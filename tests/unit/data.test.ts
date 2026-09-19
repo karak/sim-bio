@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
+import { amplitudeRatio, countPeaks, secondHalf } from '../../src/simulation/oscillation';
 import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
 
 describe('assets/data', () => {
@@ -18,10 +19,17 @@ describe('assets/data', () => {
   });
   it('all three trophic levels coexist for 100 years (seed 42, size 64)', { timeout: 120_000 }, () => {
     const w = World.create({ ...base, size: 64, species }, { log: createMemorySink() });
-    w.step(360 * 100);
+    const deer: number[] = [];
+    for (let y = 0; y < 100; y++) {
+      w.step(360);
+      deer.push(w.snapshot().totals.deer);
+    }
     const t = w.snapshot().totals;
     for (const s of species) expect(t[s.id], s.id).toBeGreaterThan(0);
     expect(species.map((s) => s.trophic)).toEqual(expect.arrayContaining(['plant', 'herbivore', 'carnivore']));
+    // M3: 捕食者・被食者の波が持続する (後半 50 年で極大値 3 以上、振幅比 0.2 以上)
+    expect(countPeaks(secondHalf(deer), 0.5)).toBeGreaterThanOrEqual(3);
+    expect(amplitudeRatio(secondHalf(deer))).toBeGreaterThanOrEqual(0.2);
   });
   it('default world runs 20 years with vegetation between 5% and 95%', { timeout: 60_000 }, () => {
     const w = World.create({ ...base, species }, { log: createMemorySink() });

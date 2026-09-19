@@ -40,9 +40,11 @@ export function generateTerrain(seed: number, size: number): Terrain {
       const border = Math.min(x, y, size - 1 - x, size - 1 - y);
       if (border < 2) e = Math.min(e, SEA_LEVEL - 0.05);
       elevation[y * size + x] = Math.min(1, Math.max(0, e));
-      const m = (fbm(noise2, nx * 2 + 10, ny * 2 + 10) + 1) / 2;
+      // 水分は高めの周波数のノイズを主にして、森・草原・乾燥地がパッチ状に混ざるようにする (生息地のモザイク)
+      // fbm は中央に値が集まるのでコントラストを 2.4 倍に伸ばす
+      const m = Math.min(1, Math.max(0, 0.5 + fbm(noise2, nx * 6 + 10, ny * 6 + 10) * 1.2));
       const lowland = 1 - Math.max(0, e - SEA_LEVEL) / (1 - SEA_LEVEL);
-      moistureBase[y * size + x] = Math.min(1, Math.max(0, 0.35 * m + 0.45 * lowland + 0.1));
+      moistureBase[y * size + x] = Math.min(1, Math.max(0, 0.6 * m + 0.3 * lowland + 0.05));
     }
   }
   return { elevation, moistureBase };

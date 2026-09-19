@@ -1,11 +1,11 @@
 ---
 id: M3-04
 title: セル・地域の時系列グラフ
-status: in_progress
+status: done
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: []
-evidence: []
+evidence: ["c9033cf", "tests/unit/ui.timeSeries.test.ts", "tests/e2e/smoke.spec.ts"]
 ---
 
 # セル・地域の時系列グラフ
