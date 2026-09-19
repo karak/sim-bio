@@ -89,6 +89,17 @@ test('free mode has the selector but no prophecy', async ({ page }) => {
   await expect(page.locator('#tablet-title')).toHaveCount(0);
 });
 
+test('civilization: ?scenario=test-civ shows the stage line in the HUD (M8-04)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await expect(page.locator('#hud-civ')).toBeVisible();
+  await expect(page.locator('#hud-civ')).toContainText('文明 石(4)');
+});
+
+test('civilization: free mode has no civ line', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#hud-civ')).toBeHidden();
+});
+
 test('star power: budget line is shown, spawning costs power, and an unaffordable spawn is rejected', async ({ page }) => {
   const logs: string[] = [];
   page.on('console', (m) => logs.push(m.text()));

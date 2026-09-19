@@ -1,10 +1,19 @@
 import type { Command, DisasterKind, SaveData, WorldSnapshot } from '../simulation/types';
+import type { CivState } from '../simulation/civilization';
+import { STAGE_NAMES } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
 import { drawGraph, type GraphLine, type GraphMarker } from './graph';
 import { SEA_LEVEL } from '../simulation/terrain';
 import './hud.css';
+
+/** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
+export function formatCiv(civ: CivState | null): string | null {
+  if (!civ || civ.stage < 1) return null;
+  const name = STAGE_NAMES[civ.stage] ?? '?';
+  return `文明 ${name}(${civ.stage}) · 進み ${Math.round(civ.progress * 100)}% · 民 ${Math.round(civ.population)}`;
+}
 
 export type HudHandlers = {
   onCommand(cmd: Command): void;
@@ -56,6 +65,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     `
   <div class="hud hud-tl">
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
+    <div id="hud-civ" class="mono" hidden></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
@@ -274,6 +284,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $('temp-offset-v').textContent = (s.climate.tempOffset >= 0 ? '+' : '') + s.climate.tempOffset.toFixed(1);
     }
     $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
+    const civText = formatCiv(s.civ);
+    const civEl = $('hud-civ');
+    civEl.hidden = civText === null;
+    if (civText !== null) civEl.textContent = civText;
     if (s.year !== lastYear) {
       lastYear = s.year;
       ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
