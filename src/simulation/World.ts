@@ -1,0 +1,250 @@
+import type { LogLevel, LogSink } from '../core/log/types';
+import type { Command, SaveData, SpeciesDef, WorldConfig, WorldSnapshot } from './types';
+import { generateTerrain, SEA_LEVEL } from './terrain';
+import { stepClimate } from './climate';
+import { stepVegetation, sumVegetation } from './vegetation';
+import { applyDisaster, stepFire } from './disaster';
+
+export type WorldDeps = {
+  log: LogSink;
+  /** ログの ts 付与用。テストで差し替える。省略時は Date */
+  now?: () => Date;
+};
+
+/** 陸の全セルに与える植物の初期密度 */
+const INITIAL_PLANT = 0.05;
+
+/**
+ * 生態系の中核。描画・DOM・fetch を知らない。
+ * - dispatch はキューに積み、次の step の先頭で適用する
+ * - snapshot は内部バッファをそのまま返す (読み取り専用)
+ */
+export class World {
+  private queue: Command[] = [];
+  private tick = 0;
+  private prevTotals: Record<string, number> = {};
+  private readonly n: number;
+  private readonly plants: SpeciesDef[];
+  private readonly byId: Map<string, SpeciesDef>;
+  readonly elevation: Float32Array;
+  readonly moistureBase: Float32Array;
+  readonly heat: Float32Array;
+  readonly temperature: Float32Array;
+  readonly moisture: Float32Array;
+  readonly vegetation: Float32Array;
+  readonly fire: Uint8Array;
+  readonly burnt: Uint16Array;
+  private readonly scratch: Float32Array;
+  readonly populations: Record<string, Float32Array> = {};
+  private readonly totals: Record<string, number> = {};
+  private meanTemperature = 0;
+  /** M1 では定数 (CO2 → 気温のスロットは係数 0) */
+  private readonly co2 = 280;
+
+  private constructor(
+    private readonly config: WorldConfig,
+    private readonly deps: WorldDeps,
+    terrain: { elevation: Float32Array; moistureBase: Float32Array },
+  ) {
+    this.n = config.size * config.size;
+    this.byId = new Map(config.species.map((d) => [d.id, d]));
+    this.plants = config.species.filter((d) => d.trophic === 'plant');
+    this.elevation = terrain.elevation;
+    this.moistureBase = terrain.moistureBase;
+    this.heat = new Float32Array(this.n);
+    this.temperature = new Float32Array(this.n);
+    this.moisture = new Float32Array(this.n);
+    this.vegetation = new Float32Array(this.n);
+    this.fire = new Uint8Array(this.n);
+    this.burnt = new Uint16Array(this.n);
+    this.scratch = new Float32Array(this.n);
+    for (const d of config.species) {
+      this.populations[d.id] = new Float32Array(this.n);
+      this.totals[d.id] = 0;
+    }
+  }
+
+  static create(config: WorldConfig, deps: WorldDeps): World {
+    const w = new World(structuredClone(config), deps, generateTerrain(config.seed, config.size));
+    for (const d of w.plants) {
+      const p = w.populations[d.id];
+      for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) p[i] = INITIAL_PLANT;
+    }
+    // 初期スナップショットにも気温・水分が入るように 1 回だけ気候を評価する
+    stepClimate(w, w.config, 0);
+    w.heat.fill(0);
+    w.refresh();
+    w.prevTotals = { ...w.totals };
+    w.log('info', 'sim.world.created', { seed: config.seed, size: config.size, speciesCount: config.species.length });
+    return w;
+  }
+
+  static restore(save: SaveData, deps: WorldDeps): World {
+    if (save.version !== 1) throw new Error(`unsupported save version ${String(save.version)}`);
+    const w = new World(structuredClone(save.config), deps, {
+      elevation: Float32Array.from(save.elevation),
+      moistureBase: Float32Array.from(save.moistureBase),
+    });
+    w.heat.set(save.heat);
+    w.tick = save.tick;
+    for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
+    const heat = Float32Array.from(w.heat);
+    stepClimate(w, w.config, w.tick % w.config.ticksPerYear);
+    w.heat.set(heat);
+    w.refresh();
+    w.prevTotals = { ...w.totals };
+    w.log('info', 'sim.world.created', {
+      seed: save.config.seed, size: save.config.size, speciesCount: save.config.species.length, restored: true,
+    });
+    return w;
+  }
+
+  dispatch(cmd: Command): void {
+    this.queue.push(cmd);
+  }
+
+  step(ticks = 1): void {
+    for (let k = 0; k < ticks; k++) this.stepOnce();
+  }
+
+  snapshot(): WorldSnapshot {
+    const { ticksPerYear } = this.config;
+    return {
+      tick: this.tick,
+      year: Math.floor(this.tick / ticksPerYear),
+      dayOfYear: this.tick % ticksPerYear,
+      size: this.config.size,
+      layers: {
+        elevation: this.elevation,
+        temperature: this.temperature,
+        moisture: this.moisture,
+        vegetation: this.vegetation,
+        populations: this.populations,
+      },
+      totals: this.totals,
+      meanTemperature: this.meanTemperature,
+      co2: this.co2,
+      species: this.config.species,
+    };
+  }
+
+  serialize(): SaveData {
+    const populations: Record<string, number[]> = {};
+    for (const d of this.config.species) populations[d.id] = Array.from(this.populations[d.id]);
+    return {
+      version: 1,
+      config: structuredClone(this.config),
+      tick: this.tick,
+      elevation: Array.from(this.elevation),
+      moistureBase: Array.from(this.moistureBase),
+      heat: Array.from(this.heat),
+      populations,
+    };
+  }
+
+  private stepOnce(): void {
+    const cmds = this.queue;
+    this.queue = [];
+    for (const c of cmds) this.apply(c);
+    const { ticksPerYear, size } = this.config;
+    const dayOfYear = this.tick % ticksPerYear;
+    stepClimate(this, this.config, dayOfYear);
+    stepFire(this, this.vegetation, this.plants, size);
+    stepVegetation(this.populations, this.scratch, this, this.plants, size);
+    this.refresh();
+    for (const d of this.config.species) {
+      const was = this.prevTotals[d.id] ?? 0;
+      if (was > 0 && this.totals[d.id] === 0) this.log('warn', 'sim.species.extinct', { speciesId: d.id });
+    }
+    this.prevTotals = { ...this.totals };
+    this.tick++;
+    if (this.tick % ticksPerYear === 0) {
+      this.log('info', 'sim.tick.summary', {
+        totals: { ...this.totals },
+        meanTemperature: this.meanTemperature,
+        co2: this.co2,
+        vegetationRatio: this.vegetationRatio(),
+      });
+    }
+  }
+
+  private apply(cmd: Command): void {
+    const reason = this.validate(cmd);
+    this.log('info', 'cmd.received', { cmd });
+    if (reason) {
+      this.log('warn', 'cmd.rejected', { cmd, reason });
+      return;
+    }
+    switch (cmd.type) {
+      case 'spawn_species': {
+        const p = this.populations[cmd.speciesId];
+        p[cmd.cell] = Math.min(1, p[cmd.cell] + cmd.amount);
+        break;
+      }
+      case 'set_climate': {
+        if (cmd.tempOffset !== undefined) this.config.climate.tempOffset = cmd.tempOffset;
+        if (cmd.rainScale !== undefined) this.config.climate.rainScale = cmd.rainScale;
+        break;
+      }
+      case 'disaster': {
+        const r = applyDisaster(this, cmd, this.config.species, this.config.size);
+        this.log('info', 'sim.disaster', { kind: cmd.kind, cell: cmd.cell, radius: cmd.radius, affectedCells: r.affectedCells });
+        break;
+      }
+    }
+  }
+
+  private validate(cmd: Command): string | null {
+    if ('cell' in cmd && (!Number.isInteger(cmd.cell) || cmd.cell < 0 || cmd.cell >= this.n)) return 'cell out of range';
+    if (cmd.type === 'spawn_species') {
+      if (!this.byId.has(cmd.speciesId)) return 'unknown species';
+      if (!(cmd.amount > 0)) return 'amount must be > 0';
+      if (this.elevation[cmd.cell] < SEA_LEVEL) return 'cell is sea';
+    }
+    if (cmd.type === 'disaster' && !(cmd.radius >= 0)) return 'radius must be >= 0';
+    return null;
+  }
+
+  private refresh(): void {
+    sumVegetation(this.populations, this.plants, this.vegetation);
+    for (const d of this.config.species) {
+      let t = 0;
+      const p = this.populations[d.id];
+      for (let i = 0; i < this.n; i++) t += p[i];
+      this.totals[d.id] = t;
+    }
+    let land = 0;
+    let t = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (this.elevation[i] >= SEA_LEVEL) {
+        land++;
+        t += this.temperature[i];
+      }
+    }
+    this.meanTemperature = land ? t / land : 0;
+  }
+
+  private vegetationRatio(): number {
+    let land = 0;
+    let v = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (this.elevation[i] >= SEA_LEVEL) {
+        land++;
+        v += this.vegetation[i];
+      }
+    }
+    return land ? v / land : 0;
+  }
+
+  private log(level: LogLevel, event: string, payload: Record<string, unknown>): void {
+    const now = this.deps.now ?? (() => new Date());
+    this.deps.log.write({
+      ts: now().toISOString(),
+      tick: this.tick,
+      year: Math.floor(this.tick / this.config.ticksPerYear),
+      level,
+      event,
+      ...payload,
+    });
+  }
+}

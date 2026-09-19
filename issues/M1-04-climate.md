@@ -1,11 +1,11 @@
 ---
 id: M1-04
 title: 型定義と気候ステップ
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-4-型定義と気候
 depends_on: [M1-03]
-evidence: []
+evidence: ["0d0c7fb", "tests/unit/climate.test.ts"]
 ---
 
 # 型定義と気候ステップ
