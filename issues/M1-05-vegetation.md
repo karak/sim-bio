@@ -1,11 +1,11 @@
 ---
 id: M1-05
 title: 植生ステップ
-status: todo
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-5-植生ステップ
 depends_on: [M1-04]
-evidence: []
+evidence: ["0d0c7fb", "tests/unit/vegetation.test.ts"]
 ---
 
 # 植生ステップ

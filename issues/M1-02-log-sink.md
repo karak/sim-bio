@@ -1,11 +1,11 @@
 ---
 id: M1-02
 title: LogSink ポート(console/memory)
-status: todo
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-2-logsink-ポート
 depends_on: [M1-01]
-evidence: []
+evidence: ["851e5a9", "tests/unit/log.sink.test.ts"]
 ---
 
 # LogSink ポート(console/memory)

@@ -1,7 +1,7 @@
 # 生態系シミュレーション 設計書
 
 - 作成日: 2026-09-19
-- 状態: レビュー待ち
+- 状態: M1 実装完了(2026-09-19)、M2 未着手
 - 対象: M1(地形 + 植物 + 季節 + グラフ)と M2(3 階層 + 種を放つ)
 
 ## 1. コンセプト
@@ -248,6 +248,15 @@ hud.showCell(cellIndex: number | null): void
 - `World` / `Runner` / `SceneView` / `Hud` を生成し、handlers を接続。
 - canvas クリック → `view.pickCell` → `hud.showCell`。
 
+### 4.7 実装時の差分(M1)
+
+- `SpeciesDef` に `name`(表示名)と `color`(#rrggbb)を追加。グラフ・レイヤー着色・パレットで使う。
+- `WorldSnapshot` に `species: SpeciesDef[]` を追加。描画側と Hud が種一覧を得るため。
+- `HudHandlers` に `onDisasterArm(kind | null)` を追加。災害ボタンは「次に島をクリックした場所に落とす」armed 状態を持つ。
+- `WorldDeps` は `{ log: LogSink; now?: () => Date }`。
+- 植生モデルの死亡項は `m·(2 − f)·p`(基礎死亡 + 不適合分)。適合時の平衡密度は `1 − m/r`。密度 `1e-4` 未満は 0 とみなし、全植物種の合計が 1 を超えたら比例縮小する。
+- 山火事は `radius = 0` で一点着火し、延焼は `stepFire` が担う。他の災害は `radius = 4`。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -265,16 +274,16 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| 固定シードで 100 年 step して NaN なし、植生が [0,1] 内 | `tests/unit/world.properties.test.ts` |
-| 同じ config で 2 回 create した snapshot が一致 | `tests/unit/world.determinism.test.ts` |
-| フィードバック係数 0 で年平均気温が年ごとに一致 | `tests/unit/world.properties.test.ts` |
-| `disaster` 後にそのセルの植生が下がる | `tests/unit/world.commands.test.ts` |
-| serialize → restore で snapshot が一致 | `tests/unit/world.save.test.ts` |
-| 年 1 回 `sim.tick.summary` が memorySink に出る | `tests/unit/world.log.test.ts` |
-| `layerToColors` が各レイヤーで長さ size²×3 を返す | `tests/unit/render.layerToColors.test.ts` |
-| `TimeSeries` が上限で古い点を捨てる | `tests/unit/ui.timeSeries.test.ts` |
-| ブラウザで島が表示され、1 年進めるとグラフに値が出る | `tests/e2e/smoke.spec.ts` |
-| ESLint と `tsc --noEmit` が通る | CI 相当のスクリプト `npm run check` |
+| 固定シードで 100 年 step して NaN なし、植生が [0,1] 内 | `tests/unit/world.properties.test.ts` · 993ae8e |
+| 同じ config で 2 回 create した snapshot が一致 | `tests/unit/world.determinism.test.ts` · 993ae8e |
+| フィードバック係数 0 で年平均気温が年ごとに一致 | `tests/unit/world.properties.test.ts` · 993ae8e |
+| `disaster` 後にそのセルの植生が下がる | `tests/unit/world.commands.test.ts` · 993ae8e |
+| serialize → restore で snapshot が一致 | `tests/unit/world.save.test.ts` · 993ae8e |
+| 年 1 回 `sim.tick.summary` が memorySink に出る | `tests/unit/world.log.test.ts` · 993ae8e |
+| `layerToColors` が各レイヤーで長さ size²×3 を返す | `tests/unit/render.layerToColors.test.ts` · fe329b9 |
+| `TimeSeries` が上限で古い点を捨てる | `tests/unit/ui.timeSeries.test.ts` · fe329b9 |
+| ブラウザで島が表示され、1 年進めるとグラフに値が出る | `tests/e2e/smoke.spec.ts` · 3598752 |
+| ESLint と `tsc --noEmit` が通る | `npm run check` · c7ebc5c(52 テスト通過を 3598752 時点で確認) |
 
 ### M2: 3 階層 + 種を放つ
 

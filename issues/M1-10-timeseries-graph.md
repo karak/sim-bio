@@ -1,11 +1,11 @@
 ---
 id: M1-10
 title: TimeSeries と折れ線グラフ
-status: todo
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-10-timeseries-と-canvas-グラフ
 depends_on: [M1-01]
-evidence: []
+evidence: ["fe329b9", "tests/unit/ui.timeSeries.test.ts"]
 ---
 
 # TimeSeries と折れ線グラフ

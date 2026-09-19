@@ -1,11 +1,11 @@
 ---
 id: M1-16
 title: README と受入証跡
-status: todo
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-16-readme-と受入証跡
 depends_on: [M1-15]
-evidence: []
+evidence: ["98d877b", "README.md", "docs/specs/2026-09-19-ecosystem-sim-design.md"]
 ---
 
 # README と受入証跡
