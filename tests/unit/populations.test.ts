@@ -3,7 +3,7 @@ import { stepPopulations } from '../../src/simulation/populations';
 import type { SpeciesDef } from '../../src/simulation/types';
 
 const deer: SpeciesDef = {
-  id: 'deer', name: '鹿', trophic: 'herbivore', growthRate: 0.06, mortality: 0.02, predation: 0.03,
+  id: 'deer', name: '鹿', trophic: 'herbivore', growthRate: 2.5, mortality: 0.02, predation: 0.03,
   tempRange: [-5, 28], moistureRange: [0.2, 0.9], diffusion: 0.15, eats: ['grass'], assetId: 'deer', color: '#E2B45A',
 };
 const env = (n: number) => ({
@@ -40,7 +40,7 @@ describe('stepPopulations', () => {
     expect(pops.deer[0]).toBe(0);
   });
   it('carnivore is processed after herbivore and eats it', () => {
-    const wolf: SpeciesDef = { ...deer, id: 'wolf', trophic: 'carnivore', eats: ['deer'], predation: 0.05, assetId: 'wolf' };
+    const wolf: SpeciesDef = { ...deer, id: 'wolf', trophic: 'carnivore', eats: ['deer'], predation: 0.08, growthRate: 3, assetId: 'wolf' };
     const n = 1;
     const pops = { grass: new Float32Array([0.8]), deer: new Float32Array([0.5]), wolf: new Float32Array([0.3]) };
     const s = new Float32Array(n);

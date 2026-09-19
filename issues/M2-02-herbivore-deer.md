@@ -1,11 +1,11 @@
 ---
 id: M2-02
 title: 草食獣 1 種(鹿)を追加
-status: in_progress
+status: done
 milestone: M2
 plan: docs/specs/2026-09-19-ecosystem-sim-design.md#m2-3-階層--種を放つ
 depends_on: []
-evidence: []
+evidence: ["9e9768a", "tests/unit/populations.test.ts", "tests/unit/world.trophic.test.ts"]
 ---
 
 # 草食獣 1 種(鹿)を追加

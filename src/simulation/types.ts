@@ -5,6 +5,7 @@ export type SpeciesDef = {
   id: string;
   name: string;
   trophic: Trophic;
+  /** 植物: 1 tick の成長率。動物: 摂取した餌密度あたりの増加係数 (変換効率) */
   growthRate: number;
   mortality: number;
   /** 生存に適した気温帯 (℃) */

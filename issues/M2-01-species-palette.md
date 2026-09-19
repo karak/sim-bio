@@ -1,11 +1,11 @@
 ---
 id: M2-01
 title: 種パレットから種を放つ
-status: in_progress
+status: done
 milestone: M2
 plan: docs/specs/2026-09-19-ecosystem-sim-design.md#m2-3-階層--種を放つ
 depends_on: []
-evidence: []
+evidence: ["9e9768a", "tests/e2e/smoke.spec.ts"]
 ---
 
 # 種パレットから種を放つ

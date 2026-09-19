@@ -1,7 +1,7 @@
 ---
 id: M2-03
 title: 肉食獣 1 種(狼)を追加
-status: todo
+status: in_progress
 milestone: M2
 plan: docs/specs/2026-09-19-ecosystem-sim-design.md#m2-3-階層--種を放つ
 depends_on: [M2-02]

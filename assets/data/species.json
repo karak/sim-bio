@@ -15,7 +15,8 @@
     ],
     "diffusion": 0.05,
     "assetId": "grass",
-    "color": "#6FBF7C"
+    "color": "#6FBF7C",
+    "initialDensity": 0.3
   },
   {
     "id": "forest",
@@ -33,29 +34,78 @@
     ],
     "diffusion": 0.02,
     "assetId": "forest",
-    "color": "#2E6B37"
+    "color": "#2E6B37",
+    "initialDensity": 0.15
   },
   {
     "id": "deer",
     "name": "鹿",
     "trophic": "herbivore",
-    "growthRate": 0.06,
+    "growthRate": 2.5,
     "mortality": 0.02,
-    "predation": 0.03,
+    "predation": 0.04,
     "tempRange": [
-      -5,
-      28
+      0,
+      30
     ],
     "moistureRange": [
-      0.2,
-      0.9
+      0.5,
+      0.95
     ],
     "diffusion": 0.15,
     "eats": [
-      "grass"
+      "grass",
+      "forest"
     ],
     "assetId": "deer",
     "color": "#E2B45A",
     "initialDensity": 0.02
+  },
+  {
+    "id": "rabbit",
+    "name": "ウサギ",
+    "trophic": "herbivore",
+    "growthRate": 4.0,
+    "mortality": 0.03,
+    "predation": 0.05,
+    "tempRange": [
+      -10,
+      30
+    ],
+    "moistureRange": [
+      0.05,
+      0.6
+    ],
+    "diffusion": 0.1,
+    "eats": [
+      "grass"
+    ],
+    "assetId": "rabbit",
+    "color": "#D6C27A",
+    "initialDensity": 0.02
+  },
+  {
+    "id": "wolf",
+    "name": "狼",
+    "trophic": "carnivore",
+    "growthRate": 0.8,
+    "mortality": 0.015,
+    "predation": 0.3,
+    "tempRange": [
+      -10,
+      25
+    ],
+    "moistureRange": [
+      0.1,
+      1.0
+    ],
+    "diffusion": 0.2,
+    "eats": [
+      "deer",
+      "rabbit"
+    ],
+    "assetId": "wolf",
+    "color": "#E07A55",
+    "initialDensity": 0.01
   }
 ]
