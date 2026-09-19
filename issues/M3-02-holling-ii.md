@@ -1,11 +1,11 @@
 ---
 id: M3-02
 title: Holling II 型の摂食応答
-status: in_progress
+status: done
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: [M3-01]
-evidence: []
+evidence: ["4277eb2", "tests/unit/populations.test.ts", "tests/unit/world.oscillation.test.ts"]
 ---
 
 # Holling II 型の摂食応答

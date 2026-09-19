@@ -60,4 +60,15 @@ describe('stepPopulations', () => {
     expect(pops.deer[0]).toBeLessThan(0.5 + 0.06);
     expect(pops.wolf[0]).toBeGreaterThan(0.3);
   });
+  it('herbivores accumulate grazed on the cell, carnivores do not', () => {
+    const wolf: SpeciesDef = { ...deer, id: 'wolf', trophic: 'carnivore', eats: ['deer'], predation: 0.5, growthRate: 0.8, assetId: 'wolf' };
+    const e = { ...env(1), grazed: new Float32Array(1) };
+    const pops = { grass: new Float32Array([0.8]), deer: new Float32Array([0.5]), wolf: new Float32Array([0.3]) };
+    const s = new Float32Array(1);
+    stepPopulations(pops, s, e, [deer], 1);
+    const afterDeer = e.grazed[0];
+    expect(afterDeer).toBeGreaterThan(0);
+    stepPopulations(pops, s, e, [wolf], 1);
+    expect(e.grazed[0]).toBe(afterDeer);
+  });
 });

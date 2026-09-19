@@ -34,6 +34,8 @@ export class World {
   readonly temperature: Float32Array;
   readonly moisture: Float32Array;
   readonly vegetation: Float32Array;
+  /** 被食による植物の回復遅れ [0,1] */
+  readonly grazed: Float32Array;
   readonly fire: Uint8Array;
   readonly burnt: Uint16Array;
   private readonly scratch: Float32Array;
@@ -58,6 +60,7 @@ export class World {
     this.temperature = new Float32Array(this.n);
     this.moisture = new Float32Array(this.n);
     this.vegetation = new Float32Array(this.n);
+    this.grazed = new Float32Array(this.n);
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
@@ -91,6 +94,7 @@ export class World {
       moistureBase: Float32Array.from(save.moistureBase),
     });
     w.heat.set(save.heat);
+    if (save.grazed) w.grazed.set(save.grazed);
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -143,6 +147,7 @@ export class World {
       elevation: Array.from(this.elevation),
       moistureBase: Array.from(this.moistureBase),
       heat: Array.from(this.heat),
+      grazed: Array.from(this.grazed),
       populations,
     };
   }

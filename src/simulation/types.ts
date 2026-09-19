@@ -87,5 +87,7 @@ export type SaveData = {
   elevation: number[];
   moistureBase: number[];
   heat: number[];
+  /** M3 で追加。古いセーブには無い */
+  grazed?: number[];
   populations: Record<string, number[]>;
 };

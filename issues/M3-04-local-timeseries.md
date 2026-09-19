@@ -1,7 +1,7 @@
 ---
 id: M3-04
 title: セル・地域の時系列グラフ
-status: todo
+status: in_progress
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: []

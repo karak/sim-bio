@@ -1,7 +1,7 @@
 ---
 id: M3-03
 title: 草の回復遅れ
-status: todo
+status: in_progress
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: [M3-02]

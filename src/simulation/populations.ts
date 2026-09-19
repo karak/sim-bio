@@ -3,7 +3,16 @@ import { forEachNeighbor4 } from './grid';
 import { MIN_DENSITY, suitability } from './vegetation';
 import type { SpeciesDef } from './types';
 
-export type PopulationEnv = { elevation: Float32Array; temperature: Float32Array; moisture: Float32Array };
+export type PopulationEnv = {
+  elevation: Float32Array;
+  temperature: Float32Array;
+  moisture: Float32Array;
+  /** 草食獣が植物を食べた量を積む。植物の回復遅れに使う。省略可 */
+  grazed?: Float32Array;
+};
+
+/** 植物を 1 単位食べたとき grazed に積む量。大きいほど回復が遅い */
+export const GRAZE_IMPACT = 3;
 
 const TROPHIC_ORDER = { plant: 0, herbivore: 1, carnivore: 2 } as const;
 
@@ -33,9 +42,11 @@ export function stepPopulations(
 ): void {
   const n = size * size;
   const ordered = [...animals].sort((a, b) => TROPHIC_ORDER[a.trophic] - TROPHIC_ORDER[b.trophic]);
+  const grazed = env.grazed;
   for (const d of ordered) {
     const p = pops[d.id];
     const prey = (d.eats ?? []).map((id) => pops[id]).filter((arr): arr is Float32Array => arr !== undefined);
+    const eatsPlants = d.trophic === 'herbivore';
     const predation = d.predation ?? 0;
     const handling = d.handlingTime ?? 0;
     for (let i = 0; i < n; i++) {
@@ -55,6 +66,10 @@ export function stepPopulations(
         for (const q of prey) {
           const nv = q[i] * k;
           q[i] = nv < MIN_DENSITY ? 0 : nv;
+        }
+        if (grazed && eatsPlants) {
+          const ng = grazed[i] + GRAZE_IMPACT * Math.min(g * v, food);
+          grazed[i] = ng > 1 ? 1 : ng;
         }
       }
     }
