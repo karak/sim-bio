@@ -1,7 +1,7 @@
 ---
 id: M2-05
 title: 3 階層が 100 年共存するデフォルト設定を固定
-status: todo
+status: in_progress
 milestone: M2
 plan: docs/specs/2026-09-19-ecosystem-sim-design.md#m2-3-階層--種を放つ
 depends_on: [M2-03, M2-04]
