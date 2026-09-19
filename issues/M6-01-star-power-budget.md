@@ -1,11 +1,11 @@
 ---
 id: M6-01
 title: 星の力(介入の予算)
-status: todo
+status: done
 milestone: M6
 plan: docs/specs/plans/2026-09-19-m6-playable-dilemma-plan.md#31-星の力介入の予算-m6-01
 depends_on: []
-evidence: []
+evidence: ["adfb981 tests/unit/scenario.budget.test.ts tests/unit/world.commands.test.ts tests/e2e/smoke.spec.ts"]
 ---
 
 # 星の力(介入の予算)
@@ -22,13 +22,14 @@ None (can start immediately)
 
 ## Acceptance criteria
 
-- [ ] `spawn_species` の `radius` で半径内の陸セルに放てる。既存の 1 セル放流(省略時)は変わらない
-- [ ] `ScenarioDef.budget` を読み、`intervene` が値段を引く。足りないと `{ ok: false, reason: 'budget' }` で world に流れない
-- [ ] 年が変わると `incomePerYear × 陸地率 × 生気平均 − 維持費` が加算され、上限で止まる
-- [ ] 力が負になったら 0 にし、気候を既定に戻す `set_climate` が dispatch され、`scenario.power.exhausted` がログに出る
-- [ ] 石板に力の残量と「+収入 / −維持費」が出る。弾かれたときは `cmd.rejected` がログに出て石板が反応する
-- [ ] `budget` のないシナリオは無料のまま(既存の runner テストが通る)
-- [ ] E2E: 予算付きシナリオで放流すると石板の力が減る
+- [x] `spawn_species` の `radius` で半径内の陸セルに放てる。既存の 1 セル放流(省略時)は変わらない
+- [x] `ScenarioDef.budget` を読み、`intervene` が値段を引く。足りないと `{ ok: false, reason: 'budget' }` で world に流れない
+- [x] 年が変わると `incomePerYear × 陸地率 × 生気平均 − 維持費` が加算され、上限で止まる
+- [x] 力が負になったら 0 にし、気候を既定に戻す `set_climate` が dispatch され、`scenario.power.exhausted` がログに出る
+- [x] 石板に力の残量と「+収入 / −維持費」が出る。弾かれたときは `cmd.rejected` がログに出て石板が反応する
+- [x] `budget` のないシナリオは無料のまま(既存の runner テストが通る)
+- [x] E2E: 予算付きシナリオで放流すると石板の力が減る
 
 ## 作業ログ
 
+- 2026-09-19: sonnet 委譲で型・runner・World・main まで実装、セッション上限で中断したため石板・HUD・CSS・テストを引き継ぎ。コマンドは次 step で適用されるので radius テストは対照世界との差分で判定。上限の既定 start×3 は start=0 だと 0 になる(テストで踏んだ。仕様どおりのまま)。
