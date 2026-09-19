@@ -1,0 +1,30 @@
+---
+id: M10-02
+title: 迎撃
+status: todo
+milestone: M10
+plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
+depends_on: [M10-01]
+evidence: []
+---
+
+# 迎撃
+
+## What to build
+
+段階「星」の文明が輝石を十分に持てば、予定された隕石を撃ち落とせる。石板の予言が書き換わる。「迎撃の塔」を校正する。
+
+## Blocked by
+
+M10-01
+
+## Acceptance criteria
+
+- [ ] コマンド intercept: 段階 星 かつ 輝石 ≥ 必要量で、次に予定された隕石の予定コマンドを取り消す。条件を満たさなければ拒否(単体テスト)
+- [ ] 取り消した予定は石板の節目から消え、年表に「星が砕けた」が並ぶ(E2E)
+- [ ] 「迎撃の塔」: 星まで上げる採掘で生気が減る、信仰が低いと工事が止まる。tests/slow で放置 dead・素朴戦略 dead・想定解 2 つ alive
+- [ ] 設計書に校正の表と証跡
+- [ ] npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す
+
+## 作業ログ
+
