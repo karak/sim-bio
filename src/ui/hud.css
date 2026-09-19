@@ -17,6 +17,8 @@
 .chip:hover { color: #fff; }
 .chip.on { background: #3c7a4e; color: #fff; }
 .chip.armed { background: #b5502f; color: #fff; }
+/* 星の力が足りないチップ・スライダー。押せるが runner が弾くので、見た目だけ薄くする */
+.unaffordable { opacity: 0.4; }
 .hud-r canvas { width: 320px; height: 100px; display: block; margin: 4px 0; }
 #legend span { margin-right: 10px; font-size: 11px; color: #9fb3c2; }
 #legend i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
@@ -31,6 +33,10 @@
 .tablet-title { font-size: 15px; font-weight: 700; margin-top: 4px; }
 .tablet-prophecy { font-size: 12px; color: #c9d6cd; line-height: 1.6; margin: 4px 0 6px; }
 .tablet .row { justify-content: center; }
+.tablet-power { margin-top: 2px; }
+/* 介入が弾かれた・力が尽きたときに石板を短く揺らす */
+.tablet.shake { animation: tablet-shake 0.3s; }
+@keyframes tablet-shake { 0%, 100% { transform: translateX(-50%); } 25% { transform: translateX(calc(-50% - 6px)); } 75% { transform: translateX(calc(-50% + 6px)); } }
 .verdict[hidden] { display: none; }
 .verdict { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 26, 36, 0.6); z-index: 10; }
 .verdict-box { background: rgba(15, 26, 36, 0.95); border: 2px solid #3c7a4e; border-radius: 12px; padding: 24px 32px; text-align: center; max-width: 460px; }

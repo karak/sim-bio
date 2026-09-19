@@ -51,6 +51,19 @@ export type ScenarioDef = {
   alive: Condition;
   /** 毎年評価し、満たした瞬間に負け。省略時は years 到達時の alive 判定だけで決まる */
   dead?: Condition;
+  /** 星の力 (介入の予算)。省略時は今までどおり介入は無料 */
+  budget?: {
+    /** 開始時の力 */
+    start: number;
+    /** 年収の上限。実際は × 陸地率 × 生気の平均 (島が痩せると減る) */
+    incomePerYear: number;
+    /** コマンド 1 回の値段 */
+    costs: { spawn: number; disaster: number; climate: number };
+    /** |rainScale−1|·rainScale + |tempOffset|·tempOffset を毎年引く (気候を変え続けている分の維持費) */
+    upkeepPerYear: { rainScale: number; tempOffset: number };
+    /** 貯められる上限 (省略時 start × 3) */
+    max?: number;
+  };
 };
 
 export type ScenarioStatus = 'running' | 'alive' | 'dead';

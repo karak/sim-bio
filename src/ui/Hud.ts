@@ -24,6 +24,8 @@ export type Hud = {
   addMarker(x: number, label: string, color: string): void;
   setArmed(kind: DisasterKind | null): void;
   setSpawnArmed(speciesId: string | null): void;
+  /** 星の力で買えるかどうか。false のチップは薄く見せる (押せるが runner が弾く) */
+  setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean }): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -300,5 +302,11 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     },
     setArmed,
     setSpawnArmed,
+    setAffordable: (a) => {
+      for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('unaffordable', !a.spawn);
+      for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('unaffordable', !a.disaster);
+      tempEl.classList.toggle('unaffordable', !a.climate);
+      rainEl.classList.toggle('unaffordable', !a.climate);
+    },
   };
 }

@@ -179,6 +179,12 @@
     "dead": {
       "type": "year_reached",
       "year": 2
+    },
+    "budget": {
+      "start": 10,
+      "incomePerYear": 2,
+      "costs": { "spawn": 3, "disaster": 5, "climate": 1 },
+      "upkeepPerYear": { "rainScale": 4, "tempOffset": 1 }
     }
   }
 ]

@@ -49,8 +49,20 @@ async function boot(): Promise<void> {
   let selected: number | null = null;
 
   let runner: ScenarioRunner | null = null;
-  /** プレイヤーの介入はここを通す (シナリオ中は回数を数える) */
-  const intervene = (c: Command) => (runner ? runner.intervene(c) : world.dispatch(c));
+  /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
+  const intervene = (c: Command): boolean => {
+    if (!runner) {
+      world.dispatch(c);
+      return true;
+    }
+    const result = runner.intervene(c);
+    if (!result.ok) {
+      const snap = world.snapshot();
+      log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'cmd.rejected', reason: result.reason, cmd: c });
+      if (result.reason === 'budget') tablet.flash();
+    }
+    return result.ok;
+  };
 
   const hud = createHud(app, {
     onCommand: intervene,
@@ -82,7 +94,19 @@ async function boot(): Promise<void> {
         view.update(s);
         hud.update(s);
         if (selected !== null) hud.showCell(selected, s);
-        if (runner) tablet.update(runner.yearOf(s), runner.update(s));
+        if (runner) {
+          const verdict = runner.update(s);
+          const budgetInfo = runner.budget();
+          tablet.update(runner.yearOf(s), verdict, budgetInfo);
+          const costs = scenario?.budget?.costs;
+          hud.setAffordable(
+            budgetInfo && costs
+              ? { spawn: budgetInfo.power >= costs.spawn, disaster: budgetInfo.power >= costs.disaster, climate: budgetInfo.power >= costs.climate }
+              : { spawn: true, disaster: true, climate: true },
+          );
+        } else {
+          hud.setAffordable({ spawn: true, disaster: true, climate: true });
+        }
       },
     },
   );
@@ -94,6 +118,11 @@ async function boot(): Promise<void> {
         tablet.showVerdict(v);
         log.write({ ts: new Date().toISOString(), tick: world.snapshot().tick, year: world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
       },
+      onPowerExhausted: () => {
+        tablet.flash();
+        const snap = world.snapshot();
+        log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.power.exhausted', scenario: scenario.id });
+      },
     });
   }
 
@@ -103,27 +132,20 @@ async function boot(): Promise<void> {
     if (spawnArmed) {
       const id = spawnArmed;
       const s = world.snapshot();
-      // 1 セルだけだと見えにくいので 3×3 に放つ。海セルは World 側で reject される
-      const x = cell % s.size;
-      const y = (cell - x) / s.size;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const cx = x + dx;
-          const cy = y + dy;
-          if (cx < 0 || cy < 0 || cx >= s.size || cy >= s.size) continue;
-          intervene({ type: 'spawn_species', speciesId: id, cell: cy * s.size + cx, amount: SPAWN_AMOUNT });
-        }
+      // 1 セルだけだと見えにくいので半径 1 (3×3 相当) に放つ。1 コマンドなので値段も 1 回分。海セルは World 側で無視される
+      const ok = intervene({ type: 'spawn_species', speciesId: id, cell, amount: SPAWN_AMOUNT, radius: 1 });
+      if (ok) {
+        const def = s.species.find((d) => d.id === id);
+        hud.addMarker(s.year, def?.name ?? id, def?.color ?? '#6FBF7C');
       }
-      const def = s.species.find((d) => d.id === id);
-      hud.addMarker(s.year, def?.name ?? id, def?.color ?? '#6FBF7C');
       hud.setSpawnArmed(null);
       return;
     }
     if (armed) {
       const kind = armed;
       const s = world.snapshot();
-      intervene({ type: 'disaster', kind, cell, radius: DISASTER_RADIUS[kind] });
-      hud.addMarker(s.year, kind, '#E07A55');
+      const ok = intervene({ type: 'disaster', kind, cell, radius: DISASTER_RADIUS[kind] });
+      if (ok) hud.addMarker(s.year, kind, '#E07A55');
       hud.setArmed(null);
       return;
     }

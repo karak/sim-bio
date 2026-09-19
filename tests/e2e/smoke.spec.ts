@@ -82,3 +82,29 @@ test('free mode has the selector but no prophecy', async ({ page }) => {
   await expect(page.locator('#tablet-select')).toBeVisible();
   await expect(page.locator('#tablet-title')).toHaveCount(0);
 });
+
+test('star power: budget line is shown, spawning costs power, and an unaffordable spawn is rejected', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/?scenario=test-quick');
+  // test-quick の budget: start 10, spawn 3 → 3 回で 1 になり 4 回目は弾かれる
+  await expect(page.locator('#tablet-power')).toHaveText('10 / 30');
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  const spawnOnce = async () => {
+    await page.click('#spawn-grass');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+    await expect(page.locator('#spawn-grass')).not.toHaveClass(/armed/);
+  };
+  await spawnOnce();
+  await expect(page.locator('#tablet-power')).toHaveText('7 / 30');
+  await spawnOnce();
+  await spawnOnce();
+  await expect(page.locator('#tablet-power')).toHaveText('1 / 30');
+  await expect(page.locator('#spawn-grass')).toHaveClass(/unaffordable/);
+  await spawnOnce();
+  await expect(page.locator('#tablet-power')).toHaveText('1 / 30');
+  await expect
+    .poll(() => logs.filter((l) => l.includes('"event":"cmd.rejected"') && l.includes('"reason":"budget"')).length)
+    .toBe(1);
+});

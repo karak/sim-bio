@@ -5,7 +5,7 @@ import { stepClimate } from './climate';
 import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
-import { applyDisaster, stepFire } from './disaster';
+import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 
 export type WorldDeps = {
   log: LogSink;
@@ -150,6 +150,7 @@ export class World {
       meanTemperature: this.meanTemperature,
       co2: this.co2,
       species: this.config.species,
+      climate: { tempOffset: this.config.climate.tempOffset, rainScale: this.config.climate.rainScale },
     };
   }
 
@@ -209,7 +210,10 @@ export class World {
     switch (cmd.type) {
       case 'spawn_species': {
         const p = this.populations[cmd.speciesId];
-        p[cmd.cell] = Math.min(1, p[cmd.cell] + cmd.amount);
+        // radius 省略時 (= 0) は forEachInRadius が中心セルだけを渡すので、既存の 1 セル放流と同じ結果になる
+        forEachInRadius(cmd.cell, cmd.radius ?? 0, this.config.size, (i) => {
+          if (this.elevation[i] >= SEA_LEVEL) p[i] = Math.min(1, p[i] + cmd.amount);
+        });
         break;
       }
       case 'set_climate': {
