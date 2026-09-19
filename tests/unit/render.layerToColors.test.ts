@@ -14,6 +14,8 @@ const snap = () => {
       temperature: new Float32Array([10, -5, 15, 30]),
       moisture: new Float32Array([1, 0, 0.5, 1]),
       vegetation: new Float32Array([0, 0, 0.5, 1]),
+      vitality: new Float32Array([0, 0.2, 0.6, 1]),
+      litter: new Float32Array(4),
       populations: { grass: new Float32Array([0, 0, 0.5, 1]) },
     },
   };
@@ -21,7 +23,7 @@ const snap = () => {
 
 describe('layerToColors', () => {
   it('returns size²×3 in [0,1] for every layer', () => {
-    for (const l of ['terrain', 'temperature', 'moisture', 'vegetation', 'species:grass'] as const) {
+    for (const l of ['terrain', 'temperature', 'moisture', 'vegetation', 'vitality', 'species:grass'] as const) {
       const c = layerToColors(snap(), l);
       expect(c.length).toBe(12);
       for (const v of c) {
@@ -44,5 +46,10 @@ describe('layerToColors', () => {
   it('reuses provided buffer', () => {
     const out = new Float32Array(12);
     expect(layerToColors(snap(), 'moisture', out)).toBe(out);
+  });
+  it('vitality: higher vitality is brighter', () => {
+    const c = layerToColors(snap(), 'vitality');
+    const lum = (i: number) => c[i * 3] + c[i * 3 + 1] + c[i * 3 + 2];
+    expect(lum(3)).toBeGreaterThan(lum(1));
   });
 });

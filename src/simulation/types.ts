@@ -1,4 +1,5 @@
-export type Trophic = 'plant' | 'herbivore' | 'carnivore';
+/** decomposer は枯死 (litter) を餌にし、いる場所の分解を速める第 4 の階層 */
+export type Trophic = 'plant' | 'herbivore' | 'carnivore' | 'decomposer';
 
 /** 種の定義。assets/data/species.json から読む。 */
 export type SpeciesDef = {
@@ -74,6 +75,10 @@ export type WorldSnapshot = {
     moisture: Float32Array;
     /** 植物種の合計 */
     vegetation: Float32Array;
+    /** 生気 [0,1]。植物の成長が消費し、枯死の分解で戻る */
+    vitality: Float32Array;
+    /** 枯死 (死骸・落ち葉・灰) [0,1]。分解されて生気になる */
+    litter: Float32Array;
     populations: Record<string, Float32Array>;
   };
   totals: Record<string, number>;
@@ -91,5 +96,8 @@ export type SaveData = {
   heat: number[];
   /** M3 で追加。古いセーブには無い */
   grazed?: number[];
+  /** M5 で追加 */
+  vitality?: number[];
+  litter?: number[];
   populations: Record<string, number[]>;
 };

@@ -1,7 +1,7 @@
 # 生態系シミュレーション 設計書
 
 - 作成日: 2026-09-19
-- 状態: M1〜M4 実装完了(2026-09-19)
+- 状態: M1〜M5 実装完了(2026-09-19)
 - 対象: M1(地形 + 植物 + 季節 + グラフ)と M2(3 階層 + 種を放つ)
 
 ## 1. コンセプト
@@ -288,6 +288,19 @@ hud.showCell(cellIndex: number | null): void
 - `assets/data/scenarios.json` の 4 本(沈む欠片、星が落ちる夜、火の山の目覚め、豊かさの罠)+ テスト用 `test-quick`。
 - 校正: `tests/slow/scenarios.playthrough.test.ts` で「放置 → 滅び」「台本介入 → 回避」を size 64 で固定(`npm run test:slow`、約 4 分)。
 
+### 4.11 実装時の差分(M5: 生気層と分解者)
+
+設計書 §2 決定 4 で見送った「分解者/土壌」を、企画素材の「生気」として実装した。物質循環が閉じる。
+
+- 層を 2 つ追加: `litter`(枯死: 植物・動物の死亡分と山火事の灰)と `vitality`(生気)。`stepVitality` が枯死を `BASE_DECOMPOSITION + DECOMPOSER_BOOST × 分解者密度` の率で生気に変え、生気は 4 近傍へ拡散し `VITALITY_LEACH` で漏出する。
+- 植物の成長は `vitalityFactor(v) = v / (v + 0.05)` を掛け、成長 1 単位につき `VITALITY_COST = 0.02` の生気を消費する。係数は「分解者がいれば生気は飽和し、いなければ 20 年で枯れて動物が飢える」ように決めた。
+- 第 4 の階層 `decomposer`(胞子苔 `moss`)。枯死を餌にし(枯死は減らさない。分解は `stepVitality` の担当)、湿潤 [0.35, 1] で生き、山火事で植物と同じく 0 になる。
+- 山火事は焼けた植生の半分を灰として枯死に積む。
+- `WorldSnapshot.layers` に `vitality` / `litter`、`SaveData` にも追加。レイヤー切替に「生気」、セル詳細に生気/枯死。
+- シナリオ条件 `vitality_ratio`、`ScenarioDef.start.species` で種の初期値を上書き可能。シナリオ「生気の飢饉」(苔のない島に胞子を運ぶ)を追加。
+- 既存テストの世界には胞子苔を含めた。分解者のいない世界では生気が枯れて植物が痩せるため。
+- 隕石・火山は苔も消すので、その後に草と獣だけ戻しても生気が尽きて飢える。「星が落ちる夜」「火の山の目覚め」の予言に「苔も戻せ」を足し、通し実行の台本も苔を放つ。狼は薄く放つと餌を食い尽くす前に消える紙一重(6 セルに 1 つ・0.3 で安定)。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -315,6 +328,18 @@ hud.showCell(cellIndex: number | null): void
 | `TimeSeries` が上限で古い点を捨てる | `tests/unit/ui.timeSeries.test.ts` · fe329b9 |
 | ブラウザで島が表示され、1 年進めるとグラフに値が出る | `tests/e2e/smoke.spec.ts` · 3598752 |
 | ESLint と `tsc --noEmit` が通る | `npm run check` · c7ebc5c(52 テスト通過を 3598752 時点で確認) |
+
+### M5: 生気層と分解者
+
+| 受入項目 | 証跡 |
+|---|---|
+| 枯死→生気の分解、分解者による加速、拡散と漏出、海は 0 | `tests/unit/vitality.test.ts` |
+| 生気が薄いと成長が遅く、成長は生気を消費し、死亡は枯死を積む | `tests/unit/vegetation.test.ts` |
+| 分解者は枯死で増え無いと減る。動物の死亡が枯死を積む。山火事は分解者も焼き灰を残す | `tests/unit/populations.test.ts`、`tests/unit/disaster.test.ts` |
+| 生気レイヤーの着色、保存に vitality/litter | `tests/unit/render.layerToColors.test.ts`、`tests/unit/world.save.test.ts` |
+| 100 年共存と振動が維持される | `tests/unit/data.test.ts`、`tests/unit/world.oscillation.test.ts` |
+| 生気の飢饉: 放置で滅び、五年目に苔を放てば回避 | `tests/slow/scenarios.playthrough.test.ts` |
+| 星が落ちる夜・火の山の目覚めは、苔も含めて放ち直せば回避できる(M4 の 4 本も引き続き通る) | `tests/slow/scenarios.playthrough.test.ts` |
 
 ### M4: シナリオ層の基盤
 

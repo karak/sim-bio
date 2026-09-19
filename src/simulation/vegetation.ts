@@ -1,6 +1,7 @@
 import { SEA_LEVEL } from './terrain';
 import { forEachNeighbor4 } from './grid';
 import type { SpeciesDef } from './types';
+import { VITALITY_COST, vitalityFactor } from './vitality';
 
 /** 適温帯の端から外へ、この幅で適合度が 1 → 0 に落ちる */
 const TEMP_EDGE = 5;
@@ -34,6 +35,10 @@ export type VegetationEnv = {
   moisture: Float32Array;
   /** 被食による回復遅れ [0,1]。1 なら成長 0。省略時は遅れなし */
   grazed?: Float32Array;
+  /** 生気 [0,1]。成長が消費する。省略時は無制限 */
+  vitality?: Float32Array;
+  /** 枯死。死亡分を積む。省略時は積まない */
+  litter?: Float32Array;
 };
 
 /** grazed が 1 tick に減る量 (= 1/回復日数)。NetLogo Wolf-Sheep の grass-regrowth-time に相当 */
@@ -56,6 +61,8 @@ export function stepVegetation(
   const total = new Float32Array(n);
   sumVegetation(pops, plants, total);
   const grazed = env.grazed;
+  const vitality = env.vitality;
+  const litter = env.litter;
   for (const d of plants) {
     const p = pops[d.id];
     for (let i = 0; i < n; i++) {
@@ -66,7 +73,12 @@ export function stepVegetation(
       const f = suitability(d, env.temperature[i], env.moisture[i]);
       const v = p[i];
       const regrowth = grazed ? 1 - grazed[i] : 1;
-      scratch[i] = v + d.growthRate * f * regrowth * v * (1 - total[i]) - d.mortality * (2 - f) * v;
+      const vf = vitality ? vitalityFactor(vitality[i]) : 1;
+      const growth = d.growthRate * f * regrowth * vf * v * (1 - total[i]);
+      const death = d.mortality * (2 - f) * v;
+      scratch[i] = v + growth - death;
+      if (vitality) vitality[i] = Math.max(0, vitality[i] - VITALITY_COST * growth);
+      if (litter) litter[i] = Math.min(1, litter[i] + death);
     }
     for (let i = 0; i < n; i++) {
       if (env.elevation[i] < SEA_LEVEL) {

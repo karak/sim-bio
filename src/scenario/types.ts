@@ -1,4 +1,6 @@
-import type { Command } from '../simulation/types';
+import type { Command, SpeciesDef } from '../simulation/types';
+
+type SpeciesDefLike = SpeciesDef;
 
 /**
  * 判定条件。すべて snapshot と介入回数から評価できる純粋なデータ。
@@ -9,6 +11,7 @@ export type Condition =
   | { type: 'species_extinct'; ids: string[] }
   | { type: 'land_ratio'; min?: number; max?: number }
   | { type: 'vegetation_ratio'; min?: number; max?: number }
+  | { type: 'vitality_ratio'; min?: number; max?: number }
   | { type: 'total_ratio_vs_start'; id: string; min?: number; max?: number }
   | { type: 'year_reached'; year: number }
   | { type: 'no_intervention' }
@@ -28,7 +31,14 @@ export type ScenarioDef = {
   /** 回避の型 */
   kind: 'prevent' | 'endure' | 'escape';
   /** 開始状態の上書き (seed, size, climate など)。省略時は world.default.json */
-  start?: { seed?: number; size?: number; tempOffset?: number; rainScale?: number };
+  start?: {
+    seed?: number;
+    size?: number;
+    tempOffset?: number;
+    rainScale?: number;
+    /** 種ごとの上書き (initialDensity など) */
+    species?: Record<string, Partial<Pick<SpeciesDefLike, 'initialDensity' | 'growthRate' | 'mortality' | 'diffusion'>>>;
+  };
   /** 滅びの進行と予定イベント */
   schedule: ScheduledCommand[];
   /** 判定する年数。この年に alive を満たしていれば勝ち */

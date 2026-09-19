@@ -1,7 +1,7 @@
 import type { WorldSnapshot } from '../simulation/types';
 import { SEA_LEVEL } from '../simulation/terrain';
 
-export type LayerKind = 'terrain' | 'temperature' | 'moisture' | 'vegetation' | `species:${string}`;
+export type LayerKind = 'terrain' | 'temperature' | 'moisture' | 'vegetation' | 'vitality' | `species:${string}`;
 
 type RGB = [number, number, number];
 
@@ -29,6 +29,8 @@ const HOT = hex('#D9563C');
 const DRY = hex('#F2E7C6');
 const WET = hex('#2F6EA8');
 const DARK = hex('#1A1A1A');
+const VIT_LOW = hex('#2A2622');
+const VIT_HIGH = hex('#8FD3C4');
 
 function seaColor(e: number): RGB {
   return lerp(SEA_DEEP, SEA_SHALLOW, clamp01(e / SEA_LEVEL));
@@ -70,6 +72,9 @@ export function layerToColors(
           break;
         case 'vegetation':
           c = lerp(SAND, GREEN, clamp01(L.vegetation[i]));
+          break;
+        case 'vitality':
+          c = lerp(VIT_LOW, VIT_HIGH, clamp01(L.vitality[i]));
           break;
         default:
           c = lerp(DARK, tint, clamp01(pop ? pop[i] : 0));

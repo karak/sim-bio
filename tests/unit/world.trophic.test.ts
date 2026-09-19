@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
-import { testConfig, grass, forest } from './helpers';
+import { testConfig, grass, forest, moss } from './helpers';
 import type { SpeciesDef } from '../../src/simulation/types';
 import { readFileSync } from 'node:fs';
 
@@ -24,15 +24,15 @@ const firstLand = (w: World) => {
 
 describe('World trophic interactions', () => {
   it('herbivores reduce grass compared to a world without them', () => {
-    const a = World.create(testConfig({ species: [grass, forest] }), { log: createMemorySink() });
-    const b = World.create(testConfig({ species: [grass, forest, deer] }), { log: createMemorySink() });
+    const a = World.create(testConfig({ species: [grass, forest, moss] }), { log: createMemorySink() });
+    const b = World.create(testConfig({ species: [grass, forest, moss, deer] }), { log: createMemorySink() });
     a.step(360 * 5);
     b.step(360 * 5);
     expect(b.snapshot().totals.grass).toBeLessThan(a.snapshot().totals.grass);
     expect(b.snapshot().totals.deer).toBeGreaterThan(0);
   });
   it('spawn_species works for animals', () => {
-    const w = World.create(testConfig({ species: [grass, forest, { ...deer, initialDensity: 0 }] }), { log: createMemorySink() });
+    const w = World.create(testConfig({ species: [grass, forest, moss, { ...deer, initialDensity: 0 }] }), { log: createMemorySink() });
     const c = firstLand(w);
     expect(w.snapshot().totals.deer).toBe(0);
     w.dispatch({ type: 'spawn_species', speciesId: 'deer', cell: c, amount: 0.5 });
@@ -40,8 +40,8 @@ describe('World trophic interactions', () => {
     expect(w.snapshot().totals.deer).toBeGreaterThan(0);
   });
   it('carnivores reduce herbivores compared to a world without them', () => {
-    const a = World.create(testConfig({ species: [grass, forest, deer] }), { log: createMemorySink() });
-    const b = World.create(testConfig({ species: [grass, forest, deer, wolf] }), { log: createMemorySink() });
+    const a = World.create(testConfig({ species: [grass, forest, moss, deer] }), { log: createMemorySink() });
+    const b = World.create(testConfig({ species: [grass, forest, moss, deer, wolf] }), { log: createMemorySink() });
     a.step(360 * 5);
     b.step(360 * 5);
     expect(b.snapshot().totals.deer).toBeLessThan(a.snapshot().totals.deer);
@@ -50,14 +50,14 @@ describe('World trophic interactions', () => {
   it('emits sim.species.extinct once when an animal dies out', () => {
     const log = createMemorySink();
     const starving = { ...wolf, eats: [] as string[] };
-    const w = World.create(testConfig({ species: [grass, forest, starving] }), { log });
+    const w = World.create(testConfig({ species: [grass, forest, moss, starving] }), { log });
     w.step(360 * 5);
     expect(w.snapshot().totals.wolf).toBe(0);
     expect(log.find('sim.species.extinct').map((r) => r.speciesId)).toEqual(['wolf']);
   });
   it('drier climate shifts the herbivore mix toward rabbits', () => {
-    const wet = World.create(testConfig({ species: [grass, forest, deer, rabbit] }), { log: createMemorySink() });
-    const dry = World.create(testConfig({ species: [grass, forest, deer, rabbit] }), { log: createMemorySink() });
+    const wet = World.create(testConfig({ species: [grass, forest, moss, deer, rabbit] }), { log: createMemorySink() });
+    const dry = World.create(testConfig({ species: [grass, forest, moss, deer, rabbit] }), { log: createMemorySink() });
     dry.dispatch({ type: 'set_climate', rainScale: 0.5 });
     wet.step(360 * 10);
     dry.step(360 * 10);

@@ -8,11 +8,16 @@ export const forest: SpeciesDef = {
   id: 'forest', name: '森', trophic: 'plant', growthRate: 0.015, mortality: 0.01,
   tempRange: [2, 26], moistureRange: [0.45, 1], diffusion: 0.02, assetId: 'forest', color: '#2E6B37',
 };
+/** 分解者。これが無いと生気が枯れて植物が痩せる (M5) ので、テストの既定種に含める */
+export const moss: SpeciesDef = {
+  id: 'moss', name: '胞子苔', trophic: 'decomposer', growthRate: 1.5, mortality: 0.02, predation: 0.08, handlingTime: 5,
+  tempRange: [0, 30], moistureRange: [0.35, 1], diffusion: 0.03, eats: [], assetId: 'moss', color: '#8FD3C4', initialDensity: 0.05,
+};
 export const testConfig = (over: Partial<WorldConfig> = {}): WorldConfig => ({
   seed: 42,
   size: 32,
   ticksPerYear: 360,
-  species: [grass, forest],
+  species: [grass, forest, moss],
   climate: { seasonAmplitudeTemp: 8, seasonAmplitudeRain: 0.1, tempOffset: 0, rainScale: 1 },
   feedback: { vegetationToRain: 0.1, vegetationToTemp: 0, co2ToTemp: 0, iceAlbedo: 0 },
   ...over,

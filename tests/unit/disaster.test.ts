@@ -61,4 +61,14 @@ describe('applyDisaster', () => {
     stepFire(s, s.populations.grass, [grass], 5);
     expect(s.fire[7]).toBe(0);
   });
+  it('wildfire burns decomposers too and leaves ash in litter', () => {
+    const moss: SpeciesDef = { ...grass, id: 'moss', trophic: 'decomposer', assetId: 'moss' };
+    const s = mk();
+    s.populations.moss = new Float32Array(25).fill(0.4);
+    s.litter = new Float32Array(25);
+    applyDisaster(s, { type: 'disaster', kind: 'wildfire', cell: 12, radius: 0 }, [grass], 5);
+    stepFire(s, s.populations.grass, [grass, moss], 5);
+    expect(s.populations.moss[12]).toBe(0);
+    expect(s.litter[12]).toBeCloseTo(0.4, 6);
+  });
 });

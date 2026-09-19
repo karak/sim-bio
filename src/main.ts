@@ -24,7 +24,7 @@ async function boot(): Promise<void> {
   // ?scenario=<id> で石板を選ぶ。無ければ自由モード
   const params = new URLSearchParams(location.search);
   const scenario = scenarios.find((d) => d.id === params.get('scenario')) ?? null;
-  const config: WorldConfig = { ...base, species };
+  const config: WorldConfig = { ...base, species: species.map((d) => ({ ...d, ...(scenario?.start?.species?.[d.id] ?? {}) })) };
   if (scenario?.start) {
     if (scenario.start.seed !== undefined) config.seed = scenario.start.seed;
     if (scenario.start.size !== undefined) config.size = scenario.start.size;

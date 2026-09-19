@@ -1,4 +1,4 @@
-import { BoxGeometry, ConeGeometry, MeshLambertMaterial, type BufferGeometry, type Material } from 'three';
+import { BoxGeometry, ConeGeometry, CylinderGeometry, MeshLambertMaterial, type BufferGeometry, type Material } from 'three';
 import type { SpeciesDef } from '../simulation/types';
 
 /** 種 ID → 表示アセット。glTF に差し替えるときはここだけ変える。 */
@@ -14,9 +14,11 @@ export function buildAssetTable(species: SpeciesDef[]): AssetTable {
         ? new ConeGeometry(0.18, 0.6, 5)
         : d.trophic === 'herbivore'
           ? new BoxGeometry(0.3, 0.2, 0.2)
-          : new BoxGeometry(0.4, 0.2, 0.15);
+          : d.trophic === 'decomposer'
+            ? new CylinderGeometry(0.22, 0.22, 0.06, 6)
+            : new BoxGeometry(0.4, 0.2, 0.15);
     // 動物は密度が植物より一桁小さいので、1 セルあたりの最大表示数を多くして見えるようにする
-    const perCell = d.trophic === 'plant' ? 2 : 10;
+    const perCell = d.trophic === 'plant' ? 2 : d.trophic === 'decomposer' ? 1 : 10;
     t[d.assetId] = { geometry, material, scale: d.id === 'forest' ? 1.6 : 1, perCell };
   }
   return t;
