@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { evaluate, judgeScenario, landRatio, startStats, type JudgeInput } from '../../src/scenario/judge';
-import type { ScenarioDef } from '../../src/scenario/types';
+import type { Condition, ScenarioDef } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
 
@@ -81,5 +81,25 @@ describe('assets/data/scenarios.json', () => {
       expect(['prevent', 'endure', 'escape']).toContain(d.kind);
       expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 } }), 0)).status).toBe('running');
     }
+  });
+});
+
+describe('species_mean', () => {
+  it('直近 years 年の平均が min 未満の種を「群れが小さい」で不合格にする。履歴が短ければある分で平均する', () => {
+    const c: Condition = { type: 'species_mean', ids: ['deer', 'wolf'], years: 3, min: 5 };
+    const hist = [{ deer: 20, wolf: 9 }, { deer: 2, wolf: 6 }, { deer: 8, wolf: 3 }, { deer: 5, wolf: 3 }];
+    // 直近 3 年: deer (2+8+5)/3 = 5.0 ≥ 5、wolf (6+3+3)/3 = 4.0 < 5
+    const r = evaluate(c, { ...input(snap({ totals: { deer: 5, wolf: 3 } })), history: hist });
+    expect(r.ok).toBe(false);
+    expect(r.why).toBe('群れが小さい(3 年平均): wolf 4.0 (< 5)');
+    // 履歴 1 年分だけなら今年の値で見る
+    expect(evaluate(c, { ...input(snap({ totals: { deer: 5, wolf: 5 } })), history: [{ deer: 5, wolf: 5 }] }).ok).toBe(true);
+    // history 省略時は今年の totals だけ
+    expect(evaluate(c, input(snap({ totals: { deer: 5, wolf: 5 } }))).why).toBe('群れが残った(3 年平均): deer 5.0, wolf 5.0');
+  });
+  it('最後の年だけ大きくても平均が低ければ不合格 (最後の瞬間の放流で勝てない)', () => {
+    const c: Condition = { type: 'species_mean', ids: ['deer'], years: 10, min: 5 };
+    const hist = [...Array(9).fill({ deer: 0 }), { deer: 30 }];
+    expect(evaluate(c, { ...input(snap({ totals: { deer: 30 } })), history: hist }).ok).toBe(false);
   });
 });

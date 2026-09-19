@@ -7,8 +7,9 @@ import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig, WorldSnapshot } from '../../src/simulation/types';
 
 /**
- * 4 本のシナリオを「放置」と「台本どおりの介入」で回し、
+ * 5 本のシナリオを「放置」と「台本どおりの介入」で回し、
  * 放置なら滅び、介入すれば回避できることを固定する (size 64、シードは各シナリオの start)。
+ * 沈む欠片は星の力の制約下で、素朴な単独戦略が滅び、力を配分する 2 通りの想定解が回避できることも固定する。
  */
 const species = JSON.parse(readFileSync('assets/data/species.json', 'utf8')) as SpeciesDef[];
 const base = JSON.parse(readFileSync('assets/data/world.default.json', 'utf8')) as Omit<WorldConfig, 'species'>;
@@ -33,21 +34,53 @@ const respawnAll: Script = (r, s) => {
   }
 };
 
-const scripts: Record<string, Script> = {
-  // 雨を増やして高地を湿らせ、鹿を高地に放ち、狼が増えすぎたら疫病
-  sinking: (r, s, y) => {
-    if (y === 30) r.intervene({ type: 'set_climate', rainScale: 1.5 });
-    if (y % 5 === 0 && y >= 20) {
-      for (const i of highest(s, 12)) r.intervene({ type: 'spawn_species', speciesId: 'deer', cell: i, amount: 0.3 });
-      const t = s.totals;
-      if (t.wolf > 1.5 * Math.max(1, t.deer)) {
-        let bi = -1;
-        let bv = -1;
-        for (let i = 0; i < s.layers.elevation.length; i++) if (s.layers.populations.wolf[i] > bv) { bv = s.layers.populations.wolf[i]; bi = i; }
-        r.intervene({ type: 'disaster', kind: 'plague', cell: bi, radius: 4 });
-      }
-    }
+/** 沈む欠片の介入 (星の力の制約下)。放流はプレイヤーのクリック 1 回 (半径 1) に合わせる */
+const sinkingOps = (r: ScenarioRunner, s: WorldSnapshot) => ({
+  spawnHigh: (ids: string[], k: number) => {
+    for (const c of highest(s, k)) for (const id of ids) r.intervene({ type: 'spawn_species', speciesId: id, cell: c, amount: 0.3, radius: 1 });
   },
+  plagueWolvesIfMany: () => {
+    const t = s.totals;
+    if (t.wolf <= 1.5 * Math.max(1, t.deer)) return;
+    let bi = -1;
+    let bv = -1;
+    for (let i = 0; i < s.layers.elevation.length; i++) if (s.layers.populations.wolf[i] > bv) { bv = s.layers.populations.wolf[i]; bi = i; }
+    r.intervene({ type: 'disaster', kind: 'plague', cell: bi, radius: 4 });
+  },
+});
+
+/** 素朴な単独戦略。どれも滅びる (計画 §3.4 の判定行列) */
+const sinkingNaive: Record<string, Script> = {
+  // 雨 1.5 倍を入れっぱなし。維持費 10/年が収入を超え、力が尽きて雨が止まる
+  'rain-only': (r, _s, y) => { if (y === 30) r.intervene({ type: 'set_climate', rainScale: 1.5 }); },
+  // 5 年ごとに高地へ鹿を放つだけ。雨がないので高地に鹿は根付かない
+  'spawn-only': (r, s, y) => { if (y % 5 === 0 && y >= 20) sinkingOps(r, s).spawnHigh(['deer'], 2); },
+  // 狼を疫病で抑えるだけ
+  'plague-only': (r, s, y) => { if (y % 5 === 0 && y >= 20) sinkingOps(r, s).plagueWolvesIfMany(); },
+};
+
+/** 力を配分する 2 通りの想定解。どちらも回避できる */
+const sinkingSolutions: Record<string, Script> = {
+  // 想定解 1: 控えめな雨 (1.25 倍、維持費 5/年) を 30 年目から。節約した力で 20 年ごとに鹿と兎を高地へ、狼が増えたら疫病
+  'modest-rain': (r, s, y) => {
+    const ops = sinkingOps(r, s);
+    if (y === 30) r.intervene({ type: 'set_climate', rainScale: 1.25 });
+    if (y % 20 === 0 && y >= 40) ops.spawnHigh(['deer', 'rabbit'], 1);
+    if (y % 10 === 0 && y >= 40) ops.plagueWolvesIfMany();
+  },
+  // 想定解 2: 前半は力を貯め、60 年目に雨 1.4 倍と鹿の種まき。以後は狼が増えたら疫病 (1.5 倍だと力が尽きて滅びる)
+  'save-then-rain': (r, s, y) => {
+    const ops = sinkingOps(r, s);
+    if (y === 60) {
+      r.intervene({ type: 'set_climate', rainScale: 1.4 });
+      ops.spawnHigh(['deer'], 2);
+    }
+    if (y > 60 && y % 10 === 0) ops.plagueWolvesIfMany();
+  },
+};
+
+const scripts: Record<string, Script> = {
+  sinking: sinkingSolutions['modest-rain'],
   'falling-star': (r, s, y) => { if (y === 62 || y === 70) respawnAll(r, s, y); },
   volcano: (r, s, y) => { if (y === 82 || y === 95) respawnAll(r, s, y); },
   // 十年目の基準を取ってから雨を 1.4 倍に。1.9 倍だと狼が谷で絶滅する (罠)
@@ -94,6 +127,21 @@ describe('scenario playthroughs (size 64)', { timeout: 600_000 }, () => {
       expect(v.status, v.reason).toBe('alive');
     });
   }
+  for (const [name, script] of Object.entries(sinkingNaive)) {
+    it(`sinking: naive ${name} → dead`, () => {
+      const def = defs.find((d) => d.id === 'sinking');
+      if (!def) throw new Error('missing');
+      const v = play(def, script);
+      expect(v.status, v.reason).toBe('dead');
+      expect(v.reason).toContain('鹿');
+    });
+  }
+  it('sinking: save-then-rain (second solution) → alive', () => {
+    const def = defs.find((d) => d.id === 'sinking');
+    if (!def) throw new Error('missing');
+    const v = play(def, sinkingSolutions['save-then-rain']);
+    expect(v.status, v.reason).toBe('alive');
+  });
   it('enrichment: too much rain kills the wolves (the trap)', () => {
     const def = defs.find((d) => d.id === 'enrichment');
     if (!def) throw new Error('missing');

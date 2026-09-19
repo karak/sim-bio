@@ -64,3 +64,31 @@ describe('createScenarioRunner', () => {
     expect(r2.interventions()).toBe(0);
   });
 });
+
+describe('species_mean (runner)', () => {
+  it('年ごとの totals を履歴に積み、species_mean が直近の平均で判定する', () => {
+    const totals = { deer: 10 };
+    const w = fakeWorld(totals);
+    const d: ScenarioDef = { ...def, years: 4, schedule: [], dead: undefined, alive: { type: 'species_mean', ids: ['deer'], years: 3, min: 5 } };
+    const r = createScenarioRunner(d, w);
+    r.update(w.snapshot()); // y0: 10
+    w.step(360); r.update(w.snapshot()); // y1: 10
+    totals.deer = 0;
+    w.step(360); r.update(w.snapshot()); // y2: 0
+    w.step(360); r.update(w.snapshot()); // y3: 0
+    totals.deer = 30;
+    w.step(360); r.update(w.snapshot()); // y4: 30 → 直近 3 年 (0, 0, 30) 平均 10 ≥ 5
+    expect(r.verdict().status).toBe('alive');
+    expect(r.verdict().reason).toBe('群れが残った(3 年平均): deer 10.0');
+  });
+  it('直近の平均が低ければ dead', () => {
+    const totals = { deer: 10 };
+    const w = fakeWorld(totals);
+    const d: ScenarioDef = { ...def, years: 4, schedule: [], dead: undefined, alive: { type: 'species_mean', ids: ['deer'], years: 3, min: 5 } };
+    const r = createScenarioRunner(d, w);
+    for (let y = 0; y <= 4; y++) { if (y >= 2) totals.deer = y === 4 ? 12 : 0; r.update(w.snapshot()); w.step(360); }
+    // 直近 3 年 (0, 0, 12) 平均 4 < 5
+    expect(r.verdict().status).toBe('dead');
+    expect(r.verdict().reason).toContain('群れが小さい(3 年平均): deer 4.0 (< 5)');
+  });
+});

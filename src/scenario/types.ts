@@ -8,6 +8,8 @@ type SpeciesDefLike = SpeciesDef;
  */
 export type Condition =
   | { type: 'species_alive'; ids: string[] }
+  /** 直近 years 年の総量の平均が min 以上 (群れとして残っているか)。年ごとの振動と最後の瞬間の放流に左右されない */
+  | { type: 'species_mean'; ids: string[]; years: number; min: number }
   | { type: 'species_extinct'; ids: string[] }
   | { type: 'land_ratio'; min?: number; max?: number }
   | { type: 'vegetation_ratio'; min?: number; max?: number }

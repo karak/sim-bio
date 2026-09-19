@@ -1,7 +1,7 @@
 # 生態系シミュレーション 設計書
 
 - 作成日: 2026-09-19
-- 状態: M1〜M5 実装完了(2026-09-19、M5 は 084f3b9)
+- 状態: M1〜M5 実装完了(2026-09-19、M5 は 084f3b9)。M6(沈む欠片をジレンマのあるゲームに)進行中
 - 対象: M1(地形 + 植物 + 季節 + グラフ)と M2(3 階層 + 種を放つ)
 
 ## 1. コンセプト
@@ -301,6 +301,27 @@ hud.showCell(cellIndex: number | null): void
 - 既存テストの世界には胞子苔を含めた。分解者のいない世界では生気が枯れて植物が痩せるため。
 - 隕石・火山は苔も消すので、その後に草と獣だけ戻しても生気が尽きて飢える。「星が落ちる夜」「火の山の目覚め」の予言に「苔も戻せ」を足し、通し実行の台本も苔を放つ。狼は薄く放つと餌を食い尽くす前に消える紙一重(6 セルに 1 つ・0.3 で安定)。
 
+### 4.12 実装時の差分(M6: 沈む欠片をジレンマのあるゲームに)
+
+計画 `docs/specs/plans/2026-09-19-m6-playable-dilemma-plan.md`。計測で「沈む欠片」は雨だけ・放流だけでも勝てた(介入が無限で無料)ので、希少性と判断材料を足した。
+
+- **星の力**(`ScenarioDef.budget`): シナリオ層の数値で World には入れない。`intervene` がコマンドの値段を引き、足りなければ `{ok:false, reason:'budget'}` で流さない。年が変わるたび `incomePerYear × 陸地率 × 生気平均 − 維持費`(維持費 = `|rainScale−1|·k + |tempOffset|·k`)。負になれば 0 にして気候を既定に戻す(`scenario.power.exhausted`)。`budget` のないシナリオは無料のまま。
+- `spawn_species` に `radius`。クリック 1 回の 3×3 放流を 1 コマンドにして値段を 1 回で引く。`WorldSnapshot.climate` を追加(維持費の計算用)。
+- **住みやすさレイヤー** `suit:<id>`: 適合度 0 → 暗、1 → 種の色。レイヤー列に「密度 / 住みやすさ」のモードチップ。右側 HUD をレイヤー列とグラフの縦積みコンテナにした(列が折り返しても石板・グラフに重ならない)。
+- **石板の警告**(`scenarioWarnings`、純粋関数): 種が基準の 25% 未満、陸が基準の半分未満、力が足りない、維持費が収入超え。alive 条件が参照する種だけに出す。年に 1 回評価、同じ key のログは初回だけ。**節目**(`milestones`)は未到達分を石板に出し到達で消す。**結果の内訳**(`Verdict.stats`: 介入回数・使った力・陸地率・総量)。
+- **判定条件 `species_mean`**(直近 N 年の総量の平均 ≥ min): 高地の群れは年ごとに 5〜31 と振れるので瞬間値では判定できず、また最後の瞬間の放流で勝てるのを防ぐ。runner が年ごとの totals を履歴に積み `JudgeInput.history` で渡す。試した「最後の N 年連続で alive」(sustainYears)は振動の谷で必ず途切れるため捨てた。
+- **沈む欠片の校正**(size 64、seed 42): 沈降 0.002 → **0.0015**(陸 25% → 6%。0.002 では雨があっても鹿が残らず、0.0015 で雨あり 7〜19・雨なし 4 前後の差が出る)。alive = 10 年平均で鹿 ≥ 6・兎 ≥ 3・狼 ≥ 2。予算 start 40 / incomePerYear 32(陸 25% で 8/年、6% で 2/年)/ spawn 4・disaster 12・climate 2 / 雨の維持費 20 per 1.0(1.5 倍 = 10/年、1.25 倍 = 5/年)/ 上限 120。species.json は動かしていない。
+
+  | 台本 | 鹿の 10 年平均 | 結果 |
+  |---|---|---|
+  | 放置 | 3.4 | dead |
+  | 雨 1.5 倍を 30 年目から入れっぱなし | 5.0(力が尽きて雨が止まる) | dead |
+  | 5 年ごとに鹿を高地へ放つだけ | 3.5 | dead |
+  | 狼に疫病だけ | 3.7 | dead |
+  | 雨 1.25 倍 + 20 年ごとに鹿・兎 + 疫病(想定解 1) | 9.4(力は最後に 0) | alive |
+  | 60 年目まで貯めて雨 1.4 倍 + 鹿の種まき + 疫病(想定解 2) | 14.1 | alive |
+  | 同上を雨 1.5 倍で | 3.4(力が尽きる) | dead |
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -340,6 +361,21 @@ hud.showCell(cellIndex: number | null): void
 | 100 年共存と振動が維持される | `tests/unit/data.test.ts`、`tests/unit/world.oscillation.test.ts` · 084f3b9 |
 | 生気の飢饉: 放置で滅び、五年目に苔を放てば回避 | `tests/slow/scenarios.playthrough.test.ts` · 084f3b9 |
 | 星が落ちる夜・火の山の目覚めは、苔も含めて放ち直せば回避できる(M4 の 4 本も引き続き通る) | `tests/slow/scenarios.playthrough.test.ts` · 084f3b9 |
+
+### M6: 沈む欠片をジレンマのあるゲームに
+
+| 受入項目 | 証跡 |
+|---|---|
+| 星の力: 値段・拒否・収入・維持費・上限・枯渇時の気候リセット。budget なしは無料 | `tests/unit/scenario.budget.test.ts` · adfb981 |
+| `spawn_species` の `radius`(省略時は 1 セル) | `tests/unit/world.commands.test.ts` · adfb981 |
+| 石板に力が出て放流で減り、足りないと弾かれる | `tests/e2e/smoke.spec.ts` · adfb981 |
+| 住みやすさレイヤーの着色、海は地形色、不明種は暗色 | `tests/unit/render.layerToColors.test.ts` · 73869bb |
+| 密度 / 住みやすさのモードチップ | `tests/e2e/smoke.spec.ts` · 73869bb |
+| 警告 4 種の真偽と順序、同じ警告のログは初回だけ、結果の内訳 | `tests/unit/scenario.warnings.test.ts`、`tests/unit/scenario.budget.test.ts` · 8c32ebc |
+| 節目が到達で消え、警告が出て、内訳が表示される | `tests/e2e/smoke.spec.ts` · 8c32ebc |
+| `species_mean` の平均判定と履歴 | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.runner.test.ts` |
+| 沈む欠片: 放置と素朴 3 戦略は dead、想定解 2 通りは alive、他 4 本は引き続き通る | `tests/slow/scenarios.playthrough.test.ts` |
+| 手動プレイ 3 回の記録(M6-05) | `docs/specs/plans/2026-09-19-m6-playtest.md` |
 
 ### M4: シナリオ層の基盤
 

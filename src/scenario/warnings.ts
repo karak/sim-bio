@@ -24,6 +24,7 @@ export function speciesInCondition(c: Condition): string[] {
   switch (c.type) {
     case 'species_alive':
     case 'species_extinct':
+    case 'species_mean':
       return c.ids;
     case 'total_ratio_vs_start':
       return [c.id];

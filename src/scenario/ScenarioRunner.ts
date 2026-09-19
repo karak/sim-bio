@@ -57,6 +57,8 @@ export function createScenarioRunner(
   let upkeepLastYear = 0;
   let powerSpent = 0;
   let warnings: Warning[] = [];
+  /** 年ごとの総量の履歴 (species_mean の判定用)。年に 1 件 */
+  const history: Record<string, number>[] = [];
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
   const warned = new Set<string>();
 
@@ -153,7 +155,8 @@ export function createScenarioRunner(
           warned.add(w.key);
           opts.onWarning?.(w);
         }
-        verdict = judgeScenario(def, { snapshot: s, start, year, interventions });
+        history.push({ ...s.totals });
+        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
           opts.onVerdict?.(verdict);
