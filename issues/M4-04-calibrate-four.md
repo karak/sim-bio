@@ -1,7 +1,7 @@
 ---
 id: M4-04
 title: 4 本の校正と証跡
-status: todo
+status: in_progress
 milestone: M4
 plan: docs/design/2026-09-19-scenarios-and-world.md
 depends_on: [M4-02]

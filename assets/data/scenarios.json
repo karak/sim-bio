@@ -2,7 +2,7 @@
   {
     "id": "sinking",
     "title": "沈む欠片",
-    "prophecy": "石板は告げる。この欠片は百年かけて海に呑まれる。高きへ逃れよ。獣たちが百年目の朝を迎えられたなら、島は生き延びたと言える。",
+    "prophecy": "石板は告げる。この欠片は百年かけて海に呑まれ、陸は十分の一になる。残るのは寒く乾いた高地ばかり。鹿の住める湿りを雨で作り、狼が食い尽くさぬよう数を抑えよ。百年目の朝、鹿と兎と狼が息をしていれば、島は生き延びたと言える。",
     "kind": "endure",
     "start": {
       "seed": 42
@@ -15,53 +15,27 @@
         "untilYear": 100,
         "command": {
           "type": "sink",
-          "amount": 0.004
+          "amount": 0.002
         }
       }
     ],
     "alive": {
-      "type": "all",
-      "of": [
-        {
-          "type": "species_alive",
-          "ids": [
-            "deer",
-            "rabbit",
-            "wolf"
-          ]
-        },
-        {
-          "type": "land_ratio",
-          "min": 0.05
-        }
+      "type": "species_alive",
+      "ids": [
+        "deer",
+        "rabbit",
+        "wolf"
       ]
     },
     "dead": {
-      "type": "any",
-      "of": [
-        {
-          "type": "species_extinct",
-          "ids": [
-            "deer"
-          ]
-        },
-        {
-          "type": "species_extinct",
-          "ids": [
-            "wolf"
-          ]
-        },
-        {
-          "type": "land_ratio",
-          "max": 0.03
-        }
-      ]
+      "type": "land_ratio",
+      "max": 0.02
     }
   },
   {
     "id": "falling-star",
     "title": "星が落ちる夜",
-    "prophecy": "六十年目の夜、星が島の心臓に落ちる。落ちる前に散らせ。落ちた後の三十年を、すべての命が越えられるか。",
+    "prophecy": "六十年目の夜、星が島の心臓に落ち、命をことごとく焼く。だが星の見守り手は新しい命を放てる。落ちた後の三十年で、草と森と獣を島に戻せ。",
     "kind": "endure",
     "start": {
       "seed": 42
@@ -74,7 +48,7 @@
           "type": "disaster",
           "kind": "meteor",
           "cell": -1,
-          "radius": 22
+          "radius": 46
         }
       }
     ],
@@ -87,35 +61,12 @@
         "rabbit",
         "wolf"
       ]
-    },
-    "dead": {
-      "type": "any",
-      "of": [
-        {
-          "type": "species_extinct",
-          "ids": [
-            "deer"
-          ]
-        },
-        {
-          "type": "species_extinct",
-          "ids": [
-            "wolf"
-          ]
-        },
-        {
-          "type": "species_extinct",
-          "ids": [
-            "rabbit"
-          ]
-        }
-      ]
     }
   },
   {
     "id": "volcano",
     "title": "火の山の目覚め",
-    "prophecy": "八十年目、島の心臓の山が火を吹き、半分を焼く。焼けた地は長く熱を持つ。獣を焼けぬ側へ。",
+    "prophecy": "八十年目、島の心臓の山が火を吹き、緑をすべて焼く。焼けた地は長く熱を持つ。五十年のうちに草と森を戻し、獣を戻せ。",
     "kind": "endure",
     "start": {
       "seed": 42
@@ -128,7 +79,7 @@
           "type": "disaster",
           "kind": "volcano",
           "cell": -1,
-          "radius": 26
+          "radius": 46
         }
       }
     ],
@@ -141,35 +92,12 @@
         "rabbit",
         "wolf"
       ]
-    },
-    "dead": {
-      "type": "any",
-      "of": [
-        {
-          "type": "species_extinct",
-          "ids": [
-            "deer"
-          ]
-        },
-        {
-          "type": "species_extinct",
-          "ids": [
-            "wolf"
-          ]
-        },
-        {
-          "type": "species_extinct",
-          "ids": [
-            "rabbit"
-          ]
-        }
-      ]
     }
   },
   {
     "id": "enrichment",
     "title": "豊かさの罠",
-    "prophecy": "雨を増やせば森は倍になる。だが豊かすぎる島では波が高くなり、狼は谷で息絶える。百年目、森を倍にし、狼を残せ。",
+    "prophecy": "雨を増やせば森は増える。だが豊かすぎる島では波が高くなり、狼は谷で息絶える。十年目を基準に、百年目までに森を一・五倍にし、狼を残せ。",
     "kind": "prevent",
     "start": {
       "seed": 42
@@ -197,7 +125,8 @@
       "ids": [
         "wolf"
       ]
-    }
+    },
+    "baselineYear": 10
   },
   {
     "id": "test-quick",

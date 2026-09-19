@@ -33,10 +33,14 @@ export type ScenarioDef = {
   schedule: ScheduledCommand[];
   /** 判定する年数。この年に alive を満たしていれば勝ち */
   years: number;
+  /** total_ratio_vs_start の基準を取る年 (省略時 0)。初期投入直後は不安定なので数年後を基準にできる */
+  baselineYear?: number;
+  /** schedule 内の radius はこのグリッドサイズを基準に書く (省略時 128)。実行時に size に比例して縮尺する */
+  referenceSize?: number;
   /** 満たしたら勝ち (years 到達時に評価) */
   alive: Condition;
-  /** 毎年評価し、満たした瞬間に負け */
-  dead: Condition;
+  /** 毎年評価し、満たした瞬間に負け。省略時は years 到達時の alive 判定だけで決まる */
+  dead?: Condition;
 };
 
 export type ScenarioStatus = 'running' | 'alive' | 'dead';

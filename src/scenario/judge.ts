@@ -83,8 +83,10 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
  * どちらでもなければ running。
  */
 export function judgeScenario(def: ScenarioDef, input: JudgeInput): Verdict {
-  const d = evaluate(def.dead, input);
-  if (d.ok) return { status: 'dead', reason: d.why };
+  if (def.dead) {
+    const d = evaluate(def.dead, input);
+    if (d.ok) return { status: 'dead', reason: d.why };
+  }
   if (input.year >= def.years) {
     const a = evaluate(def.alive, input);
     return a.ok ? { status: 'alive', reason: a.why } : { status: 'dead', reason: `予言の年に条件を満たせず: ${a.why}` };

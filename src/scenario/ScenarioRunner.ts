@@ -28,8 +28,10 @@ export function createScenarioRunner(
   const first = world.snapshot();
   const startTick = first.tick;
   const ticksPerYear = opts.ticksPerYear ?? 360;
-  const start: StartStats = startStats(first);
+  let start: StartStats = startStats(first);
   const size = first.size;
+  const baselineYear = def.baselineYear ?? 0;
+  const scale = size / (def.referenceSize ?? 128);
   const fired = new Set<string>();
   let lastYear = -1;
   let interventions = 0;
@@ -38,9 +40,12 @@ export function createScenarioRunner(
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
   const resolve = (cmd: Command): Command => {
+    let c = cmd;
     // cell = -1 は島の中心
-    if ('cell' in cmd && cmd.cell === -1) return { ...cmd, cell: Math.floor(size / 2) * size + Math.floor(size / 2) };
-    return cmd;
+    if ('cell' in c && c.cell === -1) c = { ...c, cell: Math.floor(size / 2) * size + Math.floor(size / 2) };
+    // 半径は referenceSize 基準なので size に比例させる
+    if (c.type === 'disaster') c = { ...c, radius: Math.max(0, Math.round(c.radius * scale)) };
+    return c;
   };
 
   const fireDue = (year: number) => {
@@ -72,6 +77,7 @@ export function createScenarioRunner(
       fireDue(year);
       if (year !== lastYear) {
         lastYear = year;
+        if (year === baselineYear) start = startStats(s);
         verdict = judgeScenario(def, { snapshot: s, start, year, interventions });
         if (verdict.status !== 'running') opts.onVerdict?.(verdict);
       }
