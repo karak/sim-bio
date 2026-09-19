@@ -12,6 +12,10 @@ test('boots, advances a year at 100x, graph shows values, layer switch works', a
   await expect(page.locator('#legend-grass')).toHaveText(/^\d+$/);
   await page.click('#layer-temperature');
   await expect(page.locator('#layer-temperature')).toHaveClass(/on/);
+  // 輝石チップでレイヤーが切り替わる (M8-01)
+  await page.click('#layer-crystal');
+  await expect(page.locator('#layer-crystal')).toHaveClass(/on/);
+  await expect(page.locator('#layer-temperature')).not.toHaveClass(/on/);
   const summaries = logs.filter((l) => l.includes('"event":"sim.tick.summary"'));
   expect(summaries.length).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(summaries[0])).toMatchObject({ event: 'sim.tick.summary', year: 1 });

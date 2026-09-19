@@ -19,7 +19,7 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
   const climate = { rainScale: opts.rainScale ?? 1, tempOffset: opts.tempOffset ?? 0 };
   const snapshot = (): WorldSnapshot => ({
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
-    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), populations: { grass: new Float32Array(n) } },
+    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
   });
   const dispatch = (c: Command) => {
     cmds.push(c);

@@ -80,6 +80,8 @@ export type WorldSnapshot = {
     vitality: Float32Array;
     /** 枯死 (死骸・落ち葉・灰) [0,1]。分解されて生気になる */
     litter: Float32Array;
+    /** 輝石 [0,1]。陸だけに決定論で塊状に置かれる。海は 0。掘削 (M8-02) までは変化しない */
+    crystal: Float32Array;
     populations: Record<string, Float32Array>;
   };
   totals: Record<string, number>;
@@ -102,5 +104,7 @@ export type SaveData = {
   /** M5 で追加 */
   vitality?: number[];
   litter?: number[];
+  /** M8 で追加。古いセーブには無い場合、restore 時に seed から決定論的に埋め直す */
+  crystal?: number[];
   populations: Record<string, number[]>;
 };

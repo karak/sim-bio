@@ -1,6 +1,6 @@
 import type { LogLevel, LogSink } from '../core/log/types';
 import type { Command, SaveData, SpeciesDef, WorldConfig, WorldSnapshot } from './types';
-import { generateTerrain, SEA_LEVEL } from './terrain';
+import { generateCrystal, generateTerrain, SEA_LEVEL } from './terrain';
 import { stepClimate } from './climate';
 import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
@@ -42,6 +42,8 @@ export class World {
   readonly grazed: Float32Array;
   readonly vitality: Float32Array;
   readonly litter: Float32Array;
+  /** 輝石 [0,1]。陸だけに決定論で塊状に置かれる。海は 0 (M8-01) */
+  readonly crystal: Float32Array;
   readonly fire: Uint8Array;
   readonly burnt: Uint16Array;
   private readonly scratch: Float32Array;
@@ -71,6 +73,8 @@ export class World {
     this.grazed = new Float32Array(this.n);
     this.vitality = new Float32Array(this.n);
     this.litter = new Float32Array(this.n);
+    // seed から決定論で生成しておく。create はそのまま使い、restore は save.crystal があればそれで上書きする
+    this.crystal = generateCrystal(config.seed, this.elevation, config.size);
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
@@ -109,6 +113,8 @@ export class World {
     if (save.vitality) w.vitality.set(save.vitality);
     else for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) w.vitality[i] = INITIAL_VITALITY;
     if (save.litter) w.litter.set(save.litter);
+    // 古いセーブには無いので、その場合は既に constructor で seed から埋めた決定論の値をそのまま使う
+    if (save.crystal) w.crystal.set(save.crystal);
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -144,6 +150,7 @@ export class World {
         vegetation: this.vegetation,
         vitality: this.vitality,
         litter: this.litter,
+        crystal: this.crystal,
         populations: this.populations,
       },
       totals: this.totals,
@@ -167,6 +174,7 @@ export class World {
       grazed: Array.from(this.grazed),
       vitality: Array.from(this.vitality),
       litter: Array.from(this.litter),
+      crystal: Array.from(this.crystal),
       populations,
     };
   }

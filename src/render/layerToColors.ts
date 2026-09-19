@@ -8,6 +8,7 @@ export type LayerKind =
   | 'moisture'
   | 'vegetation'
   | 'vitality'
+  | 'crystal'
   | `species:${string}`
   | `suit:${string}`;
 
@@ -39,6 +40,8 @@ const WET = hex('#2F6EA8');
 const DARK = hex('#1A1A1A');
 const VIT_LOW = hex('#2A2622');
 const VIT_HIGH = hex('#8FD3C4');
+/** 輝石レイヤーの高色。低色は DARK (無地) を流用する (M8-01) */
+const CRYSTAL_HIGH = hex('#B9A2F2');
 
 function seaColor(e: number): RGB {
   return lerp(SEA_DEEP, SEA_SHALLOW, clamp01(e / SEA_LEVEL));
@@ -84,6 +87,9 @@ export function layerToColors(
           break;
         case 'vitality':
           c = lerp(VIT_LOW, VIT_HIGH, clamp01(L.vitality[i]));
+          break;
+        case 'crystal':
+          c = lerp(DARK, CRYSTAL_HIGH, clamp01(L.crystal[i]));
           break;
         default:
           // suit:<id> は不明種でも例外にせず、そのまま暗色 (VIT_LOW) に留める

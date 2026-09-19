@@ -40,6 +40,7 @@ const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] =
   { id: 'moisture', label: '降水' },
   { id: 'vegetation', label: '植生' },
   { id: 'vitality', label: '生気' },
+  { id: 'crystal', label: '輝石' },
 ];
 const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'meteor', label: '隕石' },
@@ -307,6 +308,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       `<div><span>標高</span><span class="mono">${Math.round(L.elevation[cell] * 1000)} m</span></div>` +
       `<div><span>気温 / 水分</span><span class="mono">${L.temperature[cell].toFixed(1)}℃ / ${L.moisture[cell].toFixed(2)}</span></div>` +
       `<div><span>生気 / 枯死</span><span class="mono">${L.vitality[cell].toFixed(2)} / ${L.litter[cell].toFixed(2)}</span></div>` +
+      `<div><span>輝石</span><span class="mono">${L.crystal[cell].toFixed(2)}</span></div>` +
       s.species.map((d) => `<div><span>${d.name}</span><span class="mono">${L.populations[d.id][cell].toFixed(2)}</span></div>`).join('');
   };
 
