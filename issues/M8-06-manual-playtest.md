@@ -1,7 +1,7 @@
 ---
 id: M8-06
 title: 手動受入プレイテスト
-status: todo
+status: blocked
 milestone: M8
 plan: docs/specs/plans/2026-09-19-m8-civilization-plan.md
 depends_on: [M8-01, M8-02, M8-03, M8-04, M8-05]
