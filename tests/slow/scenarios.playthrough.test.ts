@@ -20,15 +20,16 @@ type Script = (r: ScenarioRunner, s: WorldSnapshot, year: number) => void;
 const highest = (s: WorldSnapshot, k: number) =>
   [...s.layers.elevation.keys()].sort((a, b) => s.layers.elevation[b] - s.layers.elevation[a]).slice(0, k);
 
-/** 島中に草・森・獣を放ち直す (星が落ちた後、火山の後) */
+/** 島中に苔・草・森・獣を放ち直す (星が落ちた後、火山の後)。苔を戻さないと生気が尽きて草も獣も飢える */
 const respawnAll: Script = (r, s) => {
   let k = 0;
   for (let i = 0; i < s.layers.elevation.length; i += 37) {
     if (s.layers.elevation[i] < 0.3) continue;
     k++;
-    for (const id of ['grass', 'forest']) r.intervene({ type: 'spawn_species', speciesId: id, cell: i, amount: 0.5 });
+    for (const id of ['moss', 'grass', 'forest']) r.intervene({ type: 'spawn_species', speciesId: id, cell: i, amount: 0.5 });
     if (k % 3 === 0) for (const id of ['deer', 'rabbit']) r.intervene({ type: 'spawn_species', speciesId: id, cell: i, amount: 0.3 });
-    if (k % 9 === 0) r.intervene({ type: 'spawn_species', speciesId: 'wolf', cell: i, amount: 0.15 });
+    // 狼は薄く放つと餌を食い尽くす前に消える紙一重なので、6 セルに 1 つ・0.3 と厚めに放つ
+    if (k % 6 === 0) r.intervene({ type: 'spawn_species', speciesId: 'wolf', cell: i, amount: 0.3 });
   }
 };
 
@@ -51,10 +52,24 @@ const scripts: Record<string, Script> = {
   volcano: (r, s, y) => { if (y === 82 || y === 95) respawnAll(r, s, y); },
   // 十年目の基準を取ってから雨を 1.4 倍に。1.9 倍だと狼が谷で絶滅する (罠)
   enrichment: (r, _s, y) => { if (y === 12) r.intervene({ type: 'set_climate', rainScale: 1.4 }); },
+  // 五年目に湿った地へ胞子苔を放つ。苔は自力で島中に広がる
+  'vitality-famine': (r, s, y) => {
+    if (y !== 5) return;
+    let k = 0;
+    for (let i = 0; i < s.layers.elevation.length; i += 23) {
+      if (s.layers.elevation[i] < 0.3 || s.layers.moisture[i] < 0.6) continue;
+      if (k++ % 2 === 0) r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: i, amount: 0.4 });
+    }
+  },
 };
 
 function play(def: ScenarioDef, script: Script | null) {
-  const cfg: WorldConfig = { ...structuredClone(base), size: SIZE, species, seed: def.start?.seed ?? base.seed };
+  const cfg: WorldConfig = {
+    ...structuredClone(base),
+    size: SIZE,
+    species: species.map((d) => ({ ...d, ...(def.start?.species?.[d.id] ?? {}) })),
+    seed: def.start?.seed ?? base.seed,
+  };
   const w = World.create(cfg, { log: createMemorySink() });
   const r = createScenarioRunner(def, w, { ticksPerYear: cfg.ticksPerYear });
   for (let y = 0; y <= def.years; y++) {
@@ -68,7 +83,7 @@ function play(def: ScenarioDef, script: Script | null) {
 }
 
 describe('scenario playthroughs (size 64)', { timeout: 600_000 }, () => {
-  for (const id of ['sinking', 'falling-star', 'volcano', 'enrichment']) {
+  for (const id of ['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine']) {
     const def = defs.find((d) => d.id === id);
     if (!def) throw new Error(`scenario ${id} missing`);
     it(`${id}: idle → dead`, () => {

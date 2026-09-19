@@ -10,9 +10,13 @@ export type DisasterState = {
   /** 焼失後の再着火不可カウンタ */
   burnt: Uint16Array;
   populations: Record<string, Float32Array>;
+  /** 枯死。焼けた植生の一部が灰として積まれる。省略可 */
+  litter?: Float32Array;
 };
 
 export const VOLCANO_HEAT = 6;
+/** 焼けた植生のうち枯死 (灰) に戻る割合 */
+export const ASH_FRACTION = 0.5;
 export const METEOR_CRATER = 0.05;
 /** この植生密度を超える隣接セルへ延焼する */
 export const FIRE_THRESHOLD = 0.3;
@@ -76,10 +80,10 @@ export function applyDisaster(
 }
 
 /**
- * 燃えているセルの植物を 0 にし、植生の濃い隣接セルへ延焼を予約する。
- * 返り値はこの tick に燃えたセル数。
+ * 燃えているセルの burnable (植物と分解者) を 0 にし、植生の濃い隣接セルへ延焼を予約する。
+ * 焼けた植生の一部は灰として枯死に積む。返り値はこの tick に燃えたセル数。
  */
-export function stepFire(s: DisasterState, vegetation: Float32Array, plants: SpeciesDef[], size: number): number {
+export function stepFire(s: DisasterState, vegetation: Float32Array, burnable: SpeciesDef[], size: number): number {
   const n = size * size;
   const next: number[] = [];
   let burned = 0;
@@ -87,7 +91,9 @@ export function stepFire(s: DisasterState, vegetation: Float32Array, plants: Spe
     if (s.burnt[i] > 0) s.burnt[i]--;
     if (s.fire[i] !== 1) continue;
     burned++;
-    for (const d of plants) s.populations[d.id][i] = 0;
+    if (s.litter) s.litter[i] = Math.min(1, s.litter[i] + ASH_FRACTION * vegetation[i]);
+    // 植物と分解者 (胞子苔) が燃える
+    for (const d of burnable) s.populations[d.id][i] = 0;
     s.burnt[i] = BURNT_TICKS;
     s.fire[i] = 0;
     forEachNeighbor4(i, size, (j) => {

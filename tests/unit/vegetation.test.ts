@@ -77,4 +77,15 @@ describe('stepVegetation', () => {
     stepVegetation(p, s, e, sp, 2);
     expect(p.grass[0]).toBeCloseTo(p.grass[1], 9);
   });
+  it('low vitality slows growth, growth consumes vitality, death feeds litter', () => {
+    const n = 4;
+    const e = { ...env(n), vitality: new Float32Array([0.02, 1, 1, 1]), litter: new Float32Array(n) };
+    const p = { grass: new Float32Array(n).fill(0.2) };
+    const s = new Float32Array(n);
+    const sp = [{ ...grass, diffusion: 0 }];
+    stepVegetation(p, s, e, sp, 2);
+    expect(p.grass[0]).toBeLessThan(p.grass[1]);
+    expect(e.vitality[1]).toBeLessThan(1);
+    expect(e.litter[1]).toBeGreaterThan(0);
+  });
 });

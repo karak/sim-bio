@@ -9,12 +9,14 @@ export type PopulationEnv = {
   moisture: Float32Array;
   /** 草食獣が植物を食べた量を積む。植物の回復遅れに使う。省略可 */
   grazed?: Float32Array;
+  /** 枯死。動物の死亡分を積み、分解者の餌になる。省略可 */
+  litter?: Float32Array;
 };
 
 /** 植物を 1 単位食べたとき grazed に積む量。大きいほど回復が遅い */
 export const GRAZE_IMPACT = 3;
 
-const TROPHIC_ORDER = { plant: 0, herbivore: 1, carnivore: 2 } as const;
+const TROPHIC_ORDER = { plant: 0, herbivore: 1, carnivore: 2, decomposer: 3 } as const;
 
 /**
  * 餌密度 food に対する 1 個体あたりの摂食率 (Holling II 型)。
@@ -43,10 +45,13 @@ export function stepPopulations(
   const n = size * size;
   const ordered = [...animals].sort((a, b) => TROPHIC_ORDER[a.trophic] - TROPHIC_ORDER[b.trophic]);
   const grazed = env.grazed;
+  const litter = env.litter;
   for (const d of ordered) {
     const p = pops[d.id];
     const prey = (d.eats ?? []).map((id) => pops[id]).filter((arr): arr is Float32Array => arr !== undefined);
     const eatsPlants = d.trophic === 'herbivore';
+    // 分解者の餌は枯死。枯死そのものは stepVitality で分解されるのでここでは減らさない
+    const eatsLitter = d.trophic === 'decomposer';
     const predation = d.predation ?? 0;
     const handling = d.handlingTime ?? 0;
     for (let i = 0; i < n; i++) {
@@ -55,12 +60,15 @@ export function stepPopulations(
         continue;
       }
       let food = 0;
-      for (const q of prey) food += q[i];
+      if (eatsLitter) food = litter ? litter[i] : 0;
+      else for (const q of prey) food += q[i];
       const f = suitability(d, env.temperature[i], env.moisture[i]);
       const v = p[i];
       const g = functionalResponse(predation, handling, food);
-      scratch[i] = v + d.growthRate * f * g * v - d.mortality * (2 - f) * v;
-      if (g > 0 && v > 0 && food > 0) {
+      const death = d.mortality * (2 - f) * v;
+      scratch[i] = v + d.growthRate * f * g * v - death;
+      if (litter && !eatsLitter) litter[i] = Math.min(1, litter[i] + death);
+      if (!eatsLitter && g > 0 && v > 0 && food > 0) {
         // 取り除く総量 g·v を餌種ごとに比例配分する。1 を超えないよう clamp
         const k = Math.max(0, 1 - (g * v) / food);
         for (const q of prey) {

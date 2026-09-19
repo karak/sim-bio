@@ -71,4 +71,20 @@ describe('stepPopulations', () => {
     stepPopulations(pops, s, e, [wolf], 1);
     expect(e.grazed[0]).toBe(afterDeer);
   });
+  it('decomposer grows on litter and declines without it; animal deaths feed litter', () => {
+    const moss: SpeciesDef = { ...deer, id: 'moss', trophic: 'decomposer', eats: [], predation: 0.08, growthRate: 2, mortality: 0.01, moistureRange: [0.2, 1], assetId: 'moss' };
+    const rich = { ...env(1), litter: new Float32Array([0.8]) };
+    const poor = { ...env(1), litter: new Float32Array([0]) };
+    const a = { moss: new Float32Array([0.2]) };
+    const b = { moss: new Float32Array([0.2]) };
+    for (let k = 0; k < 30; k++) { stepPopulations(a, new Float32Array(1), rich, [moss], 1); stepPopulations(b, new Float32Array(1), poor, [moss], 1); }
+    expect(a.moss[0]).toBeGreaterThan(0.2);
+    expect(b.moss[0]).toBeLessThan(0.2);
+    // 分解者は枯死を減らさない (分解は stepVitality の担当)
+    expect(rich.litter[0]).toBeCloseTo(0.8, 6);
+    const e = { ...env(1), litter: new Float32Array([0]) };
+    const pops = { grass: new Float32Array([0.8]), deer: new Float32Array([0.5]) };
+    stepPopulations(pops, new Float32Array(1), e, [deer], 1);
+    expect(e.litter[0]).toBeGreaterThan(0);
+  });
 });

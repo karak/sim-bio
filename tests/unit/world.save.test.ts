@@ -11,6 +11,8 @@ describe('World save/restore', () => {
     a.step(10);
     const save = a.serialize();
     expect(save.grazed).toHaveLength(32 * 32);
+    expect(save.vitality).toHaveLength(32 * 32);
+    expect(save.litter).toHaveLength(32 * 32);
     const json = JSON.stringify(save);
     const b = World.restore(JSON.parse(json), { log: createMemorySink() });
     expect(Array.from(b.snapshot().layers.vegetation)).toEqual(Array.from(a.snapshot().layers.vegetation));

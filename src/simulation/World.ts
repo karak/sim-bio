@@ -4,6 +4,7 @@ import { generateTerrain, SEA_LEVEL } from './terrain';
 import { stepClimate } from './climate';
 import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
+import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, stepFire } from './disaster';
 
 export type WorldDeps = {
@@ -27,6 +28,9 @@ export class World {
   private readonly n: number;
   private readonly plants: SpeciesDef[];
   private readonly animals: SpeciesDef[];
+  private readonly decomposers: SpeciesDef[];
+  /** 山火事で燃えるもの: 植物 + 分解者 */
+  private readonly burnable: SpeciesDef[];
   private readonly byId: Map<string, SpeciesDef>;
   readonly elevation: Float32Array;
   readonly moistureBase: Float32Array;
@@ -36,6 +40,8 @@ export class World {
   readonly vegetation: Float32Array;
   /** 被食による植物の回復遅れ [0,1] */
   readonly grazed: Float32Array;
+  readonly vitality: Float32Array;
+  readonly litter: Float32Array;
   readonly fire: Uint8Array;
   readonly burnt: Uint16Array;
   private readonly scratch: Float32Array;
@@ -54,6 +60,8 @@ export class World {
     this.byId = new Map(config.species.map((d) => [d.id, d]));
     this.plants = config.species.filter((d) => d.trophic === 'plant');
     this.animals = config.species.filter((d) => d.trophic !== 'plant');
+    this.decomposers = config.species.filter((d) => d.trophic === 'decomposer');
+    this.burnable = config.species.filter((d) => d.trophic === 'plant' || d.trophic === 'decomposer');
     this.elevation = terrain.elevation;
     this.moistureBase = terrain.moistureBase;
     this.heat = new Float32Array(this.n);
@@ -61,6 +69,8 @@ export class World {
     this.moisture = new Float32Array(this.n);
     this.vegetation = new Float32Array(this.n);
     this.grazed = new Float32Array(this.n);
+    this.vitality = new Float32Array(this.n);
+    this.litter = new Float32Array(this.n);
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
@@ -78,6 +88,7 @@ export class World {
       const p = w.populations[d.id];
       for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) p[i] = init;
     }
+    for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) w.vitality[i] = INITIAL_VITALITY;
     // 初期スナップショットにも気温・水分が入るように 1 回だけ気候を評価する
     stepClimate(w, w.config, 0);
     w.heat.fill(0);
@@ -95,6 +106,9 @@ export class World {
     });
     w.heat.set(save.heat);
     if (save.grazed) w.grazed.set(save.grazed);
+    if (save.vitality) w.vitality.set(save.vitality);
+    else for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) w.vitality[i] = INITIAL_VITALITY;
+    if (save.litter) w.litter.set(save.litter);
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -128,6 +142,8 @@ export class World {
         temperature: this.temperature,
         moisture: this.moisture,
         vegetation: this.vegetation,
+        vitality: this.vitality,
+        litter: this.litter,
         populations: this.populations,
       },
       totals: this.totals,
@@ -148,6 +164,8 @@ export class World {
       moistureBase: Array.from(this.moistureBase),
       heat: Array.from(this.heat),
       grazed: Array.from(this.grazed),
+      vitality: Array.from(this.vitality),
+      litter: Array.from(this.litter),
       populations,
     };
   }
@@ -159,9 +177,10 @@ export class World {
     const { ticksPerYear, size } = this.config;
     const dayOfYear = this.tick % ticksPerYear;
     stepClimate(this, this.config, dayOfYear);
-    stepFire(this, this.vegetation, this.plants, size);
+    stepFire(this, this.vegetation, this.burnable, size);
     stepVegetation(this.populations, this.scratch, this, this.plants, size);
     stepPopulations(this.populations, this.scratch, this, this.animals, size);
+    stepVitality(this, this.decomposers, this.scratch, size);
     this.refresh();
     for (const d of this.config.species) {
       const was = this.prevTotals[d.id] ?? 0;
@@ -175,6 +194,7 @@ export class World {
         meanTemperature: this.meanTemperature,
         co2: this.co2,
         vegetationRatio: this.vegetationRatio(),
+        vitalityMean: this.landMean(this.vitality),
       });
     }
   }
@@ -245,6 +265,19 @@ export class World {
       }
     }
     this.meanTemperature = land ? t / land : 0;
+  }
+
+  /** 陸セルの平均 */
+  private landMean(arr: Float32Array): number {
+    let land = 0;
+    let v = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (this.elevation[i] >= SEA_LEVEL) {
+        land++;
+        v += arr[i];
+      }
+    }
+    return land ? v / land : 0;
   }
 
   private vegetationRatio(): number {

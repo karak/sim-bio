@@ -30,6 +30,18 @@ export function vegetationRatio(s: WorldSnapshot): number {
   return land ? v / land : 0;
 }
 
+export function vitalityRatio(s: WorldSnapshot): number {
+  let land = 0;
+  let v = 0;
+  const e = s.layers.elevation;
+  for (let i = 0; i < e.length; i++) {
+    if (e[i] < SEA_LEVEL) continue;
+    land++;
+    v += s.layers.vitality[i];
+  }
+  return land ? v / land : 0;
+}
+
 export function startStats(s: WorldSnapshot): StartStats {
   return { landRatio: landRatio(s), totals: { ...s.totals } };
 }
@@ -55,6 +67,10 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
     case 'vegetation_ratio': {
       const v = vegetationRatio(s);
       return { ok: inRange(v, c.min, c.max), why: `植生率 ${(v * 100).toFixed(0)}%` };
+    }
+    case 'vitality_ratio': {
+      const v = vitalityRatio(s);
+      return { ok: inRange(v, c.min, c.max), why: `生気 ${(v * 100).toFixed(0)}%` };
     }
     case 'total_ratio_vs_start': {
       const base = input.start.totals[c.id] ?? 0;

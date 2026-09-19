@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
-import { testConfig, fixedNow, grass } from './helpers';
+import { testConfig, fixedNow, grass, moss } from './helpers';
 
 describe('World logging', () => {
   it('emits created, yearly summary, and stamps ts/tick/year', () => {
@@ -26,8 +26,9 @@ describe('World logging', () => {
   it('emits sim.species.extinct once when a species dies out', () => {
     const log = createMemorySink();
     const cold = { ...grass, tempRange: [50, 60] as [number, number] };
-    const w = World.create(testConfig({ species: [cold] }), { log });
+    const w = World.create(testConfig({ species: [cold, moss] }), { log });
     w.step(360 * 3);
-    expect(log.find('sim.species.extinct')).toHaveLength(1);
+    // 草が絶滅すると餌 (枯死) を失った胞子苔も後で絶滅するので、草だけ数える
+    expect(log.find('sim.species.extinct').filter((r) => r.speciesId === 'grass')).toHaveLength(1);
   });
 });

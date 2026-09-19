@@ -12,7 +12,7 @@ const snap = (over: Partial<{ totals: Record<string, number>; elevation: number[
   return {
     tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280,
     totals: over.totals ?? { grass: 10, deer: 5, wolf: 1 },
-    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation, populations: { grass: vegetation } },
+    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation, vitality: new Float32Array(n), litter: new Float32Array(n), populations: { grass: vegetation } },
   };
 };
 const input = (s: WorldSnapshot, year = 0, interventions = 0, start = startStats(snap())): JudgeInput => ({ snapshot: s, start, year, interventions });
@@ -31,6 +31,13 @@ describe('evaluate', () => {
     // 陸 3 セルの植生 (0.5+0.5+1)/3
     expect(evaluate({ type: 'vegetation_ratio', min: 0.66 }, input(snap())).ok).toBe(true);
     expect(evaluate({ type: 'vegetation_ratio', min: 0.7 }, input(snap())).ok).toBe(false);
+  });
+  it('vitality_ratio averages vitality over land', () => {
+    const s = snap();
+    s.layers.vitality.set([0, 0.2, 0.6, 1]);
+    // 陸 3 セル (0.2 + 0.6 + 1) / 3 = 0.6
+    expect(evaluate({ type: 'vitality_ratio', min: 0.6 }, input(s)).ok).toBe(true);
+    expect(evaluate({ type: 'vitality_ratio', min: 0.61 }, input(s)).ok).toBe(false);
   });
   it('total_ratio_vs_start uses the start totals', () => {
     const start = startStats(snap({ totals: { forest: 100 } }));
@@ -67,7 +74,7 @@ describe('judgeScenario', () => {
 describe('assets/data/scenarios.json', () => {
   const defs = JSON.parse(readFileSync('assets/data/scenarios.json', 'utf8')) as ScenarioDef[];
   it('contains the four first scenarios with prophecy and conditions', () => {
-    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment']);
+    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine']);
     for (const d of defs.filter((x) => !x.hidden)) {
       expect(d.prophecy.length).toBeGreaterThan(10);
       expect(d.years).toBeGreaterThan(0);

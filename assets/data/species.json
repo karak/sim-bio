@@ -110,5 +110,27 @@
     "color": "#E07A55",
     "initialDensity": 0.01,
     "handlingTime": 20
+  },
+  {
+    "id": "moss",
+    "name": "胞子苔",
+    "trophic": "decomposer",
+    "growthRate": 1.5,
+    "mortality": 0.02,
+    "predation": 0.08,
+    "handlingTime": 5,
+    "tempRange": [
+      0,
+      30
+    ],
+    "moistureRange": [
+      0.35,
+      1.0
+    ],
+    "diffusion": 0.03,
+    "eats": [],
+    "assetId": "moss",
+    "color": "#8FD3C4",
+    "initialDensity": 0.05
   }
 ]
