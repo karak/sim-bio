@@ -1,0 +1,19 @@
+import { describe, it, expect } from 'vitest';
+import { describeEvent } from '../../src/ui/Tablet';
+
+const names = { deer: '鹿' };
+const alive = { status: 'alive', reason: 'x' } as const;
+
+describe('describeEvent (年表の文)', () => {
+  it('介入・予定イベント・力切れ・警告・勝敗をそれぞれ人が読める文にする', () => {
+    expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'spawn_species', speciesId: 'deer', cell: 0, amount: 0.5 } }, names)).toBe('鹿を放った');
+    expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'disaster', kind: 'plague', cell: 0, radius: 4 } }, names)).toBe('疫病を送った');
+    expect(describeEvent({ year: 3, kind: 'scheduled', command: { type: 'disaster', kind: 'meteor', cell: -1, radius: 46 } }, names)).toBe('予言どおり隕石が起きた');
+    expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'set_climate', rainScale: 1.25 } }, names)).toBe('雨 ×1.25');
+    expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'set_climate', rainScale: 1, tempOffset: -2 } }, names)).toBe('雨 ×1.00、気温 -2.0');
+    expect(describeEvent({ year: 3, kind: 'power_exhausted' }, names)).toBe('力が尽き、気候が元に戻った');
+    expect(describeEvent({ year: 3, kind: 'warning', warning: { kind: 'power_low', key: 'power_low', text: '力が足りない(残り 0)' } }, names)).toBe('⚠ 力が足りない(残り 0)');
+    expect(describeEvent({ year: 3, kind: 'verdict', verdict: alive }, names)).toBe('島は生き延びた');
+    expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'spawn_species', speciesId: 'unknown', cell: 0, amount: 0.5 } }, names)).toBe('unknownを放った');
+  });
+});

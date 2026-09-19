@@ -185,3 +185,31 @@ describe('警告と結果の内訳 (runner)', () => {
     expect(r.verdict().stats).toEqual(got!.stats);
   });
 });
+
+describe('年表 (runner.timeline)', () => {
+  it('介入・単発の予定イベント・力切れ・警告の初回・勝敗を年付きで積む。毎年の沈降は積まない', () => {
+    const w = fakeWorld({ rainScale: 1.8 });
+    const d: ScenarioDef = {
+      ...withBudget({ start: 3, incomePerYear: 1 }),
+      years: 2,
+      schedule: [
+        { atYear: 1, command: { type: 'disaster', kind: 'meteor', cell: -1, radius: 1 } },
+        { atYear: 0, everyYears: 1, untilYear: 2, command: { type: 'sink', amount: 0.01 } },
+      ],
+    };
+    const r = createScenarioRunner(d, w);
+    r.update(w.snapshot());
+    r.intervene(climate);
+    w.step(360);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    const kinds = r.timeline().map((e) => `${e.year}:${e.kind}`);
+    // 1 年目: 力 0 で power_low と upkeep_over_income の 2 つが初回
+    expect(kinds).toEqual(['0:intervene', '1:scheduled', '1:power_exhausted', '1:warning', '1:warning', '2:verdict']);
+    expect(r.timeline()[0]).toMatchObject({ kind: 'intervene', command: climate });
+    expect(r.timeline()[3]).toMatchObject({ kind: 'warning', warning: { kind: 'power_low' } });
+    expect(r.timeline()[4]).toMatchObject({ kind: 'warning', warning: { kind: 'upkeep_over_income' } });
+    expect(r.timeline()[5]).toMatchObject({ kind: 'verdict', verdict: { status: 'alive' } });
+  });
+});

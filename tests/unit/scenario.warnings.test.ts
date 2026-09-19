@@ -40,19 +40,29 @@ describe('scenarioWarnings', () => {
     expect(scenarioWarnings(def, snap({ land: [0.5, 0.5, 0.1, 0.1] }), start, null)).toEqual([]);
   });
   it('power_low: どのコマンドも買えないときだけ出す', () => {
-    expect(scenarioWarnings(def, snap(), start, { power: 0.5, incomeLastYear: 2, upkeepLastYear: 0 }).map((w) => w.text)).toEqual(['力が足りない(残り 0)']);
-    expect(scenarioWarnings(def, snap(), start, { power: 1, incomeLastYear: 2, upkeepLastYear: 0 })).toEqual([]);
+    expect(scenarioWarnings(def, snap(), start, { power: 0.5, max: 30, incomeLastYear: 2, upkeepLastYear: 0 }).map((w) => w.text)).toEqual(['力が足りない(残り 0)']);
+    expect(scenarioWarnings(def, snap(), start, { power: 1, max: 30, incomeLastYear: 2, upkeepLastYear: 0 })).toEqual([]);
     // budget のないシナリオでは力の警告は出ない
-    expect(scenarioWarnings({ ...def, budget: undefined }, snap(), start, { power: 0, incomeLastYear: 0, upkeepLastYear: 0 })).toEqual([]);
+    expect(scenarioWarnings({ ...def, budget: undefined }, snap(), start, { power: 0, max: 30, incomeLastYear: 0, upkeepLastYear: 0 })).toEqual([]);
   });
   it('upkeep_over_income: 直前の年の維持費が収入を超えているときに出す', () => {
-    const ws = scenarioWarnings(def, snap(), start, { power: 5, incomeLastYear: 3.2, upkeepLastYear: 5 });
+    const ws = scenarioWarnings(def, snap(), start, { power: 5, max: 30, incomeLastYear: 3.2, upkeepLastYear: 5 });
     expect(ws.map((w) => w.kind)).toEqual(['upkeep_over_income']);
     expect(ws[0].text).toBe('維持費が収入を超えている(−5.0/年 > +3.2/年)');
-    expect(scenarioWarnings(def, snap(), start, { power: 5, incomeLastYear: 5, upkeepLastYear: 5 })).toEqual([]);
+    expect(scenarioWarnings(def, snap(), start, { power: 5, max: 30, incomeLastYear: 5, upkeepLastYear: 5 })).toEqual([]);
+  });
+  it('power_capped: 上限に達していて収入があるときに出す。収入 0 (最初の年) では出さない', () => {
+    expect(scenarioWarnings(def, snap(), start, { power: 30, max: 30, incomeLastYear: 2, upkeepLastYear: 0 }).map((w) => w.text)).toEqual(['力が上限(30)に達している。使わなければ収入は捨てられる']);
+    expect(scenarioWarnings(def, snap(), start, { power: 29, max: 30, incomeLastYear: 2, upkeepLastYear: 0 })).toEqual([]);
+    expect(scenarioWarnings(def, snap(), start, { power: 30, max: 30, incomeLastYear: 0, upkeepLastYear: 0 })).toEqual([]);
+  });
+  it('ignoreWarnings にある種類は出さない (沈む欠片の陸の減少)', () => {
+    const s = snap({ totals: { grass: 1, deer: 0, wolf: 0 }, land: [0.5, 0.1, 0.1, 0.1] });
+    expect(scenarioWarnings(def, s, start, null).map((w) => w.kind)).toEqual(['species_low', 'species_low', 'land_low']);
+    expect(scenarioWarnings({ ...def, ignoreWarnings: ['land_low'] }, s, start, null).map((w) => w.kind)).toEqual(['species_low', 'species_low']);
   });
   it('複数同時に出るときは 種 → 陸 → 力 の順', () => {
-    const ws = scenarioWarnings(def, snap({ totals: { grass: 1, deer: 0, wolf: 0 }, land: [0.5, 0.1, 0.1, 0.1] }), start, { power: 0, incomeLastYear: 1, upkeepLastYear: 2 });
+    const ws = scenarioWarnings(def, snap({ totals: { grass: 1, deer: 0, wolf: 0 }, land: [0.5, 0.1, 0.1, 0.1] }), start, { power: 0, max: 30, incomeLastYear: 1, upkeepLastYear: 2 });
     expect(ws.map((w) => w.kind)).toEqual(['species_low', 'species_low', 'land_low', 'power_low', 'upkeep_over_income']);
   });
 });

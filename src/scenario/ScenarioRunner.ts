@@ -3,6 +3,14 @@ import { judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type Warning } from './warnings';
 
+/** 年表の 1 行。石板が種名などに整形して出す */
+export type TimelineEvent =
+  | { year: number; kind: 'intervene'; command: Command }
+  | { year: number; kind: 'scheduled'; command: Command }
+  | { year: number; kind: 'power_exhausted' }
+  | { year: number; kind: 'warning'; warning: Warning }
+  | { year: number; kind: 'verdict'; verdict: Verdict };
+
 type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
 
 /** intervene が弾いた理由。budget = 力が足りない、finished = 既に判定が確定している */
@@ -27,6 +35,8 @@ export type ScenarioRunner = {
   budget(): BudgetInfo | null;
   /** 直近の年次評価で出た警告 (年に 1 回更新) */
   warnings(): Warning[];
+  /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
+  timeline(): TimelineEvent[];
 };
 
 /**
@@ -63,6 +73,8 @@ export function createScenarioRunner(
   const history: Record<string, number>[] = [];
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
   const warned = new Set<string>();
+  const timeline: TimelineEvent[] = [];
+  let currentYear = 0;
 
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
@@ -83,6 +95,8 @@ export function createScenarioRunner(
         if (fired.has(key)) continue;
         fired.add(key);
         world.dispatch(resolve(sc.command));
+        // 毎年繰り返す進行 (沈降など) は年表に出さない。単発の予定イベントだけ
+        if (!sc.everyYears) timeline.push({ year: y, kind: 'scheduled', command: sc.command });
         if (!sc.everyYears) break;
       }
     }
@@ -115,6 +129,7 @@ export function createScenarioRunner(
     if (power < 0) {
       power = 0;
       world.dispatch({ type: 'set_climate', rainScale: 1, tempOffset: 0 });
+      timeline.push({ year: currentYear, kind: 'power_exhausted' });
       opts.onPowerExhausted?.();
     } else {
       power = Math.min(power, budgetMax);
@@ -129,6 +144,7 @@ export function createScenarioRunner(
     power: () => power,
     budget: () => (budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null),
     warnings: () => warnings,
+    timeline: () => timeline,
     intervene(cmd) {
       if (verdict.status !== 'running') return { ok: false, reason: 'finished' };
       const cost = costOf(cmd);
@@ -139,11 +155,13 @@ export function createScenarioRunner(
       }
       interventions++;
       world.dispatch(cmd);
+      timeline.push({ year: currentYear, kind: 'intervene', command: cmd });
       return { ok: true };
     },
     update(s) {
       if (verdict.status !== 'running') return verdict;
       const year = yearOf(s);
+      currentYear = year;
       fireDue(year);
       if (year !== lastYear) {
         // 最初の呼び出し (lastYear === -1) はまだ 1 年も経っていないので力は動かさない
@@ -151,16 +169,18 @@ export function createScenarioRunner(
         lastYear = year;
         if (year === baselineYear) start = startStats(s);
         if (!isFirstCheck) applyBudgetYearChange(s);
-        warnings = scenarioWarnings(def, s, start, budgetDef ? { power, incomeLastYear, upkeepLastYear } : null);
+        warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null);
         for (const w of warnings) {
           if (warned.has(w.key)) continue;
           warned.add(w.key);
+          timeline.push({ year, kind: 'warning', warning: w });
           opts.onWarning?.(w);
         }
         history.push({ ...s.totals });
         verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
+          timeline.push({ year, kind: 'verdict', verdict });
           opts.onVerdict?.(verdict);
         }
       }

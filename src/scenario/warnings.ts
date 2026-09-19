@@ -2,9 +2,11 @@ import type { WorldSnapshot } from '../simulation/types';
 import { landRatio } from './judge';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
+export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income';
+
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
 export type Warning = {
-  kind: 'species_low' | 'land_low' | 'power_low' | 'upkeep_over_income';
+  kind: WarningKind;
   /** species_low のとき、その種の id */
   id?: string;
   key: string;
@@ -12,7 +14,7 @@ export type Warning = {
 };
 
 /** 警告の材料になる力の情報 (ScenarioRunner.budget() と同じ形)。budget のないシナリオでは null */
-export type PowerInfo = { power: number; incomeLastYear: number; upkeepLastYear: number };
+export type PowerInfo = { power: number; max: number; incomeLastYear: number; upkeepLastYear: number };
 
 /** 種の総量がこの割合を下回ると警告 */
 export const SPECIES_LOW_RATIO = 0.25;
@@ -39,7 +41,9 @@ export function speciesInCondition(c: Condition): string[] {
 /**
  * 年に 1 回評価する純粋関数。順番は「勝敗に近いもの」から: 種 → 陸 → 力。
  * species_low: 基準 (start) の 25% 未満。land_low: 基準の陸地率の半分未満。
- * power_low: どのコマンドも買えない。upkeep_over_income: 直前の年の維持費が収入を超えている。
+ * power_low: どのコマンドも買えない。power_capped: 上限に達していて収入を捨てている。
+ * upkeep_over_income: 直前の年の維持費が収入を超えている。
+ * def.ignoreWarnings にある種類は出さない (予言どおりの進行を警告にしないため)。
  */
 export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: StartStats, power: PowerInfo | null): Warning[] {
   const out: Warning[] = [];
@@ -60,6 +64,9 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
   if (def.budget && power) {
     const cheapest = Math.min(def.budget.costs.spawn, def.budget.costs.disaster, def.budget.costs.climate);
     if (power.power < cheapest) out.push({ kind: 'power_low', key: 'power_low', text: `力が足りない(残り ${Math.floor(power.power)})` });
+    if (power.power >= power.max && power.incomeLastYear > 0) {
+      out.push({ kind: 'power_capped', key: 'power_capped', text: `力が上限(${power.max})に達している。使わなければ収入は捨てられる` });
+    }
     if (power.upkeepLastYear > 0 && power.upkeepLastYear > power.incomeLastYear) {
       out.push({
         kind: 'upkeep_over_income',
@@ -68,5 +75,6 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
       });
     }
   }
-  return out;
+  const ignore = new Set(def.ignoreWarnings ?? []);
+  return out.filter((w) => !ignore.has(w.kind));
 }

@@ -103,6 +103,9 @@ test('star power: budget line is shown, spawning costs power, and an unaffordabl
   await spawnOnce();
   await spawnOnce();
   await expect(page.locator('#tablet-power')).toHaveText('1 / 30');
+  // 年表に放流 3 件が積まれている
+  await expect(page.locator('#tablet-timeline-summary')).toHaveText('年表 (3)');
+  await expect(page.locator('#tablet-timeline')).toContainText('0 年: 草を放った');
   await expect(page.locator('#spawn-grass')).toHaveClass(/unaffordable/);
   await spawnOnce();
   await expect(page.locator('#tablet-power')).toHaveText('1 / 30');
