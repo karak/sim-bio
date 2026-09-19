@@ -11,6 +11,8 @@
  * 出力: assets/textures/concept/<assetId>.png (既にあればスキップ。--force で上書き)
  *       --variants=N のときは assets/textures/concept/<assetId>-v1.png … -vN.png
  *       (パターンごとに VARIANT_HINTS の方向性を付ける)
+ *   node tools/gen-concept-art.mjs --style=angular deer rabbit wolf   # 採用済み方向性 (STYLE_PRESETS) で固定
+ *       出力は <assetId>-<style>.png (--variants 併用で -v1..vN)
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -67,9 +69,26 @@ const VARIANT_HINTS = [
   'Variant C — angular geometric: sharp facet-like planes, exaggerated silhouette, bold and stylized.',
 ];
 
-async function generate(item, variant = 0) {
+/** --style=<key> で採用済みの方向性を固定する。出力は <assetId>-<key>.png */
+const STYLE_PRESETS = {
+  // deer-v3 (angular geometric) を採用し、等身を 3〜5 頭身に下げたもの
+  angular:
+    'Adopted style — angular geometric low-poly: sharp facet-like planes, bold exaggerated silhouette, ' +
+    'thin glowing cyan (#9FF5E8) edge highlights along a few facets, warm flat base colors. ' +
+    'Proportions (strict): 3 to 5 heads tall, i.e. total body height is only 3-5 times the head height — ' +
+    'a compact, slightly stocky body, legs and neck shortened aggressively (legs no longer than the torso depth), ' +
+    'head clearly larger than realistic, like a stylized figurine or a Pokémon-scale creature; ' +
+    'NOT chibi, still readable as the animal. Keep all species-defining features from the subject description. ' +
+    'Single subject only, no other animals, no props, no ground objects except a small shadow.',
+};
+
+async function generate(item, variant = 0, style = '') {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-  const hint = variant ? `\n\nStyle direction: ${VARIANT_HINTS[(variant - 1) % VARIANT_HINTS.length]}` : '';
+  const hint = style
+    ? `\n\nStyle direction: ${STYLE_PRESETS[style]}`
+    : variant
+      ? `\n\nStyle direction: ${VARIANT_HINTS[(variant - 1) % VARIANT_HINTS.length]}`
+      : '';
   const body = {
     contents: [{ parts: [{ text: `${COMMON}\n\nSubject: ${item.prompt}${hint}` }] }],
     generationConfig: { responseModalities: ['IMAGE'] },
@@ -90,6 +109,11 @@ async function generate(item, variant = 0) {
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 const variants = Number(args.find((a) => a.startsWith('--variants='))?.split('=')[1] ?? 0);
+const style = args.find((a) => a.startsWith('--style='))?.split('=')[1] ?? '';
+if (style && !STYLE_PRESETS[style]) {
+  console.error(`未知の --style: ${style} (候補: ${Object.keys(STYLE_PRESETS).join(', ')})`);
+  process.exit(1);
+}
 const wanted = args.filter((a) => !a.startsWith('--'));
 mkdirSync(outDir, { recursive: true });
 let ok = 0;
@@ -99,14 +123,14 @@ for (const item of ITEMS) {
   // variants 未指定なら従来どおり 1 枚 (variant=0)、指定時は v1..vN
   const jobs = variants > 0 ? Array.from({ length: variants }, (_, i) => i + 1) : [0];
   for (const v of jobs) {
-    const name = v ? `${item.id}-v${v}` : item.id;
+    const name = style ? `${item.id}-${style}${v ? `-v${v}` : ''}` : v ? `${item.id}-v${v}` : item.id;
     const out = resolve(outDir, `${name}.png`);
     if (existsSync(out) && !force) {
       console.log(`skip ${name} (exists)`);
       continue;
     }
     try {
-      const png = await generate(item, v);
+      const png = await generate(item, v, style);
       writeFileSync(out, png);
       console.log(`ok   ${name} -> ${out} (${png.length} bytes)`);
       ok++;
