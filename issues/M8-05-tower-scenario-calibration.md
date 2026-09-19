@@ -1,7 +1,7 @@
 ---
 id: M8-05
 title: 判定条件と「塔の重さ」の校正
-status: todo
+status: in_progress
 milestone: M8
 plan: docs/specs/plans/2026-09-19-m8-civilization-plan.md
 depends_on: [M8-03]

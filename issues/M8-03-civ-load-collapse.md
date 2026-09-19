@@ -1,7 +1,7 @@
 ---
 id: M8-03
 title: 文明の負荷と崩壊
-status: todo
+status: in_progress
 milestone: M8
 plan: docs/specs/plans/2026-09-19-m8-civilization-plan.md
 depends_on: [M8-02]
