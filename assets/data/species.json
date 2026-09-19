@@ -5,8 +5,14 @@
     "trophic": "plant",
     "growthRate": 0.04,
     "mortality": 0.02,
-    "tempRange": [-2, 32],
-    "moistureRange": [0.15, 0.7],
+    "tempRange": [
+      -2,
+      32
+    ],
+    "moistureRange": [
+      0.15,
+      0.7
+    ],
     "diffusion": 0.05,
     "assetId": "grass",
     "color": "#6FBF7C"
@@ -17,10 +23,39 @@
     "trophic": "plant",
     "growthRate": 0.015,
     "mortality": 0.01,
-    "tempRange": [2, 26],
-    "moistureRange": [0.45, 1.0],
+    "tempRange": [
+      2,
+      26
+    ],
+    "moistureRange": [
+      0.45,
+      1.0
+    ],
     "diffusion": 0.02,
     "assetId": "forest",
     "color": "#2E6B37"
+  },
+  {
+    "id": "deer",
+    "name": "鹿",
+    "trophic": "herbivore",
+    "growthRate": 0.06,
+    "mortality": 0.02,
+    "predation": 0.03,
+    "tempRange": [
+      -5,
+      28
+    ],
+    "moistureRange": [
+      0.2,
+      0.9
+    ],
+    "diffusion": 0.15,
+    "eats": [
+      "grass"
+    ],
+    "assetId": "deer",
+    "color": "#E2B45A",
+    "initialDensity": 0.02
   }
 ]

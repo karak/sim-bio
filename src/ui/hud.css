@@ -19,3 +19,5 @@
 .hud-b label { display: flex; gap: 6px; align-items: center; font-size: 12px; }
 .hud-b input[type='range'] { width: 110px; }
 #cell-panel div { display: flex; justify-content: space-between; gap: 16px; }
+.hud-palette { bottom: 64px; right: 12px; display: flex; gap: 8px; align-items: center; }
+.swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }

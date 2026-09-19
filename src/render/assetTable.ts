@@ -2,7 +2,7 @@ import { BoxGeometry, ConeGeometry, MeshLambertMaterial, type BufferGeometry, ty
 import type { SpeciesDef } from '../simulation/types';
 
 /** 種 ID → 表示アセット。glTF に差し替えるときはここだけ変える。 */
-export type AssetTable = Record<string, { geometry: BufferGeometry; material: Material; scale: number }>;
+export type AssetTable = Record<string, { geometry: BufferGeometry; material: Material; scale: number; perCell: number }>;
 
 /** M1: プリミティブ + 単色。植物は円錐、草食獣は箱、肉食獣は細長い箱。 */
 export function buildAssetTable(species: SpeciesDef[]): AssetTable {
@@ -15,7 +15,9 @@ export function buildAssetTable(species: SpeciesDef[]): AssetTable {
         : d.trophic === 'herbivore'
           ? new BoxGeometry(0.3, 0.2, 0.2)
           : new BoxGeometry(0.4, 0.2, 0.15);
-    t[d.assetId] = { geometry, material, scale: d.id === 'forest' ? 1.6 : 1 };
+    // 動物は密度が植物より一桁小さいので、1 セルあたりの最大表示数を多くして見えるようにする
+    const perCell = d.trophic === 'plant' ? 2 : 10;
+    t[d.assetId] = { geometry, material, scale: d.id === 'forest' ? 1.6 : 1, perCell };
   }
   return t;
 }

@@ -14,3 +14,20 @@ test('boots, advances a year at 100x, graph shows values, layer switch works', a
   expect(summaries.length).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(summaries[0])).toMatchObject({ event: 'sim.tick.summary', year: 1 });
 });
+
+test('species palette: pick a species and click the island to spawn it', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/');
+  await expect(page.locator('#spawn-forest')).toBeVisible();
+  await page.click('#spawn-forest');
+  await expect(page.locator('#spawn-forest')).toHaveClass(/armed/);
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#spawn-forest')).not.toHaveClass(/armed/);
+  await expect
+    .poll(() => logs.filter((l) => l.includes('"event":"cmd.received"') && l.includes('"type":"spawn_species"')).length)
+    .toBeGreaterThan(0);
+  expect(logs.filter((l) => l.includes('"event":"cmd.rejected"'))).toHaveLength(0);
+});

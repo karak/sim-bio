@@ -15,6 +15,10 @@ export type SpeciesDef = {
   diffusion: number;
   /** 被食者の種 ID (動物のみ) */
   eats?: string[];
+  /** 餌に対する 1 tick あたりの捕食率 (動物のみ) */
+  predation?: number;
+  /** create 時に陸の全セルへ与える初期密度。省略時は植物 0.05、動物 0 */
+  initialDensity?: number;
   /** SceneView の AssetTable のキー */
   assetId: string;
   /** グラフ・ヒートマップの色 (#rrggbb) */

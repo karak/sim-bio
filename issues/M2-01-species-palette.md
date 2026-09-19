@@ -1,7 +1,7 @@
 ---
 id: M2-01
 title: 種パレットから種を放つ
-status: todo
+status: in_progress
 milestone: M2
 plan: docs/specs/2026-09-19-ecosystem-sim-design.md#m2-3-階層--種を放つ
 depends_on: []
