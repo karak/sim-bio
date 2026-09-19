@@ -1,0 +1,52 @@
+[
+  {
+    "id": "sinking",
+    "title": "沈む欠片",
+    "prophecy": "石板は告げる。この欠片は百年かけて海に呑まれる。高きへ逃れよ。獣たちが百年目の朝を迎えられたなら、島は生き延びたと言える。",
+    "kind": "endure",
+    "start": { "seed": 42 },
+    "years": 100,
+    "schedule": [
+      { "atYear": 1, "everyYears": 1, "untilYear": 100, "command": { "type": "sink", "amount": 0.004 } }
+    ],
+    "alive": { "type": "all", "of": [{ "type": "species_alive", "ids": ["deer", "rabbit", "wolf"] }, { "type": "land_ratio", "min": 0.05 }] },
+    "dead": { "type": "any", "of": [{ "type": "species_extinct", "ids": ["deer"] }, { "type": "species_extinct", "ids": ["wolf"] }, { "type": "land_ratio", "max": 0.03 }] }
+  },
+  {
+    "id": "falling-star",
+    "title": "星が落ちる夜",
+    "prophecy": "六十年目の夜、星が島の心臓に落ちる。落ちる前に散らせ。落ちた後の三十年を、すべての命が越えられるか。",
+    "kind": "endure",
+    "start": { "seed": 42 },
+    "years": 90,
+    "schedule": [
+      { "atYear": 60, "command": { "type": "disaster", "kind": "meteor", "cell": -1, "radius": 22 } }
+    ],
+    "alive": { "type": "species_alive", "ids": ["grass", "forest", "deer", "rabbit", "wolf"] },
+    "dead": { "type": "any", "of": [{ "type": "species_extinct", "ids": ["deer"] }, { "type": "species_extinct", "ids": ["wolf"] }, { "type": "species_extinct", "ids": ["rabbit"] }] }
+  },
+  {
+    "id": "volcano",
+    "title": "火の山の目覚め",
+    "prophecy": "八十年目、島の心臓の山が火を吹き、半分を焼く。焼けた地は長く熱を持つ。獣を焼けぬ側へ。",
+    "kind": "endure",
+    "start": { "seed": 42 },
+    "years": 130,
+    "schedule": [
+      { "atYear": 80, "command": { "type": "disaster", "kind": "volcano", "cell": -1, "radius": 26 } }
+    ],
+    "alive": { "type": "species_alive", "ids": ["grass", "forest", "deer", "rabbit", "wolf"] },
+    "dead": { "type": "any", "of": [{ "type": "species_extinct", "ids": ["deer"] }, { "type": "species_extinct", "ids": ["wolf"] }, { "type": "species_extinct", "ids": ["rabbit"] }] }
+  },
+  {
+    "id": "enrichment",
+    "title": "豊かさの罠",
+    "prophecy": "雨を増やせば森は倍になる。だが豊かすぎる島では波が高くなり、狼は谷で息絶える。百年目、森を倍にし、狼を残せ。",
+    "kind": "prevent",
+    "start": { "seed": 42 },
+    "years": 100,
+    "schedule": [],
+    "alive": { "type": "all", "of": [{ "type": "total_ratio_vs_start", "id": "forest", "min": 1.5 }, { "type": "species_alive", "ids": ["wolf"] }] },
+    "dead": { "type": "species_extinct", "ids": ["wolf"] }
+  }
+]

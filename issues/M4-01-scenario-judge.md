@@ -1,7 +1,7 @@
 ---
 id: M4-01
 title: シナリオ定義と判定の純粋関数
-status: todo
+status: in_progress
 milestone: M4
 plan: docs/design/2026-09-19-scenarios-and-world.md
 depends_on: []
