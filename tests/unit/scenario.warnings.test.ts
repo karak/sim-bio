@@ -12,6 +12,7 @@ const snap = (over: { totals?: Record<string, number>; land?: number[] } = {}): 
     tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 },
     totals: over.totals ?? { grass: 10, deer: 4, wolf: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n), deer: new Float32Array(n) } },
+    civ: null,
   };
 };
 const start: StartStats = { landRatio: 0.75, totals: { grass: 10, deer: 4, wolf: 1 } };

@@ -15,6 +15,20 @@ const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, w
 /** 種を放つときに各セルへ加える密度 */
 const SPAWN_AMOUNT = 0.5;
 
+/**
+ * シナリオの start.civilization を WorldConfig.civilization に落とし込む。
+ * home: -1 (省略時含む) は島の中心セルに解決する。M8-02 のブランチが同じ場所を実装する予定で、
+ * 合流時はどちらか一方を残せばよいよう小さくまとめてある。
+ */
+export function resolveCivStart(
+  start: { speciesId: string; stage?: number; home?: number } | undefined,
+  size: number,
+): WorldConfig['civilization'] {
+  if (!start) return undefined;
+  const home = start.home === undefined || start.home === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : start.home;
+  return { speciesId: start.speciesId, stage: start.stage ?? 1, home };
+}
+
 async function boot(): Promise<void> {
   const [base, species, scenarios] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
@@ -30,6 +44,7 @@ async function boot(): Promise<void> {
     if (scenario.start.size !== undefined) config.size = scenario.start.size;
     if (scenario.start.tempOffset !== undefined) config.climate.tempOffset = scenario.start.tempOffset;
     if (scenario.start.rainScale !== undefined) config.climate.rainScale = scenario.start.rainScale;
+    if (scenario.start.civilization) config.civilization = resolveCivStart(scenario.start.civilization, config.size);
   }
   const log = createConsoleSink();
   let world = World.create(config, { log });

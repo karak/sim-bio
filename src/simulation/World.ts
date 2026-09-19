@@ -44,6 +44,13 @@ export class World {
   readonly litter: Float32Array;
   /** 輝石 [0,1]。陸だけに決定論で塊状に置かれる。海は 0 (M8-01) */
   readonly crystal: Float32Array;
+  /**
+   * 文明 (M8-02 で発生・段階・崩壊の本実装に差し替え)。M8-04 では config.civilization を
+   * そのまま静的な状態として見せるだけで、時間で変化させない
+   */
+  private readonly civSpeciesId: string | null;
+  private readonly civHome: number;
+  private readonly civStage: number;
   readonly fire: Uint8Array;
   readonly burnt: Uint16Array;
   private readonly scratch: Float32Array;
@@ -75,6 +82,9 @@ export class World {
     this.litter = new Float32Array(this.n);
     // seed から決定論で生成しておく。create はそのまま使い、restore は save.crystal があればそれで上書きする
     this.crystal = generateCrystal(config.seed, this.elevation, config.size);
+    this.civSpeciesId = config.civilization?.speciesId ?? null;
+    this.civStage = config.civilization?.stage ?? 0;
+    this.civHome = config.civilization?.home ?? -1;
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
@@ -158,7 +168,32 @@ export class World {
       co2: this.co2,
       species: this.config.species,
       climate: { tempOffset: this.config.climate.tempOffset, rainScale: this.config.climate.rainScale },
+      civ: this.civSpeciesId
+        ? { speciesId: this.civSpeciesId, stage: this.civStage, progress: 0, home: this.civHome, population: this.civPopulation() }
+        : null,
     };
+  }
+
+  /** 集落半径内のその種の総量 (M8-02 の stepCivilization に差し替え予定の仮実装) */
+  private civPopulation(): number {
+    if (!this.civSpeciesId || this.civHome < 0) return 0;
+    const pop = this.populations[this.civSpeciesId];
+    if (!pop) return 0;
+    const size = this.config.size;
+    const radius = 3;
+    const cx = this.civHome % size;
+    const cy = (this.civHome - cx) / size;
+    let sum = 0;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (dx * dx + dy * dy > radius * radius) continue;
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x < 0 || y < 0 || x >= size || y >= size) continue;
+        sum += pop[y * size + x];
+      }
+    }
+    return sum;
   }
 
   serialize(): SaveData {

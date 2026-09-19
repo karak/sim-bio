@@ -41,6 +41,8 @@ export type ScenarioDef = {
     rainScale?: number;
     /** 種ごとの上書き (initialDensity など) */
     species?: Record<string, Partial<Pick<SpeciesDefLike, 'initialDensity' | 'growthRate' | 'mortality' | 'diffusion'>>>;
+    /** 文明の初期状態の上書き (M8-02)。home: -1 は島の中心に解決する */
+    civilization?: { speciesId: string; stage?: number; home?: number };
   };
   /** 滅びの進行と予定イベント */
   schedule: ScheduledCommand[];

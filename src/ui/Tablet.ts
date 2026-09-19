@@ -2,6 +2,7 @@ import type { BudgetInfo, TimelineEvent } from '../scenario/ScenarioRunner';
 import type { ScenarioDef, Verdict } from '../scenario/types';
 import type { Command } from '../simulation/types';
 import type { Warning } from '../scenario/warnings';
+import { STAGE_NAMES } from '../simulation/civilization';
 
 export type Tablet = {
   /** 開始からの年・判定・星の力 (budget が無いシナリオでは null) を表示する */
@@ -44,6 +45,9 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       return `⚠ ${e.warning.text}`;
     case 'verdict':
       return e.verdict.status === 'alive' ? '島は生き延びた' : '島は滅びた';
+    case 'civ_stage':
+      if (e.to === 0) return '文明が崩壊した';
+      return `文明が ${STAGE_NAMES[e.from]} → ${STAGE_NAMES[e.to]} に${e.to > e.from ? '上がった' : '下がった'}`;
   }
 }
 

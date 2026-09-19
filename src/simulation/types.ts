@@ -1,3 +1,5 @@
+import type { CivState } from './civilization';
+
 /** decomposer は枯死 (litter) を餌にし、いる場所の分解を速める第 4 の階層 */
 export type Trophic = 'plant' | 'herbivore' | 'carnivore' | 'decomposer';
 
@@ -51,6 +53,8 @@ export type WorldConfig = {
     co2ToTemp: number;
     iceAlbedo: number;
   };
+  /** 文明が起こりうる種と初期状態 (M8-02)。省略時は文明なし。stage/home はシナリオの start.civilization からの上書き用 */
+  civilization?: { speciesId: string; stage?: number; home?: number };
 };
 
 export type DisasterKind = 'meteor' | 'volcano' | 'wildfire' | 'plague';
@@ -90,6 +94,8 @@ export type WorldSnapshot = {
   species: SpeciesDef[];
   /** 現在の気候設定 (set_climate で変わる)。星の力の維持費の計算に使う */
   climate: { tempOffset: number; rainScale: number };
+  /** 文明の状態。文明なしの世界・シナリオでは null (M8-02) */
+  civ: CivState | null;
 };
 
 export type SaveData = {
