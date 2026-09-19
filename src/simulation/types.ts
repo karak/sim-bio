@@ -58,7 +58,9 @@ export type DisasterKind = 'meteor' | 'volcano' | 'wildfire' | 'plague';
 export type Command =
   | { type: 'spawn_species'; speciesId: string; cell: number; amount: number }
   | { type: 'set_climate'; tempOffset?: number; rainScale?: number }
-  | { type: 'disaster'; kind: DisasterKind; cell: number; radius: number };
+  | { type: 'disaster'; kind: DisasterKind; cell: number; radius: number }
+  /** 島全体の標高を amount 下げる (沈降)。シナリオの「滅びの進行」用 */
+  | { type: 'sink'; amount: number };
 
 /** 読み取り専用ビュー。layers は内部バッファそのもの (コピーしない)。 */
 export type WorldSnapshot = {

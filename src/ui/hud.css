@@ -22,3 +22,17 @@
 #cell-info div { display: flex; justify-content: space-between; gap: 16px; }
 .hud-palette { bottom: 64px; right: 12px; display: flex; gap: 8px; align-items: center; }
 .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.tablet { top: 12px; left: 50%; transform: translateX(-50%); max-width: 420px; text-align: center; }
+.tablet select { background: #233544; color: #e9eff3; border: 0; border-radius: 6px; padding: 2px 6px; font-size: 12px; font-family: inherit; }
+.tablet-title { font-size: 15px; font-weight: 700; margin-top: 4px; }
+.tablet-prophecy { font-size: 12px; color: #c9d6cd; line-height: 1.6; margin: 4px 0 6px; }
+.tablet .row { justify-content: center; }
+.verdict[hidden] { display: none; }
+.verdict { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 26, 36, 0.6); z-index: 10; }
+.verdict-box { background: rgba(15, 26, 36, 0.95); border: 2px solid #3c7a4e; border-radius: 12px; padding: 24px 32px; text-align: center; max-width: 460px; }
+.verdict.dead .verdict-box { border-color: #b5502f; }
+.verdict-title { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+.verdict.alive .verdict-title { color: #6fbf7c; }
+.verdict.dead .verdict-title { color: #e07a55; }
+.verdict-reason { color: #c9d6cd; margin-bottom: 14px; line-height: 1.6; }
+.verdict .row { justify-content: center; }
