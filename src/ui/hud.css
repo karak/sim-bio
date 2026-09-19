@@ -2,6 +2,10 @@
 .hud-tl { top: 12px; left: 12px; }
 .hud-tr { top: 12px; right: 12px; }
 .hud-r { top: 64px; right: 12px; width: 320px; }
+/* 右側はレイヤー列とグラフを縦に積む。種チップとモードチップで列が折り返しても重ならない */
+.hud-right { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.hud-right > .hud { position: static; }
+#layer-row { max-width: 340px; justify-content: flex-end; }
 .hud-b { bottom: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: calc(100% - 24px); }
 .hud-bl { bottom: 80px; left: 12px; min-width: 240px; }
 #local-graph { width: 240px; height: 80px; display: block; margin-top: 4px; }
@@ -13,6 +17,8 @@
 .chip:hover { color: #fff; }
 .chip.on { background: #3c7a4e; color: #fff; }
 .chip.armed { background: #b5502f; color: #fff; }
+/* 星の力が足りないチップ・スライダー。押せるが runner が弾くので、見た目だけ薄くする */
+.unaffordable { opacity: 0.4; }
 .hud-r canvas { width: 320px; height: 100px; display: block; margin: 4px 0; }
 #legend span { margin-right: 10px; font-size: 11px; color: #9fb3c2; }
 #legend i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
@@ -27,6 +33,13 @@
 .tablet-title { font-size: 15px; font-weight: 700; margin-top: 4px; }
 .tablet-prophecy { font-size: 12px; color: #c9d6cd; line-height: 1.6; margin: 4px 0 6px; }
 .tablet .row { justify-content: center; }
+.tablet-power { margin-top: 2px; }
+.tablet-milestones { font-size: 12px; color: #9fb3c2; }
+.tablet-warnings { font-size: 12px; color: #e0b055; line-height: 1.5; }
+.verdict-stats { color: #9fb3c2; font-size: 12px; line-height: 1.6; margin: -6px 0 14px; }
+/* 介入が弾かれた・力が尽きたときに石板を短く揺らす */
+.tablet.shake { animation: tablet-shake 0.3s; }
+@keyframes tablet-shake { 0%, 100% { transform: translateX(-50%); } 25% { transform: translateX(calc(-50% - 6px)); } 75% { transform: translateX(calc(-50% + 6px)); } }
 .verdict[hidden] { display: none; }
 .verdict { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 26, 36, 0.6); z-index: 10; }
 .verdict-box { background: rgba(15, 26, 36, 0.95); border: 2px solid #3c7a4e; border-radius: 12px; padding: 24px 32px; text-align: center; max-width: 460px; }

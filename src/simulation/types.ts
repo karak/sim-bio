@@ -57,7 +57,8 @@ export type DisasterKind = 'meteor' | 'volcano' | 'wildfire' | 'plague';
 
 /** プレイヤーの介入。すべて World.dispatch 経由。 */
 export type Command =
-  | { type: 'spawn_species'; speciesId: string; cell: number; amount: number }
+  /** radius を足すと中心セルだけでなく半径内の陸セルすべてに放つ (省略時 0 = 中心セルのみ、既存動作のまま) */
+  | { type: 'spawn_species'; speciesId: string; cell: number; amount: number; radius?: number }
   | { type: 'set_climate'; tempOffset?: number; rainScale?: number }
   | { type: 'disaster'; kind: DisasterKind; cell: number; radius: number }
   /** 島全体の標高を amount 下げる (沈降)。シナリオの「滅びの進行」用 */
@@ -85,6 +86,8 @@ export type WorldSnapshot = {
   meanTemperature: number;
   co2: number;
   species: SpeciesDef[];
+  /** 現在の気候設定 (set_climate で変わる)。星の力の維持費の計算に使う */
+  climate: { tempOffset: number; rainScale: number };
 };
 
 export type SaveData = {

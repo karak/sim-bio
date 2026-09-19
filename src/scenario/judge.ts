@@ -9,6 +9,10 @@ export type JudgeInput = {
   year: number;
   /** プレイヤーの介入回数 (dispatch したコマンド数) */
   interventions: number;
+  /** 年ごとの総量の履歴 (開始年から今年まで)。species_mean が使う。省略時は今年の totals だけ */
+  history?: Record<string, number>[];
+  /** 総量の面積スケール (size / referenceSize)²。species_mean の min は referenceSize のグリッドで書くので、実行時の size に合わせて掛ける。省略時 1 */
+  areaScale?: number;
 };
 
 export function landRatio(s: WorldSnapshot): number {
@@ -51,10 +55,24 @@ const inRange = (v: number, min?: number, max?: number) => (min === undefined ||
 /** 条件を評価する。戻り値は真偽と、人が読める説明。 */
 export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: string } {
   const s = input.snapshot;
+  const name = (id: string) => s.species.find((d) => d.id === id)?.name ?? id;
   switch (c.type) {
     case 'species_alive': {
       const dead = c.ids.filter((id) => (s.totals[id] ?? 0) <= 0);
-      return { ok: dead.length === 0, why: dead.length ? `絶滅: ${dead.join(', ')}` : `生存: ${c.ids.join(', ')}` };
+      return { ok: dead.length === 0, why: dead.length ? `絶滅: ${dead.map(name).join(', ')}` : `生存: ${c.ids.map(name).join(', ')}` };
+    }
+    case 'species_mean': {
+      const hist = (input.history ?? [s.totals]).slice(-c.years);
+      const mean = (id: string) => hist.reduce((a, t) => a + (t[id] ?? 0), 0) / hist.length;
+      const min = c.min * (input.areaScale ?? 1);
+      const small = c.ids.filter((id) => mean(id) < min);
+      const label = `${c.years} 年平均`;
+      return {
+        ok: small.length === 0,
+        why: small.length
+          ? `群れが小さい(${label}): ${small.map((id) => `${name(id)} ${mean(id).toFixed(1)} (< ${min.toFixed(1)})`).join(', ')}`
+          : `群れが残った(${label}): ${c.ids.map((id) => `${name(id)} ${mean(id).toFixed(1)}`).join(', ')}`,
+      };
     }
     case 'species_extinct': {
       const alive = c.ids.filter((id) => (s.totals[id] ?? 0) > 0);

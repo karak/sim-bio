@@ -2,11 +2,13 @@
   {
     "id": "sinking",
     "title": "沈む欠片",
-    "prophecy": "石板は告げる。この欠片は百年かけて海に呑まれ、陸は十分の一になる。残るのは寒く乾いた高地ばかり。鹿の住める湿りを雨で作り、狼が食い尽くさぬよう数を抑えよ。百年目の朝、鹿と兎と狼が息をしていれば、島は生き延びたと言える。",
+    "prophecy": "石板は告げる。この欠片は百年かけて海に呑まれ、陸は四分の一になる。残るのは寒く乾いた高地ばかり。雨を呼べば高地は鹿の地になるが、雨を降らせ続けるには星の力が要る。力は島の陸と生気から湧き、島が痩せるほど細る。狼が増えすぎれば疫病で抑えよ。それにも力が要る。百年目、直近十年の群れが鹿六・兎三・狼二を保っていれば、島は生き延びたと言える。",
     "kind": "endure",
     "start": {
-      "seed": 42
+      "seed": 42,
+      "size": 64
     },
+    "referenceSize": 64,
     "years": 100,
     "schedule": [
       {
@@ -15,21 +17,70 @@
         "untilYear": 100,
         "command": {
           "type": "sink",
-          "amount": 0.002
+          "amount": 0.0015
         }
       }
     ],
+    "milestones": [
+      {
+        "atYear": 50,
+        "text": "陸は半分になる"
+      },
+      {
+        "atYear": 80,
+        "text": "低地は沈み、高地だけが残る"
+      },
+      {
+        "atYear": 90,
+        "text": "ここからの十年の群れで判定される"
+      }
+    ],
     "alive": {
-      "type": "species_alive",
-      "ids": [
-        "deer",
-        "rabbit",
-        "wolf"
+      "type": "all",
+      "of": [
+        {
+          "type": "species_mean",
+          "ids": [
+            "deer"
+          ],
+          "years": 10,
+          "min": 6
+        },
+        {
+          "type": "species_mean",
+          "ids": [
+            "rabbit"
+          ],
+          "years": 10,
+          "min": 3
+        },
+        {
+          "type": "species_mean",
+          "ids": [
+            "wolf"
+          ],
+          "years": 10,
+          "min": 2
+        }
       ]
     },
     "dead": {
       "type": "land_ratio",
-      "max": 0.02
+      "max": 0.03
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 32,
+      "costs": {
+        "spawn": 4,
+        "disaster": 12,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 20,
+        "tempOffset": 4
+      },
+      "max": 120
     }
   },
   {
@@ -167,6 +218,12 @@
     "hidden": true,
     "prophecy": "この石板は試し読み用。二年目に必ず滅ぶ。",
     "kind": "endure",
+    "milestones": [
+      {
+        "atYear": 1,
+        "text": "試しの節目(一年で消える)"
+      }
+    ],
     "start": {
       "seed": 42
     },
@@ -179,6 +236,19 @@
     "dead": {
       "type": "year_reached",
       "year": 2
+    },
+    "budget": {
+      "start": 10,
+      "incomePerYear": 2,
+      "costs": {
+        "spawn": 3,
+        "disaster": 5,
+        "climate": 1
+      },
+      "upkeepPerYear": {
+        "rainScale": 4,
+        "tempOffset": 1
+      }
     }
   }
 ]

@@ -23,7 +23,7 @@ const snap = () => {
 
 describe('layerToColors', () => {
   it('returns size²×3 in [0,1] for every layer', () => {
-    for (const l of ['terrain', 'temperature', 'moisture', 'vegetation', 'vitality', 'species:grass'] as const) {
+    for (const l of ['terrain', 'temperature', 'moisture', 'vegetation', 'vitality', 'species:grass', 'suit:grass'] as const) {
       const c = layerToColors(snap(), l);
       expect(c.length).toBe(12);
       for (const v of c) {
@@ -51,5 +51,30 @@ describe('layerToColors', () => {
     const c = layerToColors(snap(), 'vitality');
     const lum = (i: number) => c[i * 3] + c[i * 3 + 1] + c[i * 3 + 2];
     expect(lum(3)).toBeGreaterThan(lum(1));
+  });
+  it('suit:<id>: suitability 1 のセルは種の色、0 のセルは暗色になる', () => {
+    // snap() では index2 (温度15℃・水分0.5) が grass の適合帯の中心で suitability=1、
+    // index1 (温度-5℃・水分0) は範囲外で suitability=0 になる
+    const c = layerToColors(snap(), 'suit:grass');
+    expect(c[2 * 3]).toBeCloseTo(0x6f / 255, 2);
+    expect(c[2 * 3 + 1]).toBeCloseTo(0xbf / 255, 2);
+    expect(c[2 * 3 + 2]).toBeCloseTo(0x7c / 255, 2);
+    expect(c[1 * 3]).toBeCloseTo(0x2a / 255, 2);
+    expect(c[1 * 3 + 1]).toBeCloseTo(0x26 / 255, 2);
+    expect(c[1 * 3 + 2]).toBeCloseTo(0x22 / 255, 2);
+  });
+  it('suit:<id>: 海は他レイヤーと同じ地形色のまま', () => {
+    const cTerrain = layerToColors(snap(), 'terrain');
+    const cSuit = layerToColors(snap(), 'suit:grass');
+    expect(cSuit[0]).toBeCloseTo(cTerrain[0], 5);
+    expect(cSuit[1]).toBeCloseTo(cTerrain[1], 5);
+    expect(cSuit[2]).toBeCloseTo(cTerrain[2], 5);
+  });
+  it('suit:<id>: 未知の種 id でも例外にせず、陸は暗色 (全長 size²×3) を返す', () => {
+    const c = layerToColors(snap(), 'suit:unknown');
+    expect(c.length).toBe(12);
+    expect(c[2 * 3]).toBeCloseTo(0x2a / 255, 2);
+    expect(c[2 * 3 + 1]).toBeCloseTo(0x26 / 255, 2);
+    expect(c[2 * 3 + 2]).toBeCloseTo(0x22 / 255, 2);
   });
 });

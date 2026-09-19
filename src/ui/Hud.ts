@@ -24,6 +24,8 @@ export type Hud = {
   addMarker(x: number, label: string, color: string): void;
   setArmed(kind: DisasterKind | null): void;
   setSpawnArmed(speciesId: string | null): void;
+  /** 星の力で買えるかどうか。false のチップは薄く見せる (押せるが runner が弾く) */
+  setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean }): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -55,16 +57,18 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
-  <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-species" class="row"></span></div>
+  <div class="hud-right">
+  <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
   <div class="hud hud-r">
     <div class="dim">個体数の推移</div>
     <canvas id="graph" width="640" height="200"></canvas>
     <div id="legend" class="row"></div>
     <div class="stats"><span id="stat-temp" class="mono">--℃</span><span class="dim">平均気温</span><span id="stat-veg" class="mono">--%</span><span class="dim">植生率</span></div>
   </div>
+  </div>
   <div class="hud hud-b">
     <label>気温 <input id="temp-offset" type="range" min="-10" max="10" step="0.5" value="0"><span id="temp-offset-v" class="mono">+0.0</span></label>
-    <label>降水 <input id="rain-scale" type="range" min="0.3" max="2" step="0.1" value="1"><span id="rain-scale-v" class="mono">×1.0</span></label>
+    <label>降水 <input id="rain-scale" type="range" min="0.3" max="2" step="0.05" value="1"><span id="rain-scale-v" class="mono">×1.00</span></label>
     <span class="sep"></span>
     ${DISASTERS.map((d) => `<button id="disaster-${d.kind}" class="chip">${d.label}</button>`).join('')}
     <span class="sep"></span>
@@ -93,9 +97,17 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   let lastYear = -1;
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
+  // 種チップの表示モード: 密度そのまま or 住みやすさ (適合度)。選択中の種があるときだけ layer に効く
+  let layerMode: 'density' | 'suit' = 'density';
+  let activeSpeciesId: string | null = null;
 
   const setOn = (rowId: string, id: string) => {
     for (const b of $(rowId).querySelectorAll('.chip')) b.classList.toggle('on', b.id === id);
+  };
+  // setOn は行内の .chip を丸ごと消灯するので、その後にモードチップの見た目を復元する
+  const setLayerModeUI = () => {
+    $('layer-mode-density').classList.toggle('on', layerMode === 'density');
+    $('layer-mode-suit').classList.toggle('on', layerMode === 'suit');
   };
   for (const s of SPEEDS) {
     $(`speed-${s}`).addEventListener('click', () => {
@@ -105,12 +117,24 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   }
   for (const l of LAYERS) {
     $(`layer-${l.id}`).addEventListener('click', () => {
+      activeSpeciesId = null;
       h.onLayer(l.id);
       setOn('layer-row', `layer-${l.id}`);
+      setLayerModeUI();
     });
   }
+  const setLayerMode = (m: 'density' | 'suit') => {
+    layerMode = m;
+    setLayerModeUI();
+    if (activeSpeciesId !== null) h.onLayer(m === 'suit' ? `suit:${activeSpeciesId}` : `species:${activeSpeciesId}`);
+  };
+  $('layer-mode-density').addEventListener('click', () => setLayerMode('density'));
+  $('layer-mode-suit').addEventListener('click', () => setLayerMode('suit'));
   const tempEl = $<HTMLInputElement>('temp-offset');
   const rainEl = $<HTMLInputElement>('rain-scale');
+  /** 直前のフレームで世界が持っていた気候。変化したときだけスライダーを追従させる */
+  let lastWorldRain = 1;
+  let lastWorldTemp = 0;
   tempEl.addEventListener('input', () => {
     const v = Number(tempEl.value);
     $('temp-offset-v').textContent = (v >= 0 ? '+' : '') + v.toFixed(1);
@@ -118,7 +142,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   });
   rainEl.addEventListener('input', () => {
     const v = Number(rainEl.value);
-    $('rain-scale-v').textContent = '×' + v.toFixed(1);
+    $('rain-scale-v').textContent = '×' + v.toFixed(2);
     h.onCommand({ type: 'set_climate', rainScale: v });
   });
   const setSpawnArmed = (id: string | null) => {
@@ -193,12 +217,15 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       ...s.species.map((d) => ({ key: d.id, color: d.color, label: d.name })),
       { key: 'temp', color: '#A79CE0', label: '平均気温', axis: 'right' as const },
     ];
-    $('legend').innerHTML = lines.map((l) => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join('');
+    // 凡例には現在の総量も出す (年に 1 回更新)。疫病を打つかなどの判断に数字が要る
+    $('legend').innerHTML = lines.map((l) => `<span><i style="background:${l.color}"></i>${l.label} <b id="legend-${l.key}" class="mono"></b></span>`).join('');
     $('layer-species').innerHTML = s.species.map((d) => `<button id="layer-species-${d.id}" class="chip">${d.name}</button>`).join('');
     for (const d of s.species) {
       $(`layer-species-${d.id}`).addEventListener('click', () => {
-        h.onLayer(`species:${d.id}`);
+        activeSpeciesId = d.id;
+        h.onLayer(layerMode === 'suit' ? `suit:${d.id}` : `species:${d.id}`);
         setOn('layer-row', `layer-species-${d.id}`);
+        setLayerModeUI();
       });
     }
     $('spawn-row').innerHTML = s.species
@@ -233,10 +260,23 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       redrawLocal();
     }
     $('hud-year').textContent = `Year ${s.year}`;
+    // 世界の気候が変わったときだけスライダーを追従させる (力が尽きて既定に戻ったときなど)。
+    // 差があるたびに戻すと、一時停止中に動かしたスライダー (コマンドは次の step で適用) と喧嘩する
+    if (s.climate.rainScale !== lastWorldRain) {
+      lastWorldRain = s.climate.rainScale;
+      rainEl.value = String(s.climate.rainScale);
+      $('rain-scale-v').textContent = '×' + s.climate.rainScale.toFixed(2);
+    }
+    if (s.climate.tempOffset !== lastWorldTemp) {
+      lastWorldTemp = s.climate.tempOffset;
+      tempEl.value = String(s.climate.tempOffset);
+      $('temp-offset-v').textContent = (s.climate.tempOffset >= 0 ? '+' : '') + s.climate.tempOffset.toFixed(1);
+    }
     $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
     if (s.year !== lastYear) {
       lastYear = s.year;
       ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
+      for (const d of s.species) $(`legend-${d.id}`).textContent = (s.totals[d.id] ?? 0).toFixed(0);
       redraw();
       $('stat-temp').textContent = `${s.meanTemperature.toFixed(1)}℃`;
       $('stat-veg').textContent = `${(vegRatio(s) * 100).toFixed(0)}%`;
@@ -279,5 +319,11 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     },
     setArmed,
     setSpawnArmed,
+    setAffordable: (a) => {
+      for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('unaffordable', !a.spawn);
+      for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('unaffordable', !a.disaster);
+      tempEl.classList.toggle('unaffordable', !a.climate);
+      rainEl.classList.toggle('unaffordable', !a.climate);
+    },
   };
 }

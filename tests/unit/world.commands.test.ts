@@ -67,3 +67,53 @@ describe('World commands', () => {
     expect(log.find('cmd.rejected')).toHaveLength(1);
   });
 });
+
+describe('spawn_species radius', () => {
+  const inRadius = (size: number, center: number, r: number) => {
+    const cx = center % size;
+    const cy = (center - cx) / size;
+    const cells: number[] = [];
+    for (let i = 0; i < size * size; i++) {
+      const x = i % size;
+      const y = (i - x) / size;
+      if (Math.hypot(x - cx, y - cy) <= r) cells.push(i);
+    }
+    return cells;
+  };
+  /** コマンドは次の step で適用されるので、放流なしで 1 tick 進めた対照世界との差分で見る */
+  const diffAfterSpawn = (cmd: Parameters<World['dispatch']>[0]) => {
+    const w = World.create(testConfig(), { log: createMemorySink() });
+    const ctl = World.create(testConfig(), { log: createMemorySink() });
+    w.dispatch(cmd);
+    w.step(1);
+    ctl.step(1);
+    const a = w.snapshot().layers.populations.grass;
+    const b = ctl.snapshot().layers.populations.grass;
+    return { w, diff: Float32Array.from(a, (v, i) => v - b[i]) };
+  };
+  it('radius 省略時は中心セルだけに放つ (既存動作)', () => {
+    const probe = World.create(testConfig(), { log: createMemorySink() });
+    const c = landCell(probe);
+    const { w, diff } = diffAfterSpawn({ type: 'spawn_species', speciesId: 'grass', cell: c, amount: 0.4 });
+    expect(diff[c]).toBeGreaterThan(0.3);
+    for (const i of inRadius(w.snapshot().size, c, 1)) if (i !== c) expect(Math.abs(diff[i])).toBeLessThan(0.02);
+  });
+  it('radius 1 で半径内の陸セルすべてに放ち、海セルは 0 のまま、半径外は触らない', () => {
+    const probe = World.create(testConfig(), { log: createMemorySink() });
+    const s0 = probe.snapshot();
+    const c = landCell(probe);
+    const target = inRadius(s0.size, c, 1);
+    const { w, diff } = diffAfterSpawn({ type: 'spawn_species', speciesId: 'grass', cell: c, amount: 0.5, radius: 1 });
+    const after = w.snapshot().layers.populations.grass;
+    let landHit = 0;
+    for (const i of target) {
+      if (s0.layers.elevation[i] >= 0.3) {
+        landHit++;
+        expect(diff[i]).toBeGreaterThan(0.4);
+      } else expect(after[i]).toBe(0);
+    }
+    expect(landHit).toBeGreaterThan(1);
+    const targetSet = new Set(target);
+    for (let i = 0; i < diff.length; i++) if (!targetSet.has(i)) expect(Math.abs(diff[i])).toBeLessThan(0.02);
+  });
+});

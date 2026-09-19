@@ -25,7 +25,8 @@ export const PLAGUE_SURVIVAL = 0.1;
 
 export type DisasterCommand = Extract<Command, { type: 'disaster' }>;
 
-function forEachInRadius(cell: number, radius: number, size: number, fn: (i: number) => void): void {
+/** 中心セルから半径 (ユークリッド距離) 内の全セルを走査する。円の外周・境界外は呼ばない */
+export function forEachInRadius(cell: number, radius: number, size: number, fn: (i: number) => void): void {
   const cx = cell % size;
   const cy = (cell - cx) / size;
   const r = Math.ceil(radius);

@@ -8,6 +8,8 @@ test('boots, advances a year at 100x, graph shows values, layer switch works', a
   await page.click('#speed-100');
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 20_000 });
   await expect(page.locator('#stat-veg')).not.toHaveText('--%');
+  // 凡例に現在の総量が数字で出る
+  await expect(page.locator('#legend-grass')).toHaveText(/^\d+$/);
   await page.click('#layer-temperature');
   await expect(page.locator('#layer-temperature')).toHaveClass(/on/);
   const summaries = logs.filter((l) => l.includes('"event":"sim.tick.summary"'));
@@ -30,6 +32,20 @@ test('species palette: pick a species and click the island to spawn it', async (
     .poll(() => logs.filter((l) => l.includes('"event":"cmd.received"') && l.includes('"type":"spawn_species"')).length)
     .toBeGreaterThan(0);
   expect(logs.filter((l) => l.includes('"event":"cmd.rejected"'))).toHaveLength(0);
+});
+
+test('suitability layer: mode toggle + species chip reflect the choice in DOM state', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#layer-mode-density')).toHaveClass(/on/);
+  await expect(page.locator('#layer-mode-suit')).not.toHaveClass(/on/);
+  await page.click('#layer-mode-suit');
+  await expect(page.locator('#layer-mode-suit')).toHaveClass(/on/);
+  await expect(page.locator('#layer-mode-density')).not.toHaveClass(/on/);
+  await expect(page.locator('#layer-species-forest')).toBeVisible();
+  await page.click('#layer-species-forest');
+  await expect(page.locator('#layer-species-forest')).toHaveClass(/on/);
+  // モードチップの選択状態は種チップを選んだ後も維持される
+  await expect(page.locator('#layer-mode-suit')).toHaveClass(/on/);
 });
 
 test('clicking the island opens the cell panel with a local time series', async ({ page }) => {
@@ -67,4 +83,64 @@ test('free mode has the selector but no prophecy', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#tablet-select')).toBeVisible();
   await expect(page.locator('#tablet-title')).toHaveCount(0);
+});
+
+test('star power: budget line is shown, spawning costs power, and an unaffordable spawn is rejected', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/?scenario=test-quick');
+  // test-quick の budget: start 10, spawn 3 → 3 回で 1 になり 4 回目は弾かれる
+  await expect(page.locator('#tablet-power')).toHaveText('10 / 30');
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  const spawnOnce = async () => {
+    await page.click('#spawn-grass');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+    await expect(page.locator('#spawn-grass')).not.toHaveClass(/armed/);
+  };
+  await spawnOnce();
+  await expect(page.locator('#tablet-power')).toHaveText('7 / 30');
+  await spawnOnce();
+  await spawnOnce();
+  await expect(page.locator('#tablet-power')).toHaveText('1 / 30');
+  await expect(page.locator('#spawn-grass')).toHaveClass(/unaffordable/);
+  await spawnOnce();
+  await expect(page.locator('#tablet-power')).toHaveText('1 / 30');
+  await expect
+    .poll(() => logs.filter((l) => l.includes('"event":"cmd.rejected"') && l.includes('"reason":"budget"')).length)
+    .toBe(1);
+});
+
+test('stone tablet: milestone disappears when reached, power warning appears, verdict shows stats', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#tablet-milestones')).toHaveText('1 年目: 試しの節目(一年で消える)');
+  await expect(page.locator('#tablet-warnings')).toHaveText('');
+  // 力を使い切る: 放流 3 回 (9) + 気候 1 回 (1) = 10
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  for (let i = 0; i < 3; i++) {
+    await page.click('#spawn-grass');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+    await expect(page.locator('#spawn-grass')).not.toHaveClass(/armed/);
+  }
+  await page.locator('#rain-scale').evaluate((el) => {
+    const input = el as HTMLInputElement;
+    input.value = '1.5';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#tablet-power')).toHaveText('0 / 30');
+  await expect(page.locator('#rain-scale-v')).toHaveText('×1.50');
+  await page.click('#speed-100');
+  // 1 年目: 節目が消え、力の警告が出る。力が尽きて雨が既定に戻り、スライダーもそれに従う
+  await expect(page.locator('#tablet-milestones')).toHaveText('', { timeout: 20_000 });
+  await expect(page.locator('#rain-scale-v')).toHaveText('×1.00');
+  await expect(page.locator('#tablet-warnings')).toContainText('力が足りない(残り 0)');
+  await expect.poll(() => logs.filter((l) => l.includes('"event":"scenario.warning"') && l.includes('"kind":"power_low"')).length).toBe(1);
+  // 2 年目: 滅び。内訳が出る
+  await expect(page.locator('#verdict')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#verdict-stats')).toContainText('介入 4 回 · 使った力 10');
+  await expect(page.locator('#verdict-stats')).toContainText(/陸地率 \d+%/);
+  await expect(page.locator('#verdict-stats')).toContainText('草 ');
 });

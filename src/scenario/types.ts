@@ -8,6 +8,8 @@ type SpeciesDefLike = SpeciesDef;
  */
 export type Condition =
   | { type: 'species_alive'; ids: string[] }
+  /** 直近 years 年の総量の平均が min 以上 (群れとして残っているか)。年ごとの振動と最後の瞬間の放流に左右されない */
+  | { type: 'species_mean'; ids: string[]; years: number; min: number }
   | { type: 'species_extinct'; ids: string[] }
   | { type: 'land_ratio'; min?: number; max?: number }
   | { type: 'vegetation_ratio'; min?: number; max?: number }
@@ -51,10 +53,27 @@ export type ScenarioDef = {
   alive: Condition;
   /** 毎年評価し、満たした瞬間に負け。省略時は years 到達時の alive 判定だけで決まる */
   dead?: Condition;
+  /** 予言の節目。未到達のものを石板に先に見せ、到達したら消す */
+  milestones?: { atYear: number; text: string }[];
+  /** 星の力 (介入の予算)。省略時は今までどおり介入は無料 */
+  budget?: {
+    /** 開始時の力 */
+    start: number;
+    /** 年収の上限。実際は × 陸地率 × 生気の平均 (島が痩せると減る) */
+    incomePerYear: number;
+    /** コマンド 1 回の値段 */
+    costs: { spawn: number; disaster: number; climate: number };
+    /** |rainScale−1|·rainScale + |tempOffset|·tempOffset を毎年引く (気候を変え続けている分の維持費) */
+    upkeepPerYear: { rainScale: number; tempOffset: number };
+    /** 貯められる上限 (省略時 start × 3) */
+    max?: number;
+  };
 };
 
 export type ScenarioStatus = 'running' | 'alive' | 'dead';
-export type Verdict = { status: ScenarioStatus; reason: string };
+/** 勝敗が確定したときの内訳。オーバーレイに出す */
+export type VerdictStats = { interventions: number; powerSpent: number; landRatio: number; totals: Record<string, number> };
+export type Verdict = { status: ScenarioStatus; reason: string; stats?: VerdictStats };
 
 /** 開始時に固定する基準値 */
 export type StartStats = { landRatio: number; totals: Record<string, number> };
