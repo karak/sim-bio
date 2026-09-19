@@ -29,7 +29,7 @@ M2 の `stepPopulations` は **Lotka-Volterra + ロジスティック被食者 +
 
 - 被食者の nullcline は `P = (r/a)·(1 − N/K)·(1 + a·h·N)`。これは N について上に凸で、
   こぶの位置は `N_hump = (K − 1/(a·h)) / 2`。
-- 捕food者の nullcline は縦線 `N* = d / (a·(e − d·h))`。
+- 捕食者の nullcline は縦線 `N* = d / (a·(e − d·h))`。
 - **N* < N_hump なら共存平衡は不安定になり、リミットサイクルに落ち着く。**
   N* > N_hump なら安定(減衰振動)。
 - したがって「K を大きくする(餌を豊かにする)」「h を大きくする(飽和を強くする)」と振動が出る。
