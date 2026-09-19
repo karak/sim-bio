@@ -324,6 +324,11 @@ hud.showCell(cellIndex: number | null): void
 
 - **手動プレイ(M6-05)** で直したこと: 気候スライダーは世界の気候が変わったときだけ追従する(力が尽きて雨が止まったのが見える。差があるたびに戻すと一時停止中の操作と喧嘩する)。雨の刻み 0.05。凡例に種ごとの現在の総量を年次で表示。記録は `docs/specs/plans/2026-09-19-m6-playtest.md`。
 
+### 4.13 実装時の差分(M7-01〜03: プレイテストの改善点)
+
+- 警告 `power_capped`(上限に達して収入を捨てている)。`ScenarioDef.ignoreWarnings` で予言どおりの進行を警告にしない(沈む欠片は `land_low`)。
+- `ScenarioRunner.timeline()`: 介入、単発の予定イベント、力切れ、警告の初回、勝敗を年付きで積む。毎年繰り返す進行(沈降)は積まない。石板の折りたたみ「年表」に直近 6 件。100 倍速で見逃した力切れを後から読める。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -378,6 +383,14 @@ hud.showCell(cellIndex: number | null): void
 | `species_mean` の平均判定と履歴 | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.runner.test.ts` · af130f8 |
 | 沈む欠片: 放置と素朴 3 戦略は dead、想定解 2 通りは alive、他 4 本は引き続き通る | `tests/slow/scenarios.playthrough.test.ts` · af130f8(15 件通過) |
 | 手動プレイ 3 回の記録(M6-05)、スライダー同期と凡例の数字 | `docs/specs/plans/2026-09-19-m6-playtest.md`、`tests/e2e/smoke.spec.ts` · 2608ae3 |
+
+### M7-01〜03: プレイテストの改善点
+
+| 受入項目 | 証跡 |
+|---|---|
+| 上限到達の警告、ignoreWarnings の除外 | `tests/unit/scenario.warnings.test.ts` · 97a1327 |
+| 年表に介入・予定・力切れ・警告・勝敗が積まれ、沈降は積まれない。文の整形 | `tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 97a1327 |
+| 石板の年表に放流が出る | `tests/e2e/smoke.spec.ts` · 97a1327 |
 
 ### M4: シナリオ層の基盤
 

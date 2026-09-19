@@ -1,11 +1,11 @@
 ---
 id: M7-02
 title: 出来事の年表
-status: todo
+status: done
 milestone: M7
 plan: docs/specs/plans/2026-09-19-m6-playtest.md#まとめ
 depends_on: []
-evidence: []
+evidence: ["97a1327 tests/unit/scenario.warnings.test.ts tests/unit/scenario.budget.test.ts tests/unit/ui.tablet.test.ts tests/e2e/smoke.spec.ts"]
 ---
 
 # 出来事の年表
@@ -20,8 +20,9 @@ None (can start immediately)
 
 ## Acceptance criteria
 
-- [ ] ScenarioRunner.timeline() が出来事を積む(単体テスト)。Tablet の details に直近 6 件。E2E: 放流すると年表に 1 件増える。
-- [ ] npm run check と E2E が通る
+- [x] ScenarioRunner.timeline() が出来事を積む(単体テスト)。Tablet の details に直近 6 件。E2E: 放流すると年表に 1 件増える。
+- [x] npm run check と E2E が通る
 
 ## 作業ログ
 
+- 2026-09-19: 実装・テスト通過(97a1327)。
