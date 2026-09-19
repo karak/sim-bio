@@ -81,7 +81,10 @@
         "tempOffset": 4
       },
       "max": 120
-    }
+    },
+    "ignoreWarnings": [
+      "land_low"
+    ]
   },
   {
     "id": "falling-star",

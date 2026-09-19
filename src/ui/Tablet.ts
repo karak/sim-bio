@@ -1,10 +1,11 @@
-import type { BudgetInfo } from '../scenario/ScenarioRunner';
+import type { BudgetInfo, TimelineEvent } from '../scenario/ScenarioRunner';
 import type { ScenarioDef, Verdict } from '../scenario/types';
+import type { Command } from '../simulation/types';
 import type { Warning } from '../scenario/warnings';
 
 export type Tablet = {
   /** 開始からの年・判定・星の力 (budget が無いシナリオでは null) を表示する */
-  update(year: number, verdict: Verdict, budget: BudgetInfo | null, warnings?: Warning[]): void;
+  update(year: number, verdict: Verdict, budget: BudgetInfo | null, warnings?: Warning[], timeline?: TimelineEvent[]): void;
   /** 勝敗が確定したときの大きな表示 */
   showVerdict(verdict: Verdict): void;
   /** 介入が弾かれた・力が尽きたときに石板を短く揺らして知らせる */
@@ -14,6 +15,37 @@ export type Tablet = {
 const KIND_LABEL: Record<ScenarioDef['kind'], string> = { prevent: '防ぐ', endure: '耐える', escape: '逃がす' };
 /** 石板に同時に出す警告の上限 */
 const MAX_WARNINGS = 3;
+/** 年表に出す直近の件数 */
+const MAX_TIMELINE = 6;
+const DISASTER_LABEL: Record<string, string> = { meteor: '隕石', volcano: '火山', wildfire: '山火事', plague: '疫病' };
+
+/** 年表の 1 行を人が読める文にする */
+export function describeEvent(e: TimelineEvent, names: Record<string, string>): string {
+  const cmdText = (c: Command, scheduled: boolean): string => {
+    switch (c.type) {
+      case 'spawn_species':
+        return `${names[c.speciesId] ?? c.speciesId}を放った`;
+      case 'disaster':
+        return scheduled ? `予言どおり${DISASTER_LABEL[c.kind] ?? c.kind}が起きた` : `${DISASTER_LABEL[c.kind] ?? c.kind}を送った`;
+      case 'set_climate':
+        return [c.rainScale !== undefined ? `雨 ×${c.rainScale.toFixed(2)}` : '', c.tempOffset !== undefined ? `気温 ${c.tempOffset >= 0 ? '+' : ''}${c.tempOffset.toFixed(1)}` : ''].filter(Boolean).join('、');
+      case 'sink':
+        return '海が上がった';
+    }
+  };
+  switch (e.kind) {
+    case 'intervene':
+      return cmdText(e.command, false);
+    case 'scheduled':
+      return cmdText(e.command, true);
+    case 'power_exhausted':
+      return '力が尽き、気候が元に戻った';
+    case 'warning':
+      return `⚠ ${e.warning.text}`;
+    case 'verdict':
+      return e.verdict.status === 'alive' ? '島は生き延びた' : '島は滅びた';
+  }
+}
 
 /**
  * 石板: シナリオ選択、予言、残り年数、判定。
@@ -40,6 +72,7 @@ export function createTablet(
     <div class="row"><span id="tablet-year" class="mono">0 / ${def.years} 年</span><span id="tablet-status" class="dim"></span></div>
     <div id="tablet-milestones" class="tablet-milestones"></div>
     <div id="tablet-warnings" class="tablet-warnings"></div>
+    <details class="tablet-timeline"><summary id="tablet-timeline-summary">年表 (0)</summary><div id="tablet-timeline"></div></details>
     ${def.budget ? `<div class="row tablet-power"><span class="dim">力</span><span id="tablet-power" class="mono">${def.budget.start} / ${def.budget.max ?? def.budget.start * 3}</span><span id="tablet-power-flow" class="dim"></span></div>` : ''}` : ''}
   </div>
   <div class="verdict" id="verdict" hidden>
@@ -64,7 +97,7 @@ export function createTablet(
   $('verdict-free').addEventListener('click', () => onSelect(null));
 
   return {
-    update(year, verdict, budget, warnings = []) {
+    update(year, verdict, budget, warnings = [], timeline = []) {
       if (!def) return;
       $('tablet-year').textContent = `${Math.min(year, def.years)} / ${def.years} 年`;
       $('tablet-status').textContent = verdict.status === 'running' ? `あと ${verdict.reason}` : verdict.reason;
@@ -76,6 +109,14 @@ export function createTablet(
       const wHtml = warnings.slice(0, MAX_WARNINGS).map((w) => `<div class="tablet-warning">⚠ ${w.text}</div>`).join('');
       const wEl = $('tablet-warnings');
       if (wEl.innerHTML !== wHtml) wEl.innerHTML = wHtml;
+      const tlSummary = `年表 (${timeline.length})`;
+      if ($('tablet-timeline-summary').textContent !== tlSummary) {
+        $('tablet-timeline-summary').textContent = tlSummary;
+        $('tablet-timeline').innerHTML = timeline
+          .slice(-MAX_TIMELINE)
+          .map((e) => `<div class="tablet-event">${e.year} 年: ${describeEvent(e, speciesNames)}</div>`)
+          .join('');
+      }
       if (budget && def.budget) {
         $('tablet-power').textContent = `${Math.floor(budget.power)} / ${budget.max}`;
         // 直前の年の収入と維持費。1 年目までは 0 なので出さない

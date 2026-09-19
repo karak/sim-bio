@@ -97,7 +97,7 @@ async function boot(): Promise<void> {
         if (runner) {
           const verdict = runner.update(s);
           const budgetInfo = runner.budget();
-          tablet.update(runner.yearOf(s), verdict, budgetInfo, runner.warnings());
+          tablet.update(runner.yearOf(s), verdict, budgetInfo, runner.warnings(), runner.timeline());
           const costs = scenario?.budget?.costs;
           hud.setAffordable(
             budgetInfo && costs

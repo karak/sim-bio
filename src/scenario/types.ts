@@ -1,4 +1,5 @@
 import type { Command, SpeciesDef } from '../simulation/types';
+import type { WarningKind } from './warnings';
 
 type SpeciesDefLike = SpeciesDef;
 
@@ -53,6 +54,8 @@ export type ScenarioDef = {
   alive: Condition;
   /** 毎年評価し、満たした瞬間に負け。省略時は years 到達時の alive 判定だけで決まる */
   dead?: Condition;
+  /** 出さない警告の種類。予言どおりの進行 (沈む欠片の陸の減少など) を警告にしないため */
+  ignoreWarnings?: WarningKind[];
   /** 予言の節目。未到達のものを石板に先に見せ、到達したら消す */
   milestones?: { atYear: number; text: string }[];
   /** 星の力 (介入の予算)。省略時は今までどおり介入は無料 */

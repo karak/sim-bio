@@ -36,6 +36,9 @@
 .tablet-power { margin-top: 2px; }
 .tablet-milestones { font-size: 12px; color: #9fb3c2; }
 .tablet-warnings { font-size: 12px; color: #e0b055; line-height: 1.5; }
+.tablet-timeline { font-size: 12px; color: #9fb3c2; text-align: left; margin-top: 4px; }
+.tablet-timeline summary { cursor: pointer; text-align: center; }
+.tablet-event { line-height: 1.5; }
 .verdict-stats { color: #9fb3c2; font-size: 12px; line-height: 1.6; margin: -6px 0 14px; }
 /* 介入が弾かれた・力が尽きたときに石板を短く揺らす */
 .tablet.shake { animation: tablet-shake 0.3s; }
