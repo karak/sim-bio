@@ -9,6 +9,7 @@ import { createTablet } from './ui/Tablet';
 import { createScenarioRunner, type ScenarioRunner } from './scenario/ScenarioRunner';
 import type { ScenarioDef } from './scenario/types';
 import type { Command } from './simulation/types';
+import { resolveCivilizationStart } from './simulation/civilization';
 
 /** 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる */
 const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, wildfire: 0, plague: 4 };
@@ -30,6 +31,8 @@ async function boot(): Promise<void> {
     if (scenario.start.size !== undefined) config.size = scenario.start.size;
     if (scenario.start.tempOffset !== undefined) config.climate.tempOffset = scenario.start.tempOffset;
     if (scenario.start.rainScale !== undefined) config.climate.rainScale = scenario.start.rainScale;
+    // 文明の初期段階・集落の上書き (M8-02)。home は他のコマンドと同じ規約で -1 なら島の中心
+    config.civilization = resolveCivilizationStart(scenario.start.civilization, config.size);
   }
   const log = createConsoleSink();
   let world = World.create(config, { log });
