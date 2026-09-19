@@ -373,8 +373,8 @@ hud.showCell(cellIndex: number | null): void
 | 密度 / 住みやすさのモードチップ | `tests/e2e/smoke.spec.ts` · 73869bb |
 | 警告 4 種の真偽と順序、同じ警告のログは初回だけ、結果の内訳 | `tests/unit/scenario.warnings.test.ts`、`tests/unit/scenario.budget.test.ts` · 8c32ebc |
 | 節目が到達で消え、警告が出て、内訳が表示される | `tests/e2e/smoke.spec.ts` · 8c32ebc |
-| `species_mean` の平均判定と履歴 | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.runner.test.ts` |
-| 沈む欠片: 放置と素朴 3 戦略は dead、想定解 2 通りは alive、他 4 本は引き続き通る | `tests/slow/scenarios.playthrough.test.ts` |
+| `species_mean` の平均判定と履歴 | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.runner.test.ts` · af130f8 |
+| 沈む欠片: 放置と素朴 3 戦略は dead、想定解 2 通りは alive、他 4 本は引き続き通る | `tests/slow/scenarios.playthrough.test.ts` · af130f8(15 件通過) |
 | 手動プレイ 3 回の記録(M6-05) | `docs/specs/plans/2026-09-19-m6-playtest.md` |
 
 ### M4: シナリオ層の基盤
