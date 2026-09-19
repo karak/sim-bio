@@ -7,6 +7,7 @@ import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, HOME_RADIUS, populationAround, stepMining, type CivState } from './civilization';
+import { applyLoad, checkDecline } from './civilizationLoad';
 
 export type WorldDeps = {
   log: LogSink;
@@ -57,6 +58,8 @@ export class World {
   private civ: CivState | null = null;
   /** 文明の種の年次総量、直近 EMERGE_HISTORY_YEARS 年分 (発生判定用)。古い順 */
   private civHistory: number[] = [];
+  /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
+  private readonly zeroForest: Float32Array;
 
   private constructor(
     private readonly config: WorldConfig,
@@ -83,6 +86,7 @@ export class World {
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
+    this.zeroForest = new Float32Array(this.n);
     // config.civilization があるときだけ文明の状態を持つ。start 省略時は stage 0 / home -1 (未発生) から始める
     if (config.civilization) {
       const start = config.civilization.start;
@@ -204,6 +208,12 @@ export class World {
     stepVegetation(this.populations, this.scratch, this, this.plants, size);
     stepPopulations(this.populations, this.scratch, this, this.animals, size);
     stepVitality(this, this.decomposers, this.scratch, size);
+    // 文明の負荷 (M8-03): 発生済み (stage >= 1) なら毎 tick、集落周りの森を伐り生気を吸う。
+    // forest 種が居ない世界では捨て配列 (常に 0) を渡し、生気の負荷だけがかかるようにする
+    if (this.civ && this.civ.stage >= 1) {
+      const forestPop = this.populations['forest'] ?? this.zeroForest;
+      applyLoad(this.civ.stage, this.civ.home, { forest: forestPop, litter: this.litter, vitality: this.vitality, elevation: this.elevation }, size);
+    }
     this.refresh();
     // 文明(M8-02): 発生済み (stage >= 1) なら毎 tick 輝石を掘り、段階が上がればログを出す
     if (this.civ && this.civ.stage >= 1) {
@@ -278,6 +288,29 @@ export class World {
       }
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
+    if (civ.stage >= 1) {
+      let vitSum = 0;
+      let vitCount = 0;
+      forEachInRadius(civ.home, HOME_RADIUS, this.config.size, (i) => {
+        if (this.elevation[i] >= SEA_LEVEL) {
+          vitSum += this.vitality[i];
+          vitCount++;
+        }
+      });
+      const vitalityMean = vitCount ? vitSum / vitCount : 0;
+      const { decline, reason } = checkDecline(civ.stage, civ.population, vitalityMean);
+      if (decline) {
+        const before = civ.stage;
+        civ.stage -= 1;
+        civ.progress = 0;
+        this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason, year: Math.floor(this.tick / this.config.ticksPerYear) });
+        if (civ.stage === 0) {
+          civ.home = -1;
+          this.log('info', 'sim.civ.collapsed', { reason });
+        }
+      }
+    }
   }
 
   private apply(cmd: Command): void {
