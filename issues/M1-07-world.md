@@ -1,11 +1,11 @@
 ---
 id: M1-07
 title: World(create/dispatch/step/snapshot/serialize)
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-7-world
 depends_on: [M1-02, M1-03, M1-04, M1-05, M1-06]
-evidence: []
+evidence: ["993ae8e", "tests/unit/world.determinism.test.ts", "tests/unit/world.properties.test.ts", "tests/unit/world.commands.test.ts", "tests/unit/world.save.test.ts", "tests/unit/world.log.test.ts"]
 ---
 
 # World(create/dispatch/step/snapshot/serialize)

@@ -1,7 +1,7 @@
 ---
 id: M1-09
 title: レイヤー着色と個体散布の純粋関数
-status: todo
+status: in_progress
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-9-描画の純粋関数
 depends_on: [M1-04]
