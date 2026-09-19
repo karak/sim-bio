@@ -25,9 +25,10 @@ describe('World oscillation (seed 42, size 64, 60 years)', { timeout: 120_000 },
   it('herbivore totals stay positive', () => {
     expect(Math.min(...deer)).toBeGreaterThan(0);
   });
-  // M3-01 時点の現状固定: 線形応答では減衰して平坦になる。M3-02 でこの期待を反転する。
-  it('current linear-response model damps out (amplitude ratio of last 30 years < 0.1)', () => {
-    expect(amplitudeRatio(secondHalf(deer))).toBeLessThan(0.1);
-    expect(countPeaks(secondHalf(deer), 0.5)).toBeLessThan(3);
+  // M3-02: Holling II 型応答 (狼 handlingTime=20) で持続する波が出る。
+  // M3-01 時点 (線形応答) では後半 30 年の振幅比 < 0.1、極大値 < 3 だった。
+  it('sustained oscillation: >= 3 peaks and amplitude ratio >= 0.2 in the last 30 years', () => {
+    expect(countPeaks(secondHalf(deer), 0.5)).toBeGreaterThanOrEqual(3);
+    expect(amplitudeRatio(secondHalf(deer))).toBeGreaterThanOrEqual(0.2);
   });
 });

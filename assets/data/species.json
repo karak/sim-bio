@@ -90,7 +90,7 @@
     "trophic": "carnivore",
     "growthRate": 0.8,
     "mortality": 0.015,
-    "predation": 0.3,
+    "predation": 0.5,
     "tempRange": [
       -10,
       25
@@ -106,6 +106,7 @@
     ],
     "assetId": "wolf",
     "color": "#E07A55",
-    "initialDensity": 0.01
+    "initialDensity": 0.01,
+    "handlingTime": 20
   }
 ]

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stepPopulations } from '../../src/simulation/populations';
+import { functionalResponse, stepPopulations } from '../../src/simulation/populations';
 import type { SpeciesDef } from '../../src/simulation/types';
 
 const deer: SpeciesDef = {
@@ -10,6 +10,18 @@ const env = (n: number) => ({
   elevation: new Float32Array(n).fill(0.5),
   temperature: new Float32Array(n).fill(15),
   moisture: new Float32Array(n).fill(0.5),
+});
+
+describe('functionalResponse', () => {
+  it('is linear with handlingTime 0 and saturates otherwise', () => {
+    expect(functionalResponse(0.1, 0, 0.5)).toBeCloseTo(0.05, 9);
+    expect(functionalResponse(0.1, 20, 0.5)).toBeLessThan(0.05);
+    // 飽和: 餌が 10 倍でも摂食率は 10 倍にならない
+    const lo = functionalResponse(0.1, 20, 0.1);
+    const hi = functionalResponse(0.1, 20, 1.0);
+    expect(hi / lo).toBeLessThan(5);
+    expect(hi).toBeLessThan(1 / 20);
+  });
 });
 
 describe('stepPopulations', () => {

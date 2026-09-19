@@ -1,11 +1,11 @@
 ---
 id: M3-01
 title: 振動の自動判定
-status: in_progress
+status: done
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: []
-evidence: []
+evidence: ["e7e9ade", "tests/unit/oscillation.test.ts", "tests/unit/world.oscillation.test.ts"]
 ---
 
 # 振動の自動判定
