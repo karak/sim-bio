@@ -73,7 +73,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
 
   const sea = new Mesh(
     new PlaneGeometry(size * 3, size * 3),
-    new MeshLambertMaterial({ color: '#2E6F9E', transparent: true, opacity: 0.55, side: DoubleSide }),
+    new MeshLambertMaterial({ color: '#2E6F9E', transparent: true, opacity: 0.7, side: DoubleSide, depthWrite: false }),
   );
   sea.rotateX(-Math.PI / 2);
   sea.position.y = SEA_LEVEL * hs + 0.02;
@@ -115,7 +115,8 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   const update = (s: WorldSnapshot) => {
     if (s.tick !== lastTick || layer !== lastLayer) {
       const p = geo.getAttribute('position') as BufferAttribute;
-      for (let i = 0; i < n; i++) p.setY(i, Math.max(s.layers.elevation[i], SEA_LEVEL) * hs);
+      // 海底も実標高で描き、半透明の海面を上に重ねる (平らにすると海面と Z ファイトする)
+      for (let i = 0; i < n; i++) p.setY(i, s.layers.elevation[i] * hs);
       p.needsUpdate = true;
       geo.computeVertexNormals();
       const c = geo.getAttribute('color') as BufferAttribute;
@@ -127,7 +128,8 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
         const a = opts.assets[d.assetId];
         const count = scatterInstances(s.layers.populations[d.id], s.layers.elevation, size, 2, 1, pos);
         for (let k = 0; k < count; k++) {
-          dummy.position.set(pos[k * 3], pos[k * 3 + 1] * hs, pos[k * 3 + 2]);
+          // ジオメトリ原点が中心なので高さの半分だけ持ち上げる
+          dummy.position.set(pos[k * 3], pos[k * 3 + 1] * hs + 0.3 * a.scale, pos[k * 3 + 2]);
           dummy.scale.setScalar(a.scale);
           dummy.updateMatrix();
           m.setMatrixAt(k, dummy.matrix);

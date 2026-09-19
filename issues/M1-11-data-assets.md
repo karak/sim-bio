@@ -1,11 +1,11 @@
 ---
 id: M1-11
 title: 種・世界のデータと AssetTable
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-11-データファイルと-assettable
 depends_on: [M1-07]
-evidence: []
+evidence: ["3547a00", "tests/unit/data.test.ts"]
 ---
 
 # 種・世界のデータと AssetTable

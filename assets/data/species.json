@@ -6,7 +6,7 @@
     "growthRate": 0.04,
     "mortality": 0.02,
     "tempRange": [-2, 32],
-    "moistureRange": [0.15, 0.85],
+    "moistureRange": [0.15, 0.7],
     "diffusion": 0.05,
     "assetId": "grass",
     "color": "#6FBF7C"

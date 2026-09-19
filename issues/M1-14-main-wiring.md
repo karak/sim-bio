@@ -1,7 +1,7 @@
 ---
 id: M1-14
 title: main.ts 配線
-status: todo
+status: in_progress
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-14-maints-配線
 depends_on: [M1-08, M1-12, M1-13]
