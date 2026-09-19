@@ -3,17 +3,20 @@
 使い方:
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/rabbit.py -- assets/models
 出力: <out_dir>/rabbit.blend (git 管理外) と <out_dir>/rabbit.glb
-検証: tools/blender/compare_ref.py で参照画像と同アングル撮影し定量比較する
+検証: tools/blender/compare_ref.py で参照画像と同アングル撮影し、パーツ別に色と配置を定量比較する
 
 作り方 (プリミティブの寄せ集めではなく、断面リングのロフトで面構成を作る):
-  - 各パーツは「背骨に沿った断面リング (6〜8 頂点)」を順に bridge した閉じたメッシュ。
+  - 各パーツは「背骨に沿った断面リング (7〜12 頂点)」を順に bridge した閉じたメッシュ。
     リング数を絞ることで参照画像のような大きな平面ファセットが出る。
-  - 目: 頭の側面ファセット 1 枚を inset してシアン発光にする (参照画像の菱形の目)。
-  - 耳の内側: 耳の前向きファセットを inset region して濃い茶にする (縁に地色が残る)。
-  - 六角模様: 胴体にレイキャストして表面点と法線を取り、六角柱の薄板を法線向きに貼る。
-  - 前脚の下部 (z<0.06) と鼻先は濃い色。
+  - 目: 頭の側面に「塗られた」前下がりのアーモンド形。表面にレイキャストして平面デカールとして貼る。
+  - 鼻: 口先を平らに切り (点に収束させない)、その前面に逆三角の暗いデカールを貼る。
+  - 耳: 7 頂点リングで前面中央を 1 枚の広いファセットにし、その列を先端まで濃い色にする (縁に地色が残る)。
+  - 六角模様: 盛り上がった宝石ではなく、暗いティールの縁取り + 明るいシアンの面の 2 層デカール。
+    パネル線 (ティールの細い帯) でつなぐ。
+  - 前脚の足先は濃い色。
 
-寸法は参照画像の比率から: 耳含む全高 ≈ 0.9 m、頭高/胴高 ≈ 0.45、耳長 ≈ 0.36 m。
+色は参照画像の量子化代表色から: fur #D4AC54 / 耳内側・足先・鼻 #5C3C34 / 発光 #8CFCEC / 縁取り #5C847C
+寸法は参照画像の比率から: 耳含む全高 ≈ 0.9 m、頭高/胴高 ≈ 0.45、耳長 ≈ 0.38 m。
 単位 m、Z up、正面 -Y、原点は足元。
 """
 import math
@@ -60,20 +63,23 @@ def solid(name: str, color: str, emission: float = 0.0):
 
 
 MATS = [
-    solid("rabbit_fur", "#D6C27A"),
-    solid("rabbit_ear_inner", "#5A3A2A"),
-    solid("rabbit_dark", "#3A2418"),
-    solid("rabbit_glow", "#9FF5E8", emission=0.8),
+    solid("rabbit_fur", "#D4AC54"),
+    solid("rabbit_ear_inner", "#5C3C34"),
+    solid("rabbit_dark", "#5C3C34"),
+    solid("rabbit_glow", "#8CFCEC", emission=0.6),
+    solid("rabbit_teal", "#5C847C"),
 ]
-FUR, EAR, DARK, GLOW = range(4)
+FUR, EAR, DARK, GLOW, TEAL = range(5)
 
 
 # ---------- ロフト用ヘルパ ----------
-def ring(bm, center, ux, uy, rx, ry, n, phase=0.0):
-    """center を中心に ux/uy 平面上へ n 頂点の楕円リングを置く。phase で面の向きを合わせる"""
+def ring(bm, center, ux, uy, rx, ry, n=8, phase=0.0, angles=None):
+    """center を中心に ux/uy 平面上へ楕円リングを置く。angles (度) を渡すと頂点の角度を直接指定できる"""
+    if angles is None:
+        angles = [math.degrees(phase) + 360 * i / n for i in range(n)]
     return [
-        bm.verts.new(center + ux * (rx * math.cos(t)) + uy * (ry * math.sin(t)))
-        for t in (phase + 2 * math.pi * i / n for i in range(n))
+        bm.verts.new(center + ux * (rx * math.cos(math.radians(a))) + uy * (ry * math.sin(math.radians(a))))
+        for a in angles
     ]
 
 
@@ -112,7 +118,7 @@ def densify(sections, bulge=1.035):
 
 
 def finish(bm, name):
-    """bmesh をオブジェクト化。法線を外向きに揃え、4 マテリアルスロットを持たせる"""
+    """bmesh をオブジェクト化。法線を外向きに揃え、全マテリアルスロットを持たせる"""
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
@@ -126,7 +132,7 @@ def finish(bm, name):
 
 parts = []
 
-# ---------- 胴 (尻尾側 → 胸): 8 頂点リング、側面と上下に平らなファセット ----------
+# ---------- 胴 (尻尾側 → 胸): 12 頂点リング、側面と上下に平らなファセット ----------
 bm = bmesh.new()
 # (y, z中心, 半幅x, 半高z)
 body_sections = densify([
@@ -136,16 +142,16 @@ body_sections = densify([
     (0.08, 0.22, 0.20, 0.22),  # 腰の最大部
     (0.0, 0.25, 0.19, 0.235),
     (-0.09, 0.27, 0.17, 0.215),
-    (-0.15, 0.29, 0.14, 0.18),  # 胸〜首
-    (-0.20, 0.32, 0.10, 0.13),
-    (-0.235, 0.34, 0.055, 0.075),
+    (-0.17, 0.27, 0.15, 0.20),  # 胸〜首 (参照では頭の下に胸が大きく張り出す)
+    (-0.24, 0.29, 0.11, 0.15),
+    (-0.275, 0.31, 0.06, 0.09),
 ])
 rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rz, 12, math.pi / 12) for y, zc, rx, rz in body_sections]
 loft(bm, rings)
 body = finish(bm, "body")
 parts.append(body)
 
-# ---------- 頭 (後頭部 → 鼻先): 8 頂点リング。最後は点に収束させて鼻にする ----------
+# ---------- 頭 (後頭部 → 口先): 12 頂点リング。口先は平らに切る ----------
 bm = bmesh.new()
 head_sections = densify([
     (-0.08, 0.45, 0.08, 0.08),
@@ -153,22 +159,20 @@ head_sections = densify([
     (-0.17, 0.475, 0.155, 0.14),  # 最大幅
     (-0.22, 0.47, 0.15, 0.135),
     (-0.27, 0.45, 0.125, 0.115),
-    (-0.31, 0.43, 0.095, 0.09),
-    (-0.34, 0.415, 0.06, 0.06),  # 口先
-    (-0.362, 0.405, 0.03, 0.028),  # 鼻のつけ根 (ここから先だけ濃い色)
+    (-0.31, 0.43, 0.10, 0.095),
+    (-0.345, 0.41, 0.065, 0.06),  # 口先 (平らなキャップ。ここに鼻のデカールを貼る)
 ])
 rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rz, 12, math.pi / 12) for y, zc, rx, rz in head_sections]
-nose_tip = bm.verts.new(Vector((0, -0.378, 0.40)))
-faces = loft(bm, rings + [nose_tip])
-# 鼻: 先端に収束する三角面を濃い色に
-for f in faces:
-    if nose_tip in f.verts:
-        f.material_index = DARK
+loft(bm, rings)
 head = finish(bm, "head")
 parts.append(head)
 
 
-# ---------- 耳: 幅広の刃状。6 頂点リングで前後に平らなファセット ----------
+# ---------- 耳: 幅広の刃状。前面中央を広い 1 ファセットにし、その列を先端まで濃い色に ----------
+# (ux, uy) 平面での頂点角度。270° が前面中央。195°→345° の 1 面が広い前面、その両脇 15° が縁
+EAR_ANGLES = [0, 25, 90, 155, 180, 200, 340]
+
+
 def make_ear(sgn):
     bm = bmesh.new()
     axis = Vector((sgn * 0.24, 0.20, 0.95)).normalized()  # 外へ 14°、後ろへ 12° 傾く
@@ -176,28 +180,28 @@ def make_ear(sgn):
     uy = axis.cross(ux).normalized()  # 厚み方向 (≈Y、前が -uy)
     base = Vector((sgn * 0.08, -0.165, 0.555))
     # (軸方向距離, 半幅, 半厚)
-    ear_sections = [(0.0, 0.05, 0.026), (0.08, 0.07, 0.03), (0.17, 0.076, 0.028), (0.26, 0.062, 0.022), (0.33, 0.034, 0.014)]
-    rings = [ring(bm, base + axis * t, ux, uy, w, th, 8, math.pi / 8) for t, w, th in ear_sections]
-    tip = bm.verts.new(base + axis * 0.37)
-    loft(bm, rings + [tip])
-    # 内側: 前を向くファセット (法線が -Y 寄り) を inset region して濃い茶に
+    ear_sections = [(0.0, 0.04, 0.024), (0.09, 0.062, 0.03), (0.20, 0.075, 0.028), (0.29, 0.058, 0.02), (0.35, 0.03, 0.012)]
+    rings = [ring(bm, base + axis * t, ux, uy, w, th, angles=EAR_ANGLES) for t, w, th in ear_sections]
+    tip = bm.verts.new(base + axis * 0.38)
+    faces = loft(bm, rings + [tip])
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    front = [f for f in bm.faces if f.normal.dot(-uy) > 0.6 and f.calc_center_median().z > base.z + 0.02]
-    bmesh.ops.inset_region(bm, faces=front, thickness=0.012, depth=-0.004, use_even_offset=True)
-    for f in front:
-        f.material_index = EAR
+    # 前面中央の列 (法線がほぼ -uy) を、付け根の 1 段を除いて濃い色に
+    for f in faces:
+        c = f.calc_center_median()
+        if f.normal.dot(-uy) > 0.9 and (c - base).dot(axis) > 0.05:
+            f.material_index = EAR
     return finish(bm, f"ear_{'R' if sgn > 0 else 'L'}")
 
 
 parts += [make_ear(1), make_ear(-1)]
 
 
-# ---------- 前脚: 上 (胴の中) → 足先。下部は濃い色のブーツ ----------
+# ---------- 前脚: 上 (胴の中) → 足先。足先は濃い色 ----------
 def make_foreleg(sgn):
     bm = bmesh.new()
-    sx = sgn * 0.085
+    sx = sgn * 0.075
     # (z, y中心, 半幅x, 半奥行y)
-    leg_sections = [(0.28, -0.17, 0.05, 0.055), (0.20, -0.18, 0.047, 0.052), (0.12, -0.192, 0.045, 0.05), (0.045, -0.205, 0.05, 0.065), (0.0, -0.215, 0.05, 0.072)]
+    leg_sections = [(0.28, -0.235, 0.04, 0.05), (0.20, -0.245, 0.037, 0.045), (0.12, -0.255, 0.036, 0.045), (0.045, -0.265, 0.04, 0.058), (0.0, -0.275, 0.042, 0.065)]
     rings = [ring(bm, Vector((sx, y, z)), X, Y, rx, ry, 8, math.pi / 8) for z, y, rx, ry in leg_sections]
     faces = loft(bm, rings)
     for f in faces:
@@ -216,7 +220,11 @@ def make_hindfoot(sgn):
     # (y, 半幅x, 半高z)
     foot_sections = [(0.19, 0.05, 0.032), (0.10, 0.06, 0.045), (0.0, 0.06, 0.042), (-0.10, 0.05, 0.03)]
     rings = [ring(bm, Vector((sx, y, rz + 0.002)), X, Z, rx, rz, 8, math.pi / 8) for y, rx, rz in foot_sections]
-    loft(bm, rings)
+    faces = loft(bm, rings)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    for f in faces:  # かかと側 (後ろ半分) の側面と底を濃い色に
+        if f.normal.z < 0.5 and f.calc_center_median().y > 0.04:
+            f.material_index = DARK
     return finish(bm, f"hindfoot_{'R' if sgn > 0 else 'L'}")
 
 
@@ -230,62 +238,186 @@ loft(bm, rings + [tail_tip])
 parts.append(finish(bm, "tail"))
 
 
-# ---------- 表面に貼る板 (目・六角模様): レイキャストで表面点と法線を取り法線向きに置く ----------
+# ---------- 表面に貼るデカール (目・鼻・六角模様・パネル線) ----------
+# 配置は参照画像の実測値で指定する。compare_ref.py と同じカメラ (方位 45°、仰角 10°) を組み、
+# 参照画像のシルエット bbox 正規化座標 (fx: 中心 0、fy: 上 0、高さ 1) を、モデルの投影 bbox に当てはめて
+# レイキャストし表面点を得る。参照は右側面 (+X 側) が手前なので、左側は x を反転して貼る。
+# 数値の出所: compare_ref.py が出力する ref_components.json (cyan_core / teal / dark)
+from bpy_extras.object_utils import world_to_camera_view
+
 bpy.context.view_layer.update()
 depsgraph = bpy.context.evaluated_depsgraph_get()
+base_parts = list(parts)
+
+REF_AZ, REF_EL = 45.0, 10.0
+_pts = [o.matrix_world @ Vector(c) for o in base_parts for c in o.bound_box]
+_lo = Vector((min(p[i] for p in _pts) for i in range(3)))
+_hi = Vector((max(p[i] for p in _pts) for i in range(3)))
+_center, _height = (_lo + _hi) / 2, _hi.z - _lo.z
+cam_data = bpy.data.cameras.new("ref_cam")
+cam_data.lens = 50
+ref_cam = bpy.data.objects.new("ref_cam", cam_data)
+scene.collection.objects.link(ref_cam)
+scene.camera = ref_cam
+scene.render.resolution_x = scene.render.resolution_y = 1024
+_fov = 2 * math.atan(cam_data.sensor_width / 2 / cam_data.lens)
+_dist = (_height / 0.62) / 2 / math.tan(_fov / 2)
+_a, _e = math.radians(REF_AZ), math.radians(REF_EL)
+ref_cam.location = _center + Vector((math.cos(_a) * math.cos(_e) * _dist, -math.sin(_a) * math.cos(_e) * _dist, math.sin(_e) * _dist))
+ref_cam.rotation_euler = (_center - ref_cam.location).to_track_quat("-Z", "Y").to_euler()
+bpy.context.view_layer.update()
+
+# モデルの投影 bbox (画像座標 0..1、y は上向き)
+_proj = [world_to_camera_view(scene, ref_cam, o.matrix_world @ v.co) for o in base_parts for v in o.data.vertices]
+_x0, _x1 = min(p.x for p in _proj), max(p.x for p in _proj)
+_y0, _y1 = min(p.y for p in _proj), max(p.y for p in _proj)
+_h = _y1 - _y0
+FRAME_M = _height  # 正規化枠 1 = モデルの全高 (m)。参照の寸法をメートルへ換算する係数
+_tr, _br, _bl, _tl = cam_data.view_frame(scene=scene)
+
+
+def tangent_frame(n):
+    u = (Z.cross(n) if abs(n.z) < 0.9 else X.cross(n)).normalized()
+    return u, n.cross(u).normalized()
 
 
 def surface_frame(obj, target, inner):
-    """target 付近の obj 表面点と、その接平面の正規直交基底 (u: 水平寄り, v: 上寄り) を返す"""
+    """target 付近の obj 表面点と接平面基底。inner へ向けて外側からレイキャストする"""
     origin = target + (target - inner) * 3
     direction = (inner - origin).normalized()
     hit, loc, normal, _ = obj.ray_cast(origin, direction, depsgraph=depsgraph)
     if not hit:
         raise RuntimeError(f"表面が見つかりません {target}")
     n = normal.normalized()
-    u = (Z.cross(n) if abs(n.z) < 0.9 else X.cross(n)).normalized()
-    v = n.cross(u).normalized()
-    return loc, n, u, v
+    return (loc, n) + tangent_frame(n)
 
 
-def surface_plate(name, loc, n, u, v, nverts, rx, ry, tilt_deg=0.0, thick=0.006):
-    """接平面上に nverts 角形の薄板を置く。tilt で接平面内で回転"""
+def at_ref(fx, fy, objs=None, mirror=False, center=False):
+    """参照画像の正規化座標 (fx, fy) をカメラ越しにモデル表面へ投影する。
+    mirror=True で左側 (x 反転) の対応点、center=True で x=0 の正中線上に落とし直す"""
+    objs = objs or base_parts
+    ix = (_x0 + _x1) / 2 + fx * _h
+    iy = _y1 - fy * _h
+    p_local = _bl + (_br - _bl) * ix + (_tl - _bl) * iy
+    p_world = ref_cam.matrix_world @ p_local
+    origin = ref_cam.matrix_world.translation
+    d = (p_world - origin).normalized()
+    best = None
+    for o in objs:
+        hit, loc, normal, _ = o.ray_cast(origin, d, depsgraph=depsgraph)
+        if hit and (best is None or (loc - origin).length < (best[0] - origin).length):
+            best = (loc, normal.normalized(), o)
+    if best is None:
+        # 参照の輪郭がモデルより外側にある点: 中心側へ少しずつ寄せて当たる所に置く
+        if abs(fx) < 0.005:
+            raise RuntimeError(f"参照座標 ({fx}, {fy}) がモデルに当たりません")
+        step = -0.01 if fx > 0 else 0.01
+        return at_ref(fx + step, fy, objs, mirror, center)
+    loc, n, o = best
+    if mirror:
+        # モデルは左右対称なので、カメラ位置とレイ方向を x 反転して撃てば必ず対応点に当たる
+        origin2 = Vector((-origin.x, origin.y, origin.z))
+        d2 = Vector((-d.x, d.y, d.z))
+    if center:
+        # 正中線上: 当たった点の高さで、正面から後方へ撃ち直す
+        origin2 = Vector((0, loc.y - 0.5, loc.z))
+        d2 = Vector((0, 1, 0))
+    if mirror or center:
+        best2 = None
+        for o2 in objs:
+            hit, loc2, normal2, _ = o2.ray_cast(origin2, d2, depsgraph=depsgraph)
+            if hit and (best2 is None or (loc2 - origin2).length < (best2[0] - origin2).length):
+                best2 = (loc2, normal2.normalized())
+        if best2 is None:
+            raise RuntimeError(f"参照座標 ({fx}, {fy}) の対応点 {target} が見つかりません")
+        loc, n = best2
+    return (loc, n) + tangent_frame(n)
+
+
+def decal_at(name, frame, pts_uv, mat, tilt_deg=0.0, offset=0.002):
+    """接平面上の多角形 (pts_uv: (u,v) 座標列 [m]) を、表面から offset だけ浮かせた 1 枚の面として貼る"""
+    loc, n, u, v = frame
     t = math.radians(tilt_deg)
     du = u * math.cos(t) + v * math.sin(t)
     dv = -u * math.sin(t) + v * math.cos(t)
     bm = bmesh.new()
-    top = ring(bm, loc + n * thick, du, dv, rx, ry, nverts, 0.0)
-    bottom = ring(bm, loc - n * 0.004, du, dv, rx, ry, nverts, 0.0)
-    for f in loft(bm, [bottom, top]):
-        f.material_index = GLOW
+    verts = [bm.verts.new(loc + n * offset + du * a + dv * b) for a, b in pts_uv]
+    f = bm.faces.new(verts)
+    f.material_index = mat
+    f.normal_update()
+    if f.normal.dot(n) < 0:
+        bmesh.ops.reverse_faces(bm, faces=[f])
     parts.append(finish(bm, name))
 
 
-def honeycomb(name, obj, target, inner, size, cells):
-    """target の表面点を中心に、ハニカム格子上のセル (col,row,scale) へ六角板を並べる"""
-    loc, n, u, v = surface_frame(obj, target, inner)
-    pitch = size * 2.15
-    for i, (col, row, sc) in enumerate(cells):
-        off = u * (pitch * (col + 0.5 * (row % 2))) + v * (pitch * 0.866 * row)
-        p = loc + off
-        # 各セルを改めて表面へ投影し、曲面に沿わせる
-        loc_i, n_i, u_i, v_i = surface_frame(obj, p + n * 0.05, inner)
-        surface_plate(f"{name}_{i}", loc_i, n_i, u_i, v_i, 6, size * sc, size * sc, 30)
+def almond(L, H, k=4):
+    """両端が尖ったアーモンド形 (レンズ形) の頂点列"""
+    step = 180 // (k + 1)
+    top = [(L * math.cos(math.radians(a)), H * math.sin(math.radians(a))) for a in range(180 - step, 0, -step)]
+    return [(-L, 0.0)] + top + [(L, 0.0)] + [(x, -y) for x, y in reversed(top)]
 
 
-HEAD_INNER = Vector((0, -0.20, 0.46))
-BODY_INNER = Vector((0, 0.0, 0.26))
-for sgn in (1, -1):
-    tag = "R" if sgn > 0 else "L"
-    # 目: 頭の側面前寄りに、前下がりに傾いた菱形 (参照画像の目)
-    loc, n, u, v = surface_frame(head, Vector((sgn * 0.2, -0.285, 0.49)), HEAD_INNER)
-    surface_plate(f"eye_{tag}", loc, n, u, v, 4, 0.05, 0.03, tilt_deg=-25 * sgn, thick=0.005)
-    # 胸: 前脚の付け根の外側にひとかたまり (参照画像の手前側の模様)
-    honeycomb(f"hex_chest_{tag}", body, Vector((sgn * 0.19, -0.15, 0.18)), BODY_INNER, 0.027,
-              [(0, 0, 1.0), (1, 0, 0.8), (-1, 0, 0.8), (0, 1, 0.85), (-1, 1, 0.7), (0, -1, 0.8)])
-    # 腰: もも周りにひとかたまり
-    honeycomb(f"hex_haunch_{tag}", body, Vector((sgn * 0.26, 0.07, 0.26)), BODY_INNER, 0.029,
-              [(0, 0, 1.0), (1, 0, 0.85), (0, 1, 0.9), (-1, 1, 0.7), (0, -1, 0.8), (1, -1, 0.65)])
+def hexagon(r, rot=30):
+    return [(r * math.cos(math.radians(rot + 60 * i)), r * math.sin(math.radians(rot + 60 * i))) for i in range(6)]
+
+
+def jewel(name, fx, fy, r_frame, mirror=False):
+    """六角ジュエル: ティールの縁取り (下層) + シアンの面 (上層)。位置と半径は参照の実測値。胴体にだけ貼る"""
+    r = r_frame * FRAME_M
+    fr = at_ref(fx, fy, objs=[body], mirror=mirror)
+    decal_at(f"{name}_rim", fr, hexagon(r + 0.006), TEAL, offset=0.0015)
+    decal_at(f"{name}_core", fr, hexagon(r), GLOW, offset=0.003)
+
+
+def ribbon(name, pts, mat=TEAL, width=0.009, offset=0.0015, mirror=False, step=0.012):
+    """参照座標の折れ線を胴体表面に投影し、細い帯にする (パネル線)。面に沿うよう step 間隔で細分する"""
+    dense = []
+    for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+        n = max(1, int(math.hypot(bx - ax, by - ay) / step))
+        dense += [(ax + (bx - ax) * i / n, ay + (by - ay) * i / n) for i in range(n)]
+    dense.append(pts[-1])
+    hits = [at_ref(fx, fy, objs=[body], mirror=mirror) for fx, fy in dense]
+    bm = bmesh.new()
+    prev = None
+    for i, (loc, n, _, _) in enumerate(hits):
+        d = (hits[i + 1][0] - loc) if i + 1 < len(hits) else (loc - hits[i - 1][0])
+        d = d.normalized()
+        side = n.cross(d).normalized() * (width / 2)
+        pair = (bm.verts.new(loc + n * offset - side), bm.verts.new(loc + n * offset + side))
+        if prev:
+            f = bm.faces.new((prev[0], prev[1], pair[1], pair[0]))
+            f.material_index = mat
+        prev = pair
+    parts.append(finish(bm, name))
+
+
+# 鼻: 口先の前面、正中線上に逆三角 (参照: fx -0.237, fy 0.563, r 0.022)
+decal_at("nose", at_ref(-0.237, 0.563, center=True),
+         [(-0.028, 0.016), (0.028, 0.016), (0.02, -0.006), (0.0, -0.03), (-0.02, -0.006)], DARK)
+
+for mirror in (False, True):
+    tag = "L" if mirror else "R"
+    sgn = -1 if mirror else 1
+    # 目: 頭の側面 (参照: fx -0.122, fy 0.508、面積から L 0.058 / H 0.034 m)。後ろが上がる向きに傾ける
+    decal_at(f"eye_{tag}", at_ref(-0.122, 0.508, mirror=mirror), almond(0.058, 0.034), GLOW, tilt_deg=22 * sgn)
+    # 胸の六角クラスタ (参照 cyan_core の実測)
+    for i, (fx, fy, r) in enumerate([(-0.168, 0.738, 0.0324), (-0.123, 0.779, 0.0184), (-0.123, 0.699, 0.0174), (-0.152, 0.807, 0.0165),
+                                     (-0.211, 0.694, 0.0136), (-0.194, 0.777, 0.0135), (-0.230, 0.716, 0.0088)]):
+        jewel(f"hex_chest_{tag}_{i}", fx, fy, r, mirror)
+    # 腰の六角クラスタ
+    for i, (fx, fy, r) in enumerate([(0.077, 0.565, 0.030), (0.142, 0.650, 0.0181), (0.162, 0.618, 0.0162), (0.208, 0.687, 0.0157)]):
+        jewel(f"hex_haunch_{tag}_{i}", fx, fy, r, mirror)
+    # パネル線 (ティール): 襟、腰パネルの輪郭、ももの輪郭
+    ribbon(f"line_collar_{tag}", [(-0.05, 0.62), (-0.12, 0.632), (-0.19, 0.655), (-0.22, 0.70)], mirror=mirror)
+    ribbon(f"line_haunch_{tag}", [(0.0, 0.585), (0.06, 0.572), (0.12, 0.60), (0.19, 0.66), (0.17, 0.695), (0.10, 0.69), (0.02, 0.645)], mirror=mirror)
+    ribbon(f"line_thigh_{tag}", [(0.10, 0.70), (0.16, 0.73), (0.23, 0.80), (0.20, 0.85)], mirror=mirror)
+    # 明るい斜線 (参照 cyan_core の細長い成分)
+    ribbon(f"line_bright1_{tag}", [(-0.078, 0.682), (-0.02, 0.76), (0.0, 0.789)], mat=GLOW, width=0.006, offset=0.003, mirror=mirror)
+    ribbon(f"line_bright2_{tag}", [(0.0, 0.581), (0.068, 0.643)], mat=GLOW, width=0.006, offset=0.003, mirror=mirror)
+    ribbon(f"line_bright3_{tag}", [(0.133, 0.727), (0.20, 0.77), (0.232, 0.794)], mat=GLOW, width=0.006, offset=0.003, mirror=mirror)
+
+# 比較用カメラは書き出しに含めない
+bpy.data.objects.remove(ref_cam)
 
 # ---------- 仕上げ: 結合・フラットシェード・原点を足元に ----------
 for o in parts:

@@ -1,25 +1,32 @@
-"""3D モデルを参照画像と同じポーズ・アングルで撮影し、参照画像と定量比較する。
+"""3D モデルを参照画像と同じポーズ・アングルで撮影し、パーツ別の色と配置を参照画像と定量比較する。
 
 使い方:
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/compare_ref.py -- \
       assets/models/rabbit.blend assets/textures/concept/rabbit-angular.png <out_dir> [az] [el]
 
-  az: カメラ方位 (度)。0 = 被写体の右真横 (+X)、正で正面側 (-Y) に回る。既定 30
-  el: カメラ仰角 (度)。既定 15
-  (参照画像は「被写体が画面左を向き、やや正面寄りの斜めから、少し上から」の構図)
+  az: カメラ方位 (度)。0 = 被写体の右真横 (+X)、正で正面側 (-Y) に回る。既定 45
+  el: カメラ仰角 (度)。既定 10
+
+評価の考え方:
+  モデル側はマテリアルを ID 色で描いた「ID パス」でパーツ (fur / ear_inner / dark / glow) を正確に分割する。
+  参照側は色相と明度で同じ 4 クラスに分類する (シアン系 → glow、暗い → dark、暗い かつ 上半分 → ear_inner、残り → fur)。
+  両者をシルエットの bbox で正規化した同じ枠に置いて、パーツごとに比較する。
 
 出力 (<out_dir>/):
-  render_flat.png   Workbench フラット (マテリアル色そのまま) の撮影。指標計算に使う
-  render_shaded.png EEVEE の陰影付き撮影。目視比較用
-  compare.png       参照 | 陰影付き撮影 | シルエット重ね (緑=一致, 赤=参照のみ, 青=モデルのみ)
-  metrics.json      指標
+  render_id.png      ID パス (fur=赤, ear_inner=緑, dark=青, glow=黄)
+  render_shaded.png  EEVEE の陰影付き撮影 (色比較に使う)
+  compare.png        参照 | 陰影付き撮影 | 参照のクラス図 | モデルのクラス図 | 画素 ΔE ヒートマップ
+  metrics.json       指標
 
-指標:
-  silhouette_iou    バウンディングボックス正規化後のシルエット IoU (1 が完全一致)
-  aspect_ratio      シルエット bbox の 幅/高さ。ref と model を並記し差を出す
-  color_fraction    シルエット内のピクセル分類割合 (fur / dark / glow)。ref と model
-  fur_mean_rgb      fur と分類したピクセルの平均色 (sRGB 0-1) と、その距離
-  row_profile_corr  高さ方向の幅プロファイル (各行のシルエット幅) の相関係数。等身・体型の一致度
+metrics.json の主な項目:
+  parts.<name>.fraction       シルエット内でそのパーツが占める割合 (ref / model / diff)
+  parts.<name>.centroid       正規化枠での重心 (x, y ∈ [0,1]) と距離
+  parts.<name>.mask_iou       正規化枠でのパーツマスク IoU (配置の一致度)
+  parts.<name>.color.ref_mean_rgb / model_mean_rgb   参照とモデル撮影のそのパーツ平均 sRGB (0-255)
+  parts.<name>.color.delta_e76                       その 2 色の CIE Lab ΔE76 (陰影込み同士の比較)
+  parts.<name>.color.material_rgb / delta_e_material 参照平均色と、モデルのマテリアル設定色との ΔE76
+  pixel_color.mean_delta_e / p90_delta_e             シルエット重なり領域の画素ごとの ΔE76 の平均と 90 パーセンタイル
+  silhouette.iou / aspect                            参考値 (輪郭)
 """
 import json
 import math
@@ -34,15 +41,62 @@ argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 if len(argv) < 3:
     raise SystemExit(__doc__)
 blend, ref_path, out_dir = argv[0], argv[1], argv[2]
-az = float(argv[3]) if len(argv) > 3 else 30.0
-el = float(argv[4]) if len(argv) > 4 else 15.0
+az = float(argv[3]) if len(argv) > 3 else 45.0
+el = float(argv[4]) if len(argv) > 4 else 10.0
 os.makedirs(out_dir, exist_ok=True)
+
+PARTS = ["fur", "ear_inner", "dark", "glow"]
+ID_COLORS = {"fur": (1, 0, 0), "ear_inner": (0, 1, 0), "dark": (0, 0, 1), "glow": (1, 1, 0)}
+# クラス図の表示色
+CLASS_VIS = {"fur": (0.84, 0.76, 0.48), "ear_inner": (0.35, 0.23, 0.16), "dark": (0.15, 0.10, 0.07), "glow": (0.4, 0.95, 0.9)}
+
+
+# ---------- 色空間 ----------
+def srgb_to_linear(c):
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def rgb_to_lab(rgb):
+    """sRGB (0-1, 表示値) → CIE Lab (D65)"""
+    lin = srgb_to_linear(np.clip(rgb, 0, 1))
+    m = np.array([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]])
+    xyz = lin @ m.T
+    xyz = xyz / np.array([0.95047, 1.0, 1.08883])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    L = 116 * f[..., 1] - 16
+    a = 500 * (f[..., 0] - f[..., 1])
+    b = 200 * (f[..., 1] - f[..., 2])
+    return np.stack([L, a, b], axis=-1)
+
+
+def delta_e(rgb1, rgb2):
+    return float(np.linalg.norm(rgb_to_lab(np.asarray(rgb1)) - rgb_to_lab(np.asarray(rgb2))))
+
+
+def rgb_to_hsv(rgb):
+    mx, mn = rgb.max(-1), rgb.min(-1)
+    d = mx - mn
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    h = np.zeros_like(mx)
+    nz = d > 1e-6
+    rm, gm, bm = (mx == r) & nz, (mx == g) & nz & ~(mx == r), (mx == b) & nz & ~(mx == r) & ~(mx == g)
+    h[rm] = ((g - b)[rm] / d[rm]) % 6
+    h[gm] = (b - r)[gm] / d[gm] + 2
+    h[bm] = (r - g)[bm] / d[bm] + 4
+    h = h * 60
+    s = np.where(mx > 1e-6, d / np.maximum(mx, 1e-6), 0)
+    return h, s, mx
+
+
+def to255(rgb):
+    return [int(round(float(c) * 255)) for c in rgb]
+
 
 # ---------- 参照画像 ----------
 ref_img = bpy.data.images.load(os.path.abspath(ref_path))
 RW, RH = ref_img.size
-ref = np.array(ref_img.pixels[:], dtype=np.float32).reshape(RH, RW, 4)[::-1]  # 上が先頭になるよう反転
-ref_rgb = ref[..., :3]  # sRGB 表示値 (PNG は sRGB なので pixels は sRGB のまま)
+ref = np.array(ref_img.pixels[:], dtype=np.float32).reshape(RH, RW, 4)[::-1]
+ref_rgb = ref[..., :3]
 
 # ---------- 撮影 ----------
 bpy.ops.wm.open_mainfile(filepath=os.path.abspath(blend))
@@ -65,7 +119,6 @@ cam_data.lens = 50
 cam = bpy.data.objects.new("cmp_cam", cam_data)
 scene.collection.objects.link(cam)
 scene.camera = cam
-# 参照画像は被写体が高さの ~62% を占める。50mm/36mm センサーの縦画角から距離を決める
 fov = 2 * math.atan(cam_data.sensor_width / 2 / cam_data.lens)
 dist = (height / 0.62) / 2 / math.tan(fov / 2)
 a, e = math.radians(az), math.radians(el)
@@ -82,16 +135,39 @@ def render(path):
     return arr
 
 
-# フラット撮影: マテリアル色そのまま。Workbench はノードでなく viewport 表示色を使うので Base Color を写す
+# マテリアル名の末尾 → 評価クラス。ティールの縁取り/パネル線は参照側の分類と同じく glow に含める
+MATERIAL_CLASS = {"ear_inner": "ear_inner", "dark": "dark", "glow": "glow", "teal": "glow", "fur": "fur"}
+
+
+def part_of_material(m):
+    """マテリアル名からパーツ名を決める (例: rabbit_ear_inner → ear_inner)"""
+    for suffix in sorted(MATERIAL_CLASS, key=len, reverse=True):
+        if m.name.endswith(suffix):
+            return MATERIAL_CLASS[suffix]
+    return "fur"
+
+
+# マテリアル設定色 (フラット色) を控えておく
+material_rgb = {}
 for m in bpy.data.materials:
     if m.use_nodes and "Principled BSDF" in m.node_tree.nodes:
-        m.diffuse_color = m.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value
+        lin = np.array(m.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value[:3])
+        srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * lin ** (1 / 2.4) - 0.055)
+        material_rgb.setdefault(part_of_material(m), srgb)
+
+# ID パス: Workbench フラットで、マテリアル表示色を ID 色にして描く
+saved = {m.name: tuple(m.diffuse_color) for m in bpy.data.materials}
+for m in bpy.data.materials:
+    m.diffuse_color = (*ID_COLORS[part_of_material(m)], 1)
 scene.render.engine = "BLENDER_WORKBENCH"
 scene.display.shading.light = "FLAT"
 scene.display.shading.color_type = "MATERIAL"
-flat = render(os.path.join(out_dir, "render_flat.png"))
+scene.display.render_aa = "OFF"
+idpass = render(os.path.join(out_dir, "render_id.png"))
+for m in bpy.data.materials:
+    m.diffuse_color = saved[m.name]
 
-# 陰影付き撮影: EEVEE + 太陽光
+# 陰影付き撮影: EEVEE + 太陽光 (参照画像は左上前方からの光)
 scene.render.engine = "BLENDER_EEVEE"
 world = bpy.data.worlds.new("cmp_world")
 world.use_nodes = True
@@ -106,88 +182,180 @@ scene.collection.objects.link(sun)
 shaded = render(os.path.join(out_dir, "render_shaded.png"))
 
 
-# ---------- シルエット抽出 ----------
-def ref_mask(rgb):
-    """参照画像: 外周の色を背景とし、背景から離れて彩度のある画素を被写体にする (影は無彩色なので除外)"""
-    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
-    bgc = np.median(border, axis=0)
-    dist = np.linalg.norm(rgb - bgc, axis=-1)
-    sat = rgb.max(-1) - rgb.min(-1)
-    return (dist > 0.12) & (sat > 0.12)
+def rounded(o):
+    """JSON 出力用に小数を 4 桁へ丸める (長い数字列は secrets スキャンに誤検知される)"""
+    if isinstance(o, float):
+        return round(o, 4)
+    if isinstance(o, dict):
+        return {k: rounded(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [rounded(v) for v in o]
+    return o
 
 
-def model_mask(rgba):
-    return rgba[..., 3] > 0.5
-
-
+# ---------- 分割 ----------
 def bbox(mask):
     ys, xs = np.where(mask)
     return ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
 
 
-def normalize(mask, size=256):
-    """bbox で切り出し、高さを size に揃えて (幅は比率維持) 中央に置く"""
-    y0, y1, x0, x1 = bbox(mask)
+def ref_classes(rgb):
+    """参照画像を silhouette と 4 クラスに分ける"""
+    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    bgc = np.median(border, axis=0)
+    dist = np.linalg.norm(rgb - bgc, axis=-1)
+    h, s, v = rgb_to_hsv(rgb)
+    sil = (dist > 0.12) & ((s > 0.10) | (v < 0.35))  # 影 (無彩色の灰) は除外、暗い茶は含める
+    glow = sil & (h > 140) & (h < 215) & (s > 0.2) & (v > 0.35)
+    darkish = sil & ~glow & (v < 0.5)
+    y0, y1, x0, x1 = bbox(sil)
+    yy = (np.arange(rgb.shape[0])[:, None] - y0) / max(y1 - y0, 1)
+    ear = darkish & (yy < 0.5)
+    dark = darkish & ~ear
+    fur = sil & ~glow & ~darkish
+    return sil, {"fur": fur, "ear_inner": ear, "dark": dark, "glow": glow}
+
+
+def model_classes(idp):
+    sil = idp[..., 3] > 0.5
+    rgb = idp[..., :3]
+    out = {}
+    for p, c in ID_COLORS.items():
+        out[p] = sil & (np.linalg.norm(rgb - np.array(c), axis=-1) < 0.3)
+    return sil, out
+
+
+def norm_frame(mask, box, size):
+    """bbox で切り出して高さ size に正規化し、幅 2*size の枠の中央に置く"""
+    y0, y1, x0, x1 = box
     crop = mask[y0:y1, x0:x1]
-    h, w = crop.shape
+    h, w = crop.shape[:2]
     scale = size / h
     nw = max(1, int(round(w * scale)))
     ys = np.clip((np.arange(size) / scale).astype(int), 0, h - 1)
     xs = np.clip((np.arange(nw) / scale).astype(int), 0, w - 1)
     res = crop[ys][:, xs]
-    canvas = np.zeros((size, size * 2), dtype=bool)
+    canvas = np.zeros((size, size * 2) + crop.shape[2:], dtype=crop.dtype)
     ox = size - nw // 2
     canvas[:, ox:ox + nw] = res[:, : size * 2 - ox]
-    return canvas, w / h
+    return canvas
 
 
-def classify(rgb, mask):
-    """シルエット内の画素を fur / dark / glow に分類 (sRGB 表示値で判定)"""
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    glow = mask & (b - r > 0.25) & (g > 0.5)
-    dark = mask & ~glow & (rgb.max(-1) < 0.45)
-    fur = mask & ~glow & ~dark
-    n = mask.sum()
-    return {
-        "fraction": {"fur": float(fur.sum() / n), "dark": float(dark.sum() / n), "glow": float(glow.sum() / n)},
-        "fur_mean_rgb": [float(v) for v in rgb[fur].mean(0)],
+S = 384
+r_sil, r_cls = ref_classes(ref_rgb)
+m_sil, m_cls = model_classes(idpass)
+rbox, mbox = bbox(r_sil), bbox(m_sil)
+r_asp = (rbox[3] - rbox[2]) / (rbox[1] - rbox[0])
+m_asp = (mbox[3] - mbox[2]) / (mbox[1] - mbox[0])
+
+rN = {p: norm_frame(r_cls[p], rbox, S) for p in PARTS}
+mN = {p: norm_frame(m_cls[p], mbox, S) for p in PARTS}
+r_silN, m_silN = norm_frame(r_sil, rbox, S), norm_frame(m_sil, mbox, S)
+r_rgbN = norm_frame(ref_rgb, rbox, S)
+m_rgbN = norm_frame(shaded[..., :3], mbox, S)
+
+
+def centroid(maskN):
+    ys, xs = np.where(maskN)
+    if len(ys) == 0:
+        return None
+    return [float(xs.mean() / (2 * S)), float(ys.mean() / S)]
+
+
+parts = {}
+for p in PARTS:
+    rm, mm = r_cls[p], m_cls[p]
+    rf, mf = float(rm.sum() / r_sil.sum()), float(mm.sum() / m_sil.sum())
+    rc, mc = centroid(rN[p]), centroid(mN[p])
+    union = (rN[p] | mN[p]).sum()
+    iou = float((rN[p] & mN[p]).sum() / union) if union else 0.0
+    r_mean = ref_rgb[rm].mean(0) if rm.any() else np.zeros(3)
+    m_mean = shaded[..., :3][mm].mean(0) if mm.any() else np.zeros(3)
+    entry = {
+        "fraction": {"ref": rf, "model": mf, "diff": mf - rf},
+        "centroid": {"ref": rc, "model": mc, "dist": (float(np.linalg.norm(np.subtract(rc, mc))) if rc and mc else None)},
+        "mask_iou": iou,
+        "color": {
+            "ref_mean_rgb": to255(r_mean),
+            "model_mean_rgb": to255(m_mean),
+            "delta_e76": delta_e(r_mean, m_mean),
+        },
     }
+    if p in material_rgb:
+        entry["color"]["material_rgb"] = to255(material_rgb[p])
+        entry["color"]["delta_e_material"] = delta_e(r_mean, material_rgb[p])
+    parts[p] = entry
 
-
-def row_profile(canvas):
-    return canvas.sum(1).astype(np.float64)
-
-
-rm = ref_mask(ref_rgb)
-mm = model_mask(flat)
-rn, r_aspect = normalize(rm)
-mn, m_aspect = normalize(mm)
-iou = float((rn & mn).sum() / (rn | mn).sum())
-rp, mp = row_profile(rn), row_profile(mn)
-corr = float(np.corrcoef(rp, mp)[0, 1])
-
-# Workbench flat 撮影の色は Standard 変換で sRGB として保存されているのでそのまま比較
-rc = classify(ref_rgb, rm)
-mc = classify(flat[..., :3], mm)
-fur_dist = float(np.linalg.norm(np.array(rc["fur_mean_rgb"]) - np.array(mc["fur_mean_rgb"])))
+# 画素ごとの色差 (正規化枠でシルエットが重なる画素)
+overlap = r_silN & m_silN
+dE = np.linalg.norm(rgb_to_lab(r_rgbN) - rgb_to_lab(m_rgbN), axis=-1)
+dE_ov = dE[overlap]
+pixel_color = {
+    "overlap_pixels": int(overlap.sum()),
+    "mean_delta_e": float(dE_ov.mean()),
+    "median_delta_e": float(np.median(dE_ov)),
+    "p90_delta_e": float(np.percentile(dE_ov, 90)),
+    "fraction_delta_e_over_20": float((dE_ov > 20).mean()),
+}
 
 metrics = {
     "camera": {"azimuth_deg": az, "elevation_deg": el, "distance_m": dist},
-    "silhouette_iou": iou,
-    "row_profile_corr": corr,
-    "aspect_ratio": {"ref": r_aspect, "model": m_aspect, "diff": m_aspect - r_aspect},
-    "color_fraction": {"ref": rc["fraction"], "model": mc["fraction"]},
-    "fur_mean_rgb": {"ref": rc["fur_mean_rgb"], "model": mc["fur_mean_rgb"], "dist": fur_dist},
     "faces": int(sum(len(o.data.polygons) for o in meshes)),
-    "tris": int(sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in meshes)),
+    "tris": int(sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in meshes)),
+    "parts": parts,
+    "pixel_color": pixel_color,
+    "silhouette": {"iou": float((r_silN & m_silN).sum() / (r_silN | m_silN).sum()), "aspect": {"ref": r_asp, "model": m_asp}},
 }
 with open(os.path.join(out_dir, "metrics.json"), "w") as f:
-    json.dump(metrics, f, indent=2, ensure_ascii=False)
-
-# ---------- 比較画像: 参照 | 陰影付き | シルエット重ね ----------
-S = 512
+    json.dump(rounded(metrics), f, indent=2, ensure_ascii=False)
 
 
+# ---------- 参照画像の模様を塊ごとに抽出 (モデル側でデカール位置を決めるのに使う) ----------
+def components(mask):
+    """連結成分ごとに (fx, fy, area, r_equiv) を返す。座標は bbox 正規化枠: fx = (x - S)/S (中心 0), fy = y/S (上 0)"""
+    h, w = mask.shape
+    seen = np.zeros_like(mask, dtype=bool)
+    out = []
+    ys, xs = np.where(mask)
+    for sy, sx in zip(ys, xs):
+        if seen[sy, sx]:
+            continue
+        stack = [(sy, sx)]
+        seen[sy, sx] = True
+        px = []
+        while stack:
+            y, x = stack.pop()
+            px.append((y, x))
+            for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+                if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True
+                    stack.append((ny, nx))
+        arr = np.array(px)
+        area = len(px) / (S * S)
+        out.append({
+            "fx": float((arr[:, 1].mean() - S) / S),
+            "fy": float(arr[:, 0].mean() / S),
+            "area": area,
+            "r_equiv": float(math.sqrt(area / 2.598)),  # 六角形とみなした外接半径 (高さ 1 の枠に対する比)
+            "bbox": [float((arr[:, 1].min() - S) / S), float(arr[:, 0].min() / S), float((arr[:, 1].max() - S) / S), float(arr[:, 0].max() / S)],
+        })
+    return sorted(out, key=lambda c: -c["area"])
+
+
+h_, s_, v_ = rgb_to_hsv(r_rgbN)
+core = r_silN & (h_ > 140) & (h_ < 215) & (s_ > 0.3) & (v_ > 0.75)  # 明るいシアン (六角の面・目)
+teal = r_silN & (h_ > 140) & (h_ < 215) & (s_ > 0.2) & (v_ > 0.35) & (v_ <= 0.75)  # 縁取り・パネル線
+ref_components = {
+    "frame": "fx = (x - center)/height, fy = y_from_top/height; height = silhouette bbox height",
+    "cyan_core": [c for c in components(core) if c["area"] > 2e-5],
+    "teal": [c for c in components(teal) if c["area"] > 2e-5][:12],
+    "ear_inner": components(rN["ear_inner"])[:3],
+    "dark": components(rN["dark"])[:4],
+}
+with open(os.path.join(out_dir, "ref_components.json"), "w") as f:
+    json.dump(rounded(ref_components), f, indent=2)
+
+# ---------- 比較画像 ----------
 def resize_rgba(arr, size):
     h, w = arr.shape[:2]
     ys = np.clip((np.arange(size) * h / size).astype(int), 0, h - 1)
@@ -195,18 +363,26 @@ def resize_rgba(arr, size):
     return arr[ys][:, xs]
 
 
-ref_small = resize_rgba(ref, S)
-shaded_small = resize_rgba(shaded, S)
-# 透明部分を白に
-alpha = shaded_small[..., 3:4]
-shaded_small = shaded_small * alpha + (1 - alpha) * np.array([1, 1, 1, 1], dtype=np.float32)
-ov = np.ones((S, S, 4), dtype=np.float32)
-rn_s = resize_rgba(rn[:, :, None].astype(np.float32), S)[..., 0] > 0.5
-mn_s = resize_rgba(mn[:, :, None].astype(np.float32), S)[..., 0] > 0.5
-ov[rn_s & mn_s, :3] = (0.3, 0.8, 0.3)
-ov[rn_s & ~mn_s, :3] = (0.9, 0.3, 0.3)
-ov[~rn_s & mn_s, :3] = (0.3, 0.4, 0.9)
-comp = np.concatenate([ref_small, shaded_small, ov], axis=1)
+def class_map(cls):
+    img = np.ones((S, 2 * S, 4), dtype=np.float32)
+    for p in PARTS:
+        img[cls[p], :3] = CLASS_VIS[p]
+    return img[:, S // 2: S // 2 + S]  # 中央 S×S を切り出す
+
+
+tile_ref = resize_rgba(ref, S)
+sh = resize_rgba(shaded, S)
+al = sh[..., 3:4]
+tile_shaded = sh * al + (1 - al) * np.array([1, 1, 1, 1], dtype=np.float32)
+tile_rcls = class_map(rN)
+tile_mcls = class_map(mN)
+heat = np.ones((S, 2 * S, 4), dtype=np.float32)
+t = np.clip(dE / 50.0, 0, 1)
+heat[..., 1] = 1 - t
+heat[..., 2] = 1 - t
+heat[~overlap] = (0.92, 0.92, 0.92, 1)
+tile_heat = heat[:, S // 2: S // 2 + S]
+comp = np.concatenate([tile_ref, tile_shaded, tile_rcls, tile_mcls, tile_heat], axis=1)
 out_img = bpy.data.images.new("compare", comp.shape[1], comp.shape[0], alpha=True)
 out_img.pixels = comp[::-1].astype(np.float32).ravel().tolist()
 out_img.filepath_raw = os.path.abspath(os.path.join(out_dir, "compare.png"))
