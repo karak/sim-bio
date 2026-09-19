@@ -1,0 +1,58 @@
+import { describe, it, expect } from 'vitest';
+import { scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
+import type { ScenarioDef, StartStats } from '../../src/scenario/types';
+import type { WorldSnapshot } from '../../src/simulation/types';
+import { grass } from './helpers';
+
+const deer = { ...grass, id: 'deer', name: '鹿' };
+const snap = (over: { totals?: Record<string, number>; land?: number[] } = {}): WorldSnapshot => {
+  const elevation = Float32Array.from(over.land ?? [0.5, 0.5, 0.5, 0.1]);
+  const n = elevation.length;
+  return {
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 },
+    totals: over.totals ?? { grass: 10, deer: 4, wolf: 1 },
+    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), populations: { grass: new Float32Array(n), deer: new Float32Array(n) } },
+  };
+};
+const start: StartStats = { landRatio: 0.75, totals: { grass: 10, deer: 4, wolf: 1 } };
+const def: ScenarioDef = {
+  id: 'w', title: 'w', prophecy: 'p', kind: 'endure', years: 10, schedule: [],
+  alive: { type: 'all', of: [{ type: 'species_alive', ids: ['deer'] }, { type: 'total_ratio_vs_start', id: 'grass', min: 1 }] },
+  budget: { start: 10, incomePerYear: 4, costs: { spawn: 3, disaster: 5, climate: 1 }, upkeepPerYear: { rainScale: 10, tempOffset: 2 } },
+};
+
+describe('scenarioWarnings', () => {
+  it('speciesInCondition は alive 条件が参照する種だけを集める', () => {
+    expect(speciesInCondition(def.alive)).toEqual(['deer', 'grass']);
+    expect(speciesInCondition({ type: 'land_ratio', min: 0.1 })).toEqual([]);
+  });
+  it('species_low: 基準の 25% 未満の種に、名前と割合を入れて出す。関係ない種 (wolf) は出さない', () => {
+    const ws = scenarioWarnings(def, snap({ totals: { grass: 10, deer: 0.8, wolf: 0 } }), start, null);
+    expect(ws.map((w) => w.kind)).toEqual(['species_low']);
+    expect(ws[0]).toMatchObject({ id: 'deer', key: 'species_low:deer' });
+    expect(ws[0].text).toBe('鹿が減っている(基準の 20%)');
+    expect(scenarioWarnings(def, snap({ totals: { grass: 10, deer: 1.2, wolf: 0 } }), start, null)).toEqual([]);
+  });
+  it('land_low: 陸地率が基準の半分未満で出す', () => {
+    const ws = scenarioWarnings(def, snap({ land: [0.5, 0.1, 0.1, 0.1] }), start, null);
+    expect(ws.map((w) => w.kind)).toEqual(['land_low']);
+    expect(ws[0].text).toBe('陸が減っている(基準の 33%)');
+    expect(scenarioWarnings(def, snap({ land: [0.5, 0.5, 0.1, 0.1] }), start, null)).toEqual([]);
+  });
+  it('power_low: どのコマンドも買えないときだけ出す', () => {
+    expect(scenarioWarnings(def, snap(), start, { power: 0.5, incomeLastYear: 2, upkeepLastYear: 0 }).map((w) => w.text)).toEqual(['力が足りない(残り 0)']);
+    expect(scenarioWarnings(def, snap(), start, { power: 1, incomeLastYear: 2, upkeepLastYear: 0 })).toEqual([]);
+    // budget のないシナリオでは力の警告は出ない
+    expect(scenarioWarnings({ ...def, budget: undefined }, snap(), start, { power: 0, incomeLastYear: 0, upkeepLastYear: 0 })).toEqual([]);
+  });
+  it('upkeep_over_income: 直前の年の維持費が収入を超えているときに出す', () => {
+    const ws = scenarioWarnings(def, snap(), start, { power: 5, incomeLastYear: 3.2, upkeepLastYear: 5 });
+    expect(ws.map((w) => w.kind)).toEqual(['upkeep_over_income']);
+    expect(ws[0].text).toBe('維持費が収入を超えている(−5.0/年 > +3.2/年)');
+    expect(scenarioWarnings(def, snap(), start, { power: 5, incomeLastYear: 5, upkeepLastYear: 5 })).toEqual([]);
+  });
+  it('複数同時に出るときは 種 → 陸 → 力 の順', () => {
+    const ws = scenarioWarnings(def, snap({ totals: { grass: 1, deer: 0, wolf: 0 }, land: [0.5, 0.1, 0.1, 0.1] }), start, { power: 0, incomeLastYear: 1, upkeepLastYear: 2 });
+    expect(ws.map((w) => w.kind)).toEqual(['species_low', 'species_low', 'land_low', 'power_low', 'upkeep_over_income']);
+  });
+});

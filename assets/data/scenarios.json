@@ -167,6 +167,7 @@
     "hidden": true,
     "prophecy": "この石板は試し読み用。二年目に必ず滅ぶ。",
     "kind": "endure",
+    "milestones": [{ "atYear": 1, "text": "試しの節目(一年で消える)" }],
     "start": {
       "seed": 42
     },

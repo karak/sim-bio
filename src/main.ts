@@ -86,7 +86,7 @@ async function boot(): Promise<void> {
     },
   });
 
-  const tablet = createTablet(app, scenarios, scenario, selectScenario);
+  const tablet = createTablet(app, scenarios, scenario, selectScenario, Object.fromEntries(species.map((d) => [d.id, d.name])));
   const loop = createRunner(
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
@@ -97,7 +97,7 @@ async function boot(): Promise<void> {
         if (runner) {
           const verdict = runner.update(s);
           const budgetInfo = runner.budget();
-          tablet.update(runner.yearOf(s), verdict, budgetInfo);
+          tablet.update(runner.yearOf(s), verdict, budgetInfo, runner.warnings());
           const costs = scenario?.budget?.costs;
           hud.setAffordable(
             budgetInfo && costs
@@ -117,6 +117,10 @@ async function boot(): Promise<void> {
         loop.setSpeed(0);
         tablet.showVerdict(v);
         log.write({ ts: new Date().toISOString(), tick: world.snapshot().tick, year: world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
+      },
+      onWarning: (w) => {
+        const snap = world.snapshot();
+        log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.warning', scenario: scenario.id, kind: w.kind, id: w.id, text: w.text });
       },
       onPowerExhausted: () => {
         tablet.flash();

@@ -108,3 +108,35 @@ test('star power: budget line is shown, spawning costs power, and an unaffordabl
     .poll(() => logs.filter((l) => l.includes('"event":"cmd.rejected"') && l.includes('"reason":"budget"')).length)
     .toBe(1);
 });
+
+test('stone tablet: milestone disappears when reached, power warning appears, verdict shows stats', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#tablet-milestones')).toHaveText('1 年目: 試しの節目(一年で消える)');
+  await expect(page.locator('#tablet-warnings')).toHaveText('');
+  // 力を使い切る: 放流 3 回 (9) + 気候 1 回 (1) = 10
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  for (let i = 0; i < 3; i++) {
+    await page.click('#spawn-grass');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+    await expect(page.locator('#spawn-grass')).not.toHaveClass(/armed/);
+  }
+  await page.locator('#rain-scale').evaluate((el) => {
+    const input = el as HTMLInputElement;
+    input.value = '1.5';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#tablet-power')).toHaveText('0 / 30');
+  await page.click('#speed-100');
+  // 1 年目: 節目が消え、力の警告が出る
+  await expect(page.locator('#tablet-milestones')).toHaveText('', { timeout: 20_000 });
+  await expect(page.locator('#tablet-warnings')).toContainText('力が足りない(残り 0)');
+  await expect.poll(() => logs.filter((l) => l.includes('"event":"scenario.warning"') && l.includes('"kind":"power_low"')).length).toBe(1);
+  // 2 年目: 滅び。内訳が出る
+  await expect(page.locator('#verdict')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#verdict-stats')).toContainText('介入 4 回 · 使った力 10');
+  await expect(page.locator('#verdict-stats')).toContainText(/陸地率 \d+%/);
+  await expect(page.locator('#verdict-stats')).toContainText('草 ');
+});

@@ -51,6 +51,8 @@ export type ScenarioDef = {
   alive: Condition;
   /** 毎年評価し、満たした瞬間に負け。省略時は years 到達時の alive 判定だけで決まる */
   dead?: Condition;
+  /** 予言の節目。未到達のものを石板に先に見せ、到達したら消す */
+  milestones?: { atYear: number; text: string }[];
   /** 星の力 (介入の予算)。省略時は今までどおり介入は無料 */
   budget?: {
     /** 開始時の力 */
@@ -67,7 +69,9 @@ export type ScenarioDef = {
 };
 
 export type ScenarioStatus = 'running' | 'alive' | 'dead';
-export type Verdict = { status: ScenarioStatus; reason: string };
+/** 勝敗が確定したときの内訳。オーバーレイに出す */
+export type VerdictStats = { interventions: number; powerSpent: number; landRatio: number; totals: Record<string, number> };
+export type Verdict = { status: ScenarioStatus; reason: string; stats?: VerdictStats };
 
 /** 開始時に固定する基準値 */
 export type StartStats = { landRatio: number; totals: Record<string, number> };

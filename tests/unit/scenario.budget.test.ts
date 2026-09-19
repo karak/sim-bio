@@ -150,3 +150,38 @@ describe('星の力 (budget)', () => {
     expect(r.intervene(spawn)).toEqual({ ok: false, reason: 'finished' });
   });
 });
+
+describe('警告と結果の内訳 (runner)', () => {
+  it('年次評価で warnings() が更新され、同じ警告の onWarning は初回だけ', () => {
+    const w = fakeWorld({ rainScale: 1.5 });
+    const seen: string[] = [];
+    const r = createScenarioRunner(withBudget({ start: 1, incomePerYear: 1 }), w, { onWarning: (x) => seen.push(x.key) });
+    r.update(w.snapshot());
+    expect(r.warnings()).toEqual([]);
+    w.step(360);
+    r.update(w.snapshot());
+    // 1 + 1 − 5 < 0 → 力 0、気候は戻る。維持費 5 > 収入 1
+    expect(r.warnings().map((x) => x.kind)).toEqual(['power_low', 'upkeep_over_income']);
+    expect(seen).toEqual(['power_low', 'upkeep_over_income']);
+    w.step(360);
+    r.update(w.snapshot());
+    // 翌年: 力 1 で climate (1) が買えるので power_low は消える。維持費 0 なので upkeep も消える
+    expect(r.warnings()).toEqual([]);
+    w.step(360);
+    r.update(w.snapshot());
+    expect(seen).toEqual(['power_low', 'upkeep_over_income']);
+  });
+  it('判定が確定すると Verdict.stats に介入回数・使った力・陸地率・総量が入る', () => {
+    const w = fakeWorld({ landRatio: 0.5 });
+    let got: ReturnType<typeof r.verdict> | null = null;
+    const r = createScenarioRunner({ ...withBudget(), years: 1 }, w, { onVerdict: (v) => (got = v) });
+    r.update(w.snapshot());
+    r.intervene(spawn);
+    r.intervene(climate);
+    w.step(360);
+    r.update(w.snapshot());
+    expect(got).not.toBeNull();
+    expect(got!.stats).toEqual({ interventions: 2, powerSpent: 4, landRatio: 0.5, totals: { grass: 1 } });
+    expect(r.verdict().stats).toEqual(got!.stats);
+  });
+});

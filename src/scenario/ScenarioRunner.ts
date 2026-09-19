@@ -1,6 +1,7 @@
 import type { Command, WorldSnapshot } from '../simulation/types';
 import { judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
 import type { ScenarioDef, StartStats, Verdict } from './types';
+import { scenarioWarnings, type Warning } from './warnings';
 
 type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
 
@@ -24,6 +25,8 @@ export type ScenarioRunner = {
   power(): number;
   /** 石板表示用の力の情報。budget のないシナリオでは null */
   budget(): BudgetInfo | null;
+  /** 直近の年次評価で出た警告 (年に 1 回更新) */
+  warnings(): Warning[];
 };
 
 /**
@@ -33,7 +36,7 @@ export type ScenarioRunner = {
 export function createScenarioRunner(
   def: ScenarioDef,
   world: RunnerWorld,
-  opts: { onVerdict?: (v: Verdict) => void; onPowerExhausted?: () => void; ticksPerYear?: number } = {},
+  opts: { onVerdict?: (v: Verdict) => void; onPowerExhausted?: () => void; onWarning?: (w: Warning) => void; ticksPerYear?: number } = {},
 ): ScenarioRunner {
   const first = world.snapshot();
   const startTick = first.tick;
@@ -52,6 +55,10 @@ export function createScenarioRunner(
   let power = budgetDef?.start ?? 0;
   let incomeLastYear = 0;
   let upkeepLastYear = 0;
+  let powerSpent = 0;
+  let warnings: Warning[] = [];
+  /** 一度ログに出した警告の key。同じ警告を毎年出さない */
+  const warned = new Set<string>();
 
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
@@ -117,11 +124,15 @@ export function createScenarioRunner(
     verdict: () => verdict,
     power: () => power,
     budget: () => (budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null),
+    warnings: () => warnings,
     intervene(cmd) {
       if (verdict.status !== 'running') return { ok: false, reason: 'finished' };
       const cost = costOf(cmd);
       if (budgetDef && power < cost) return { ok: false, reason: 'budget' };
-      if (budgetDef) power -= cost;
+      if (budgetDef) {
+        power -= cost;
+        powerSpent += cost;
+      }
       interventions++;
       world.dispatch(cmd);
       return { ok: true };
@@ -136,8 +147,17 @@ export function createScenarioRunner(
         lastYear = year;
         if (year === baselineYear) start = startStats(s);
         if (!isFirstCheck) applyBudgetYearChange(s);
+        warnings = scenarioWarnings(def, s, start, budgetDef ? { power, incomeLastYear, upkeepLastYear } : null);
+        for (const w of warnings) {
+          if (warned.has(w.key)) continue;
+          warned.add(w.key);
+          opts.onWarning?.(w);
+        }
         verdict = judgeScenario(def, { snapshot: s, start, year, interventions });
-        if (verdict.status !== 'running') opts.onVerdict?.(verdict);
+        if (verdict.status !== 'running') {
+          verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
+          opts.onVerdict?.(verdict);
+        }
       }
       return verdict;
     },
