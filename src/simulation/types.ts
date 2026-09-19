@@ -90,6 +90,8 @@ export type WorldSnapshot = {
   species: SpeciesDef[];
   /** 現在の気候設定 (set_climate で変わる)。星の力の維持費の計算に使う */
   climate: { tempOffset: number; rainScale: number };
+  /** 文明の状態 (M8-02)。まだ実装されていない/その世界に文明が無ければ null。段階だけ先に読めるよう最小限の形にしてある */
+  civ?: { stage: number } | null;
 };
 
 export type SaveData = {

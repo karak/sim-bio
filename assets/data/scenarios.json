@@ -253,5 +253,72 @@
         "tempOffset": 1
       }
     }
+  },
+  {
+    "id": "tower",
+    "title": "塔の重さ",
+    "hidden": true,
+    "prophecy": "この島の民は塔を建てた。塔は森を伐り、生気を吸う。放っておけば森は尽き、塔は民ごと崩れる。百年、森を三割保ったまま塔を立たせ続けよ。民を減らせば塔は軽くなるが、減らしすぎれば崩れる。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 6,
+        "home": -1
+      }
+    },
+    "referenceSize": 64,
+    "years": 100,
+    "schedule": [],
+    "milestones": [
+      {
+        "atYear": 30,
+        "text": "森が痩せ始める"
+      },
+      {
+        "atYear": 60,
+        "text": "塔が民を食い始める"
+      },
+      {
+        "atYear": 90,
+        "text": "ここからの十年で判定される"
+      }
+    ],
+    "alive": {
+      "type": "all",
+      "of": [
+        {
+          "type": "total_ratio_vs_start",
+          "id": "forest",
+          "min": 0.3
+        },
+        {
+          "type": "civ_stage",
+          "min": 6,
+          "years": 10
+        }
+      ]
+    },
+    "dead": {
+      "type": "civ_stage",
+      "max": 0
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 32,
+      "costs": {
+        "spawn": 4,
+        "disaster": 12,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 20,
+        "tempOffset": 4
+      },
+      "max": 120
+    },
+    "ignoreWarnings": []
   }
 ]

@@ -150,3 +150,78 @@ describe('scenario playthroughs (size 64)', { timeout: 600_000 }, () => {
     expect(v.reason).toContain('wolf');
   });
 });
+
+/**
+ * 「塔の重さ」(M8-05)。M8-02 (文明の発生と段階) と M8-03 (文明の負荷と崩壊) が feat/m8 に着地するまでは
+ * World が start.civilization を解釈しないので、この一式は下書きのまま describe.skip にしておく。
+ * 校正 (M8-05 後半) で un-skip し、実測して閾値・予算・負荷係数を合わせる。
+ */
+type TowerCivilization = { speciesId: string; stage?: number; home?: number };
+
+/** 集落は島の中心 (start.civilization.home = -1)。クリック相当の放流は半径 1、疫病は半径 4 で統一する */
+const towerScripts: Record<string, Script> = {
+  // 森の放流だけ。負荷 (伐採・生気吸収) を上回れず、いずれ森が尽きるか文明が崩壊する想定
+  'forest-spawn-only': (r, _s, y) => {
+    if (y >= 10 && y % 5 === 0) r.intervene({ type: 'spawn_species', speciesId: 'forest', cell: -1, amount: 0.4, radius: 1 });
+  },
+  // 疫病で鹿 (文明の担い手) を間引くだけ。森を育てないので森の 3 割維持に失敗する想定
+  'plague-only': (r, _s, y) => {
+    if (y >= 10 && y % 10 === 0) r.intervene({ type: 'disaster', kind: 'plague', cell: -1, radius: 4 });
+  },
+  // 想定解 1: 雨で森を育てつつ、時々放流で底上げする
+  'rain-and-spawn': (r, _s, y) => {
+    if (y === 10) r.intervene({ type: 'set_climate', rainScale: 1.3 });
+    if (y >= 10 && y % 10 === 0) r.intervene({ type: 'spawn_species', speciesId: 'forest', cell: -1, amount: 0.4, radius: 1 });
+  },
+  // 想定解 2: 疫病で民を間引いて負荷を下げつつ、森を放流で補う (段階が下がりすぎない程度に間引く)
+  'plague-and-spawn': (r, _s, y) => {
+    if (y >= 10 && y % 15 === 0) r.intervene({ type: 'disaster', kind: 'plague', cell: -1, radius: 4 });
+    if (y >= 10 && y % 5 === 0) r.intervene({ type: 'spawn_species', speciesId: 'forest', cell: -1, amount: 0.4, radius: 1 });
+  },
+};
+
+function playTower(def: ScenarioDef, script: Script | null) {
+  // start.civilization / WorldConfig.civilization は M8-02 の型。着地前の今は unknown 経由でキャストしておく
+  const towerStart = def.start as (ScenarioDef['start'] & { civilization?: TowerCivilization }) | undefined;
+  const cfg = {
+    ...structuredClone(base),
+    size: SIZE,
+    species: species.map((d) => ({ ...d, ...(def.start?.species?.[d.id] ?? {}) })),
+    seed: def.start?.seed ?? base.seed,
+    civilization: towerStart?.civilization,
+  } as unknown as WorldConfig;
+  const w = World.create(cfg, { log: createMemorySink() });
+  const r = createScenarioRunner(def, w, { ticksPerYear: cfg.ticksPerYear });
+  for (let y = 0; y <= def.years; y++) {
+    const s = w.snapshot();
+    script?.(r, s, y);
+    const v = r.update(s);
+    if (v.status !== 'running') return v;
+    w.step(cfg.ticksPerYear);
+  }
+  return r.verdict();
+}
+
+describe.skip('tower scenario playthroughs (size 64) — M8-02/M8-03 待ち、M8-05 後半で un-skip', { timeout: 600_000 }, () => {
+  const def = defs.find((d) => d.id === 'tower');
+  if (!def) throw new Error('scenario tower missing');
+  it('idle → dead', () => {
+    expect(playTower(def, null).status).toBe('dead');
+  });
+  it('naive forest-spawn-only → dead', () => {
+    const v = playTower(def, towerScripts['forest-spawn-only']);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('naive plague-only → dead', () => {
+    const v = playTower(def, towerScripts['plague-only']);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('rain + spawn → alive', () => {
+    const v = playTower(def, towerScripts['rain-and-spawn']);
+    expect(v.status, v.reason).toBe('alive');
+  });
+  it('plague (cull) + spawn → alive', () => {
+    const v = playTower(def, towerScripts['plague-and-spawn']);
+    expect(v.status, v.reason).toBe('alive');
+  });
+});
