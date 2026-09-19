@@ -1,11 +1,11 @@
 ---
 id: M4-02
 title: 滅びの進行(沈降コマンドと予定コマンド)
-status: todo
+status: done
 milestone: M4
 plan: docs/design/2026-09-19-scenarios-and-world.md
 depends_on: [M4-01]
-evidence: []
+evidence: ["f51e76d", "tests/unit/world.commands.test.ts", "tests/unit/scenario.runner.test.ts"]
 ---
 
 # 滅びの進行(沈降コマンドと予定コマンド)

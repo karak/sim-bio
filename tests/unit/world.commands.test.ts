@@ -44,4 +44,26 @@ describe('World commands', () => {
     w.step(1);
     expect(log.find('cmd.rejected')).toHaveLength(2);
   });
+  it('sink lowers land ratio and drowned cells lose vegetation', () => {
+    const log = createMemorySink();
+    const w = World.create(testConfig(), { log });
+    w.step(360);
+    const before = w.snapshot();
+    let landBefore = 0;
+    for (let i = 0; i < before.layers.elevation.length; i++) if (before.layers.elevation[i] >= 0.3) landBefore++;
+    w.dispatch({ type: 'sink', amount: 0.1 });
+    w.step(1);
+    const after = w.snapshot();
+    let landAfter = 0;
+    for (let i = 0; i < after.layers.elevation.length; i++) {
+      if (after.layers.elevation[i] >= 0.3) landAfter++;
+      else expect(after.layers.vegetation[i]).toBe(0);
+    }
+    expect(landAfter).toBeLessThan(landBefore);
+    const rec = log.find('sim.sink')[0];
+    expect(rec.drownedCells).toBe(landBefore - landAfter);
+    w.dispatch({ type: 'sink', amount: 0 });
+    w.step(1);
+    expect(log.find('cmd.rejected')).toHaveLength(1);
+  });
 });

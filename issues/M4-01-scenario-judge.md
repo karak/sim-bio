@@ -1,11 +1,11 @@
 ---
 id: M4-01
 title: シナリオ定義と判定の純粋関数
-status: in_progress
+status: done
 milestone: M4
 plan: docs/design/2026-09-19-scenarios-and-world.md
 depends_on: []
-evidence: []
+evidence: ["8b8f516", "tests/unit/scenario.judge.test.ts"]
 ---
 
 # シナリオ定義と判定の純粋関数

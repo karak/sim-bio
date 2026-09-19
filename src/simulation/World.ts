@@ -202,6 +202,17 @@ export class World {
         this.log('info', 'sim.disaster', { kind: cmd.kind, cell: cmd.cell, radius: cmd.radius, affectedCells: r.affectedCells });
         break;
       }
+      case 'sink': {
+        let drowned = 0;
+        for (let i = 0; i < this.n; i++) {
+          const before = this.elevation[i];
+          const after = Math.max(0, before - cmd.amount);
+          this.elevation[i] = after;
+          if (before >= SEA_LEVEL && after < SEA_LEVEL) drowned++;
+        }
+        this.log('info', 'sim.sink', { amount: cmd.amount, drownedCells: drowned });
+        break;
+      }
     }
   }
 
@@ -213,6 +224,7 @@ export class World {
       if (this.elevation[cmd.cell] < SEA_LEVEL) return 'cell is sea';
     }
     if (cmd.type === 'disaster' && !(cmd.radius >= 0)) return 'radius must be >= 0';
+    if (cmd.type === 'sink' && !(cmd.amount > 0)) return 'amount must be > 0';
     return null;
   }
 
