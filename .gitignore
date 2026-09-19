@@ -1,0 +1,29 @@
+# 依存関係・ビルド成果物
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+
+# 環境変数・ローカル設定
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ログ
+*.log
+npm-debug.log*
+
+# 大容量素材の作業ファイル（書き出し前の元データ）
+assets/**/*.blend
+assets/**/*.blend1
+assets/**/*.psd
+assets/**/*.aseprite
