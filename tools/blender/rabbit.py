@@ -55,6 +55,8 @@ def solid(name: str, color: str, emission: float = 0.0):
     rgb = hex_rgb(color)
     bsdf.inputs["Base Color"].default_value = (*rgb, 1)
     bsdf.inputs["Roughness"].default_value = 0.8
+    # 参照はマットな塗り。スペキュラの白い反射は色補正で消せない加算項になるので切る
+    bsdf.inputs["Specular IOR Level"].default_value = 0.0
     if emission:
         bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
         bsdf.inputs["Emission Strength"].default_value = emission
@@ -62,12 +64,21 @@ def solid(name: str, color: str, emission: float = 0.0):
     return m
 
 
+# 基準色は参照画像の量子化代表色。tools/blender/rabbit-colors.json があればそれで上書きする
+# (compare_ref.py の ΔE を 1 未満に追い込む補正ループ tools/blender/tune_colors.py が書き出す)
+COLORS = {"fur": "#D4AC54", "ear_inner": "#5C3C34", "dark": "#5C3C34", "glow": "#8CFCEC", "teal": "#5C847C"}
+_colors_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rabbit-colors.json")
+if os.path.exists(_colors_path):
+    import json
+    with open(_colors_path) as _f:
+        COLORS.update(json.load(_f))
+
 MATS = [
-    solid("rabbit_fur", "#D4AC54"),
-    solid("rabbit_ear_inner", "#5C3C34"),
-    solid("rabbit_dark", "#5C3C34"),
-    solid("rabbit_glow", "#8CFCEC", emission=0.6),
-    solid("rabbit_teal", "#5C847C"),
+    solid("rabbit_fur", COLORS["fur"]),
+    solid("rabbit_ear_inner", COLORS["ear_inner"]),
+    solid("rabbit_dark", COLORS["dark"]),
+    solid("rabbit_glow", COLORS["glow"], emission=0.6),
+    solid("rabbit_teal", COLORS["teal"]),
 ]
 FUR, EAR, DARK, GLOW, TEAL = range(5)
 

@@ -32,17 +32,17 @@
           82
         ],
         "model_mean_rgb": [
-          176,
-          144,
-          77
+          203,
+          162,
+          82
         ],
-        "delta_e76": 10.3957,
+        "delta_e76": 0.2642,
         "material_rgb": [
-          212,
-          172,
-          84
+          248,
+          196,
+          101
         ],
-        "delta_e_material": 5.0446
+        "delta_e_material": 15.3267
       }
     },
     "ear_inner": {
@@ -70,17 +70,17 @@
           47
         ],
         "model_mean_rgb": [
-          111,
-          84,
-          77
+          89,
+          58,
+          47
         ],
-        "delta_e76": 11.5639,
+        "delta_e76": 0.1424,
         "material_rgb": [
-          92,
-          60,
-          52
+          82,
+          53,
+          43
         ],
-        "delta_e_material": 2.4008
+        "delta_e_material": 2.7857
       }
     },
     "dark": {
@@ -108,17 +108,17 @@
           56
         ],
         "model_mean_rgb": [
-          85,
-          63,
-          57
+          89,
+          69,
+          56
         ],
-        "delta_e76": 5.2106,
+        "delta_e76": 0.7635,
         "material_rgb": [
-          92,
-          60,
-          52
+          106,
+          82,
+          68
         ],
-        "delta_e_material": 7.3218
+        "delta_e_material": 6.1757
       }
     },
     "glow": {
@@ -146,26 +146,26 @@
           185
         ],
         "model_mean_rgb": [
-          133,
-          197,
-          191
+          117,
+          198,
+          186
         ],
-        "delta_e76": 6.6122,
+        "delta_e76": 0.9257,
         "material_rgb": [
-          140,
-          252,
-          236
+          124,
+          255,
+          228
         ],
-        "delta_e_material": 19.1462
+        "delta_e_material": 22.9507
       }
     }
   },
   "pixel_color": {
     "overlap_pixels": 38584,
-    "mean_delta_e": 24.3716,
-    "median_delta_e": 21.0079,
-    "p90_delta_e": 53.7022,
-    "fraction_delta_e_over_20": 0.5643
+    "mean_delta_e": 22.8016,
+    "median_delta_e": 12.6653,
+    "p90_delta_e": 58.2268,
+    "fraction_delta_e_over_20": 0.3075
   },
   "silhouette": {
     "iou": 0.7389,
