@@ -1,11 +1,11 @@
 ---
 id: M1-14
 title: main.ts 配線
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-14-maints-配線
 depends_on: [M1-08, M1-12, M1-13]
-evidence: []
+evidence: ["ac1dc01", "手動確認: npm run dev で動作"]
 ---
 
 # main.ts 配線

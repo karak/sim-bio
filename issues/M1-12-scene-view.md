@@ -1,11 +1,11 @@
 ---
 id: M1-12
 title: SceneView(Three.js)
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-12-sceneviewthreejs
 depends_on: [M1-09, M1-11]
-evidence: []
+evidence: ["ac1dc01", "手動確認: 島・レイヤー切替・セル詳細"]
 ---
 
 # SceneView(Three.js)

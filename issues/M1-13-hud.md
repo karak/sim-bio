@@ -1,11 +1,11 @@
 ---
 id: M1-13
 title: Hud(速度・レイヤー・グラフ・気候・災害・保存)
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-13-hud
 depends_on: [M1-10]
-evidence: []
+evidence: ["ac1dc01", "手動確認: 速度・グラフ・スライダー"]
 ---
 
 # Hud(速度・レイヤー・グラフ・気候・災害・保存)
