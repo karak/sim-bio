@@ -131,7 +131,9 @@ cam = bpy.data.objects.new("cmp_cam", cam_data)
 scene.collection.objects.link(cam)
 scene.camera = cam
 fov = 2 * math.atan(cam_data.sensor_width / 2 / cam_data.lens)
-dist = (height / 0.62) / 2 / math.tan(fov / 2)
+# 横長の個体は幅がフレームからはみ出すので、画面上の概算幅 (0.7·(dx+dy)) が全高を超えるときはそれを基準にする
+fill_dim = max(height, 0.7 * ((hi.x - lo.x) + (hi.y - lo.y)))
+dist = (fill_dim / 0.62) / 2 / math.tan(fov / 2)
 a, e = math.radians(az), math.radians(el)
 cam.location = center + Vector((math.cos(a) * math.cos(e) * dist, -math.sin(a) * math.cos(e) * dist, math.sin(e) * dist))
 cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
@@ -234,13 +236,12 @@ def model_classes(idp):
 
 
 def norm_frame(mask, box, size, wide=False):
-    """bbox で切り出して size×(2*size) の枠に正規化する。
-    縦長の個体 (rabbit / deer): 高さを size に合わせ、枠の中央に置く (枠の単位 1 = 全高)。
-    横長の個体 (wolf, wide=True): 幅を 2*size に合わせ、上寄せで置く (枠の単位 1 = 全幅の半分)"""
+    """bbox で切り出して size×(2*size) の枠に正規化する (枠の単位 1 = 全高、中央揃え・上寄せ)。
+    幅が高さの 2 倍を超える個体だけ幅基準に落とす (wide は表示の切り出し判定にも使う)"""
     y0, y1, x0, x1 = box
     crop = mask[y0:y1, x0:x1]
     h, w = crop.shape[:2]
-    scale = (2 * size) / w if wide else size / h
+    scale = min(size / h, (2 * size) / w)
     nh, nw = max(1, min(size, int(round(h * scale)))), max(1, min(2 * size, int(round(w * scale))))
     ys = np.clip((np.arange(nh) / scale).astype(int), 0, h - 1)
     xs = np.clip((np.arange(nw) / scale).astype(int), 0, w - 1)
@@ -257,8 +258,8 @@ m_sil, m_cls = model_classes(idpass)
 rbox, mbox = bbox(r_sil), bbox(m_sil)
 r_asp = (rbox[3] - rbox[2]) / (rbox[1] - rbox[0])
 m_asp = (mbox[3] - mbox[2]) / (mbox[1] - mbox[0])
-WIDE = r_asp > 1.0  # 参照が横長なら幅基準で正規化する (モデル側も同じ基準)
-print(f"frame: {'wide (unit = width/2)' if WIDE else 'tall (unit = height)'}, ref aspect {r_asp:.2f}, model aspect {m_asp:.2f}")
+WIDE = r_asp > 1.0  # 参照が横長ならクラス図・ヒートマップを 2 倍幅で出す (中央 S×S に切り出さない)
+print(f"frame: unit = height, {'wide layout' if WIDE else 'tall layout'}, ref aspect {r_asp:.2f}, model aspect {m_asp:.2f}")
 
 rN = {p: norm_frame(r_cls[p], rbox, S, WIDE) for p in PARTS}
 mN = {p: norm_frame(m_cls[p], mbox, S, WIDE) for p in PARTS}
@@ -358,8 +359,7 @@ h_, s_, v_ = rgb_to_hsv(r_rgbN)
 core = r_silN & (h_ > 140) & (h_ < 215) & (s_ > 0.3) & (v_ > 0.75)  # 明るいシアン (六角の面・目)
 teal = r_silN & (h_ > 140) & (h_ < 215) & (s_ > 0.2) & (v_ > 0.35) & (v_ <= 0.75)  # 縁取り・パネル線
 ref_components = {
-    "frame": ("fx = (x - center)/(width/2), fy = y_from_top/(width/2); wide subject" if WIDE
-              else "fx = (x - center)/height, fy = y_from_top/height; height = silhouette bbox height"),
+    "frame": "fx = (x - center)/height, fy = y_from_top/height; height = silhouette bbox height",
     "cyan_core": [c for c in components(core) if c["area"] > 2e-5],
     "teal": [c for c in components(teal) if c["area"] > 2e-5][:12],
 }

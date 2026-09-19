@@ -166,7 +166,8 @@ class Kit:
         self.scene.camera = cam
         self.scene.render.resolution_x = self.scene.render.resolution_y = 1024
         fov = 2 * math.atan(cam_data.sensor_width / 2 / lens)
-        dist = (height / fill) / 2 / math.tan(fov / 2)
+        fill_dim = max(height, 0.7 * ((hi.x - lo.x) + (hi.y - lo.y)))  # compare_ref.py と同じ規則 (横長の個体は幅基準)
+        dist = (fill_dim / fill) / 2 / math.tan(fov / 2)
         a, e = math.radians(az), math.radians(el)
         cam.location = center + Vector((math.cos(a) * math.cos(e) * dist, -math.sin(a) * math.cos(e) * dist, math.sin(e) * dist))
         cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
