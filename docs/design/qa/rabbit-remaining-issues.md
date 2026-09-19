@@ -1,6 +1,6 @@
 # 土兎 (rabbit) 3D モデル 残課題
 
-対象: `assets/models/rabbit.glb` (生成スクリプト `tools/blender/rabbit.py`)、commit `0aae098` 時点。
+対象: `assets/models/rabbit.glb` / `assets/models/rabbit.blend` (生成スクリプト `tools/blender/rabbit.py`)、commit `0aae098` 時点。
 本モデルは中間成果物として利用する。以下は参照画像 `assets/textures/concept/rabbit-angular.png` との
 定量比較 (`tools/blender/compare_ref.py`、方位 45°・仰角 10°) で残っている差分と、その判断・対処案。
 

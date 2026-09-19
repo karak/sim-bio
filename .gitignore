@@ -23,7 +23,7 @@ Thumbs.db
 npm-debug.log*
 
 # 大容量素材の作業ファイル（書き出し前の元データ）
-assets/**/*.blend
+# .blend も成果物としてリポジトリで管理する (.blend1 バックアップのみ除外)
 assets/**/*.blend1
 assets/**/*.psd
 assets/**/*.aseprite

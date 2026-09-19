@@ -2,7 +2,7 @@
 
 使い方:
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/rabbit.py -- assets/models
-出力: <out_dir>/rabbit.blend (git 管理外) と <out_dir>/rabbit.glb
+出力: <out_dir>/rabbit.blend と <out_dir>/rabbit.glb (どちらもリポジトリで管理)
 検証: tools/blender/compare_ref.py で参照画像と同アングル撮影し、パーツ別に色と配置を定量比較する
 
 作り方 (プリミティブの寄せ集めではなく、断面リングのロフトで面構成を作る):

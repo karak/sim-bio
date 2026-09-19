@@ -1,6 +1,6 @@
 # 土兎 (rabbit) 3D モデル QA 受入基準 (フルセット)
 
-対象: `assets/models/rabbit.glb` / `assets/models/rabbit.blend` (git 管理外)、生成スクリプト `tools/blender/rabbit.py`。
+対象: `assets/models/rabbit.glb` / `assets/models/rabbit.blend` (どちらもリポジトリで管理)、生成スクリプト `tools/blender/rabbit.py`。
 参照画像: `assets/textures/concept/rabbit-angular.png` (Gemini `gemini-2.5-flash-image`、`--style=angular`)。
 評価カメラ: 方位 45° (+X 側から正面寄り)、仰角 10°、50 mm、全高がフレームの 62%。
 残課題は `rabbit-remaining-issues.md` を参照。
@@ -51,7 +51,7 @@
 
 | # | 基準 | 判定 | 証跡 |
 |---|---|---|---|
-| D1 | `rabbit.glb` がコミットされている (`.blend` は gitignore) | PASS | `0aae098` `assets/models/rabbit.glb` |
+| D1 | `rabbit.glb` と `rabbit.blend` の両方がコミットされている | PASS | `0aae098` `assets/models/rabbit.glb`、`.blend` は .gitignore から除外して追加 (このコミット) |
 | D2 | 生成が決定論的 (スクリプト再実行で同じ出力) | PASS | `rabbit.py` 先頭で `read_factory_settings(use_empty=True)` |
 | D3 | 比較の証跡 (compare.png / metrics.json / ref_components.json / tune-history.json) が `docs/design/qa/` にある | PASS | `0aae098` |
 | D4 | 秘密情報スキャン (git-secrets) を `--no-verify` なしで通過 | PASS | `compare_ref.py` `rounded()` で小数 4 桁に丸め |
