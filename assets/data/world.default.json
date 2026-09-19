@@ -1,0 +1,7 @@
+{
+  "seed": 42,
+  "size": 128,
+  "ticksPerYear": 360,
+  "climate": { "seasonAmplitudeTemp": 8, "seasonAmplitudeRain": 0.1, "tempOffset": 0, "rainScale": 1 },
+  "feedback": { "vegetationToRain": 0.1, "vegetationToTemp": 0, "co2ToTemp": 0, "iceAlbedo": 0 }
+}

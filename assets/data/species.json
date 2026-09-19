@@ -1,0 +1,26 @@
+[
+  {
+    "id": "grass",
+    "name": "草",
+    "trophic": "plant",
+    "growthRate": 0.04,
+    "mortality": 0.02,
+    "tempRange": [-2, 32],
+    "moistureRange": [0.15, 0.85],
+    "diffusion": 0.05,
+    "assetId": "grass",
+    "color": "#6FBF7C"
+  },
+  {
+    "id": "forest",
+    "name": "森",
+    "trophic": "plant",
+    "growthRate": 0.015,
+    "mortality": 0.01,
+    "tempRange": [2, 26],
+    "moistureRange": [0.45, 1.0],
+    "diffusion": 0.02,
+    "assetId": "forest",
+    "color": "#2E6B37"
+  }
+]

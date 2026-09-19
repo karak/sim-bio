@@ -1,11 +1,11 @@
 ---
 id: M1-08
 title: Runner(rAF と速度倍率)
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-8-runner
 depends_on: [M1-07]
-evidence: []
+evidence: ["fe329b9", "tests/unit/runner.test.ts"]
 ---
 
 # Runner(rAF と速度倍率)

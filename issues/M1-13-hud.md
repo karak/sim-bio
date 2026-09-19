@@ -1,7 +1,7 @@
 ---
 id: M1-13
 title: Hud(速度・レイヤー・グラフ・気候・災害・保存)
-status: todo
+status: in_progress
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-13-hud
 depends_on: [M1-10]

@@ -1,7 +1,7 @@
 ---
 id: M1-12
 title: SceneView(Three.js)
-status: todo
+status: in_progress
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-12-sceneviewthreejs
 depends_on: [M1-09, M1-11]
