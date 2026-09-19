@@ -2,18 +2,21 @@
 
 使い方:
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/compare_ref.py -- \
-      assets/models/rabbit.blend assets/textures/concept/rabbit-angular.png <out_dir> [az] [el]
+      assets/models/<creature>.blend assets/textures/concept/<creature>-angular.png <out_dir> [az] [el] [creature=<name>]
 
   az: カメラ方位 (度)。0 = 被写体の右真横 (+X)、正で正面側 (-Y) に回る。既定 45
   el: カメラ仰角 (度)。既定 10
+  creature: rabbit / deer / wolf。省略時は blend または参照画像のファイル名の先頭から推定する
 
 評価の考え方:
-  モデル側はマテリアルを ID 色で描いた「ID パス」でパーツ (fur / ear_inner / dark / glow) を正確に分割する。
-  参照側は色相と明度で同じ 4 クラスに分類する (シアン系 → glow、暗い → dark、暗い かつ 上半分 → ear_inner、残り → fur)。
+  モデル側はマテリアルを ID 色で描いた「ID パス」でパーツを正確に分割する。マテリアル名は <creature>_<part> (fur / dark / glow /
+  teal / ear_inner) の規約で作る。参照側は色相と明度で同じクラスに分類する。パーツ構成と分類ルールは個体ごとに
+  tools/blender/creature_parts.py に定義する (rabbit: fur / ear_inner / dark / glow、deer と wolf: fur / dark / glow)。
   両者をシルエットの bbox で正規化した同じ枠に置いて、パーツごとに比較する。
 
 出力 (<out_dir>/):
   render_id.png      ID パス (fur=赤, ear_inner=緑, dark=青, glow=黄)
+  ref_components.json 参照画像の模様の連結成分 (cyan_core / teal と、地色以外の各パーツ)。デカール配置の実測値に使う
   render_shaded.png  EEVEE の陰影付き撮影 (色比較に使う)
   compare.png        参照 | 陰影付き撮影 | 参照のクラス図 | モデルのクラス図 | 画素 ΔE ヒートマップ
   metrics.json       指標
@@ -37,7 +40,12 @@ import bpy
 import numpy as np
 from mathutils import Vector
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from creature_parts import CREATURES, creature_from_path  # noqa: E402
+
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+kw = dict(a.split("=", 1) for a in argv if "=" in a)
+argv = [a for a in argv if "=" not in a]
 if len(argv) < 3:
     raise SystemExit(__doc__)
 blend, ref_path, out_dir = argv[0], argv[1], argv[2]
@@ -45,10 +53,13 @@ az = float(argv[3]) if len(argv) > 3 else 45.0
 el = float(argv[4]) if len(argv) > 4 else 10.0
 os.makedirs(out_dir, exist_ok=True)
 
-PARTS = ["fur", "ear_inner", "dark", "glow"]
-ID_COLORS = {"fur": (1, 0, 0), "ear_inner": (0, 1, 0), "dark": (0, 0, 1), "glow": (1, 1, 0)}
+CREATURE = kw.get("creature") or creature_from_path(blend, ref_path)
+CFG = CREATURES[CREATURE]
+PARTS = CFG["parts"]
+ID_COLORS = CFG["id_colors"]
 # クラス図の表示色
-CLASS_VIS = {"fur": (0.84, 0.76, 0.48), "ear_inner": (0.35, 0.23, 0.16), "dark": (0.15, 0.10, 0.07), "glow": (0.4, 0.95, 0.9)}
+CLASS_VIS = CFG["class_vis"]
+print(f"creature: {CREATURE}, parts: {PARTS}")
 
 
 # ---------- 色空間 ----------
@@ -135,8 +146,8 @@ def render(path):
     return arr
 
 
-# マテリアル名の末尾 → 評価クラス。ティールの縁取り/パネル線は参照側の分類と同じく glow に含める
-MATERIAL_CLASS = {"ear_inner": "ear_inner", "dark": "dark", "glow": "glow", "teal": "glow", "fur": "fur"}
+# マテリアル名の末尾 → 評価クラス (個体別。rabbit ではティールの縁取り/パネル線を参照側の分類と同じく glow に含める)
+MATERIAL_CLASS = CFG["material_class"]
 
 
 def part_of_material(m):
@@ -200,20 +211,17 @@ def bbox(mask):
 
 
 def ref_classes(rgb):
-    """参照画像を silhouette と 4 クラスに分ける"""
+    """参照画像を silhouette と個体別クラスに分ける (分類ルールは creature_parts.py)"""
     border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
     bgc = np.median(border, axis=0)
     dist = np.linalg.norm(rgb - bgc, axis=-1)
     h, s, v = rgb_to_hsv(rgb)
     sil = (dist > 0.12) & ((s > 0.10) | (v < 0.35))  # 影 (無彩色の灰) は除外、暗い茶は含める
-    glow = sil & (h > 140) & (h < 215) & (s > 0.2) & (v > 0.35)
-    darkish = sil & ~glow & (v < 0.5)
     y0, y1, x0, x1 = bbox(sil)
-    yy = (np.arange(rgb.shape[0])[:, None] - y0) / max(y1 - y0, 1)
-    ear = darkish & (yy < 0.5)
-    dark = darkish & ~ear
-    fur = sil & ~glow & ~darkish
-    return sil, {"fur": fur, "ear_inner": ear, "dark": dark, "glow": glow}
+    yy = np.broadcast_to((np.arange(rgb.shape[0])[:, None] - y0) / max(y1 - y0, 1), sil.shape)
+    classes = CFG["classify"](h, s, v, sil, yy)
+    assert set(classes) == set(PARTS), (set(classes), set(PARTS))
+    return sil, classes
 
 
 def model_classes(idp):
@@ -225,19 +233,21 @@ def model_classes(idp):
     return sil, out
 
 
-def norm_frame(mask, box, size):
-    """bbox で切り出して高さ size に正規化し、幅 2*size の枠の中央に置く"""
+def norm_frame(mask, box, size, wide=False):
+    """bbox で切り出して size×(2*size) の枠に正規化する。
+    縦長の個体 (rabbit / deer): 高さを size に合わせ、枠の中央に置く (枠の単位 1 = 全高)。
+    横長の個体 (wolf, wide=True): 幅を 2*size に合わせ、上寄せで置く (枠の単位 1 = 全幅の半分)"""
     y0, y1, x0, x1 = box
     crop = mask[y0:y1, x0:x1]
     h, w = crop.shape[:2]
-    scale = size / h
-    nw = max(1, int(round(w * scale)))
-    ys = np.clip((np.arange(size) / scale).astype(int), 0, h - 1)
+    scale = (2 * size) / w if wide else size / h
+    nh, nw = max(1, min(size, int(round(h * scale)))), max(1, min(2 * size, int(round(w * scale))))
+    ys = np.clip((np.arange(nh) / scale).astype(int), 0, h - 1)
     xs = np.clip((np.arange(nw) / scale).astype(int), 0, w - 1)
     res = crop[ys][:, xs]
     canvas = np.zeros((size, size * 2) + crop.shape[2:], dtype=crop.dtype)
     ox = size - nw // 2
-    canvas[:, ox:ox + nw] = res[:, : size * 2 - ox]
+    canvas[:nh, ox:ox + nw] = res[:, : size * 2 - ox]
     return canvas
 
 
@@ -247,12 +257,14 @@ m_sil, m_cls = model_classes(idpass)
 rbox, mbox = bbox(r_sil), bbox(m_sil)
 r_asp = (rbox[3] - rbox[2]) / (rbox[1] - rbox[0])
 m_asp = (mbox[3] - mbox[2]) / (mbox[1] - mbox[0])
+WIDE = r_asp > 1.0  # 参照が横長なら幅基準で正規化する (モデル側も同じ基準)
+print(f"frame: {'wide (unit = width/2)' if WIDE else 'tall (unit = height)'}, ref aspect {r_asp:.2f}, model aspect {m_asp:.2f}")
 
-rN = {p: norm_frame(r_cls[p], rbox, S) for p in PARTS}
-mN = {p: norm_frame(m_cls[p], mbox, S) for p in PARTS}
-r_silN, m_silN = norm_frame(r_sil, rbox, S), norm_frame(m_sil, mbox, S)
-r_rgbN = norm_frame(ref_rgb, rbox, S)
-m_rgbN = norm_frame(shaded[..., :3], mbox, S)
+rN = {p: norm_frame(r_cls[p], rbox, S, WIDE) for p in PARTS}
+mN = {p: norm_frame(m_cls[p], mbox, S, WIDE) for p in PARTS}
+r_silN, m_silN = norm_frame(r_sil, rbox, S, WIDE), norm_frame(m_sil, mbox, S, WIDE)
+r_rgbN = norm_frame(ref_rgb, rbox, S, WIDE)
+m_rgbN = norm_frame(shaded[..., :3], mbox, S, WIDE)
 
 
 def centroid(maskN):
@@ -346,12 +358,13 @@ h_, s_, v_ = rgb_to_hsv(r_rgbN)
 core = r_silN & (h_ > 140) & (h_ < 215) & (s_ > 0.3) & (v_ > 0.75)  # 明るいシアン (六角の面・目)
 teal = r_silN & (h_ > 140) & (h_ < 215) & (s_ > 0.2) & (v_ > 0.35) & (v_ <= 0.75)  # 縁取り・パネル線
 ref_components = {
-    "frame": "fx = (x - center)/height, fy = y_from_top/height; height = silhouette bbox height",
+    "frame": ("fx = (x - center)/(width/2), fy = y_from_top/(width/2); wide subject" if WIDE
+              else "fx = (x - center)/height, fy = y_from_top/height; height = silhouette bbox height"),
     "cyan_core": [c for c in components(core) if c["area"] > 2e-5],
     "teal": [c for c in components(teal) if c["area"] > 2e-5][:12],
-    "ear_inner": components(rN["ear_inner"])[:3],
-    "dark": components(rN["dark"])[:4],
 }
+for p in PARTS[1:]:  # 地色以外の各パーツの塊 (rabbit: ear_inner / dark / glow、deer・wolf: dark / glow)
+    ref_components[p] = components(rN[p])[:6]
 with open(os.path.join(out_dir, "ref_components.json"), "w") as f:
     json.dump(rounded(ref_components), f, indent=2)
 
@@ -367,7 +380,7 @@ def class_map(cls):
     img = np.ones((S, 2 * S, 4), dtype=np.float32)
     for p in PARTS:
         img[cls[p], :3] = CLASS_VIS[p]
-    return img[:, S // 2: S // 2 + S]  # 中央 S×S を切り出す
+    return img if WIDE else img[:, S // 2: S // 2 + S]  # 縦長なら中央 S×S を切り出す (横長は 2S 幅のまま)
 
 
 tile_ref = resize_rgba(ref, S)
@@ -381,7 +394,7 @@ t = np.clip(dE / 50.0, 0, 1)
 heat[..., 1] = 1 - t
 heat[..., 2] = 1 - t
 heat[~overlap] = (0.92, 0.92, 0.92, 1)
-tile_heat = heat[:, S // 2: S // 2 + S]
+tile_heat = heat if WIDE else heat[:, S // 2: S // 2 + S]
 comp = np.concatenate([tile_ref, tile_shaded, tile_rcls, tile_mcls, tile_heat], axis=1)
 out_img = bpy.data.images.new("compare", comp.shape[1], comp.shape[0], alpha=True)
 out_img.pixels = comp[::-1].astype(np.float32).ravel().tolist()

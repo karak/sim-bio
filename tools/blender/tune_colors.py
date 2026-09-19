@@ -2,14 +2,16 @@
 """材質色の補正ループ: 参照画像とパーツ別平均色の ΔE76 が全パーツで閾値未満になるまで回す。
 
 使い方:
-  python3 tools/blender/tune_colors.py [--target 1.0] [--max-iter 10] [--out <dir>]
+  python3 tools/blender/tune_colors.py [--creature rabbit|deer|wolf] [--target 1.0] [--max-iter 10] [--out <dir>]
 
 各反復:
-  1. rabbit.py でモデルを再ビルド (rabbit-colors.json の色を使う)
-  2. compare_ref.py で参照と同アングル撮影し parts.<p>.color の ref_mean_rgb / model_mean_rgb を得る
-  3. 各パーツの材質色 (リニア RGB) に ref/model の比を掛けて rabbit-colors.json を更新
-     (glow クラスは glow と teal の 2 材質を含むので同じ比を両方に掛ける)
-収束したら docs/design/qa/ に証跡 (compare.png, metrics.json) をコピーする。
+  1. tools/blender/<creature>.py でモデルを再ビルド (<creature>-colors.json の色を使う)
+  2. compare_ref.py で参照 (assets/textures/concept/<creature>-angular.png) と同アングル撮影し
+     parts.<p>.color の ref_mean_rgb / model_mean_rgb を得る
+  3. 各パーツの材質色 (リニア RGB) に ref/model の比を掛けて <creature>-colors.json を更新
+     (1 クラスに複数材質があるとき、例: rabbit の glow = glow + teal、は同じ比を両方に掛ける。
+      対応は creature_parts.py の class_materials)
+証跡 (compare.png, metrics.json, history.json) は --out に出る。採用時は docs/design/qa/<creature>-*.{png,json} へコピーする。
 """
 import argparse
 import json
@@ -17,10 +19,11 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from creature_parts import CREATURES  # noqa: E402
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 RUN = os.path.expanduser("~/.claude/skills/blender/scripts/run_blender.sh")
-COLORS_PATH = os.path.join(ROOT, "tools", "blender", "rabbit-colors.json")
-CLASS_MATERIALS = {"fur": ["fur"], "ear_inner": ["ear_inner"], "dark": ["dark"], "glow": ["glow", "teal"]}
 
 
 def srgb_to_linear(c):
@@ -50,26 +53,35 @@ def run(args):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--creature", default="rabbit", choices=sorted(CREATURES))
     ap.add_argument("--target", type=float, default=1.0)
     ap.add_argument("--max-iter", type=int, default=10)
-    ap.add_argument("--out", default=os.path.join(ROOT, "docs", "design", "qa", "tune"))
+    ap.add_argument("--out", default=None)
     ap.add_argument("--az", default="45")
     ap.add_argument("--el", default="10")
     a = ap.parse_args()
-    os.makedirs(a.out, exist_ok=True)
+    cfg = CREATURES[a.creature]
+    class_materials = cfg["class_materials"]
+    colors_path = os.path.join(ROOT, "tools", "blender", f"{a.creature}-colors.json")
+    build_script = f"tools/blender/{a.creature}.py"
+    blend = f"assets/models/{a.creature}.blend"
+    ref_png = f"assets/textures/concept/{a.creature}-angular.png"
+    out = a.out or os.path.join(ROOT, "docs", "design", "qa", f"tune-{a.creature}")
+    os.makedirs(out, exist_ok=True)
+    if not os.path.exists(os.path.join(ROOT, build_script)):
+        raise SystemExit(f"{build_script} がありません (モデル生成スクリプトを先に作ってください)")
 
-    colors = {"fur": "#D4AC54", "ear_inner": "#5C3C34", "dark": "#5C3C34", "glow": "#8CFCEC", "teal": "#5C847C"}
-    if os.path.exists(COLORS_PATH):
-        colors.update(json.load(open(COLORS_PATH)))
+    colors = dict(cfg["base_colors"])
+    if os.path.exists(colors_path):
+        colors.update(json.load(open(colors_path)))
 
     history = []
     for it in range(a.max_iter + 1):
-        json.dump(colors, open(COLORS_PATH, "w"), indent=2)
-        run([RUN, "tools/blender/rabbit.py", "--", "assets/models"])
-        run([RUN, "tools/blender/compare_ref.py", "--", "assets/models/rabbit.blend",
-             "assets/textures/concept/rabbit-angular.png", a.out, a.az, a.el])
-        m = json.load(open(os.path.join(a.out, "metrics.json")))
-        des = {p: m["parts"][p]["color"]["delta_e76"] for p in CLASS_MATERIALS}
+        json.dump(colors, open(colors_path, "w"), indent=2)
+        run([RUN, build_script, "--", "assets/models"])
+        run([RUN, "tools/blender/compare_ref.py", "--", blend, ref_png, out, a.az, a.el, f"creature={a.creature}"])
+        m = json.load(open(os.path.join(out, "metrics.json")))
+        des = {p: m["parts"][p]["color"]["delta_e76"] for p in class_materials}
         history.append({"iter": it, "colors": dict(colors), "delta_e76": des})
         print(f"iter {it}: " + "  ".join(f"{p} dE={d:.2f}" for p, d in des.items()) + "  colors=" + json.dumps(colors))
         if all(d < a.target for d in des.values()):
@@ -79,14 +91,14 @@ def main():
             print("max iterations reached (not converged)")
             break
         # 補正: リニア空間で ref/model の比を材質色に掛ける (ゼロ割り回避のため下限 1/255)
-        for p, mats in CLASS_MATERIALS.items():
+        for p, mats in class_materials.items():
             ref = [srgb_to_linear(max(c, 1) / 255) for c in m["parts"][p]["color"]["ref_mean_rgb"]]
             mod = [srgb_to_linear(max(c, 1) / 255) for c in m["parts"][p]["color"]["model_mean_rgb"]]
             for mat in mats:
                 lin = hex_to_lin(colors[mat])
                 colors[mat] = lin_to_hex([l * r / mo for l, r, mo in zip(lin, ref, mod)])
 
-    json.dump(history, open(os.path.join(a.out, "history.json"), "w"), indent=2, ensure_ascii=False)
+    json.dump(history, open(os.path.join(out, "history.json"), "w"), indent=2, ensure_ascii=False)
     return 0 if all(d < a.target for d in history[-1]["delta_e76"].values()) else 1
 
 
