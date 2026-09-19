@@ -67,8 +67,8 @@ describe('judgeScenario', () => {
 describe('assets/data/scenarios.json', () => {
   const defs = JSON.parse(readFileSync('assets/data/scenarios.json', 'utf8')) as ScenarioDef[];
   it('contains the four first scenarios with prophecy and conditions', () => {
-    expect(defs.map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment']);
-    for (const d of defs) {
+    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment']);
+    for (const d of defs.filter((x) => !x.hidden)) {
       expect(d.prophecy.length).toBeGreaterThan(10);
       expect(d.years).toBeGreaterThan(0);
       expect(['prevent', 'endure', 'escape']).toContain(d.kind);

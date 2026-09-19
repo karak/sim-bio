@@ -1,7 +1,7 @@
 ---
 id: M4-03
 title: 石板 UI とシナリオ選択、勝敗表示
-status: todo
+status: in_progress
 milestone: M4
 plan: docs/design/2026-09-19-scenarios-and-world.md
 depends_on: [M4-02]

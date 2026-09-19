@@ -42,3 +42,29 @@ test('clicking the island opens the cell panel with a local time series', async 
   await expect(page.locator('#local-graph')).toBeVisible();
   await expect(page.locator('#cell-info')).toContainText('セル (');
 });
+
+test('stone tablet: ?scenario=sinking shows the prophecy and counts years', async ({ page }) => {
+  await page.goto('/?scenario=sinking');
+  await expect(page.locator('#tablet-title')).toContainText('沈む欠片');
+  await expect(page.locator('#tablet-prophecy')).toContainText('百年');
+  await expect(page.locator('#tablet-year')).toHaveText('0 / 100 年');
+  await page.click('#speed-100');
+  await expect(page.locator('#tablet-year')).not.toHaveText('0 / 100 年', { timeout: 20_000 });
+  await expect(page.locator('#verdict')).toBeHidden();
+});
+
+test('stone tablet: verdict overlay appears and stops the clock', async ({ page }) => {
+  await page.goto('/?scenario=test-quick');
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
+  const y = await page.locator('#hud-year').textContent();
+  await page.waitForTimeout(1500);
+  expect(await page.locator('#hud-year').textContent()).toBe(y);
+});
+
+test('free mode has the selector but no prophecy', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#tablet-select')).toBeVisible();
+  await expect(page.locator('#tablet-title')).toHaveCount(0);
+});

@@ -21,6 +21,8 @@ export type ScheduledCommand = { atYear: number; everyYears?: number; untilYear?
 export type ScenarioDef = {
   id: string;
   title: string;
+  /** true なら選択 UI に出さない (テスト・デバッグ用) */
+  hidden?: boolean;
   /** 石板の予言 (プレイヤーに最初から見せる) */
   prophecy: string;
   /** 回避の型 */
