@@ -1,7 +1,7 @@
 ---
 id: M3-01
 title: 振動の自動判定
-status: todo
+status: in_progress
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: []
