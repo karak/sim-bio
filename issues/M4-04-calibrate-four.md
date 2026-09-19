@@ -1,11 +1,11 @@
 ---
 id: M4-04
 title: 4 本の校正と証跡
-status: in_progress
+status: done
 milestone: M4
 plan: docs/design/2026-09-19-scenarios-and-world.md
 depends_on: [M4-02]
-evidence: []
+evidence: ["cbe4b84", "tests/slow/scenarios.playthrough.test.ts", "docs/specs/2026-09-19-ecosystem-sim-design.md"]
 ---
 
 # 4 本の校正と証跡
