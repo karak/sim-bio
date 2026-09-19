@@ -1,7 +1,7 @@
 ---
 id: M1-01
 title: プロジェクト土台(Vite/TS/Vitest/ESLint)
-status: in_progress
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-1-プロジェクト土台
 depends_on: []

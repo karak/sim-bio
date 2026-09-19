@@ -8,6 +8,6 @@ f=$(ls issues/"$id"-*.md)
 perl -pi -e "s/^status: .*/status: $st/" "$f"
 if [[ $# -gt 0 ]]; then
   ev=$(printf '"%s", ' "$@"); ev="[${ev%, }]"
-  perl -pi -e "s/^evidence: .*/evidence: $ev/" "$f"
+  perl -pi -e "s|^evidence: .*|evidence: $ev|" "$f"
 fi
 echo "$id -> $st"
