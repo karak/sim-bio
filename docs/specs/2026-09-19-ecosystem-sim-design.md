@@ -1,7 +1,7 @@
 # 生態系シミュレーション 設計書
 
 - 作成日: 2026-09-19
-- 状態: M1 実装完了(2026-09-19)、M2 未着手
+- 状態: M1・M2 実装完了(2026-09-19)
 - 対象: M1(地形 + 植物 + 季節 + グラフ)と M2(3 階層 + 種を放つ)
 
 ## 1. コンセプト
@@ -257,6 +257,14 @@ hud.showCell(cellIndex: number | null): void
 - 植生モデルの死亡項は `m·(2 − f)·p`(基礎死亡 + 不適合分)。適合時の平衡密度は `1 − m/r`。密度 `1e-4` 未満は 0 とみなし、全植物種の合計が 1 を超えたら比例縮小する。
 - 山火事は `radius = 0` で一点着火し、延焼は `stepFire` が担う。他の災害は `radius = 4`。
 
+### 4.8 実装時の差分(M2)
+
+- 動物の更新は `stepPopulations`(Lotka-Volterra 型、摂食応答は線形)。`p' = p + growthRate·f·predation·food·p − mortality·(2 − f)·p`、餌は `predation·p` の割合で減る。草食獣 → 肉食獣の順に処理。
+- `SpeciesDef` に `predation`(動物のみ)と `initialDensity`(create 時の初期密度)を追加。動物の `growthRate` は「摂取した餌密度あたりの増加係数」で 1 を超える値を取る。
+- `HudHandlers` に `onSpawnArm(speciesId | null)` を追加。種パレットは災害と同じ armed 方式で、島クリック時に 3×3 セルへ `amount = 0.5` を放つ。
+- `AssetTable` に `perCell`(1 セルあたりの最大表示数)を追加。植物 2、動物 10。
+- デフォルト種: 草・森(植物)、鹿(湿潤、草と森を食べる)、ウサギ(乾燥、草だけ)、狼(鹿とウサギ)。バランスの経緯は `issues/M2-05-balance-coexist.md` を参照。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -289,11 +297,11 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| 草食獣が植物を減らし、肉食獣が草食獣を減らす方向に動く | `tests/unit/world.trophic.test.ts` |
-| 固定シードで 100 年回して 3 階層とも絶滅しない設定が 1 つ以上ある | `tests/unit/world.properties.test.ts` |
-| `spawn_species` 後に totals が増える | `tests/unit/world.commands.test.ts` |
-| 絶滅時に `sim.species.extinct` が 1 回だけ出る | `tests/unit/world.log.test.ts` |
-| 種パレットから放った種が画面に現れる | `tests/e2e/smoke.spec.ts` に追記 |
+| 草食獣が植物を減らし、肉食獣が草食獣を減らす方向に動く | `tests/unit/world.trophic.test.ts` · 25aecac |
+| 固定シードで 100 年回して 3 階層とも絶滅しない設定が 1 つ以上ある | `tests/unit/data.test.ts`(seed 42, size 64)· 25aecac |
+| `spawn_species` 後に totals が増える | `tests/unit/world.commands.test.ts`(植物)、`tests/unit/world.trophic.test.ts`(動物)· 25aecac |
+| 絶滅時に `sim.species.extinct` が 1 回だけ出る | `tests/unit/world.log.test.ts`(植物)、`tests/unit/world.trophic.test.ts`(動物)· 25aecac |
+| 種パレットから放った種が画面に現れる | `tests/e2e/smoke.spec.ts` · 種パレット E2E |
 
 ## 7. スコープ外(今回やらない)
 

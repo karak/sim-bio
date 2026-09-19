@@ -3,6 +3,7 @@ import type { Command, SaveData, SpeciesDef, WorldConfig, WorldSnapshot } from '
 import { generateTerrain, SEA_LEVEL } from './terrain';
 import { stepClimate } from './climate';
 import { stepVegetation, sumVegetation } from './vegetation';
+import { stepPopulations } from './populations';
 import { applyDisaster, stepFire } from './disaster';
 
 export type WorldDeps = {
@@ -25,6 +26,7 @@ export class World {
   private prevTotals: Record<string, number> = {};
   private readonly n: number;
   private readonly plants: SpeciesDef[];
+  private readonly animals: SpeciesDef[];
   private readonly byId: Map<string, SpeciesDef>;
   readonly elevation: Float32Array;
   readonly moistureBase: Float32Array;
@@ -49,6 +51,7 @@ export class World {
     this.n = config.size * config.size;
     this.byId = new Map(config.species.map((d) => [d.id, d]));
     this.plants = config.species.filter((d) => d.trophic === 'plant');
+    this.animals = config.species.filter((d) => d.trophic !== 'plant');
     this.elevation = terrain.elevation;
     this.moistureBase = terrain.moistureBase;
     this.heat = new Float32Array(this.n);
@@ -66,9 +69,11 @@ export class World {
 
   static create(config: WorldConfig, deps: WorldDeps): World {
     const w = new World(structuredClone(config), deps, generateTerrain(config.seed, config.size));
-    for (const d of w.plants) {
+    for (const d of w.config.species) {
+      const init = d.initialDensity ?? (d.trophic === 'plant' ? INITIAL_PLANT : 0);
+      if (init <= 0) continue;
       const p = w.populations[d.id];
-      for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) p[i] = INITIAL_PLANT;
+      for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) p[i] = init;
     }
     // 初期スナップショットにも気温・水分が入るように 1 回だけ気候を評価する
     stepClimate(w, w.config, 0);
@@ -151,6 +156,7 @@ export class World {
     stepClimate(this, this.config, dayOfYear);
     stepFire(this, this.vegetation, this.plants, size);
     stepVegetation(this.populations, this.scratch, this, this.plants, size);
+    stepPopulations(this.populations, this.scratch, this, this.animals, size);
     this.refresh();
     for (const d of this.config.species) {
       const was = this.prevTotals[d.id] ?? 0;

@@ -126,7 +126,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
         const m = inst[d.assetId];
         if (!m) continue;
         const a = opts.assets[d.assetId];
-        const count = scatterInstances(s.layers.populations[d.id], s.layers.elevation, size, 2, 1, pos);
+        const count = scatterInstances(s.layers.populations[d.id], s.layers.elevation, size, a.perCell, 1, pos);
         for (let k = 0; k < count; k++) {
           // ジオメトリ原点が中心なので高さの半分だけ持ち上げる
           dummy.position.set(pos[k * 3], pos[k * 3 + 1] * hs + 0.3 * a.scale, pos[k * 3 + 2]);

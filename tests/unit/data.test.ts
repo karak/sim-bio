@@ -16,6 +16,13 @@ describe('assets/data', () => {
       expect(s.tempRange[0]).toBeLessThan(s.tempRange[1]);
     }
   });
+  it('all three trophic levels coexist for 100 years (seed 42, size 64)', { timeout: 120_000 }, () => {
+    const w = World.create({ ...base, size: 64, species }, { log: createMemorySink() });
+    w.step(360 * 100);
+    const t = w.snapshot().totals;
+    for (const s of species) expect(t[s.id], s.id).toBeGreaterThan(0);
+    expect(species.map((s) => s.trophic)).toEqual(expect.arrayContaining(['plant', 'herbivore', 'carnivore']));
+  });
   it('default world runs 20 years with vegetation between 5% and 95%', { timeout: 60_000 }, () => {
     const w = World.create({ ...base, species }, { log: createMemorySink() });
     w.step(360 * 20);

@@ -14,6 +14,8 @@ export type HudHandlers = {
   onLoad(save: SaveData): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
+  /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
+  onSpawnArm(speciesId: string | null): void;
 };
 
 export type Hud = {
@@ -21,6 +23,7 @@ export type Hud = {
   showCell(cell: number | null, s: WorldSnapshot): void;
   addMarker(x: number, label: string, color: string): void;
   setArmed(kind: DisasterKind | null): void;
+  setSpawnArmed(speciesId: string | null): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -63,6 +66,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
   </div>
+  <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden></div>`,
   );
   const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -76,6 +80,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   let lines: GraphLine[] = [];
   let lastYear = -1;
   let armed: DisasterKind | null = null;
+  let spawnArmed: string | null = null;
 
   const setOn = (rowId: string, id: string) => {
     for (const b of $(rowId).querySelectorAll('.chip')) b.classList.toggle('on', b.id === id);
@@ -104,9 +109,15 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     $('rain-scale-v').textContent = '×' + v.toFixed(1);
     h.onCommand({ type: 'set_climate', rainScale: v });
   });
+  const setSpawnArmed = (id: string | null) => {
+    spawnArmed = id;
+    for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('armed', b.id === `spawn-${id}`);
+    h.onSpawnArm(id);
+  };
   const setArmed = (k: DisasterKind | null) => {
     armed = k;
     for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('armed', d.kind === k);
+    if (k !== null && spawnArmed !== null) setSpawnArmed(null);
     h.onDisasterArm(k);
   };
   for (const d of DISASTERS) {
@@ -149,6 +160,16 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $(`layer-species-${d.id}`).addEventListener('click', () => {
         h.onLayer(`species:${d.id}`);
         setOn('layer-row', `layer-species-${d.id}`);
+      });
+    }
+    $('spawn-row').innerHTML = s.species
+      .map((d) => `<button id="spawn-${d.id}" class="chip"><i class="swatch" style="background:${d.color}"></i>${d.name}</button>`)
+      .join('');
+    for (const d of s.species) {
+      $(`spawn-${d.id}`).addEventListener('click', () => {
+        const next = spawnArmed === d.id ? null : d.id;
+        if (next !== null && armed !== null) setArmed(null);
+        setSpawnArmed(next);
       });
     }
   };
@@ -204,5 +225,6 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       redraw();
     },
     setArmed,
+    setSpawnArmed,
   };
 }

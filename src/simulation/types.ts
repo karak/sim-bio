@@ -5,6 +5,7 @@ export type SpeciesDef = {
   id: string;
   name: string;
   trophic: Trophic;
+  /** 植物: 1 tick の成長率。動物: 摂取した餌密度あたりの増加係数 (変換効率) */
   growthRate: number;
   mortality: number;
   /** 生存に適した気温帯 (℃) */
@@ -15,6 +16,10 @@ export type SpeciesDef = {
   diffusion: number;
   /** 被食者の種 ID (動物のみ) */
   eats?: string[];
+  /** 餌に対する 1 tick あたりの捕食率 (動物のみ) */
+  predation?: number;
+  /** create 時に陸の全セルへ与える初期密度。省略時は植物 0.05、動物 0 */
+  initialDensity?: number;
   /** SceneView の AssetTable のキー */
   assetId: string;
   /** グラフ・ヒートマップの色 (#rrggbb) */
