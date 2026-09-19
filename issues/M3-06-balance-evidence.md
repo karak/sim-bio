@@ -1,11 +1,11 @@
 ---
 id: M3-06
 title: M3 のバランス確定と証跡
-status: in_progress
+status: done
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: [M3-02, M3-03, M3-05]
-evidence: []
+evidence: ["ef7dea2", "tests/unit/data.test.ts", "docs/specs/2026-09-19-ecosystem-sim-design.md"]
 ---
 
 # M3 のバランス確定と証跡
