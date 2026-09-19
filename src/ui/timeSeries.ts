@@ -17,6 +17,11 @@ export class TimeSeries {
     }
   }
 
+  clear(): void {
+    this.xs = [];
+    this.data.clear();
+  }
+
   get length(): number {
     return this.xs.length;
   }

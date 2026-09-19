@@ -1,11 +1,11 @@
 ---
 id: M3-03
 title: 草の回復遅れ
-status: in_progress
+status: done
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: [M3-02]
-evidence: []
+evidence: ["9914a42", "tests/unit/vegetation.test.ts", "tests/unit/populations.test.ts", "tests/unit/world.save.test.ts"]
 ---
 
 # 草の回復遅れ

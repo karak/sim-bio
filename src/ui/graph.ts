@@ -51,14 +51,16 @@ export function drawGraph(
   ctx.fillStyle = '#9FB3C2';
   ctx.font = '10px ui-monospace, monospace';
   ctx.textAlign = 'right';
-  ctx.fillText(rl[1].toFixed(0), pad.l - 4, pad.t + 4);
-  ctx.fillText(rl[0].toFixed(0), pad.l - 4, pad.t + ih);
+  const fy = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(2));
+  ctx.fillText(fy(rl[1]), pad.l - 4, pad.t + 4);
+  ctx.fillText(fy(rl[0]), pad.l - 4, pad.t + ih);
   ctx.textAlign = 'left';
   ctx.fillText(`${rr[1].toFixed(1)}℃`, w - pad.r + 4, pad.t + 4);
   ctx.fillText(`${rr[0].toFixed(1)}℃`, w - pad.r + 4, pad.t + ih);
   ctx.textAlign = 'center';
-  ctx.fillText(`Y${x0}`, pad.l, h - 4);
-  ctx.fillText(`Y${x1}`, w - pad.r, h - 4);
+  const fx = (x: number) => (Number.isInteger(x) ? `Y${x}` : `Y${x.toFixed(1)}`);
+  ctx.fillText(fx(x0), pad.l, h - 4);
+  ctx.fillText(fx(x1), w - pad.r, h - 4);
 
   for (const m of markers) {
     if (m.x < x0 || m.x > x1) continue;
