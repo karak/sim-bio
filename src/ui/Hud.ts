@@ -55,12 +55,14 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
-  <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-species" class="row"></span></div>
+  <div class="hud-right">
+  <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
   <div class="hud hud-r">
     <div class="dim">個体数の推移</div>
     <canvas id="graph" width="640" height="200"></canvas>
     <div id="legend" class="row"></div>
     <div class="stats"><span id="stat-temp" class="mono">--℃</span><span class="dim">平均気温</span><span id="stat-veg" class="mono">--%</span><span class="dim">植生率</span></div>
+  </div>
   </div>
   <div class="hud hud-b">
     <label>気温 <input id="temp-offset" type="range" min="-10" max="10" step="0.5" value="0"><span id="temp-offset-v" class="mono">+0.0</span></label>
@@ -93,9 +95,17 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   let lastYear = -1;
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
+  // 種チップの表示モード: 密度そのまま or 住みやすさ (適合度)。選択中の種があるときだけ layer に効く
+  let layerMode: 'density' | 'suit' = 'density';
+  let activeSpeciesId: string | null = null;
 
   const setOn = (rowId: string, id: string) => {
     for (const b of $(rowId).querySelectorAll('.chip')) b.classList.toggle('on', b.id === id);
+  };
+  // setOn は行内の .chip を丸ごと消灯するので、その後にモードチップの見た目を復元する
+  const setLayerModeUI = () => {
+    $('layer-mode-density').classList.toggle('on', layerMode === 'density');
+    $('layer-mode-suit').classList.toggle('on', layerMode === 'suit');
   };
   for (const s of SPEEDS) {
     $(`speed-${s}`).addEventListener('click', () => {
@@ -105,10 +115,19 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   }
   for (const l of LAYERS) {
     $(`layer-${l.id}`).addEventListener('click', () => {
+      activeSpeciesId = null;
       h.onLayer(l.id);
       setOn('layer-row', `layer-${l.id}`);
+      setLayerModeUI();
     });
   }
+  const setLayerMode = (m: 'density' | 'suit') => {
+    layerMode = m;
+    setLayerModeUI();
+    if (activeSpeciesId !== null) h.onLayer(m === 'suit' ? `suit:${activeSpeciesId}` : `species:${activeSpeciesId}`);
+  };
+  $('layer-mode-density').addEventListener('click', () => setLayerMode('density'));
+  $('layer-mode-suit').addEventListener('click', () => setLayerMode('suit'));
   const tempEl = $<HTMLInputElement>('temp-offset');
   const rainEl = $<HTMLInputElement>('rain-scale');
   tempEl.addEventListener('input', () => {
@@ -197,8 +216,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     $('layer-species').innerHTML = s.species.map((d) => `<button id="layer-species-${d.id}" class="chip">${d.name}</button>`).join('');
     for (const d of s.species) {
       $(`layer-species-${d.id}`).addEventListener('click', () => {
-        h.onLayer(`species:${d.id}`);
+        activeSpeciesId = d.id;
+        h.onLayer(layerMode === 'suit' ? `suit:${d.id}` : `species:${d.id}`);
         setOn('layer-row', `layer-species-${d.id}`);
+        setLayerModeUI();
       });
     }
     $('spawn-row').innerHTML = s.species

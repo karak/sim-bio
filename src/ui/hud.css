@@ -2,6 +2,10 @@
 .hud-tl { top: 12px; left: 12px; }
 .hud-tr { top: 12px; right: 12px; }
 .hud-r { top: 64px; right: 12px; width: 320px; }
+/* 右側はレイヤー列とグラフを縦に積む。種チップとモードチップで列が折り返しても重ならない */
+.hud-right { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.hud-right > .hud { position: static; }
+#layer-row { max-width: 340px; justify-content: flex-end; }
 .hud-b { bottom: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: calc(100% - 24px); }
 .hud-bl { bottom: 80px; left: 12px; min-width: 240px; }
 #local-graph { width: 240px; height: 80px; display: block; margin-top: 4px; }

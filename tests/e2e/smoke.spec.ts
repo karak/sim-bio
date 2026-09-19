@@ -32,6 +32,20 @@ test('species palette: pick a species and click the island to spawn it', async (
   expect(logs.filter((l) => l.includes('"event":"cmd.rejected"'))).toHaveLength(0);
 });
 
+test('suitability layer: mode toggle + species chip reflect the choice in DOM state', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#layer-mode-density')).toHaveClass(/on/);
+  await expect(page.locator('#layer-mode-suit')).not.toHaveClass(/on/);
+  await page.click('#layer-mode-suit');
+  await expect(page.locator('#layer-mode-suit')).toHaveClass(/on/);
+  await expect(page.locator('#layer-mode-density')).not.toHaveClass(/on/);
+  await expect(page.locator('#layer-species-forest')).toBeVisible();
+  await page.click('#layer-species-forest');
+  await expect(page.locator('#layer-species-forest')).toHaveClass(/on/);
+  // モードチップの選択状態は種チップを選んだ後も維持される
+  await expect(page.locator('#layer-mode-suit')).toHaveClass(/on/);
+});
+
 test('clicking the island opens the cell panel with a local time series', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#cell-panel')).toBeHidden();

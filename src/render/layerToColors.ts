@@ -1,7 +1,15 @@
 import type { WorldSnapshot } from '../simulation/types';
 import { SEA_LEVEL } from '../simulation/terrain';
+import { suitability } from '../simulation/vegetation';
 
-export type LayerKind = 'terrain' | 'temperature' | 'moisture' | 'vegetation' | 'vitality' | `species:${string}`;
+export type LayerKind =
+  | 'terrain'
+  | 'temperature'
+  | 'moisture'
+  | 'vegetation'
+  | 'vitality'
+  | `species:${string}`
+  | `suit:${string}`;
 
 type RGB = [number, number, number];
 
@@ -46,7 +54,8 @@ export function layerToColors(
   const o = out ?? new Float32Array(n * 3);
   const L = s.layers;
   const speciesId = layer.startsWith('species:') ? layer.slice(8) : null;
-  const def = speciesId ? s.species.find((d) => d.id === speciesId) : undefined;
+  const suitId = layer.startsWith('suit:') ? layer.slice(5) : null;
+  const def = speciesId ? s.species.find((d) => d.id === speciesId) : suitId ? s.species.find((d) => d.id === suitId) : undefined;
   const tint = def ? hex(def.color) : GREEN;
   const pop = speciesId ? L.populations[speciesId] : undefined;
   for (let i = 0; i < n; i++) {
@@ -77,7 +86,13 @@ export function layerToColors(
           c = lerp(VIT_LOW, VIT_HIGH, clamp01(L.vitality[i]));
           break;
         default:
-          c = lerp(DARK, tint, clamp01(pop ? pop[i] : 0));
+          // suit:<id> は不明種でも例外にせず、そのまま暗色 (VIT_LOW) に留める
+          c =
+            suitId !== null
+              ? def
+                ? lerp(VIT_LOW, tint, clamp01(suitability(def, L.temperature[i], L.moisture[i])))
+                : VIT_LOW
+              : lerp(DARK, tint, clamp01(pop ? pop[i] : 0));
       }
     }
     o[i * 3] = c[0];
