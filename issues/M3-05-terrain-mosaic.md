@@ -1,11 +1,11 @@
 ---
 id: M3-05
 title: 生息地のモザイク化と避難地
-status: in_progress
+status: done
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: [M3-03]
-evidence: []
+evidence: ["af7628e", "tests/unit/terrain.test.ts", "tests/unit/data.test.ts"]
 ---
 
 # 生息地のモザイク化と避難地

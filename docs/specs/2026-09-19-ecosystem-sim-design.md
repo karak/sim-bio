@@ -1,7 +1,7 @@
 # 生態系シミュレーション 設計書
 
 - 作成日: 2026-09-19
-- 状態: M1・M2 実装完了(2026-09-19)
+- 状態: M1・M2・M3 実装完了(2026-09-19)
 - 対象: M1(地形 + 植物 + 季節 + グラフ)と M2(3 階層 + 種を放つ)
 
 ## 1. コンセプト
@@ -265,6 +265,17 @@ hud.showCell(cellIndex: number | null): void
 - `AssetTable` に `perCell`(1 セルあたりの最大表示数)を追加。植物 2、動物 10。
 - デフォルト種: 草・森(植物)、鹿(湿潤、草と森を食べる)、ウサギ(乾燥、草だけ)、狼(鹿とウサギ)。バランスの経緯は `issues/M2-05-balance-coexist.md` を参照。
 
+### 4.9 実装時の差分(M3: 振動と舞台)
+
+調査メモ `references/science/predator-prey-models.md` と `references/games/stage-design-ideas.md` に基づく。
+
+- 摂食応答を Holling II 型にした: `g = predation·food / (1 + predation·handlingTime·food)`。`SpeciesDef.handlingTime` を追加(省略時 0 = 線形)。線形応答では共存平衡が常に安定で振動が減衰していた。
+- 被食による植物の回復遅れ `grazed` レイヤーを追加。草食獣が食べた量 × 3 を積み、植物の成長率に `(1 − grazed)` を掛ける。毎 tick 1/30 ずつ回復(NetLogo Wolf-Sheep の grass-regrowth-time に相当)。`SaveData.grazed` に含める。
+- 振動判定の純粋関数 `countPeaks` / `amplitudeRatio` を追加し、性質テストで「後半の極大値 ≥ 3、振幅比 ≥ 0.2」を守る。
+- 地形: 水分ノイズを周波数 6 倍・コントラスト 2.4 倍にして森・草原・乾燥地をパッチ状に分けた。陸の水分は 0.2〜0.9 に分布し、陸に囲まれた湖ができる。
+- Hud: セルをクリックすると周辺(半径 3)の種密度の時系列(10 tick ごと、直近 5 年)を 2 本目のグラフに出す。合計で相殺される局所の波を見せるため。
+- デフォルトの種パラメータ: 鹿 growthRate 3.5 / predation 0.05 / handlingTime 8、ウサギ handlingTime 8、狼 predation 0.6 / handlingTime 20。シード 42・7・3 で 100 年共存し、草・鹿・ウサギ・狼が周期 5〜8 年で振動する。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -292,6 +303,18 @@ hud.showCell(cellIndex: number | null): void
 | `TimeSeries` が上限で古い点を捨てる | `tests/unit/ui.timeSeries.test.ts` · fe329b9 |
 | ブラウザで島が表示され、1 年進めるとグラフに値が出る | `tests/e2e/smoke.spec.ts` · 3598752 |
 | ESLint と `tsc --noEmit` が通る | `npm run check` · c7ebc5c(52 テスト通過を 3598752 時点で確認) |
+
+### M3: 振動と舞台
+
+| 受入項目 | 証跡 |
+|---|---|
+| 振動判定の純粋関数が合成波で正しく動く | `tests/unit/oscillation.test.ts` |
+| handlingTime > 0 で摂食が飽和する | `tests/unit/populations.test.ts` |
+| 固定シード 60 年で鹿の年次総量が後半に極大値 ≥ 3、振幅比 ≥ 0.2 | `tests/unit/world.oscillation.test.ts` |
+| 被食セルの回復が遅れ、30 tick 後に戻る。grazed が保存される | `tests/unit/vegetation.test.ts`、`tests/unit/world.save.test.ts` |
+| 陸の水分がモザイク(乾燥 ≥ 15%、湿潤 ≥ 15%)、湖がある | `tests/unit/terrain.test.ts` |
+| デフォルト設定で 100 年共存かつ振動 | `tests/unit/data.test.ts` · af7628e |
+| セルクリックで局所時系列が出る | `tests/e2e/smoke.spec.ts` |
 
 ### M2: 3 階層 + 種を放つ
 

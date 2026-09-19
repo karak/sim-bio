@@ -1,7 +1,7 @@
 ---
 id: M3-06
 title: M3 のバランス確定と証跡
-status: todo
+status: in_progress
 milestone: M3
 plan: references/games/stage-design-ideas.md
 depends_on: [M3-02, M3-03, M3-05]
