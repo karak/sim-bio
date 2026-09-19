@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
+import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { testConfig } from './helpers';
+
+/** testConfig() (seed 42, size 32) の陸のセルを 1 つ返す。文明の home に使う */
+function someLandCell(): number {
+  const probe = World.create(testConfig(), { log: createMemorySink() });
+  const elevation = probe.snapshot().layers.elevation;
+  const i = elevation.findIndex((e) => e >= SEA_LEVEL);
+  expect(i).toBeGreaterThanOrEqual(0);
+  return i;
+}
 
 describe('World save/restore', () => {
   it('round-trips snapshot exactly and continues identically', () => {
@@ -31,5 +41,17 @@ describe('World save/restore', () => {
     delete save.crystal;
     const b = World.restore(JSON.parse(JSON.stringify(save)), { log: createMemorySink() });
     expect(Array.from(b.snapshot().layers.crystal)).toEqual(Array.from(a.snapshot().layers.crystal));
+  });
+
+  it('civilization ありのセーブは civ ごと往復し、続きも一致する (M8-02)', () => {
+    const a = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home: someLandCell() } } }), { log: createMemorySink() });
+    a.step(200);
+    const save = a.serialize();
+    expect(save.civ).toEqual(a.snapshot().civ);
+    const b = World.restore(JSON.parse(JSON.stringify(save)), { log: createMemorySink() });
+    expect(b.snapshot().civ).toEqual(a.snapshot().civ);
+    a.step(100);
+    b.step(100);
+    expect(b.snapshot().civ).toEqual(a.snapshot().civ);
   });
 });
