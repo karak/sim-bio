@@ -1,7 +1,7 @@
 ---
 id: M1-04
 title: 型定義と気候ステップ
-status: todo
+status: in_progress
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-4-型定義と気候
 depends_on: [M1-03]

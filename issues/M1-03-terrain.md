@@ -1,11 +1,11 @@
 ---
 id: M1-03
 title: 乱数・グリッド・地形生成
-status: todo
+status: done
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-3-乱数グリッド地形生成
 depends_on: [M1-01]
-evidence: []
+evidence: ["851e5a9", "tests/unit/terrain.test.ts"]
 ---
 
 # 乱数・グリッド・地形生成
