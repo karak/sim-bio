@@ -1,7 +1,7 @@
 # 生態系シミュレーション 設計書
 
 - 作成日: 2026-09-19
-- 状態: M1〜M5 実装完了(2026-09-19)
+- 状態: M1〜M5 実装完了(2026-09-19、M5 は 084f3b9)
 - 対象: M1(地形 + 植物 + 季節 + グラフ)と M2(3 階層 + 種を放つ)
 
 ## 1. コンセプト
@@ -333,13 +333,13 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| 枯死→生気の分解、分解者による加速、拡散と漏出、海は 0 | `tests/unit/vitality.test.ts` |
-| 生気が薄いと成長が遅く、成長は生気を消費し、死亡は枯死を積む | `tests/unit/vegetation.test.ts` |
-| 分解者は枯死で増え無いと減る。動物の死亡が枯死を積む。山火事は分解者も焼き灰を残す | `tests/unit/populations.test.ts`、`tests/unit/disaster.test.ts` |
-| 生気レイヤーの着色、保存に vitality/litter | `tests/unit/render.layerToColors.test.ts`、`tests/unit/world.save.test.ts` |
-| 100 年共存と振動が維持される | `tests/unit/data.test.ts`、`tests/unit/world.oscillation.test.ts` |
-| 生気の飢饉: 放置で滅び、五年目に苔を放てば回避 | `tests/slow/scenarios.playthrough.test.ts` |
-| 星が落ちる夜・火の山の目覚めは、苔も含めて放ち直せば回避できる(M4 の 4 本も引き続き通る) | `tests/slow/scenarios.playthrough.test.ts` |
+| 枯死→生気の分解、分解者による加速、拡散と漏出、海は 0 | `tests/unit/vitality.test.ts` · 084f3b9 |
+| 生気が薄いと成長が遅く、成長は生気を消費し、死亡は枯死を積む | `tests/unit/vegetation.test.ts` · 084f3b9 |
+| 分解者は枯死で増え無いと減る。動物の死亡が枯死を積む。山火事は分解者も焼き灰を残す | `tests/unit/populations.test.ts`、`tests/unit/disaster.test.ts` · 084f3b9 |
+| 生気レイヤーの着色、保存に vitality/litter | `tests/unit/render.layerToColors.test.ts`、`tests/unit/world.save.test.ts` · 084f3b9 |
+| 100 年共存と振動が維持される | `tests/unit/data.test.ts`、`tests/unit/world.oscillation.test.ts` · 084f3b9 |
+| 生気の飢饉: 放置で滅び、五年目に苔を放てば回避 | `tests/slow/scenarios.playthrough.test.ts` · 084f3b9 |
+| 星が落ちる夜・火の山の目覚めは、苔も含めて放ち直せば回避できる(M4 の 4 本も引き続き通る) | `tests/slow/scenarios.playthrough.test.ts` · 084f3b9 |
 
 ### M4: シナリオ層の基盤
 

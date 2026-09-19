@@ -1,11 +1,11 @@
 ---
 id: M5-03
 title: 生気の表示と保存
-status: todo
+status: done
 milestone: M5
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M5-01]
-evidence: []
+evidence: ["084f3b9 tests/unit/render.layerToColors.test.ts tests/unit/world.save.test.ts tests/e2e/smoke.spec.ts"]
 ---
 
 # 生気の表示と保存
@@ -20,8 +20,8 @@ M5-01
 
 ## Acceptance criteria
 
-- [ ] tests/unit/render.layerToColors.test.ts: vitality レイヤーが size²×3 を返し、生気が高いほど明るい
-- [ ] E2E: 生気レイヤーのチップを押すと on になる
+- [x] tests/unit/render.layerToColors.test.ts: vitality レイヤーが size²×3 を返し、生気が高いほど明るい
+- [x] E2E: 生気レイヤーのチップを押すと on になる
 
 ## 作業ログ
 

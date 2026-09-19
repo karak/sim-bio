@@ -1,11 +1,11 @@
 ---
 id: M5-02
 title: 分解者(胞子苔)
-status: todo
+status: done
 milestone: M5
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M5-01]
-evidence: []
+evidence: ["084f3b9 tests/unit/populations.test.ts tests/unit/disaster.test.ts"]
 ---
 
 # 分解者(胞子苔)
@@ -20,9 +20,9 @@ M5-01
 
 ## Acceptance criteria
 
-- [ ] tests/unit/populations.test.ts: 分解者は枯死が多いと増え、無いと減る
-- [ ] tests/unit/vitality.test.ts: 分解者がいるセルは分解が速い
-- [ ] tests/unit/disaster.test.ts: 山火事は分解者も 0 にする
+- [x] tests/unit/populations.test.ts: 分解者は枯死が多いと増え、無いと減る
+- [x] tests/unit/vitality.test.ts: 分解者がいるセルは分解が速い
+- [x] tests/unit/disaster.test.ts: 山火事は分解者も 0 にする
 
 ## 作業ログ
 

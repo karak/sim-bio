@@ -1,11 +1,11 @@
 ---
 id: M5-01
 title: 枯死層と生気層(物質循環の閉じ)
-status: todo
+status: done
 milestone: M5
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: []
-evidence: []
+evidence: ["084f3b9 tests/unit/vitality.test.ts tests/unit/vegetation.test.ts"]
 ---
 
 # 枯死層と生気層(物質循環の閉じ)
@@ -20,9 +20,9 @@ evidence: []
 
 ## Acceptance criteria
 
-- [ ] tests/unit/vitality.test.ts: 枯死→生気の分解、生気の拡散と漏出、海は 0
-- [ ] tests/unit/vegetation.test.ts: 生気が薄いセルは成長が遅い、成長すると生気が減る、枯死が死亡分だけ増える
-- [ ] serialize/restore に vitality と litter が含まれる
+- [x] tests/unit/vitality.test.ts: 枯死→生気の分解、生気の拡散と漏出、海は 0
+- [x] tests/unit/vegetation.test.ts: 生気が薄いセルは成長が遅い、成長すると生気が減る、枯死が死亡分だけ増える
+- [x] serialize/restore に vitality と litter が含まれる
 
 ## 作業ログ
 
