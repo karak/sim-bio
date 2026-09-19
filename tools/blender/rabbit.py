@@ -11,9 +11,11 @@
   - 目: 頭の側面に「塗られた」前下がりのアーモンド形。表面にレイキャストして平面デカールとして貼る。
   - 鼻: 口先を平らに切り (点に収束させない)、その前面に逆三角の暗いデカールを貼る。
   - 耳: 7 頂点リングで前面中央を 1 枚の広いファセットにし、その列を先端まで濃い色にする (縁に地色が残る)。
+    手前 (右) の耳は後ろへ寝せ、内面が斜め前を向くようにねじって全長で濃い面を見せる。
+    奥 (左) の耳は直立で上部 45% だけ濃い (参照では折れて外面が見えている部分を地色で表す)。
   - 六角模様: 盛り上がった宝石ではなく、暗いティールの縁取り + 明るいシアンの面の 2 層デカール。
     パネル線 (ティールの細い帯) でつなぐ。
-  - 前脚の足先は濃い色。
+  - 前脚は短く太い楔で足先は地色。濃い色は鼻と後ろ足の飛節 (かかとから腰へ上がる下腿、腿の影) だけ。
 
 色は参照画像の量子化代表色から: fur #D4AC54 / 耳内側・足先・鼻 #5C3C34 / 発光 #8CFCEC / 縁取り #5C847C
 寸法は参照画像の比率から: 耳含む全高 ≈ 0.9 m、頭高/胴高 ≈ 0.45、耳長 ≈ 0.38 m。
@@ -25,7 +27,7 @@ import sys
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 out_dir = argv[0] if argv else "assets/models"
@@ -146,34 +148,41 @@ parts = []
 # ---------- 胴 (尻尾側 → 胸): 12 頂点リング、側面と上下に平らなファセット ----------
 bm = bmesh.new()
 # (y, z中心, 半幅x, 半高z)
+# 参照の背中は肩 (z≈0.44) が最も高く、尻へ向かって斜めに下がる。腰は下ほど後ろへ張り出す楔で、
+# 尻の下端はほぼ地面につく。胸は顎の下で鼻先と同じくらいまで前へ張り出し、その下端 (z≈0.2) から前脚が出る
 body_sections = densify([
-    (0.25, 0.13, 0.05, 0.05),
-    (0.215, 0.16, 0.13, 0.12),
-    (0.15, 0.19, 0.185, 0.185),
-    (0.08, 0.22, 0.20, 0.22),  # 腰の最大部
-    (0.0, 0.25, 0.19, 0.235),
-    (-0.09, 0.27, 0.17, 0.215),
-    (-0.17, 0.27, 0.15, 0.20),  # 胸〜首 (参照では頭の下に胸が大きく張り出す)
-    (-0.24, 0.29, 0.11, 0.15),
-    (-0.275, 0.31, 0.06, 0.09),
+    (0.27, 0.13, 0.09, 0.08),
+    (0.21, 0.15, 0.16, 0.11),
+    (0.15, 0.18, 0.175, 0.13),
+    (0.08, 0.22, 0.185, 0.14),  # 腰の最大部 (前寄りの下端は後ろ足と飛節が見えるよう z≈0.08 で止める)
+    (0.0, 0.235, 0.185, 0.17),
+    (-0.09, 0.25, 0.17, 0.19),
+    (-0.17, 0.27, 0.15, 0.17),  # 胸〜首 (参照では頭の下に胸が大きく張り出す)
+    (-0.24, 0.27, 0.12, 0.15),
+    (-0.30, 0.27, 0.07, 0.10),
 ])
 rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rz, 12, math.pi / 12) for y, zc, rx, rz in body_sections]
 loft(bm, rings)
 body = finish(bm, "body")
 parts.append(body)
 
-# ---------- 頭 (後頭部 → 口先): 12 頂点リング。口先は平らに切る ----------
+# ---------- 頭 (後頭部 → 口先): 8 頂点リングの楔形。口先は平らに切る ----------
 bm = bmesh.new()
+# 参照の頭は楔形: 後頭部が幅広で、眉の稜線から口先へ向けて幅も高さも絞り、鼻先は下がって顎がつく。
+# 8 頂点リングで頬・額・顎に大きな平面を作り、密度は上げても膨らませない (角を保つ)。
+# 頂点角度は側面 (頬) の平面が背高になるよう ±45° に置く: 目のデカールが頬の平面に収まり、
+# 奥側の目が上の斜面に乗ってカメラから覗くのを防ぐ
+HEAD_ANGLES = [45, 80, 100, 135, 225, 260, 280, 315]
 head_sections = densify([
-    (-0.08, 0.45, 0.08, 0.08),
-    (-0.12, 0.47, 0.135, 0.13),
-    (-0.17, 0.475, 0.155, 0.14),  # 最大幅
-    (-0.22, 0.47, 0.15, 0.135),
-    (-0.27, 0.45, 0.125, 0.115),
-    (-0.31, 0.43, 0.10, 0.095),
-    (-0.345, 0.41, 0.065, 0.06),  # 口先 (平らなキャップ。ここに鼻のデカールを貼る)
-])
-rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rz, 12, math.pi / 12) for y, zc, rx, rz in head_sections]
+    (-0.09, 0.445, 0.075, 0.075),
+    (-0.14, 0.465, 0.13, 0.115),
+    (-0.19, 0.47, 0.145, 0.12),  # 最大幅 (頬)
+    (-0.25, 0.462, 0.135, 0.115),
+    (-0.325, 0.452, 0.11, 0.108),  # 眉〜目 (参照の顔面はほぼ垂直)
+    (-0.36, 0.432, 0.085, 0.09),  # 口先へ絞る (絞りすぎると奥の目が口先の脇から見える)
+    (-0.39, 0.41, 0.05, 0.06),  # 鼻先 (平らな小キャップ。ここに鼻のデカールを貼る)
+], bulge=1.0)
+rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rz, angles=HEAD_ANGLES) for y, zc, rx, rz in head_sections]
 loft(bm, rings)
 head = finish(bm, "head")
 parts.append(head)
@@ -184,40 +193,63 @@ parts.append(head)
 EAR_ANGLES = [0, 25, 90, 155, 180, 200, 340]
 
 
-def make_ear(sgn):
+def make_ear(sgn, lean_out_deg, lean_back_deg, twist0_deg, profile, length=0.41, dark_from=0.12):
+    """付け根では内面が外側 (sgn*X) へ twist0 だけ回り (筒状の開口)、先端へ向けて前を向くようにねじる。
+    profile は各断面のねじれ割合 (1 で twist0、0 で内面が前)。dark_from は内面を濃い色にする区間の始点 (長さ比)。
+    参照 (カメラは +X 側): 手前の右耳は内面が斜め前を向いて全長で濃い面が見え、
+    奥の左耳は下半分が地色で上部だけ濃い (折れて外面が見えている)。断面をねじって折れを作ると
+    境目がつぶれて見えるので、奥の耳はねじらず内面の上部だけを濃い色に塗る"""
     bm = bmesh.new()
-    axis = Vector((sgn * 0.24, 0.20, 0.95)).normalized()  # 外へ 14°、後ろへ 12° 傾く
-    ux = Y.cross(axis).normalized()  # 幅方向 (≈X)
-    uy = axis.cross(ux).normalized()  # 厚み方向 (≈Y、前が -uy)
-    base = Vector((sgn * 0.08, -0.165, 0.555))
-    # (軸方向距離, 半幅, 半厚)
-    ear_sections = [(0.0, 0.04, 0.024), (0.09, 0.062, 0.03), (0.20, 0.075, 0.028), (0.29, 0.058, 0.02), (0.35, 0.03, 0.012)]
-    rings = [ring(bm, base + axis * t, ux, uy, w, th, angles=EAR_ANGLES) for t, w, th in ear_sections]
-    tip = bm.verts.new(base + axis * 0.38)
+    axis = Vector((sgn * math.sin(math.radians(lean_out_deg)), math.sin(math.radians(lean_back_deg)), 1.0)).normalized()
+    ux0 = Y.cross(axis).normalized()  # 幅方向 (≈X)
+    uy0 = axis.cross(ux0).normalized()  # 厚み方向 (≈Y、前が -uy)
+    base = Vector((sgn * 0.08, -0.20, 0.56))
+    s = length / 0.41
+    # (軸方向距離, 半幅, 半厚)。参照の耳はパドル形で先端側 1/3 が最も広い
+    ear_sections = [(t * s, w, th, k) for (t, w, th), k in zip([
+        (0.0, 0.042, 0.026), (0.05, 0.056, 0.03), (0.11, 0.066, 0.03), (0.17, 0.074, 0.028), (0.23, 0.08, 0.026),
+        (0.26, 0.082, 0.025), (0.31, 0.078, 0.02), (0.36, 0.055, 0.014), (0.39, 0.028, 0.01),
+    ], profile)]
+    # 内面 (-uy) が外側 (sgn*X) を向く回転方向を決める
+    probe = (Matrix.Rotation(math.radians(90), 4, axis) @ (-uy0)).x * sgn
+    twist_sign = 1.0 if probe > 0 else -1.0
+    rings, inner = [], []
+    for t, w, th, k in ear_sections:
+        rot = Matrix.Rotation(twist_sign * math.radians(twist0_deg * k), 4, axis)
+        ux, uy = rot @ ux0, rot @ uy0
+        rings.append(ring(bm, base + axis * t, ux, uy, w, th, angles=EAR_ANGLES))
+        inner.append(-uy)
+    print(f"ear sgn={sgn}: inner at base = {tuple(round(v, 2) for v in inner[0])}, at tip = {tuple(round(v, 2) for v in inner[-1])}")
+    tip = bm.verts.new(base + axis * length)
     faces = loft(bm, rings + [tip])
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    # 前面中央の列 (法線がほぼ -uy) を、付け根の 1 段を除いて濃い色に
+    # 前面中央の列 (法線がその区間の内面方向) を、付け根の 1 段を除いて濃い色に
     for f in faces:
         c = f.calc_center_median()
-        if f.normal.dot(-uy) > 0.9 and (c - base).dot(axis) > 0.05:
+        t = (c - base).dot(axis)
+        k = min(range(len(ear_sections)), key=lambda i: abs(ear_sections[i][0] - t))
+        if f.normal.dot(inner[k]) > 0.8 and t > dark_from * length:
             f.material_index = EAR
     return finish(bm, f"ear_{'R' if sgn > 0 else 'L'}")
 
 
-parts += [make_ear(1), make_ear(-1)]
+# 参照のポーズ: 手前 (右) の耳は後ろへ寝て内面が斜め前 (45°)、奥 (左) の耳はほぼ直立で内面が前、上部 45% だけ濃い
+SMOOTH_TWIST = [1.0, 0.8, 0.55, 0.3, 0.12, 0.05, 0.0, 0.0, 0.0]
+NO_TWIST = [0.0] * 9
+parts += [make_ear(1, 8, 28, 45, SMOOTH_TWIST, length=0.44), make_ear(-1, 0, 3, 0, NO_TWIST, length=0.41, dark_from=0.55)]
 
 
 # ---------- 前脚: 上 (胴の中) → 足先。足先は濃い色 ----------
 def make_foreleg(sgn):
+    """参照の前脚は短く太い楔で、足先は前へ伸びる地色の足。濃い色は付けない (参照の暗部は影)。
+    参照では奥の前脚が手前の前脚のほぼ真後ろに隠れるので、奥 (左) の脚をわずかに後ろへ置く"""
     bm = bmesh.new()
-    sx = sgn * 0.075
+    sx = sgn * 0.06
+    dy = 0.0 if sgn > 0 else 0.06
     # (z, y中心, 半幅x, 半奥行y)
-    leg_sections = [(0.28, -0.235, 0.04, 0.05), (0.20, -0.245, 0.037, 0.045), (0.12, -0.255, 0.036, 0.045), (0.045, -0.265, 0.04, 0.058), (0.0, -0.275, 0.042, 0.065)]
-    rings = [ring(bm, Vector((sx, y, z)), X, Y, rx, ry, 8, math.pi / 8) for z, y, rx, ry in leg_sections]
-    faces = loft(bm, rings)
-    for f in faces:
-        if f.calc_center_median().z < 0.045:
-            f.material_index = DARK
+    leg_sections = [(0.24, -0.26, 0.046, 0.05), (0.16, -0.27, 0.044, 0.048), (0.08, -0.28, 0.042, 0.048), (0.03, -0.29, 0.044, 0.062), (0.0, -0.295, 0.044, 0.07)]
+    rings = [ring(bm, Vector((sx, y + dy, z)), X, Y, rx, ry, 8, math.pi / 8) for z, y, rx, ry in leg_sections]
+    loft(bm, rings)
     return finish(bm, f"foreleg_{'R' if sgn > 0 else 'L'}")
 
 
@@ -227,15 +259,16 @@ parts += [make_foreleg(1), make_foreleg(-1)]
 # ---------- 後ろ足: かかと → つま先の平たい足 ----------
 def make_hindfoot(sgn):
     bm = bmesh.new()
-    sx = sgn * 0.14
+    sx = sgn * 0.15
     # (y, 半幅x, 半高z)
-    foot_sections = [(0.19, 0.05, 0.032), (0.10, 0.06, 0.045), (0.0, 0.06, 0.042), (-0.10, 0.05, 0.03)]
+    # 参照では足はかかとから前へ長く伸び、かかとの後ろ (腿の下) が濃い影になる
+    foot_sections = [(0.11, 0.05, 0.03), (0.05, 0.06, 0.05), (-0.03, 0.06, 0.045), (-0.10, 0.05, 0.03)]
     rings = [ring(bm, Vector((sx, y, rz + 0.002)), X, Z, rx, rz, 8, math.pi / 8) for y, rx, rz in foot_sections]
-    faces = loft(bm, rings)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    for f in faces:  # かかと側 (後ろ半分) の側面と底を濃い色に
-        if f.normal.z < 0.5 and f.calc_center_median().y > 0.04:
-            f.material_index = DARK
+    loft(bm, rings)
+    # 飛節 (かかとから腰の下へ斜め前に立ち上がる下腿)。参照ではここが腿の影で濃い帯になる (足そのものは地色)
+    shin = [ring(bm, Vector((sx, 0.06, 0.04)), X, Y, 0.05, 0.05, 8, math.pi / 8), ring(bm, Vector((sx * 0.93, -0.04, 0.16)), X, Y, 0.045, 0.045, 8, math.pi / 8)]
+    for f in loft(bm, shin):
+        f.material_index = DARK
     return finish(bm, f"hindfoot_{'R' if sgn > 0 else 'L'}")
 
 
@@ -243,8 +276,9 @@ parts += [make_hindfoot(1), make_hindfoot(-1)]
 
 # ---------- 尻尾 ----------
 bm = bmesh.new()
-rings = [ring(bm, Vector((0, 0.22, 0.20)), X, Z, 0.04, 0.05, 8, math.pi / 8), ring(bm, Vector((0, 0.28, 0.195)), X, Z, 0.05, 0.055, 8, math.pi / 8)]
-tail_tip = bm.verts.new(Vector((0, 0.325, 0.185)))
+# 参照の尻尾は尻の下端から斜め上後ろへ立つ三角の板
+rings = [ring(bm, Vector((0, 0.28, 0.08)), X, Z, 0.045, 0.045, 8, math.pi / 8), ring(bm, Vector((0, 0.33, 0.09)), X, Z, 0.035, 0.04, 8, math.pi / 8)]
+tail_tip = bm.verts.new(Vector((0, 0.37, 0.11)))
 loft(bm, rings + [tail_tip])
 parts.append(finish(bm, "tail"))
 
@@ -284,6 +318,19 @@ _x0, _x1 = min(p.x for p in _proj), max(p.x for p in _proj)
 _y0, _y1 = min(p.y for p in _proj), max(p.y for p in _proj)
 _h = _y1 - _y0
 FRAME_M = _height  # 正規化枠 1 = モデルの全高 (m)。参照の寸法をメートルへ換算する係数
+
+
+def frame_of(p):
+    """ワールド座標 → 参照と同じ正規化枠 (fx: 中心 0、fy: 上 0)。形状合わせのデバッグ用"""
+    v = world_to_camera_view(scene, ref_cam, Vector(p))
+    return round((v.x - (_x0 + _x1) / 2) / _h, 3), round((_y1 - v.y) / _h, 3)
+
+
+if os.environ.get("RABBIT_DEBUG"):
+    for _name, _p in [("nose", (0, -0.39, 0.41)), ("brow", (0, -0.31, 0.56)), ("chest_front", (0, -0.30, 0.30)),
+                      ("rump_top_rear", (0, 0.27, 0.19)), ("tail_tip", (0, 0.37, 0.11)), ("tail_base", (0, 0.29, 0.02)),
+                      ("shin_top_R", (0.133, 0.08, 0.21)), ("heel_R", (0.14, 0.15, 0.03)), ("foreleg_R_front", (0.06, -0.295, 0.0))]:
+        print(f"landmark {_name}: fx,fy = {frame_of(_p)}")
 _tr, _br, _bl, _tl = cam_data.view_frame(scene=scene)
 
 
@@ -340,24 +387,40 @@ def at_ref(fx, fy, objs=None, mirror=False, center=False):
             if hit and (best2 is None or (loc2 - origin2).length < (best2[0] - origin2).length):
                 best2 = (loc2, normal2.normalized())
         if best2 is None:
-            raise RuntimeError(f"参照座標 ({fx}, {fy}) の対応点 {target} が見つかりません")
+            raise RuntimeError(f"参照座標 ({fx}, {fy}) の対応点が見つかりません")
         loc, n = best2
     return (loc, n) + tangent_frame(n)
 
 
+def conform(p, n, offset):
+    """接平面上の点 p を、法線方向に表面へ落として offset だけ浮かせる (平らなデカールが面の稜線から浮くのを防ぐ)"""
+    origin = p + n * 0.05
+    best = None
+    for o in base_parts:
+        hit, loc, _, _ = o.ray_cast(origin, -n, depsgraph=depsgraph)
+        if hit and (best is None or (loc - origin).length < (best - origin).length):
+            best = loc
+    return p if best is None else best + n * offset
+
+
 def decal_at(name, frame, pts_uv, mat, tilt_deg=0.0, offset=0.002):
-    """接平面上の多角形 (pts_uv: (u,v) 座標列 [m]) を、表面から offset だけ浮かせた 1 枚の面として貼る"""
+    """接平面上の多角形 (pts_uv: (u,v) 座標列 [m]) を、表面から offset だけ浮かせた 1 枚の面として貼る。
+    各頂点は表面へ落とし直すので、稜線をまたぐデカールも面に沿う (奥側の目が口先の脇から覗かない)"""
     loc, n, u, v = frame
     t = math.radians(tilt_deg)
     du = u * math.cos(t) + v * math.sin(t)
     dv = -u * math.sin(t) + v * math.cos(t)
     bm = bmesh.new()
-    verts = [bm.verts.new(loc + n * offset + du * a + dv * b) for a, b in pts_uv]
-    f = bm.faces.new(verts)
-    f.material_index = mat
-    f.normal_update()
-    if f.normal.dot(n) < 0:
-        bmesh.ops.reverse_faces(bm, faces=[f])
+    verts = [bm.verts.new(conform(loc + du * a + dv * b, n, offset)) for a, b in pts_uv]
+    # 頂点を面に沿わせると多角形が非平面になるので、中心から扇状に三角形化して各片を表面に密着させる
+    center = bm.verts.new(conform(loc, n, offset))
+    faces = [bm.faces.new((center, verts[i], verts[(i + 1) % len(verts)])) for i in range(len(verts))]
+    for f in faces:
+        f.material_index = mat
+        f.normal_update()
+    flip = [f for f in faces if f.normal.dot(n) < 0]
+    if flip:
+        bmesh.ops.reverse_faces(bm, faces=flip)
     parts.append(finish(bm, name))
 
 
@@ -410,7 +473,7 @@ for mirror in (False, True):
     tag = "L" if mirror else "R"
     sgn = -1 if mirror else 1
     # 目: 頭の側面 (参照: fx -0.122, fy 0.508、面積から L 0.058 / H 0.034 m)。後ろが上がる向きに傾ける
-    decal_at(f"eye_{tag}", at_ref(-0.122, 0.508, mirror=mirror), almond(0.058, 0.034), GLOW, tilt_deg=22 * sgn)
+    decal_at(f"eye_{tag}", at_ref(-0.122, 0.508, mirror=mirror), almond(0.058, 0.034), GLOW, tilt_deg=22 * sgn, offset=0.004)
     # 胸の六角クラスタ (参照 cyan_core の実測)
     for i, (fx, fy, r) in enumerate([(-0.168, 0.738, 0.0324), (-0.123, 0.779, 0.0184), (-0.123, 0.699, 0.0174), (-0.152, 0.807, 0.0165),
                                      (-0.211, 0.694, 0.0136), (-0.194, 0.777, 0.0135), (-0.230, 0.716, 0.0088)]):
