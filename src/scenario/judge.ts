@@ -11,6 +11,8 @@ export type JudgeInput = {
   interventions: number;
   /** 年ごとの総量の履歴 (開始年から今年まで)。species_mean が使う。省略時は今年の totals だけ */
   history?: Record<string, number>[];
+  /** 総量の面積スケール (size / referenceSize)²。species_mean の min は referenceSize のグリッドで書くので、実行時の size に合わせて掛ける。省略時 1 */
+  areaScale?: number;
 };
 
 export function landRatio(s: WorldSnapshot): number {
@@ -62,12 +64,13 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
     case 'species_mean': {
       const hist = (input.history ?? [s.totals]).slice(-c.years);
       const mean = (id: string) => hist.reduce((a, t) => a + (t[id] ?? 0), 0) / hist.length;
-      const small = c.ids.filter((id) => mean(id) < c.min);
+      const min = c.min * (input.areaScale ?? 1);
+      const small = c.ids.filter((id) => mean(id) < min);
       const label = `${c.years} 年平均`;
       return {
         ok: small.length === 0,
         why: small.length
-          ? `群れが小さい(${label}): ${small.map((id) => `${name(id)} ${mean(id).toFixed(1)} (< ${c.min})`).join(', ')}`
+          ? `群れが小さい(${label}): ${small.map((id) => `${name(id)} ${mean(id).toFixed(1)} (< ${min.toFixed(1)})`).join(', ')}`
           : `群れが残った(${label}): ${c.ids.map((id) => `${name(id)} ${mean(id).toFixed(1)}`).join(', ')}`,
       };
     }

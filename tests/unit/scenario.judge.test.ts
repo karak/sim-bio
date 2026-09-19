@@ -91,11 +91,20 @@ describe('species_mean', () => {
     // 直近 3 年: deer (2+8+5)/3 = 5.0 ≥ 5、wolf (6+3+3)/3 = 4.0 < 5
     const r = evaluate(c, { ...input(snap({ totals: { deer: 5, wolf: 3 } })), history: hist });
     expect(r.ok).toBe(false);
-    expect(r.why).toBe('群れが小さい(3 年平均): wolf 4.0 (< 5)');
+    expect(r.why).toBe('群れが小さい(3 年平均): wolf 4.0 (< 5.0)');
     // 履歴 1 年分だけなら今年の値で見る
     expect(evaluate(c, { ...input(snap({ totals: { deer: 5, wolf: 5 } })), history: [{ deer: 5, wolf: 5 }] }).ok).toBe(true);
     // history 省略時は今年の totals だけ
     expect(evaluate(c, input(snap({ totals: { deer: 5, wolf: 5 } }))).why).toBe('群れが残った(3 年平均): deer 5.0, wolf 5.0');
+  });
+  it('areaScale で min を面積比に合わせる (referenceSize 128 で書いた min を size 64 では 1/4 に)', () => {
+    const c: Condition = { type: 'species_mean', ids: ['deer'], years: 1, min: 24 };
+    const base = input(snap({ totals: { deer: 7 } }));
+    expect(evaluate(c, base).ok).toBe(false);
+    const r = evaluate(c, { ...base, areaScale: 0.25 });
+    expect(r.ok).toBe(true);
+    expect(r.why).toBe('群れが残った(1 年平均): deer 7.0');
+    expect(evaluate(c, { ...input(snap({ totals: { deer: 5 } })), areaScale: 0.25 }).why).toBe('群れが小さい(1 年平均): deer 5.0 (< 6.0)');
   });
   it('最後の年だけ大きくても平均が低ければ不合格 (最後の瞬間の放流で勝てない)', () => {
     const c: Condition = { type: 'species_mean', ids: ['deer'], years: 10, min: 5 };

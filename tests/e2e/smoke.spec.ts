@@ -8,6 +8,8 @@ test('boots, advances a year at 100x, graph shows values, layer switch works', a
   await page.click('#speed-100');
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 20_000 });
   await expect(page.locator('#stat-veg')).not.toHaveText('--%');
+  // 凡例に現在の総量が数字で出る
+  await expect(page.locator('#legend-grass')).toHaveText(/^\d+$/);
   await page.click('#layer-temperature');
   await expect(page.locator('#layer-temperature')).toHaveClass(/on/);
   const summaries = logs.filter((l) => l.includes('"event":"sim.tick.summary"'));
@@ -129,9 +131,11 @@ test('stone tablet: milestone disappears when reached, power warning appears, ve
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await expect(page.locator('#tablet-power')).toHaveText('0 / 30');
+  await expect(page.locator('#rain-scale-v')).toHaveText('×1.50');
   await page.click('#speed-100');
-  // 1 年目: 節目が消え、力の警告が出る
+  // 1 年目: 節目が消え、力の警告が出る。力が尽きて雨が既定に戻り、スライダーもそれに従う
   await expect(page.locator('#tablet-milestones')).toHaveText('', { timeout: 20_000 });
+  await expect(page.locator('#rain-scale-v')).toHaveText('×1.00');
   await expect(page.locator('#tablet-warnings')).toContainText('力が足りない(残り 0)');
   await expect.poll(() => logs.filter((l) => l.includes('"event":"scenario.warning"') && l.includes('"kind":"power_low"')).length).toBe(1);
   // 2 年目: 滅び。内訳が出る

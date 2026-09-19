@@ -45,6 +45,8 @@ export function createScenarioRunner(
   const size = first.size;
   const baselineYear = def.baselineYear ?? 0;
   const scale = size / (def.referenceSize ?? 128);
+  /** 総量 (セル密度の和) はセル数に比例するので、species_mean の min は面積比で合わせる */
+  const areaScale = scale * scale;
   const fired = new Set<string>();
   let lastYear = -1;
   let interventions = 0;
@@ -156,7 +158,7 @@ export function createScenarioRunner(
           opts.onWarning?.(w);
         }
         history.push({ ...s.totals });
-        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history });
+        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
           opts.onVerdict?.(verdict);

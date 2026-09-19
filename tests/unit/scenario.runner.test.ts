@@ -80,6 +80,7 @@ describe('species_mean (runner)', () => {
     w.step(360); r.update(w.snapshot()); // y4: 30 → 直近 3 年 (0, 0, 30) 平均 10 ≥ 5
     expect(r.verdict().status).toBe('alive');
     expect(r.verdict().reason).toBe('群れが残った(3 年平均): deer 10.0');
+    // referenceSize 4 の def を size 4 で回しているので areaScale は 1
   });
   it('直近の平均が低ければ dead', () => {
     const totals = { deer: 10 };
@@ -89,6 +90,6 @@ describe('species_mean (runner)', () => {
     for (let y = 0; y <= 4; y++) { if (y >= 2) totals.deer = y === 4 ? 12 : 0; r.update(w.snapshot()); w.step(360); }
     // 直近 3 年 (0, 0, 12) 平均 4 < 5
     expect(r.verdict().status).toBe('dead');
-    expect(r.verdict().reason).toContain('群れが小さい(3 年平均): deer 4.0 (< 5)');
+    expect(r.verdict().reason).toContain('群れが小さい(3 年平均): deer 4.0 (< 5.0)');
   });
 });
