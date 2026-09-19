@@ -377,7 +377,7 @@ hud.showCell(cellIndex: number | null): void
 | 節目が到達で消え、警告が出て、内訳が表示される | `tests/e2e/smoke.spec.ts` · 8c32ebc |
 | `species_mean` の平均判定と履歴 | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.runner.test.ts` · af130f8 |
 | 沈む欠片: 放置と素朴 3 戦略は dead、想定解 2 通りは alive、他 4 本は引き続き通る | `tests/slow/scenarios.playthrough.test.ts` · af130f8(15 件通過) |
-| 手動プレイ 3 回の記録(M6-05) | `docs/specs/plans/2026-09-19-m6-playtest.md` |
+| 手動プレイ 3 回の記録(M6-05)、スライダー同期と凡例の数字 | `docs/specs/plans/2026-09-19-m6-playtest.md`、`tests/e2e/smoke.spec.ts` · 2608ae3 |
 
 ### M4: シナリオ層の基盤
 
