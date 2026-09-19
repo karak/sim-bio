@@ -1,7 +1,7 @@
 ---
 id: M1-16
 title: README と受入証跡
-status: todo
+status: in_progress
 milestone: M1
 plan: docs/specs/plans/2026-09-19-m1-implementation-plan.md#task-16-readme-と受入証跡
 depends_on: [M1-15]

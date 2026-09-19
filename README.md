@@ -30,7 +30,19 @@
 | `tests/unit/` | 単体テスト（主に `src/simulation/`） |
 | `tests/integration/` | シミュレーション + 描画の結合テスト |
 | `tests/e2e/` | ブラウザ E2E テスト |
-| `tools/` | 素材変換・データ生成などのスクリプト |
+| `tools/` | チケット一覧・状態更新などのスクリプト |
+| `issues/` | チケット(Markdown + frontmatter で状態管理) |
+
+## 開発
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm run check      # tsc + eslint + vitest
+npm run test:e2e   # Playwright スモーク (初回は npx playwright install chromium)
+```
+
+チケットは `issues/` で管理する(`tools/issues.sh` で一覧)。設計書は `docs/specs/`、実装計画は `docs/specs/plans/`。
 
 ## 設計方針（暫定）
 
