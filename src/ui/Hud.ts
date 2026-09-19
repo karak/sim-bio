@@ -27,6 +27,10 @@ export type Hud = {
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
+/** セル時系列: サンプリング間隔 (tick)、保持年数、平均を取る半径 */
+const LOCAL_SAMPLE_TICKS = 10;
+const LOCAL_YEARS = 5;
+const LOCAL_RADIUS = 3;
 const SPEEDS: Speed[] = [0, 1, 10, 100];
 const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] = [
   { id: 'terrain', label: '地形' },
@@ -67,7 +71,11 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
-  <div class="hud hud-bl" id="cell-panel" hidden></div>`,
+  <div class="hud hud-bl" id="cell-panel" hidden>
+    <div id="cell-info"></div>
+    <div class="dim" style="margin-top:6px">周辺 (半径 ${LOCAL_RADIUS}) の密度 · 直近 ${LOCAL_YEARS} 年</div>
+    <canvas id="local-graph" width="480" height="160"></canvas>
+  </div>`,
   );
   const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
     const el = root.querySelector<T>('#' + id);
@@ -76,6 +84,9 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   };
 
   const ts = new TimeSeries(500);
+  const local = new TimeSeries((LOCAL_YEARS * 360) / LOCAL_SAMPLE_TICKS);
+  let localCell: number | null = null;
+  let localLastTick = -1;
   const markers: GraphMarker[] = [];
   let lines: GraphLine[] = [];
   let lastYear = -1;
@@ -147,6 +158,33 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2d context unavailable');
   const redraw = () => drawGraph(ctx, ts, lines, markers, canvas.width, canvas.height);
+  const localCanvas = $<HTMLCanvasElement>('local-graph');
+  const localCtx = localCanvas.getContext('2d');
+  if (!localCtx) throw new Error('2d context unavailable');
+  const redrawLocal = () =>
+    drawGraph(localCtx, local, lines.filter((l) => l.axis !== 'right'), [], localCanvas.width, localCanvas.height);
+
+  /** 選択セル周辺の種ごとの平均密度 */
+  const localDensities = (cell: number, s: WorldSnapshot): Record<string, number> => {
+    const x0 = cell % s.size;
+    const y0 = (cell - x0) / s.size;
+    const out: Record<string, number> = {};
+    let count = 0;
+    for (const d of s.species) out[d.id] = 0;
+    for (let dy = -LOCAL_RADIUS; dy <= LOCAL_RADIUS; dy++) {
+      for (let dx = -LOCAL_RADIUS; dx <= LOCAL_RADIUS; dx++) {
+        const x = x0 + dx;
+        const y = y0 + dy;
+        if (x < 0 || y < 0 || x >= s.size || y >= s.size || dx * dx + dy * dy > LOCAL_RADIUS * LOCAL_RADIUS) continue;
+        const i = y * s.size + x;
+        if (s.layers.elevation[i] < SEA_LEVEL) continue;
+        count++;
+        for (const d of s.species) out[d.id] += s.layers.populations[d.id][i];
+      }
+    }
+    if (count) for (const k of Object.keys(out)) out[k] /= count;
+    return out;
+  };
 
   const ensureSpecies = (s: WorldSnapshot) => {
     if (lines.length === s.species.length + 1) return;
@@ -188,6 +226,11 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
 
   const update = (s: WorldSnapshot) => {
     ensureSpecies(s);
+    if (localCell !== null && s.tick % LOCAL_SAMPLE_TICKS === 0 && s.tick !== localLastTick) {
+      localLastTick = s.tick;
+      local.push(s.tick / 360, localDensities(localCell, s));
+      redrawLocal();
+    }
     $('hud-year').textContent = `Year ${s.year}`;
     $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
     if (s.year !== lastYear) {
@@ -203,14 +246,22 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const p = $('cell-panel');
     if (cell === null) {
       p.hidden = true;
+      localCell = null;
       return;
+    }
+    if (cell !== localCell) {
+      localCell = cell;
+      localLastTick = -1;
+      local.clear();
+      local.push(s.tick / 360, localDensities(cell, s));
+      redrawLocal();
     }
     const x = cell % s.size;
     const y = (cell - x) / s.size;
     const L = s.layers;
     const sea = L.elevation[cell] < SEA_LEVEL;
     p.hidden = false;
-    p.innerHTML =
+    $('cell-info').innerHTML =
       `<div class="mono">セル (${x}, ${y})${sea ? ' · 海' : ''}</div>` +
       `<div><span>標高</span><span class="mono">${Math.round(L.elevation[cell] * 1000)} m</span></div>` +
       `<div><span>気温 / 水分</span><span class="mono">${L.temperature[cell].toFixed(1)}℃ / ${L.moisture[cell].toFixed(2)}</span></div>` +

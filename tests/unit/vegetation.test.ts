@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stepVegetation, suitability, sumVegetation } from '../../src/simulation/vegetation';
+import { GRAZED_RECOVERY_PER_TICK, stepVegetation, suitability, sumVegetation } from '../../src/simulation/vegetation';
 import type { SpeciesDef } from '../../src/simulation/types';
 
 const grass: SpeciesDef = {
@@ -59,5 +59,22 @@ describe('stepVegetation', () => {
     const out = new Float32Array(1);
     sumVegetation(p, [grass, forest], out);
     expect(out[0]).toBeCloseTo(p.grass[0] + p.forest[0], 6);
+  });
+  it('grazed cell regrows slower and recovers after the delay', () => {
+    // 2×2 グリッド。セル 0 だけ grazed=1、拡散は 0
+    const n = 4;
+    const e = { ...env(n), grazed: new Float32Array([1, 0, 0, 0]) };
+    const p = { grass: new Float32Array(n).fill(0.2) };
+    const s = new Float32Array(n);
+    const sp = [{ ...grass, diffusion: 0 }];
+    stepVegetation(p, s, e, sp, 2);
+    expect(p.grass[0]).toBeLessThan(p.grass[1]);
+    expect(e.grazed[0]).toBeCloseTo(1 - GRAZED_RECOVERY_PER_TICK, 6);
+    for (let k = 0; k < 40; k++) stepVegetation(p, s, e, sp, 2);
+    expect(e.grazed[0]).toBe(0);
+    // 遅れが消えた後は、同じ密度から同じだけ成長する
+    p.grass.fill(0.3);
+    stepVegetation(p, s, e, sp, 2);
+    expect(p.grass[0]).toBeCloseTo(p.grass[1], 9);
   });
 });

@@ -31,3 +31,14 @@ test('species palette: pick a species and click the island to spawn it', async (
     .toBeGreaterThan(0);
   expect(logs.filter((l) => l.includes('"event":"cmd.rejected"'))).toHaveLength(0);
 });
+
+test('clicking the island opens the cell panel with a local time series', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cell-panel')).toBeHidden();
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#cell-panel')).toBeVisible();
+  await expect(page.locator('#local-graph')).toBeVisible();
+  await expect(page.locator('#cell-info')).toContainText('セル (');
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stepPopulations } from '../../src/simulation/populations';
+import { functionalResponse, stepPopulations } from '../../src/simulation/populations';
 import type { SpeciesDef } from '../../src/simulation/types';
 
 const deer: SpeciesDef = {
@@ -10,6 +10,18 @@ const env = (n: number) => ({
   elevation: new Float32Array(n).fill(0.5),
   temperature: new Float32Array(n).fill(15),
   moisture: new Float32Array(n).fill(0.5),
+});
+
+describe('functionalResponse', () => {
+  it('is linear with handlingTime 0 and saturates otherwise', () => {
+    expect(functionalResponse(0.1, 0, 0.5)).toBeCloseTo(0.05, 9);
+    expect(functionalResponse(0.1, 20, 0.5)).toBeLessThan(0.05);
+    // 飽和: 餌が 10 倍でも摂食率は 10 倍にならない
+    const lo = functionalResponse(0.1, 20, 0.1);
+    const hi = functionalResponse(0.1, 20, 1.0);
+    expect(hi / lo).toBeLessThan(5);
+    expect(hi).toBeLessThan(1 / 20);
+  });
 });
 
 describe('stepPopulations', () => {
@@ -47,5 +59,16 @@ describe('stepPopulations', () => {
     stepPopulations(pops, s, env(n), [wolf, deer], 1);
     expect(pops.deer[0]).toBeLessThan(0.5 + 0.06);
     expect(pops.wolf[0]).toBeGreaterThan(0.3);
+  });
+  it('herbivores accumulate grazed on the cell, carnivores do not', () => {
+    const wolf: SpeciesDef = { ...deer, id: 'wolf', trophic: 'carnivore', eats: ['deer'], predation: 0.5, growthRate: 0.8, assetId: 'wolf' };
+    const e = { ...env(1), grazed: new Float32Array(1) };
+    const pops = { grass: new Float32Array([0.8]), deer: new Float32Array([0.5]), wolf: new Float32Array([0.3]) };
+    const s = new Float32Array(1);
+    stepPopulations(pops, s, e, [deer], 1);
+    const afterDeer = e.grazed[0];
+    expect(afterDeer).toBeGreaterThan(0);
+    stepPopulations(pops, s, e, [wolf], 1);
+    expect(e.grazed[0]).toBe(afterDeer);
   });
 });

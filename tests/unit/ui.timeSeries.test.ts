@@ -19,4 +19,12 @@ describe('TimeSeries', () => {
     expect(t.latest('zzz')).toBeUndefined();
     expect(new TimeSeries(2).xRange()).toEqual([0, 0]);
   });
+  it('clear empties everything', () => {
+    const t = new TimeSeries(3);
+    t.push(0, { a: 1 });
+    t.clear();
+    expect(t.length).toBe(0);
+    expect(t.keys()).toEqual([]);
+    expect(t.xRange()).toEqual([0, 0]);
+  });
 });

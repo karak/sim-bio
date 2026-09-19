@@ -18,6 +18,8 @@ export type SpeciesDef = {
   eats?: string[];
   /** 餌に対する 1 tick あたりの捕食率 (動物のみ) */
   predation?: number;
+  /** 餌 1 単位の処理時間 (動物のみ、省略時 0 = 線形応答)。大きいほど摂食が飽和し、振動が出やすい (Holling II 型) */
+  handlingTime?: number;
   /** create 時に陸の全セルへ与える初期密度。省略時は植物 0.05、動物 0 */
   initialDensity?: number;
   /** SceneView の AssetTable のキー */
@@ -85,5 +87,7 @@ export type SaveData = {
   elevation: number[];
   moistureBase: number[];
   heat: number[];
+  /** M3 で追加。古いセーブには無い */
+  grazed?: number[];
   populations: Record<string, number[]>;
 };

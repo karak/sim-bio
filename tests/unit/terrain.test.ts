@@ -40,4 +40,54 @@ describe('generateTerrain', () => {
     expect(land / (n * n)).toBeGreaterThan(0.2);
     expect(land / (n * n)).toBeLessThan(0.8);
   });
+
+  it('moisture on land is a mosaic: >=15% dry (<0.45) and >=15% wet (>=0.6)', () => {
+    const n = 128;
+    const { elevation, moistureBase } = generateTerrain(42, n);
+    let land = 0;
+    let dry = 0;
+    let wet = 0;
+    for (let i = 0; i < n * n; i++) {
+      if (elevation[i] < SEA_LEVEL) continue;
+      land++;
+      if (moistureBase[i] < 0.45) dry++;
+      if (moistureBase[i] >= 0.6) wet++;
+    }
+    expect(dry / land).toBeGreaterThanOrEqual(0.15);
+    expect(wet / land).toBeGreaterThanOrEqual(0.15);
+  });
+
+  it('has at least one lake (water not connected to the border)', () => {
+    const n = 64;
+    const { elevation } = generateTerrain(42, n);
+    const water = (i: number) => elevation[i] < SEA_LEVEL;
+    const seen = new Uint8Array(n * n);
+    const q: number[] = [];
+    for (let k = 0; k < n; k++) {
+      for (const i of [k, (n - 1) * n + k, k * n, k * n + n - 1]) {
+        if (water(i) && !seen[i]) {
+          seen[i] = 1;
+          q.push(i);
+        }
+      }
+    }
+    while (q.length) {
+      const i = q.pop() as number;
+      const x = i % n;
+      const y = (i - x) / n;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+        const j = ny * n + nx;
+        if (water(j) && !seen[j]) {
+          seen[j] = 1;
+          q.push(j);
+        }
+      }
+    }
+    let lake = 0;
+    for (let i = 0; i < n * n; i++) if (water(i) && !seen[i]) lake++;
+    expect(lake).toBeGreaterThan(0);
+  });
 });

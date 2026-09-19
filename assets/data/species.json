@@ -41,9 +41,9 @@
     "id": "deer",
     "name": "鹿",
     "trophic": "herbivore",
-    "growthRate": 2.5,
+    "growthRate": 3.5,
     "mortality": 0.02,
-    "predation": 0.04,
+    "predation": 0.05,
     "tempRange": [
       0,
       30
@@ -59,7 +59,8 @@
     ],
     "assetId": "deer",
     "color": "#E2B45A",
-    "initialDensity": 0.02
+    "initialDensity": 0.02,
+    "handlingTime": 8
   },
   {
     "id": "rabbit",
@@ -82,7 +83,8 @@
     ],
     "assetId": "rabbit",
     "color": "#D6C27A",
-    "initialDensity": 0.02
+    "initialDensity": 0.02,
+    "handlingTime": 8
   },
   {
     "id": "wolf",
@@ -90,7 +92,7 @@
     "trophic": "carnivore",
     "growthRate": 0.8,
     "mortality": 0.015,
-    "predation": 0.3,
+    "predation": 0.6,
     "tempRange": [
       -10,
       25
@@ -106,6 +108,7 @@
     ],
     "assetId": "wolf",
     "color": "#E07A55",
-    "initialDensity": 0.01
+    "initialDensity": 0.01,
+    "handlingTime": 20
   }
 ]

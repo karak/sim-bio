@@ -9,7 +9,9 @@ describe('World save/restore', () => {
     a.step(400);
     a.dispatch({ type: 'set_climate', tempOffset: 2 });
     a.step(10);
-    const json = JSON.stringify(a.serialize());
+    const save = a.serialize();
+    expect(save.grazed).toHaveLength(32 * 32);
+    const json = JSON.stringify(save);
     const b = World.restore(JSON.parse(json), { log: createMemorySink() });
     expect(Array.from(b.snapshot().layers.vegetation)).toEqual(Array.from(a.snapshot().layers.vegetation));
     expect(b.snapshot().tick).toBe(a.snapshot().tick);

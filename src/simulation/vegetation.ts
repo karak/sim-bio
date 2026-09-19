@@ -28,13 +28,22 @@ export function sumVegetation(pops: Record<string, Float32Array>, plants: Specie
   }
 }
 
-export type VegetationEnv = { elevation: Float32Array; temperature: Float32Array; moisture: Float32Array };
+export type VegetationEnv = {
+  elevation: Float32Array;
+  temperature: Float32Array;
+  moisture: Float32Array;
+  /** 被食による回復遅れ [0,1]。1 なら成長 0。省略時は遅れなし */
+  grazed?: Float32Array;
+};
+
+/** grazed が 1 tick に減る量 (= 1/回復日数)。NetLogo Wolf-Sheep の grass-regrowth-time に相当 */
+export const GRAZED_RECOVERY_PER_TICK = 1 / 30;
 
 /**
  * 1 tick 分の植生更新。
- * p' = p + r·f·p·(1 − total) − m·(2 − f)·p (基礎死亡 m に不適合分 m·(1−f) を加算)、
+ * p' = p + r·f·(1 − grazed)·p·(1 − total) − m·(2 − f)·p (基礎死亡 m に不適合分 m·(1−f) を加算)、
  * その後 4 近傍への拡散。海は常に 0。全種の合計が 1 を超えたら比例で縮める。
- * 適合 f=1 での平衡密度は 1 − m/r。
+ * 適合 f=1・grazed=0 での平衡密度は 1 − m/r。grazed は毎 tick GRAZED_RECOVERY_PER_TICK ずつ回復する。
  */
 export function stepVegetation(
   pops: Record<string, Float32Array>,
@@ -46,6 +55,7 @@ export function stepVegetation(
   const n = size * size;
   const total = new Float32Array(n);
   sumVegetation(pops, plants, total);
+  const grazed = env.grazed;
   for (const d of plants) {
     const p = pops[d.id];
     for (let i = 0; i < n; i++) {
@@ -55,7 +65,8 @@ export function stepVegetation(
       }
       const f = suitability(d, env.temperature[i], env.moisture[i]);
       const v = p[i];
-      scratch[i] = v + d.growthRate * f * v * (1 - total[i]) - d.mortality * (2 - f) * v;
+      const regrowth = grazed ? 1 - grazed[i] : 1;
+      scratch[i] = v + d.growthRate * f * regrowth * v * (1 - total[i]) - d.mortality * (2 - f) * v;
     }
     for (let i = 0; i < n; i++) {
       if (env.elevation[i] < SEA_LEVEL) {
@@ -73,6 +84,12 @@ export function stepVegetation(
       const mean = c ? sum / c : scratch[i];
       const v = scratch[i] + d.diffusion * (mean - scratch[i]);
       p[i] = v < MIN_DENSITY ? 0 : v > 1 ? 1 : v;
+    }
+  }
+  if (grazed) {
+    for (let i = 0; i < n; i++) {
+      const g = grazed[i] - GRAZED_RECOVERY_PER_TICK;
+      grazed[i] = g < 0 ? 0 : g;
     }
   }
   // 容量 1 を全種で共有する。超えた分は比例で縮める
