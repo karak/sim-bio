@@ -31,3 +31,6 @@ assets/**/*.aseprite
 # Playwright
 playwright-report/
 test-results/
+
+# 他エージェントの worktree
+.claude/worktrees/

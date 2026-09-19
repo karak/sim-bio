@@ -1,7 +1,7 @@
 # 生態系シミュレーション 設計書
 
 - 作成日: 2026-09-19
-- 状態: M1・M2・M3 実装完了(2026-09-19)
+- 状態: M1〜M4 実装完了(2026-09-19)
 - 対象: M1(地形 + 植物 + 季節 + グラフ)と M2(3 階層 + 種を放つ)
 
 ## 1. コンセプト
@@ -276,6 +276,18 @@ hud.showCell(cellIndex: number | null): void
 - Hud: セルをクリックすると周辺(半径 3)の種密度の時系列(10 tick ごと、直近 5 年)を 2 本目のグラフに出す。合計で相殺される局所の波を見せるため。
 - デフォルトの種パラメータ: 鹿 growthRate 3.5 / predation 0.05 / handlingTime 8、ウサギ handlingTime 8、狼 predation 0.6 / handlingTime 20。シード 42・7・3 で 100 年共存し、草・鹿・ウサギ・狼が周期 5〜8 年で振動する。
 
+### 4.10 実装時の差分(M4: シナリオ層の基盤)
+
+企画素材 `docs/design/2026-09-19-scenarios-and-world.md` の §5「最初の一歩」を実装した。
+
+- `src/scenario/`: 予言の定義 `ScenarioDef`(開始状態、予定コマンド、年数、alive / dead 条件)、判定の純粋関数 `judgeScenario`、実行役 `ScenarioRunner`(予定コマンドの発火、年次判定、介入回数)。条件は `species_alive` / `species_extinct` / `land_ratio` / `vegetation_ratio` / `total_ratio_vs_start` / `year_reached` / `no_intervention` / `all` / `any`。
+- `Command` に `sink`(島全体の標高を下げる)を追加。滅びの進行はすべて予定コマンドで表す。
+- `dead` は省略可。省略時は予言の年に `alive` を満たすかだけで決まる。途中の絶滅を即死にしないのは、種を放つ力(再生)を使う遊びを許すため。
+- 予定コマンドの `cell: -1` は島の中心、`radius` は `referenceSize`(既定 128)基準でグリッドサイズに比例させる。`baselineYear` で `total_ratio_vs_start` の基準年を遅らせられる。
+- UI: 石板(`src/ui/Tablet.ts`)。`?scenario=<id>` で選ぶ。予言、残り年数、勝敗オーバーレイ。シナリオ中の読込は無効。
+- `assets/data/scenarios.json` の 4 本(沈む欠片、星が落ちる夜、火の山の目覚め、豊かさの罠)+ テスト用 `test-quick`。
+- 校正: `tests/slow/scenarios.playthrough.test.ts` で「放置 → 滅び」「台本介入 → 回避」を size 64 で固定(`npm run test:slow`、約 4 分)。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -303,6 +315,16 @@ hud.showCell(cellIndex: number | null): void
 | `TimeSeries` が上限で古い点を捨てる | `tests/unit/ui.timeSeries.test.ts` · fe329b9 |
 | ブラウザで島が表示され、1 年進めるとグラフに値が出る | `tests/e2e/smoke.spec.ts` · 3598752 |
 | ESLint と `tsc --noEmit` が通る | `npm run check` · c7ebc5c(52 テスト通過を 3598752 時点で確認) |
+
+### M4: シナリオ層の基盤
+
+| 受入項目 | 証跡 |
+|---|---|
+| 判定条件が期待どおり真偽を返す | `tests/unit/scenario.judge.test.ts` |
+| 予定コマンドが指定年に 1 回発火し、介入が数えられる | `tests/unit/scenario.runner.test.ts` |
+| `sink` で陸地率が下がり、海になったセルの植物が 0 | `tests/unit/world.commands.test.ts` |
+| 石板に予言が出て年が進む、勝敗オーバーレイが出て時計が止まる、自由モードでは予言が出ない | `tests/e2e/smoke.spec.ts` |
+| 4 本とも放置で滅び、台本介入で回避できる。豊かさの罠は雨 1.9 倍で狼が絶滅する | `tests/slow/scenarios.playthrough.test.ts` |
 
 ### M3: 振動と舞台
 

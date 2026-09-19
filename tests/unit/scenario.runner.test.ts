@@ -16,7 +16,7 @@ const fakeWorld = (totals: Record<string, number>) => {
   return { dispatch: (c: Command) => cmds.push(c), snapshot, step: (t: number) => { tick += t; }, cmds };
 };
 const def: ScenarioDef = {
-  id: 't', title: 't', prophecy: 'p', kind: 'endure', years: 5,
+  id: 't', title: 't', prophecy: 'p', kind: 'endure', years: 5, referenceSize: 4,
   schedule: [
     { atYear: 2, command: { type: 'disaster', kind: 'meteor', cell: -1, radius: 1 } },
     { atYear: 1, everyYears: 1, untilYear: 3, command: { type: 'sink', amount: 0.01 } },
