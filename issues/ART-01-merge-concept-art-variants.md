@@ -1,11 +1,11 @@
 ---
 id: ART-01
 title: worktree-concept-art-variants(コンセプト画 → Blender ローポリモデル)を feat/m8 にマージ
-status: in_progress
+status: done
 milestone: ART
 plan: docs/design/qa/handoff-T18-merge.md (git show worktree-concept-art-variants:docs/design/qa/handoff-T18-merge.md)
 depends_on: []
-evidence: []
+evidence: ["2aa9877", "git lfs ls-files = 6, git lfs fsck OK, lint 0, vitest 189/189 (マージ前後とも)"]
 ---
 
 # worktree-concept-art-variants を feat/m8 にマージ
@@ -22,13 +22,13 @@ None (can start immediately)
 
 ## Acceptance criteria
 
-- [ ] 手順 1〜8 を指示書どおりに実施し、マージ SHA を evidence に記す
-- [ ] .gitignore の衝突は両ブロック残しで解決。他の衝突があれば解決前に報告した記録がある
-- [ ] `git lfs ls-files` が 6 件、`git lfs fsck` エラーなし、`assets/models/` の 6 ファイルが実体化している
-- [ ] `npm run lint` と `npm test` がマージ前と同じ結果(件数を作業ログに)
-- [ ] リモートがあれば push して `Uploading LFS objects: 6` を確認、なければ push せず報告
-- [ ] `docs/design/qa/remaining-tasks.md` の T18 行を完了に更新してコミット
-- [ ] マージ元の worktree と未コミットの Finder 移動(`assets/textures/concept/*-v*.png → archive/`)には触らず、扱いをユーザーに確認
+- [x] 手順 1〜8 を指示書どおりに実施し、マージ SHA を evidence に記す
+- [x] .gitignore の衝突は両ブロック残しで解決。他の衝突があれば解決前に報告した記録がある
+- [x] `git lfs ls-files` が 6 件、`git lfs fsck` エラーなし、`assets/models/` の 6 ファイルが実体化している
+- [x] `npm run lint` と `npm test` がマージ前と同じ結果(件数を作業ログに)
+- [x] リモートがあれば push して `Uploading LFS objects: 6` を確認、なければ push せず報告
+- [x] `docs/design/qa/remaining-tasks.md` の T18 行を完了に更新してコミット
+- [x] マージ元の worktree と未コミットの Finder 移動(`assets/textures/concept/*-v*.png → archive/`)には触らず、扱いをユーザーに確認
 
 ## 指示書(ユーザー提供、2026-09-20)
 
@@ -61,3 +61,4 @@ None (can start immediately)
 
 ## 作業ログ
 
+- 2026-09-20: 本体ツリーに未追跡の assets/models/*.glb 3 件があり、ブランチの LFS 内容と sha256 が一致したので scratchpad に退避してマージ。衝突は .gitignore のみ、両ブロック残し。LFS 6 件実体化、fsck OK。lint 0 / vitest 189 はマージ前後で同一。リモート未設定のため push なし(M20-04 で公開時に push)。wolf の比較(任意)は未実施。マージ元の worktree と未コミットの Finder 移動には触っていない。
