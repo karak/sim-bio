@@ -2,16 +2,17 @@
   "camera": {
     "azimuth_deg": 135.0,
     "elevation_deg": 10.0,
-    "distance_m": 3.6514
+    "distance_m": 3.638,
+    "projection": "ortho"
   },
-  "faces": 918,
-  "tris": 1837,
+  "faces": 1358,
+  "tris": 2805,
   "parts": {
     "fur": {
       "fraction": {
         "ref": 0.6116,
-        "model": 0.5679,
-        "diff": -0.0438
+        "model": 0.6179,
+        "diff": 0.0063
       },
       "centroid": {
         "ref": [
@@ -19,12 +20,12 @@
           0.6402
         ],
         "model": [
-          0.5024,
-          0.6279
+          0.4963,
+          0.6348
         ],
-        "dist": 0.0159
+        "dist": 0.0067
       },
-      "mask_iou": 0.418,
+      "mask_iou": 0.7238,
       "color": {
         "ref_mean_rgb": [
           190,
@@ -36,20 +37,20 @@
           141,
           69
         ],
-        "delta_e76": 0.392,
+        "delta_e76": 0.1986,
         "material_rgb": [
-          202,
-          150,
-          74
+          206,
+          153,
+          75
         ],
-        "delta_e_material": 4.131
+        "delta_e_material": 5.6579
       }
     },
     "dark": {
       "fraction": {
         "ref": 0.1925,
-        "model": 0.2227,
-        "diff": 0.0302
+        "model": 0.1996,
+        "diff": 0.0072
       },
       "centroid": {
         "ref": [
@@ -57,12 +58,12 @@
           0.6038
         ],
         "model": [
-          0.4939,
-          0.6296
+          0.4788,
+          0.5893
         ],
-        "dist": 0.0319
+        "dist": 0.0149
       },
-      "mask_iou": 0.3114,
+      "mask_iou": 0.5243,
       "color": {
         "ref_mean_rgb": [
           46,
@@ -71,23 +72,23 @@
         ],
         "model_mean_rgb": [
           46,
-          96,
+          97,
           91
         ],
-        "delta_e76": 0.2946,
+        "delta_e76": 0.6134,
         "material_rgb": [
-          46,
-          101,
+          47,
+          102,
           97
         ],
-        "delta_e_material": 2.4322
+        "delta_e_material": 2.7473
       }
     },
     "glow": {
       "fraction": {
         "ref": 0.1959,
-        "model": 0.2095,
-        "diff": 0.0136
+        "model": 0.1825,
+        "diff": -0.0135
       },
       "centroid": {
         "ref": [
@@ -95,12 +96,12 @@
           0.2594
         ],
         "model": [
-          0.5113,
-          0.2383
+          0.5109,
+          0.2209
         ],
-        "dist": 0.0221
+        "dist": 0.039
       },
-      "mask_iou": 0.2121,
+      "mask_iou": 0.3929,
       "color": {
         "ref_mean_rgb": [
           166,
@@ -109,31 +110,31 @@
         ],
         "model_mean_rgb": [
           166,
-          250,
-          242
+          251,
+          240
         ],
-        "delta_e76": 0.8731,
+        "delta_e76": 0.4077,
         "material_rgb": [
           151,
-          249,
-          225
+          247,
+          224
         ],
-        "delta_e_material": 8.7081
+        "delta_e_material": 8.0936
       }
     }
   },
   "pixel_color": {
-    "overlap_pixels": 17693,
-    "mean_delta_e": 21.3432,
-    "median_delta_e": 11.894,
-    "p90_delta_e": 62.9153,
-    "fraction_delta_e_over_20": 0.285
+    "overlap_pixels": 23109,
+    "mean_delta_e": 15.5689,
+    "median_delta_e": 10.6315,
+    "p90_delta_e": 38.0039,
+    "fraction_delta_e_over_20": 0.1705
   },
   "silhouette": {
-    "iou": 0.4876,
+    "iou": 0.7286,
     "aspect": {
       "ref": 0.517,
-      "model": 0.4852
+      "model": 0.5262
     }
   }
 }

@@ -198,10 +198,8 @@ class Kit:
                 best = (loc, normal.normalized())
         return best
 
-    def at_ref(self, fx, fy, objs=None, mirror=False, center=False):
-        """参照画像の正規化座標 (fx, fy) をカメラ越しにモデル表面へ投影する。
-        mirror=True で反対側 (x 反転) の対応点、center=True で x=0 の正中線上 (正面から後方へ撃ち直す)"""
-        objs = objs or self.base_parts
+    def ray_of(self, fx, fy):
+        """参照画像の正規化座標 (fx, fy) を通る視線 (origin, dir)"""
         ix = (self.x0 + self.x1) / 2 + fx * self.h
         iy = self.y1 - fy * self.h
         p_local = self.bl + (self.br - self.bl) * ix + (self.tl - self.bl) * iy
@@ -209,10 +207,60 @@ class Kit:
         if self.ortho:
             # 平行投影: 視線はすべてカメラの -Z 方向。原点は画枠上の点をカメラ側へ戻した位置
             d = (self.ref_cam.matrix_world.to_3x3() @ Vector((0, 0, -1))).normalized()
-            origin = p_world - d * 10.0
-        else:
-            origin = self.ref_cam.matrix_world.translation
-            d = (p_world - origin).normalized()
+            return p_world - d * 10.0, d
+        origin = self.ref_cam.matrix_world.translation
+        return origin, (p_world - origin).normalized()
+
+    def cut_along(self, obj, polys, margin=0.03):
+        """参照座標の多角形の辺に沿ってオブジェクトの面を切る (面単位の塗り分けの境界を直線にする)。
+        各辺を通る視線 2 本が張る平面で、その辺 (線分) から margin 以内に投影される面だけを bisect する
+        (平面は無限に延びるので、線分から離れた面まで切ると三角形数が増える)。
+        奥側 (+X) は x を反転した平面で切り、左右対称にする。切った後に paint で塗る前提"""
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        mw = obj.matrix_world
+        cuts = 0
+
+        def seg_dist(p, a, b):
+            ax, ay = a
+            bx, by = b
+            vx, vy = bx - ax, by - ay
+            t = max(0.0, min(1.0, ((p[0] - ax) * vx + (p[1] - ay) * vy) / max(vx * vx + vy * vy, 1e-9)))
+            return math.hypot(p[0] - ax - t * vx, p[1] - ay - t * vy)
+
+        for poly in polys:
+            for a, b in zip(poly, poly[1:] + poly[:1]):
+                oa, da = self.ray_of(*a)
+                ob, _ = self.ray_of(*b)
+                no = da.cross(ob - oa).normalized()
+                for sgn in (-1, 1):  # -1: 手前 (-X)、+1: 奥 (+X、鏡像の平面)
+                    co = Vector((sgn * -oa.x, oa.y, oa.z)) if sgn > 0 else oa
+                    n = Vector((-no.x, no.y, no.z)) if sgn > 0 else no
+                    faces = []
+                    for f in bm.faces:
+                        c = mw @ f.calc_center_median()
+                        if (c.x < 0) != (sgn < 0):
+                            continue
+                        fr = self.frame_of(Vector((-abs(c.x), c.y, c.z)))
+                        if seg_dist(fr, a, b) <= margin:
+                            faces.append(f)
+                    if not faces:
+                        continue
+                    edges = {e for f in faces for e in f.edges}
+                    verts = {v for f in faces for v in f.verts}
+                    r = bmesh.ops.bisect_plane(bm, geom=list(verts) + list(edges) + faces, dist=0.0005, plane_co=mw.inverted() @ co,
+                                               plane_no=(mw.inverted().to_3x3() @ n).normalized(), clear_inner=False, clear_outer=False)
+                    cuts += len(r["geom_cut"])
+        bm.to_mesh(obj.data)
+        bm.free()
+        obj.data.update()
+        return cuts
+
+    def at_ref(self, fx, fy, objs=None, mirror=False, center=False):
+        """参照画像の正規化座標 (fx, fy) をカメラ越しにモデル表面へ投影する。
+        mirror=True で反対側 (x 反転) の対応点、center=True で x=0 の正中線上 (正面から後方へ撃ち直す)"""
+        objs = objs or self.base_parts
+        origin, d = self.ray_of(fx, fy)
         best = self._cast(objs, origin, d)
         if best is None:
             # 参照の輪郭がモデルより外側にある点: 枠の中心 (0, 0.5) へ 0.01 ずつ寄せて当たる所に置く

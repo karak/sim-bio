@@ -2,57 +2,29 @@
   {
     "iter": 0,
     "colors": {
-      "fur": "#CC9C4C",
-      "dark": "#2C645C",
-      "teal": "#2C645C",
-      "glow": "#A4FCF4"
-    },
-    "delta_e76": {
-      "fur": 2.5395,
-      "dark": 2.4882,
-      "glow": 6.4611
-    }
-  },
-  {
-    "iter": 1,
-    "colors": {
-      "fur": "#CB974A",
-      "dark": "#2D6460",
-      "teal": "#2D6460",
-      "glow": "#97FBEB"
-    },
-    "delta_e76": {
-      "fur": 0.2232,
-      "dark": 0.1854,
-      "glow": 3.1372
-    }
-  },
-  {
-    "iter": 2,
-    "colors": {
-      "fur": "#CA964A",
-      "dark": "#2E6560",
-      "teal": "#2E6560",
-      "glow": "#97FAE5"
-    },
-    "delta_e76": {
-      "fur": 0.3922,
-      "dark": 0.7205,
-      "glow": 1.8698
-    }
-  },
-  {
-    "iter": 3,
-    "colors": {
       "fur": "#CA964A",
       "dark": "#2E6561",
       "teal": "#2E6561",
       "glow": "#97F9E1"
     },
     "delta_e76": {
-      "fur": 0.392,
-      "dark": 0.2946,
-      "glow": 0.8731
+      "fur": 1.4415,
+      "dark": 0.2535,
+      "glow": 0.5811
+    }
+  },
+  {
+    "iter": 1,
+    "colors": {
+      "fur": "#CE994B",
+      "dark": "#2F6661",
+      "teal": "#2F6661",
+      "glow": "#97F7E0"
+    },
+    "delta_e76": {
+      "fur": 0.1902,
+      "dark": 0.5463,
+      "glow": 0.404
     }
   }
 ]
