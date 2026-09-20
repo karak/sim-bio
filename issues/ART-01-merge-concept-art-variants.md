@@ -1,7 +1,7 @@
 ---
 id: ART-01
 title: worktree-concept-art-variants(コンセプト画 → Blender ローポリモデル)を feat/m8 にマージ
-status: todo
+status: in_progress
 milestone: ART
 plan: docs/design/qa/handoff-T18-merge.md (git show worktree-concept-art-variants:docs/design/qa/handoff-T18-merge.md)
 depends_on: []
