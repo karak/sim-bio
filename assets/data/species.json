@@ -132,5 +132,30 @@
     "assetId": "moss",
     "color": "#8FD3C4",
     "initialDensity": 0.05
+  },
+  {
+    "id": "firelizard",
+    "name": "炎蜥蜴",
+    "trophic": "carnivore",
+    "growthRate": 6,
+    "mortality": 0.005,
+    "predation": 1,
+    "tempRange": [
+      30,
+      80
+    ],
+    "moistureRange": [
+      0,
+      1
+    ],
+    "diffusion": 0.15,
+    "eats": [
+      "deer"
+    ],
+    "assetId": "firelizard",
+    "color": "#FF6A3D",
+    "initialDensity": 0.002,
+    "handlingTime": 3,
+    "spawnable": false
   }
 ]

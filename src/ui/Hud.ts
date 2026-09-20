@@ -247,10 +247,12 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
         setLayerModeUI();
       });
     }
-    $('spawn-row').innerHTML = s.species
+    // spawnable: false の種 (M8-09: 炎蜥蜴) は放流チップを出さない。凡例・住みやすさレイヤーには出る (上のループ)
+    const spawnableSpecies = s.species.filter((d) => d.spawnable !== false);
+    $('spawn-row').innerHTML = spawnableSpecies
       .map((d) => `<button id="spawn-${d.id}" class="chip"><i class="swatch" style="background:${d.color}"></i>${d.name}</button>`)
       .join('');
-    for (const d of s.species) {
+    for (const d of spawnableSpecies) {
       $(`spawn-${d.id}`).addEventListener('click', () => {
         const next = spawnArmed === d.id ? null : d.id;
         if (next !== null && armed !== null) setArmed(null);
