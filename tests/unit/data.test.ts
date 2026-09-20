@@ -25,9 +25,10 @@ describe('assets/data', () => {
       deer.push(w.snapshot().totals.deer);
     }
     const t = w.snapshot().totals;
-    // 炎蜥蜴 (M8-09) は熱でしか増えない設計で、この試験は噴火を起こさないので絶滅して 0 になるのが正しい (tests/unit/firelizard.test.ts で検証)
+    // 炎蜥蜴 (M8-09) は熱でしか増えない設計で、この試験は噴火を起こさないので絶滅して 0 になるのが正しい (tests/unit/firelizard.test.ts で検証)。
+    // initialDensity 0 の種 (M8-10 鐘樹など) は放流でしか増えないので、自然発生では総量 0 のままでよい
     for (const s of species) {
-      if (s.id === 'firelizard') continue;
+      if (s.id === 'firelizard' || s.initialDensity === 0) continue;
       expect(t[s.id], s.id).toBeGreaterThan(0);
     }
     expect(t.firelizard).toBe(0);

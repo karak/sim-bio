@@ -25,6 +25,10 @@ export type SpeciesDef = {
   handlingTime?: number;
   /** create 時に陸の全セルへ与える初期密度。省略時は植物 0.05、動物 0 */
   initialDensity?: number;
+  /** 同じセルの他の植物の成長倍率 = (1 − shade・このセルの自分の密度)。省略時 0 (影響なし)。植物のみ (M8-10 鐘樹) */
+  shade?: number;
+  /** この種の死亡分が枯死 (litter) に積まれる倍率。省略時 1 (等倍)。植物のみ (M8-10 鐘樹) */
+  litterBoost?: number;
   /** SceneView の AssetTable のキー */
   assetId: string;
   /** グラフ・ヒートマップの色 (#rrggbb) */

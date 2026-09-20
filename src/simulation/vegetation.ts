@@ -63,6 +63,11 @@ export function stepVegetation(
   const grazed = env.grazed;
   const vitality = env.vitality;
   const litter = env.litter;
+  // 陰 (shade, M8-10 鐘樹): shade を持つ種は同じセルの他の植物の成長を弱める。
+  // この tick の間の更新順に結果が左右されないよう、shade を持つ種の密度は tick 開始時点でスナップショットする。
+  const shadeSpecies = plants.filter((d) => (d.shade ?? 0) > 0);
+  const shadeSnapshot = new Map<string, Float32Array>();
+  for (const s of shadeSpecies) shadeSnapshot.set(s.id, pops[s.id].slice());
   for (const d of plants) {
     const p = pops[d.id];
     for (let i = 0; i < n; i++) {
@@ -74,11 +79,19 @@ export function stepVegetation(
       const v = p[i];
       const regrowth = grazed ? 1 - grazed[i] : 1;
       const vf = vitality ? vitalityFactor(vitality[i]) : 1;
-      const growth = d.growthRate * f * regrowth * vf * v * (1 - total[i]);
+      // shade を持つ他種の密度分だけ成長倍率を落とす (0 未満にはしない)。shade が無ければ shadeMul は常に 1
+      let shadeMul = 1;
+      for (const s of shadeSpecies) {
+        if (s.id === d.id) continue;
+        const m = 1 - (s.shade ?? 0) * shadeSnapshot.get(s.id)![i];
+        shadeMul *= m < 0 ? 0 : m;
+      }
+      const growth = d.growthRate * f * regrowth * vf * v * (1 - total[i]) * shadeMul;
       const death = d.mortality * (2 - f) * v;
       scratch[i] = v + growth - death;
       if (vitality) vitality[i] = Math.max(0, vitality[i] - VITALITY_COST * growth);
-      if (litter) litter[i] = Math.min(1, litter[i] + death);
+      // litterBoost (M8-10 鐘樹): 省略時は 1 倍で、これまでと同じ積み方になる
+      if (litter) litter[i] = Math.min(1, litter[i] + death * (d.litterBoost ?? 1));
     }
     for (let i = 0; i < n; i++) {
       if (env.elevation[i] < SEA_LEVEL) {

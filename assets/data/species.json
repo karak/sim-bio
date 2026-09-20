@@ -157,5 +157,26 @@
     "initialDensity": 0.002,
     "handlingTime": 3,
     "spawnable": false
+  },
+  {
+    "id": "belltree",
+    "name": "鐘樹",
+    "trophic": "plant",
+    "growthRate": 0.005,
+    "mortality": 0.0026,
+    "tempRange": [
+      2,
+      26
+    ],
+    "moistureRange": [
+      0.4,
+      1.0
+    ],
+    "diffusion": 0.005,
+    "shade": 0.8,
+    "litterBoost": 2,
+    "assetId": "belltree",
+    "color": "#3E8E6A",
+    "initialDensity": 0
   }
 ]
