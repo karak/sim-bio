@@ -8,11 +8,12 @@ const deer = { ...grass, id: 'deer', name: '鹿' };
 const snap = (over: { totals?: Record<string, number>; land?: number[]; civ?: { stage: number } | null } = {}): WorldSnapshot => {
   const elevation = Float32Array.from(over.land ?? [0.5, 0.5, 0.5, 0.1]);
   const n = elevation.length;
+  // civ_declining のテスト用に、段階だけ指定できる簡易な CivState を組み立てる (他のフィールドは評価に使わないので既定値)
+  const civ = over.civ ? { speciesId: 'deer', stage: over.civ.stage, progress: 0, home: -1, population: 0 } : null;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null,
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ,
     totals: over.totals ?? { grass: 10, deer: 4, wolf: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n), deer: new Float32Array(n) } },
-    civ: over.civ,
   };
 };
 const start: StartStats = { landRatio: 0.75, totals: { grass: 10, deer: 4, wolf: 1 } };
