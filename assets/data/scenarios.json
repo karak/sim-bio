@@ -253,5 +253,111 @@
         "tempOffset": 1
       }
     }
+  },
+  {
+    "id": "test-civ",
+    "title": "文明の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。石の文明を最初から据えて、表示だけを確かめる。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 4,
+        "home": -1
+      }
+    },
+    "years": 5,
+    "schedule": [],
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
+  },
+  {
+    "id": "tower",
+    "title": "塔の重さ",
+    "prophecy": "この島の民は塔を建てた。塔は燃料で立つ。蓄えは七年で尽き、燃料の無い年が三年続けば塔は一段低くなり、巣まで落ちれば民ごと崩れる。燃料の取り方は二つ。火の山を目覚めさせれば熱が塔を動かすが、火は草木を焼き、熱の中に炎蜥蜴が湧いて民を食う。鐘樹を植えれば材が塔を動かすが、育つのに二十年かかり、陰で草が痩せて民の餌が細る。今の十年を火で凌ぐか、五十年後のために樹を植えるか。百年目、塔が立ち、鹿の群れが半ば残っていれば、島は生き延びたと言える。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 6,
+        "home": 2847,
+        "fuelStock": 45
+      },
+      "volcanoCell": 3223
+    },
+    "referenceSize": 64,
+    "years": 100,
+    "schedule": [],
+    "milestones": [
+      {
+        "atYear": 7,
+        "text": "燃料の蓄えが尽きる。火か樹か"
+      },
+      {
+        "atYear": 30,
+        "text": "植えた鐘樹が材になり始める頃"
+      },
+      {
+        "atYear": 90,
+        "text": "ここからの十年の塔と群れで判定される"
+      }
+    ],
+    "alive": {
+      "type": "all",
+      "of": [
+        {
+          "type": "civ_stage",
+          "min": 6,
+          "years": 10
+        },
+        {
+          "type": "species_mean",
+          "ids": [
+            "deer"
+          ],
+          "years": 10,
+          "min": 13.8
+        }
+      ]
+    },
+    "dead": {
+      "type": "any",
+      "of": [
+        {
+          "type": "civ_stage",
+          "max": 0
+        },
+        {
+          "type": "species_extinct",
+          "ids": [
+            "deer"
+          ]
+        }
+      ]
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 12,
+      "costs": {
+        "spawn": 4,
+        "disaster": 24,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 80,
+        "tempOffset": 16
+      },
+      "max": 120
+    },
+    "ignoreWarnings": [
+      "land_low"
+    ]
   }
 ]

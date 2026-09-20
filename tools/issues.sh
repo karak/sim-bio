@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 filter="${1:-}"
 printf '%-8s %-12s %s\n' ID STATUS TITLE
-for f in issues/M*.md; do
+for f in issues/[A-Z]*-[0-9]*-*.md; do
   id=$(sed -n 's/^id: *//p' "$f" | head -1)
   st=$(sed -n 's/^status: *//p' "$f" | head -1 | sed 's/ *#.*//')
   ti=$(sed -n 's/^title: *//p' "$f" | head -1)

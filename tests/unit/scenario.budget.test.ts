@@ -8,7 +8,7 @@ import { grass } from './helpers';
  * 星の力 (介入の予算) の性質。
  * 陸地率と生気を固定した偽の world で、値段・収入・維持費・枯渇を確かめる。
  */
-const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: number; tempOffset?: number } = {}) => {
+const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: number; tempOffset?: number; civStage?: number } = {}) => {
   let tick = 0;
   const cmds: Command[] = [];
   const size = 4;
@@ -17,9 +17,13 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
   const elevation = new Float32Array(n).fill(0.1);
   for (let i = 0; i < landCells; i++) elevation[i] = 0.5;
   const climate = { rainScale: opts.rainScale ?? 1, tempOffset: opts.tempOffset ?? 0 };
+  // 文明の段階 (M8-04)。テストから setCivStage で年をまたいで変えて timeline を確かめる
+  let civStage = opts.civStage ?? 0;
   const snapshot = (): WorldSnapshot => ({
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
-    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), populations: { grass: new Float32Array(n) } },
+    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
+    civ: civStage > 0 ? { speciesId: 'deer', stage: civStage, progress: 0, home: 0, population: 0 } : null,
+    volcanoCell: 0,
   });
   const dispatch = (c: Command) => {
     cmds.push(c);
@@ -28,7 +32,7 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
       if (c.tempOffset !== undefined) climate.tempOffset = c.tempOffset;
     }
   };
-  return { dispatch, snapshot, step: (t: number) => { tick += t; }, cmds };
+  return { dispatch, snapshot, step: (t: number) => { tick += t; }, cmds, setCivStage: (s: number) => { civStage = s; } };
 };
 
 const base: ScenarioDef = {
@@ -211,5 +215,34 @@ describe('年表 (runner.timeline)', () => {
     expect(r.timeline()[3]).toMatchObject({ kind: 'warning', warning: { kind: 'power_low' } });
     expect(r.timeline()[4]).toMatchObject({ kind: 'warning', warning: { kind: 'upkeep_over_income' } });
     expect(r.timeline()[5]).toMatchObject({ kind: 'verdict', verdict: { status: 'alive' } });
+  });
+});
+
+describe('文明の年表 (civ_stage, M8-04)', () => {
+  it('snapshot.civ.stage が年をまたいで変わったら timeline に civ_stage を積む', () => {
+    const w = fakeWorld();
+    w.setCivStage(2);
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivStage(3);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivStage(0);
+    r.update(w.snapshot());
+    const civEvents = r.timeline().filter((e) => e.kind === 'civ_stage');
+    expect(civEvents).toEqual([
+      { year: 1, kind: 'civ_stage', from: 2, to: 3 },
+      { year: 2, kind: 'civ_stage', from: 3, to: 0 },
+    ]);
+  });
+  it('段階が変わらなければ積まない', () => {
+    const w = fakeWorld();
+    w.setCivStage(4);
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'civ_stage')).toEqual([]);
   });
 });

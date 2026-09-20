@@ -16,6 +16,7 @@ const snap = () => {
       vegetation: new Float32Array([0, 0, 0.5, 1]),
       vitality: new Float32Array([0, 0.2, 0.6, 1]),
       litter: new Float32Array(4),
+      crystal: new Float32Array([0, 0, 0, 1]),
       populations: { grass: new Float32Array([0, 0, 0.5, 1]) },
     },
   };
@@ -23,7 +24,7 @@ const snap = () => {
 
 describe('layerToColors', () => {
   it('returns size²×3 in [0,1] for every layer', () => {
-    for (const l of ['terrain', 'temperature', 'moisture', 'vegetation', 'vitality', 'species:grass', 'suit:grass'] as const) {
+    for (const l of ['terrain', 'temperature', 'moisture', 'vegetation', 'vitality', 'crystal', 'species:grass', 'suit:grass'] as const) {
       const c = layerToColors(snap(), l);
       expect(c.length).toBe(12);
       for (const v of c) {
@@ -69,6 +70,22 @@ describe('layerToColors', () => {
     expect(cSuit[0]).toBeCloseTo(cTerrain[0], 5);
     expect(cSuit[1]).toBeCloseTo(cTerrain[1], 5);
     expect(cSuit[2]).toBeCloseTo(cTerrain[2], 5);
+  });
+  it('crystal: 輝石が多いセルは明るい紫、0 のセルは暗色、海は地形色のまま', () => {
+    // snap() は index3 の輝石が 1、index1・index2 が 0、index0 が海 (elevation 0.1)
+    const c = layerToColors(snap(), 'crystal');
+    const cTerrain = layerToColors(snap(), 'terrain');
+    expect(c[0]).toBeCloseTo(cTerrain[0], 5);
+    expect(c[1]).toBeCloseTo(cTerrain[1], 5);
+    expect(c[2]).toBeCloseTo(cTerrain[2], 5);
+    // 輝石 0 のセルは暗色 (#1A1A1A)
+    expect(c[1 * 3]).toBeCloseTo(0x1a / 255, 2);
+    expect(c[1 * 3 + 1]).toBeCloseTo(0x1a / 255, 2);
+    expect(c[1 * 3 + 2]).toBeCloseTo(0x1a / 255, 2);
+    // 輝石 1 のセルは明るい紫 (#B9A2F2) に近づく
+    expect(c[3 * 3]).toBeCloseTo(0xb9 / 255, 2);
+    expect(c[3 * 3 + 1]).toBeCloseTo(0xa2 / 255, 2);
+    expect(c[3 * 3 + 2]).toBeCloseTo(0xf2 / 255, 2);
   });
   it('suit:<id>: 未知の種 id でも例外にせず、陸は暗色 (全長 size²×3) を返す', () => {
     const c = layerToColors(snap(), 'suit:unknown');

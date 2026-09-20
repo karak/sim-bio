@@ -5,13 +5,17 @@ import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
 
 const deer = { ...grass, id: 'deer', name: '鹿' };
-const snap = (over: { totals?: Record<string, number>; land?: number[] } = {}): WorldSnapshot => {
+const snap = (over: { totals?: Record<string, number>; land?: number[]; civ?: { stage: number; fuel?: { stock: number; need: number; debt: number } } | null } = {}): WorldSnapshot => {
   const elevation = Float32Array.from(over.land ?? [0.5, 0.5, 0.5, 0.1]);
   const n = elevation.length;
+  // civ_declining のテスト用に、段階だけ指定できる簡易な CivState を組み立てる (他のフィールドは評価に使わないので既定値)
+  const civ = over.civ
+    ? { speciesId: 'deer', stage: over.civ.stage, progress: 0, home: -1, population: 0, ...(over.civ.fuel ? { fuel: { last: 0, shortYears: 0, ...over.civ.fuel } } : {}) }
+    : null;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 },
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0,
     totals: over.totals ?? { grass: 10, deer: 4, wolf: 1 },
-    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), populations: { grass: new Float32Array(n), deer: new Float32Array(n) } },
+    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n), deer: new Float32Array(n) } },
   };
 };
 const start: StartStats = { landRatio: 0.75, totals: { grass: 10, deer: 4, wolf: 1 } };
@@ -64,5 +68,29 @@ describe('scenarioWarnings', () => {
   it('複数同時に出るときは 種 → 陸 → 力 の順', () => {
     const ws = scenarioWarnings(def, snap({ totals: { grass: 1, deer: 0, wolf: 0 }, land: [0.5, 0.1, 0.1, 0.1] }), start, { power: 0, max: 30, incomeLastYear: 1, upkeepLastYear: 2 });
     expect(ws.map((w) => w.kind)).toEqual(['species_low', 'species_low', 'land_low', 'power_low', 'upkeep_over_income']);
+  });
+  it('civ_declining: civ 引数を渡し、段階が前年より下がっていれば出す', () => {
+    const s = snap({ civ: { stage: 5 } });
+    expect(scenarioWarnings(def, s, start, null, { prevStage: 6 }).map((w) => w.kind)).toEqual(['civ_declining']);
+    expect(scenarioWarnings(def, s, start, null, { prevStage: 6 })[0].text).toBe('文明が衰えている(段階 6 → 5)');
+  });
+  it('civ_declining: 段階が下がっていない、または civ を渡さないときは出さない', () => {
+    const s = snap({ civ: { stage: 6 } });
+    expect(scenarioWarnings(def, s, start, null, { prevStage: 6 })).toEqual([]);
+    expect(scenarioWarnings(def, s, start, null)).toEqual([]);
+    // civ が無い (null) スナップショットは段階 0 扱いなので、前年 1 なら下がったことになる
+    const s0 = snap({ civ: null });
+    expect(scenarioWarnings(def, s0, start, null, { prevStage: 1 }).map((w) => w.kind)).toEqual(['civ_declining']);
+  });
+  it('fuel_low: 蓄えが 1 年分を割れば「心細い」、負債があれば「足りない(不足 N 年分)」。蓄えが足りていれば出さない (M8-06)', () => {
+    const ok = snap({ civ: { stage: 6, fuel: { stock: 12, need: 6, debt: 0 } } });
+    expect(scenarioWarnings(def, ok, start, null)).toEqual([]);
+    const low = snap({ civ: { stage: 6, fuel: { stock: 4, need: 6, debt: 0 } } });
+    expect(scenarioWarnings(def, low, start, null).map((w) => [w.kind, w.text])).toEqual([['fuel_low', '塔の燃料が心細い(蓄え 4 / 年に 6)']]);
+    const debt = snap({ civ: { stage: 6, fuel: { stock: 0, need: 6, debt: 9 } } });
+    expect(scenarioWarnings(def, debt, start, null).map((w) => w.text)).toEqual(['塔の燃料が足りない(不足 1.5 年分。3 年分で一段崩れる)']);
+    // 燃料の要らない段階 (need 0) では出さない
+    const none = snap({ civ: { stage: 2, fuel: { stock: 0, need: 0, debt: 0 } } });
+    expect(scenarioWarnings(def, none, start, null)).toEqual([]);
   });
 });

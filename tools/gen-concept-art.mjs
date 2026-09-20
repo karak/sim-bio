@@ -7,7 +7,12 @@
  *   node tools/gen-concept-art.mjs             # 全部
  *   node tools/gen-concept-art.mjs deer wolf   # 指定した assetId だけ
  *   GEMINI_IMAGE_MODEL=... で モデルを変更 (既定: gemini-2.5-flash-image)
+ *   node tools/gen-concept-art.mjs --variants=3 deer wolf rabbit   # 1 体につき 3 パターン
  * 出力: assets/textures/concept/<assetId>.png (既にあればスキップ。--force で上書き)
+ *       --variants=N のときは assets/textures/concept/<assetId>-v1.png … -vN.png
+ *       (パターンごとに VARIANT_HINTS の方向性を付ける)
+ *   node tools/gen-concept-art.mjs --style=angular deer rabbit wolf   # 採用済み方向性 (STYLE_PRESETS) で固定
+ *       出力は <assetId>-<style>.png (--variants 併用で -v1..vN)
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -57,10 +62,35 @@ const ITEMS = [
   { id: 'key-visual-doom-volcano', prompt: 'Isometric top-down view of a small island with a central volcano erupting red smoke, half the island darkened by ash; the other half still green.' },
 ];
 
-async function generate(item) {
+/** --variants=N のとき、n 番目 (1 始まり) のパターンに付ける方向性。N が超えたら循環 */
+const VARIANT_HINTS = [
+  'Variant A — realistic proportions: anatomically faithful body, natural stance, restrained stylization.',
+  'Variant B — chibi / mascot: big head, short limbs, rounded shapes, friendly and cute.',
+  'Variant C — angular geometric: sharp facet-like planes, exaggerated silhouette, bold and stylized.',
+];
+
+/** --style=<key> で採用済みの方向性を固定する。出力は <assetId>-<key>.png */
+const STYLE_PRESETS = {
+  // deer-v3 (angular geometric) を採用し、等身を 3〜5 頭身に下げたもの
+  angular:
+    'Adopted style — angular geometric low-poly: sharp facet-like planes, bold exaggerated silhouette, ' +
+    'thin glowing cyan (#9FF5E8) edge highlights along a few facets, warm flat base colors. ' +
+    'Proportions (strict): 3 to 5 heads tall, i.e. total body height is only 3-5 times the head height — ' +
+    'a compact, slightly stocky body, legs and neck shortened aggressively (legs no longer than the torso depth), ' +
+    'head clearly larger than realistic, like a stylized figurine or a Pokémon-scale creature; ' +
+    'NOT chibi, still readable as the animal. Keep all species-defining features from the subject description. ' +
+    'Single subject only, no other animals, no props, no ground objects except a small shadow.',
+};
+
+async function generate(item, variant = 0, style = '') {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+  const hint = style
+    ? `\n\nStyle direction: ${STYLE_PRESETS[style]}`
+    : variant
+      ? `\n\nStyle direction: ${VARIANT_HINTS[(variant - 1) % VARIANT_HINTS.length]}`
+      : '';
   const body = {
-    contents: [{ parts: [{ text: `${COMMON}\n\nSubject: ${item.prompt}` }] }],
+    contents: [{ parts: [{ text: `${COMMON}\n\nSubject: ${item.prompt}${hint}` }] }],
     generationConfig: { responseModalities: ['IMAGE'] },
   };
   const res = await fetch(url, {
@@ -78,25 +108,36 @@ async function generate(item) {
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
+const variants = Number(args.find((a) => a.startsWith('--variants='))?.split('=')[1] ?? 0);
+const style = args.find((a) => a.startsWith('--style='))?.split('=')[1] ?? '';
+if (style && !STYLE_PRESETS[style]) {
+  console.error(`未知の --style: ${style} (候補: ${Object.keys(STYLE_PRESETS).join(', ')})`);
+  process.exit(1);
+}
 const wanted = args.filter((a) => !a.startsWith('--'));
 mkdirSync(outDir, { recursive: true });
 let ok = 0;
 let ng = 0;
 for (const item of ITEMS) {
   if (wanted.length && !wanted.includes(item.id)) continue;
-  const out = resolve(outDir, `${item.id}.png`);
-  if (existsSync(out) && !force) {
-    console.log(`skip ${item.id} (exists)`);
-    continue;
-  }
-  try {
-    const png = await generate(item);
-    writeFileSync(out, png);
-    console.log(`ok   ${item.id} -> ${out} (${png.length} bytes)`);
-    ok++;
-  } catch (e) {
-    console.error(`fail ${item.id}: ${e instanceof Error ? e.message : String(e)}`);
-    ng++;
+  // variants 未指定なら従来どおり 1 枚 (variant=0)、指定時は v1..vN
+  const jobs = variants > 0 ? Array.from({ length: variants }, (_, i) => i + 1) : [0];
+  for (const v of jobs) {
+    const name = style ? `${item.id}-${style}${v ? `-v${v}` : ''}` : v ? `${item.id}-v${v}` : item.id;
+    const out = resolve(outDir, `${name}.png`);
+    if (existsSync(out) && !force) {
+      console.log(`skip ${name} (exists)`);
+      continue;
+    }
+    try {
+      const png = await generate(item, v, style);
+      writeFileSync(out, png);
+      console.log(`ok   ${name} -> ${out} (${png.length} bytes)`);
+      ok++;
+    } catch (e) {
+      console.error(`fail ${name}: ${e instanceof Error ? e.message : String(e)}`);
+      ng++;
+    }
   }
 }
 console.log(`done: ${ok} generated, ${ng} failed`);

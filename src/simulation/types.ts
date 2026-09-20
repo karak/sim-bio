@@ -1,3 +1,5 @@
+import type { CivState, CivilizationConfig } from './civilization';
+
 /** decomposer は枯死 (litter) を餌にし、いる場所の分解を速める第 4 の階層 */
 export type Trophic = 'plant' | 'herbivore' | 'carnivore' | 'decomposer';
 
@@ -21,12 +23,23 @@ export type SpeciesDef = {
   predation?: number;
   /** 餌 1 単位の処理時間 (動物のみ、省略時 0 = 線形応答)。大きいほど摂食が飽和し、振動が出やすい (Holling II 型) */
   handlingTime?: number;
+  /**
+   * 熱でしか生きられない種 (炎蜥蜴、M8-05 v2)。セルの局所加熱 (heat) がこの値以上で適合度が満点、
+   * 0 なら適合度 0 (heat / minHeat で線形)。気温の適温帯とは別に掛かる。省略時は熱を見ない
+   */
+  minHeat?: number;
   /** create 時に陸の全セルへ与える初期密度。省略時は植物 0.05、動物 0 */
   initialDensity?: number;
+  /** 同じセルの他の植物の成長倍率 = (1 − shade・このセルの自分の密度)。省略時 0 (影響なし)。植物のみ (M8-10 鐘樹) */
+  shade?: number;
+  /** この種の死亡分が枯死 (litter) に積まれる倍率。省略時 1 (等倍)。植物のみ (M8-10 鐘樹) */
+  litterBoost?: number;
   /** SceneView の AssetTable のキー */
   assetId: string;
   /** グラフ・ヒートマップの色 (#rrggbb) */
   color: string;
+  /** HUD の放流チップに出すか。省略時 true。false は凡例・住みやすさレイヤーには出るが、見守り手が放てない種 (M8-09: 炎蜥蜴) */
+  spawnable?: boolean;
 };
 
 export type WorldConfig = {
@@ -51,6 +64,15 @@ export type WorldConfig = {
     co2ToTemp: number;
     iceAlbedo: number;
   };
+  /** 文明を持つ種 (M8-02)。省略時は文明なし (既定の世界・既存シナリオはすべてこれ) */
+  civilization?: CivilizationConfig;
+  /**
+   * 火の山として使うセル (M8-08)。省略時は World が標高最大の陸セルを既定にする。
+   * 標高最大セルは LAPSE (標高による気温低下) で冷えすぎ、噴火を重ねても炎蜥蜴の適温 (30℃〜) に
+   * 届かないことが M8-09 の校正で分かったため、シナリオ側で暖かい低地セルを指定できるようにした
+   * (main.ts が scenario.start.volcanoCell を解決してここに入れる)
+   */
+  volcanoCell?: number;
 };
 
 export type DisasterKind = 'meteor' | 'volcano' | 'wildfire' | 'plague';
@@ -80,6 +102,8 @@ export type WorldSnapshot = {
     vitality: Float32Array;
     /** 枯死 (死骸・落ち葉・灰) [0,1]。分解されて生気になる */
     litter: Float32Array;
+    /** 輝石 [0,1]。陸だけに決定論で塊状に置かれる。海は 0。掘削 (M8-02) までは変化しない */
+    crystal: Float32Array;
     populations: Record<string, Float32Array>;
   };
   totals: Record<string, number>;
@@ -88,6 +112,10 @@ export type WorldSnapshot = {
   species: SpeciesDef[];
   /** 現在の気候設定 (set_climate で変わる)。星の力の維持費の計算に使う */
   climate: { tempOffset: number; rainScale: number };
+  /** 文明の状態のコピー。config.civilization が無ければ null (M8-02) */
+  civ: CivState | null;
+  /** 火山セル。config.volcanoCell があればそれ、無ければ標高最大の陸セル (M8-08) */
+  volcanoCell: number;
 };
 
 export type SaveData = {
@@ -102,5 +130,9 @@ export type SaveData = {
   /** M5 で追加 */
   vitality?: number[];
   litter?: number[];
+  /** M8 で追加。古いセーブには無い場合、restore 時に seed から決定論的に埋め直す */
+  crystal?: number[];
   populations: Record<string, number[]>;
+  /** M8-02 で追加。config.civilization が無ければ無い */
+  civ?: CivState;
 };

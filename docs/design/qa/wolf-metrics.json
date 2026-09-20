@@ -1,0 +1,140 @@
+{
+  "camera": {
+    "azimuth_deg": 135.0,
+    "elevation_deg": 10.0,
+    "distance_m": 3.7938,
+    "projection": "ortho"
+  },
+  "faces": 1075,
+  "tris": 2182,
+  "parts": {
+    "fur": {
+      "fraction": {
+        "ref": 0.7924,
+        "model": 0.8032,
+        "diff": 0.0107
+      },
+      "centroid": {
+        "ref": [
+          0.5182,
+          0.4794
+        ],
+        "model": [
+          0.5244,
+          0.4788
+        ],
+        "dist": 0.0063
+      },
+      "mask_iou": 0.5934,
+      "color": {
+        "ref_mean_rgb": [
+          224,
+          128,
+          86
+        ],
+        "model_mean_rgb": [
+          224,
+          128,
+          86
+        ],
+        "delta_e76": 0.282,
+        "material_rgb": [
+          242,
+          138,
+          93
+        ],
+        "delta_e_material": 5.5149
+      }
+    },
+    "dark": {
+      "fraction": {
+        "ref": 0.1681,
+        "model": 0.1659,
+        "diff": -0.0022
+      },
+      "centroid": {
+        "ref": [
+          0.5333,
+          0.6774
+        ],
+        "model": [
+          0.5833,
+          0.5233
+        ],
+        "dist": 0.162
+      },
+      "mask_iou": 0.1444,
+      "color": {
+        "ref_mean_rgb": [
+          136,
+          59,
+          48
+        ],
+        "model_mean_rgb": [
+          136,
+          59,
+          48
+        ],
+        "delta_e76": 0.1807,
+        "material_rgb": [
+          159,
+          69,
+          57
+        ],
+        "delta_e_material": 7.9508
+      }
+    },
+    "glow": {
+      "fraction": {
+        "ref": 0.0395,
+        "model": 0.031,
+        "diff": -0.0085
+      },
+      "centroid": {
+        "ref": [
+          0.5298,
+          0.2102
+        ],
+        "model": [
+          0.4784,
+          0.2429
+        ],
+        "dist": 0.0609
+      },
+      "mask_iou": 0.3284,
+      "color": {
+        "ref_mean_rgb": [
+          168,
+          244,
+          220
+        ],
+        "model_mean_rgb": [
+          167,
+          246,
+          222
+        ],
+        "delta_e76": 0.8858,
+        "material_rgb": [
+          141,
+          227,
+          200
+        ],
+        "delta_e_material": 7.6252
+      }
+    }
+  },
+  "pixel_color": {
+    "overlap_pixels": 117830,
+    "mean_delta_e": 15.7774,
+    "median_delta_e": 8.7248,
+    "p90_delta_e": 39.5306,
+    "fraction_delta_e_over_20": 0.2593
+  },
+  "silhouette": {
+    "iou": 0.7722,
+    "aspect": {
+      "ref": 1.7523,
+      "model": 1.7323
+    }
+  }
+}

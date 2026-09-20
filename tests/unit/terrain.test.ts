@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateTerrain, SEA_LEVEL } from '../../src/simulation/terrain';
+import { generateCrystal, generateTerrain, SEA_LEVEL } from '../../src/simulation/terrain';
 import { mulberry32 } from '../../src/simulation/rng';
 
 describe('mulberry32', () => {
@@ -89,5 +89,36 @@ describe('generateTerrain', () => {
     let lake = 0;
     for (let i = 0; i < n * n; i++) if (water(i) && !seen[i]) lake++;
     expect(lake).toBeGreaterThan(0);
+  });
+});
+
+describe('generateCrystal (M8-01)', () => {
+  it('same seed gives same crystal、海は必ず 0', () => {
+    const size = 32;
+    const { elevation } = generateTerrain(42, size);
+    const a = generateCrystal(42, elevation, size);
+    const b = generateCrystal(42, elevation, size);
+    expect(Array.from(a)).toEqual(Array.from(b));
+    for (let i = 0; i < size * size; i++) {
+      if (elevation[i] < SEA_LEVEL) expect(a[i]).toBe(0);
+    }
+  });
+
+  it('陸地の 2%〜15% 程度に塊状に置かれる (複数シードで確認)', () => {
+    const size = 32;
+    for (const seed of [1, 2, 3, 42, 99]) {
+      const { elevation } = generateTerrain(seed, size);
+      const crystal = generateCrystal(seed, elevation, size);
+      let land = 0;
+      let has = 0;
+      for (let i = 0; i < size * size; i++) {
+        if (elevation[i] < SEA_LEVEL) continue;
+        land++;
+        if (crystal[i] > 0) has++;
+      }
+      const ratio = has / land;
+      expect(ratio).toBeGreaterThan(0.02);
+      expect(ratio).toBeLessThan(0.15);
+    }
   });
 });

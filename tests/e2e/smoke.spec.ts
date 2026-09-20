@@ -12,6 +12,10 @@ test('boots, advances a year at 100x, graph shows values, layer switch works', a
   await expect(page.locator('#legend-grass')).toHaveText(/^\d+$/);
   await page.click('#layer-temperature');
   await expect(page.locator('#layer-temperature')).toHaveClass(/on/);
+  // 輝石チップでレイヤーが切り替わる (M8-01)
+  await page.click('#layer-crystal');
+  await expect(page.locator('#layer-crystal')).toHaveClass(/on/);
+  await expect(page.locator('#layer-temperature')).not.toHaveClass(/on/);
   const summaries = logs.filter((l) => l.includes('"event":"sim.tick.summary"'));
   expect(summaries.length).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(summaries[0])).toMatchObject({ event: 'sim.tick.summary', year: 1 });
@@ -32,6 +36,24 @@ test('species palette: pick a species and click the island to spawn it', async (
     .poll(() => logs.filter((l) => l.includes('"event":"cmd.received"') && l.includes('"type":"spawn_species"')).length)
     .toBeGreaterThan(0);
   expect(logs.filter((l) => l.includes('"event":"cmd.rejected"'))).toHaveLength(0);
+});
+
+test('firelizard (M8-09): shown in legend but not spawnable by the watcher', async ({ page }) => {
+  await page.goto('/');
+  // 凡例には出る (熱でしか増えない種でも観測対象ではある)
+  await expect(page.locator('#legend-firelizard')).toBeVisible();
+  // 住みやすさレイヤーの種チップにも出る
+  await expect(page.locator('#layer-species-firelizard')).toBeVisible();
+  // 見守り手は炎蜥蜴を放てない (放流チップには出ない)
+  await expect(page.locator('#spawn-firelizard')).toHaveCount(0);
+});
+
+test('鐘樹 (belltree, M8-10): spawn chip and legend appear in free mode', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#spawn-belltree')).toBeVisible();
+  // 凡例に種名 鐘樹 が出る (対応する legend-belltree の総量表示と対で存在する)
+  await expect(page.locator('#legend')).toContainText('鐘樹');
+  await expect(page.locator('#legend-belltree')).toHaveText(/^\d+$/);
 });
 
 test('suitability layer: mode toggle + species chip reflect the choice in DOM state', async ({ page }) => {
@@ -83,6 +105,35 @@ test('free mode has the selector but no prophecy', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#tablet-select')).toBeVisible();
   await expect(page.locator('#tablet-title')).toHaveCount(0);
+});
+
+test('civilization: ?scenario=test-civ shows the stage line in the HUD (M8-04)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await expect(page.locator('#hud-civ')).toBeVisible();
+  await expect(page.locator('#hud-civ')).toContainText('文明 石(4)');
+});
+
+test('civilization: free mode has no civ line', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#hud-civ')).toBeHidden();
+});
+
+test('tower fuel: ?scenario=test-civ shows the fuel line once a year has passed (M8-08)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await page.click('#speed-100');
+  // stage 4 なので、1 年たって fuel が一度でも計算されれば「· 燃料 N / M」が出る
+  await expect(page.locator('#hud-civ')).toContainText('燃料', { timeout: 8000 });
+});
+
+test('volcano hint: arming the 火山 chip shows the hint text, unarming hides it (M8-08)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#volcano-hint')).toBeHidden();
+  await page.click('#disaster-volcano');
+  await expect(page.locator('#disaster-volcano')).toHaveClass(/armed/);
+  await expect(page.locator('#volcano-hint')).toBeVisible();
+  await expect(page.locator('#volcano-hint')).toContainText('火の山');
+  await page.click('#disaster-volcano');
+  await expect(page.locator('#volcano-hint')).toBeHidden();
 });
 
 test('star power: budget line is shown, spawning costs power, and an unaffordable spawn is rejected', async ({ page }) => {

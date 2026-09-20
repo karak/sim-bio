@@ -1,11 +1,14 @@
 import type { LogLevel, LogSink } from '../core/log/types';
 import type { Command, SaveData, SpeciesDef, WorldConfig, WorldSnapshot } from './types';
-import { generateTerrain, SEA_LEVEL } from './terrain';
+import { generateCrystal, generateTerrain, SEA_LEVEL } from './terrain';
 import { stepClimate } from './climate';
 import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
+import { checkEmergence, HOME_RADIUS, MAX_STAGE, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
+import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
+import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 
 export type WorldDeps = {
   log: LogSink;
@@ -42,6 +45,8 @@ export class World {
   readonly grazed: Float32Array;
   readonly vitality: Float32Array;
   readonly litter: Float32Array;
+  /** 輝石 [0,1]。陸だけに決定論で塊状に置かれる。海は 0 (M8-01) */
+  readonly crystal: Float32Array;
   readonly fire: Uint8Array;
   readonly burnt: Uint16Array;
   private readonly scratch: Float32Array;
@@ -50,6 +55,19 @@ export class World {
   private meanTemperature = 0;
   /** M1 では定数 (CO2 → 気温のスロットは係数 0) */
   private readonly co2 = 280;
+  /** 文明の状態。config.civilization が無ければ null のまま (M8-02) */
+  private civ: CivState | null = null;
+  /** 衰退条件が連続で成り立っている年数 (M8-06) */
+  private civDeclineStreak = 0;
+  /** 文明の種の年次総量、直近 EMERGE_HISTORY_YEARS 年分 (発生判定用)。古い順 */
+  private civHistory: number[] = [];
+  /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
+  private readonly zeroForest: Float32Array;
+  /**
+   * 火山セル: config.volcanoCell があればそれ、無ければ標高最大の陸セル。create 時に 1 度だけ決める (M8-08)。
+   * HUD が火山チップの誘導先として使う
+   */
+  private readonly _volcanoCell: number;
 
   private constructor(
     private readonly config: WorldConfig,
@@ -71,9 +89,33 @@ export class World {
     this.grazed = new Float32Array(this.n);
     this.vitality = new Float32Array(this.n);
     this.litter = new Float32Array(this.n);
+    // seed から決定論で生成しておく。create はそのまま使い、restore は save.crystal があればそれで上書きする
+    this.crystal = generateCrystal(config.seed, this.elevation, config.size);
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
+    this.zeroForest = new Float32Array(this.n);
+    // 火山セルは config.volcanoCell があればそれを使う。無ければ標高最大の陸セルを既定にする (M8-08)。
+    // 標高最大セルは冷えすぎて炎蜥蜴が湧かない (M8-09 の校正) ことがあるので、シナリオ側で暖かい
+    // 低地セルを指定できるようにしてある
+    if (config.volcanoCell !== undefined) {
+      this._volcanoCell = config.volcanoCell;
+    } else {
+      let volcanoCell = 0;
+      let volcanoElevation = -Infinity;
+      for (let i = 0; i < this.n; i++) {
+        if (this.elevation[i] >= SEA_LEVEL && this.elevation[i] > volcanoElevation) {
+          volcanoElevation = this.elevation[i];
+          volcanoCell = i;
+        }
+      }
+      this._volcanoCell = volcanoCell;
+    }
+    // config.civilization があるときだけ文明の状態を持つ。start 省略時は stage 0 / home -1 (未発生) から始める
+    if (config.civilization) {
+      const start = config.civilization.start;
+      this.civ = { speciesId: config.civilization.speciesId, stage: start?.stage ?? 0, progress: 0, home: start?.home ?? -1, population: 0 };
+    }
     for (const d of config.species) {
       this.populations[d.id] = new Float32Array(this.n);
       this.totals[d.id] = 0;
@@ -109,6 +151,10 @@ export class World {
     if (save.vitality) w.vitality.set(save.vitality);
     else for (let i = 0; i < w.n; i++) if (w.elevation[i] >= SEA_LEVEL) w.vitality[i] = INITIAL_VITALITY;
     if (save.litter) w.litter.set(save.litter);
+    // 古いセーブには無いので、その場合は既に constructor で seed から埋めた決定論の値をそのまま使う
+    if (save.crystal) w.crystal.set(save.crystal);
+    // save.civ が無ければ constructor で config.civilization.start から作った初期状態のまま (M8-02)
+    if (save.civ) w.civ = { ...save.civ };
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -124,6 +170,11 @@ export class World {
 
   dispatch(cmd: Command): void {
     this.queue.push(cmd);
+  }
+
+  /** 火山セル (config.volcanoCell、無ければ標高最大の陸セル)。HUD が火山チップの誘導先として使う (M8-08) */
+  volcanoCell(): number {
+    return this._volcanoCell;
   }
 
   step(ticks = 1): void {
@@ -144,6 +195,7 @@ export class World {
         vegetation: this.vegetation,
         vitality: this.vitality,
         litter: this.litter,
+        crystal: this.crystal,
         populations: this.populations,
       },
       totals: this.totals,
@@ -151,6 +203,8 @@ export class World {
       co2: this.co2,
       species: this.config.species,
       climate: { tempOffset: this.config.climate.tempOffset, rainScale: this.config.climate.rainScale },
+      civ: this.civ ? { ...this.civ } : null,
+      volcanoCell: this._volcanoCell,
     };
   }
 
@@ -167,7 +221,9 @@ export class World {
       grazed: Array.from(this.grazed),
       vitality: Array.from(this.vitality),
       litter: Array.from(this.litter),
+      crystal: Array.from(this.crystal),
       populations,
+      ...(this.civ ? { civ: { ...this.civ } } : {}),
     };
   }
 
@@ -182,7 +238,25 @@ export class World {
     stepVegetation(this.populations, this.scratch, this, this.plants, size);
     stepPopulations(this.populations, this.scratch, this, this.animals, size);
     stepVitality(this, this.decomposers, this.scratch, size);
+    // 文明の負荷 (M8-03): 発生済み (stage >= 1) なら毎 tick、集落周りの森を伐り生気を吸う。
+    // forest 種が居ない世界では捨て配列 (常に 0) を渡し、生気の負荷だけがかかるようにする
+    if (this.civ && this.civ.stage >= 1) {
+      const forestPop = this.populations['forest'] ?? this.zeroForest;
+      const civPopulation = this.populations[this.civ.speciesId];
+      applyLoad(this.civ.stage, this.civ.home, { forest: forestPop, litter: this.litter, vitality: this.vitality, elevation: this.elevation, civPopulation }, size);
+    }
     this.refresh();
+    // 文明(M8-02): 発生済み (stage >= 1) なら毎 tick 輝石を掘り、段階が上がればログを出す
+    if (this.civ && this.civ.stage >= 1) {
+      const before = this.civ.stage;
+      // 次の段階に必要な民がいなければ掘っても上がらない (M8-06)。民は年 1 回更新される
+      const canAdvance = this.civ.stage >= MAX_STAGE || this.civ.population >= POP_NEED[this.civ.stage + 1];
+      const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance);
+      this.civ = state;
+      if (this.civ.stage !== before) {
+        this.log('info', 'sim.civ.stage', { from: before, to: this.civ.stage, year: Math.floor(this.tick / ticksPerYear) });
+      }
+    }
     for (const d of this.config.species) {
       const was = this.prevTotals[d.id] ?? 0;
       if (was > 0 && this.totals[d.id] === 0) this.log('warn', 'sim.species.extinct', { speciesId: d.id });
@@ -190,13 +264,127 @@ export class World {
     this.prevTotals = { ...this.totals };
     this.tick++;
     if (this.tick % ticksPerYear === 0) {
-      this.log('info', 'sim.tick.summary', {
+      if (this.civ) this.stepCivYearly();
+      const summary: Record<string, unknown> = {
         totals: { ...this.totals },
         meanTemperature: this.meanTemperature,
         co2: this.co2,
         vegetationRatio: this.vegetationRatio(),
         vitalityMean: this.landMean(this.vitality),
+      };
+      // civilization が設定されているときだけ civStage/civProgress を summary に足す (未設定の世界・既存テストは変わらない)
+      if (this.civ) {
+        summary.civStage = this.civ.stage;
+        summary.civProgress = this.civ.progress;
+        // 燃料は stepCivYearly (直前で呼んでいる) が毎年必ず設定するので、ここでは存在チェック不要
+        summary.civFuel = this.civ.fuel;
+      }
+      this.log('info', 'sim.tick.summary', summary);
+    }
+  }
+
+  /**
+   * 文明の年次処理 (M8-02)。年が変わるたびに 1 回呼ぶ。
+   * stage 0 (未発生) なら発生判定をし、発生していれば集落半径内の人口を更新する。
+   */
+  private stepCivYearly(): void {
+    const civ = this.civ as CivState;
+    const total = this.totals[civ.speciesId] ?? 0;
+    this.civHistory.push(total);
+    if (this.civHistory.length > 10) this.civHistory.shift();
+    if (civ.stage === 0) {
+      // 集落候補: その種の密度が最大の陸セル
+      const pop = this.populations[civ.speciesId];
+      let candidate = -1;
+      let best = 0;
+      for (let i = 0; i < this.n; i++) {
+        if (this.elevation[i] < SEA_LEVEL) continue;
+        if (pop[i] > best) {
+          best = pop[i];
+          candidate = i;
+        }
+      }
+      if (candidate >= 0) {
+        let vegSum = 0;
+        let vegCount = 0;
+        forEachInRadius(candidate, HOME_RADIUS, this.config.size, (i) => {
+          if (this.elevation[i] >= SEA_LEVEL) {
+            vegSum += this.vegetation[i];
+            vegCount++;
+          }
+        });
+        const candidateVegetation = vegCount ? vegSum / vegCount : 0;
+        if (checkEmergence(this.civHistory, candidateVegetation)) {
+          civ.stage = 1;
+          civ.home = candidate;
+          civ.progress = 0;
+          this.log('info', 'sim.civ.emerged', { speciesId: civ.speciesId, home: candidate });
+        }
+      }
+    }
+    civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    const year = Math.floor(this.tick / this.config.ticksPerYear);
+    // 塔の燃料 (M8-08): 決定判定より前に、毎年 1 度だけ集落半径内の熱・鐘樹の材から燃料を徴収する。
+    // 足りない年が FUEL_YEARS 続いたら段階を 1 下げる (reason: 'fuel')。belltree レイヤーは M8-10 が
+    // 追加するまで存在しないので、無い世界では熱だけが燃料源になる (collectFuel が省略時ガード)
+    {
+      const need = FUEL_NEED[civ.stage] ?? 0;
+      const belltree = this.populations['belltree'];
+      // 蓄え (M8-05 v2): 空きの分まで集めて蓄えに積み、その年の必要量を蓄えから引く。
+      // 蓄えの初期値は config.civilization.start.fuelStock (省略時 0)
+      const stockMax = need * FUEL_STOCK_YEARS;
+      const prevStock = civ.fuel?.stock ?? this.config.civilization?.start?.fuelStock ?? 0;
+      const room = Math.max(0, stockMax - prevStock);
+      const { fuel } = collectFuel(civ.stage, civ.home, { heat: this.heat, belltree, elevation: this.elevation }, this.config.size, room);
+      // 上限は「集める量」にだけ掛ける (room)。開始時の蓄え (fuelStock) が上限を超えていても切り捨てない
+      // (石板の「蓄えは七年で尽きる」を成り立たせる)
+      let stock = prevStock + fuel;
+      // 不足は累積する (M8-05 v2): 蓄えから必要量を引き、足りない分を負債に積む。足りた年は負債が必要量ぶん減る。
+      // 負債が FUEL_YEARS 年分に達したら段階を下げる。「3 年に 1 度だけ足りる」細い供給で塔が立ち続ける穴を塞ぐ
+      const deficit = Math.max(0, need - stock);
+      stock = Math.max(0, stock - need);
+      const prevDebt = civ.fuel?.debt ?? 0;
+      const debt = deficit > 0 ? prevDebt + deficit : Math.max(0, prevDebt - need);
+      const shortYears = need > 0 ? Math.floor(debt / need) : 0;
+      civ.fuel = { last: fuel, need, shortYears, stock, debt };
+      if (civ.stage >= 1 && need > 0 && debt >= need * FUEL_YEARS) {
+        const before = civ.stage;
+        civ.stage -= 1;
+        civ.progress = 0;
+        civ.fuel = { ...civ.fuel, shortYears: 0, debt: 0 };
+        this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'fuel', year });
+        if (civ.stage === 0) {
+          civ.home = -1;
+          this.log('info', 'sim.civ.collapsed', { reason: 'fuel' });
+        }
+      }
+      this.log('info', 'sim.civ.fuel', { fuel: civ.fuel.last, need: civ.fuel.need, shortYears: civ.fuel.shortYears, stock: civ.fuel.stock });
+    }
+    // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
+    if (civ.stage >= 1) {
+      let vitSum = 0;
+      let vitCount = 0;
+      forEachInRadius(civ.home, SUPPORT_RADIUS, this.config.size, (i) => {
+        if (this.elevation[i] >= SEA_LEVEL) {
+          vitSum += this.vitality[i];
+          vitCount++;
+        }
       });
+      const vitalityMean = vitCount ? vitSum / vitCount : 0;
+      const { decline, reason } = checkDecline(civ.stage, civ.population, vitalityMean);
+      // 衰退条件が DECLINE_YEARS 年続いたときだけ段階を下げる (M8-06)。途切れれば数え直す
+      this.civDeclineStreak = decline ? this.civDeclineStreak + 1 : 0;
+      if (decline && this.civDeclineStreak >= DECLINE_YEARS) {
+        this.civDeclineStreak = 0;
+        const before = civ.stage;
+        civ.stage -= 1;
+        civ.progress = 0;
+        this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason, year });
+        if (civ.stage === 0) {
+          civ.home = -1;
+          this.log('info', 'sim.civ.collapsed', { reason });
+        }
+      }
     }
   }
 

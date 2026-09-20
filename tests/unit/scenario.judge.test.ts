@@ -5,14 +5,16 @@ import type { Condition, ScenarioDef } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
 
-const snap = (over: Partial<{ totals: Record<string, number>; elevation: number[]; vegetation: number[] }> = {}): WorldSnapshot => {
+const snap = (over: Partial<{ totals: Record<string, number>; elevation: number[]; vegetation: number[]; civ: { stage: number } | null }> = {}): WorldSnapshot => {
   const elevation = Float32Array.from(over.elevation ?? [0.1, 0.5, 0.5, 0.5]);
   const vegetation = Float32Array.from(over.vegetation ?? [0, 0.5, 0.5, 1]);
   const n = elevation.length;
+  // civ_stage のテスト用に、段階だけ指定できる簡易な CivState を組み立てる (他のフィールドは評価に使わないので既定値)
+  const civ = over.civ ? { speciesId: 'deer', stage: over.civ.stage, progress: 0, home: -1, population: 0 } : null;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 },
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0,
     totals: over.totals ?? { grass: 10, deer: 5, wolf: 1 },
-    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation, vitality: new Float32Array(n), litter: new Float32Array(n), populations: { grass: vegetation } },
+    layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation, vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: vegetation } },
   };
 };
 const input = (s: WorldSnapshot, year = 0, interventions = 0, start = startStats(snap())): JudgeInput => ({ snapshot: s, start, year, interventions });
@@ -73,13 +75,14 @@ describe('judgeScenario', () => {
 
 describe('assets/data/scenarios.json', () => {
   const defs = JSON.parse(readFileSync('assets/data/scenarios.json', 'utf8')) as ScenarioDef[];
-  it('contains the four first scenarios with prophecy and conditions', () => {
-    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine']);
+  it('contains the six first scenarios with prophecy and conditions', () => {
+    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine', 'tower']);
     for (const d of defs.filter((x) => !x.hidden)) {
       expect(d.prophecy.length).toBeGreaterThan(10);
       expect(d.years).toBeGreaterThan(0);
       expect(['prevent', 'endure', 'escape']).toContain(d.kind);
-      expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 } }), 0)).status).toBe('running');
+      // civ_stage 条件を使う塔の重さも running になるよう、開始段階相当の civ を入れておく
+      expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 }, civ: { stage: 6 } }), 0)).status).toBe('running');
     }
   });
 });
@@ -110,5 +113,28 @@ describe('species_mean', () => {
     const c: Condition = { type: 'species_mean', ids: ['deer'], years: 10, min: 5 };
     const hist = [...Array(9).fill({ deer: 0 }), { deer: 30 }];
     expect(evaluate(c, { ...input(snap({ totals: { deer: 30 } })), history: hist }).ok).toBe(false);
+  });
+});
+
+describe('civ_stage', () => {
+  it('years 省略時は今の段階だけを見る。civ が null なら段階 0 扱い', () => {
+    const min6 = { type: 'civ_stage', min: 6 } as const;
+    expect(evaluate(min6, input(snap({ civ: { stage: 6 } }))).ok).toBe(true);
+    expect(evaluate(min6, input(snap({ civ: { stage: 6 } }))).why).toBe('文明の段階 6(塔)');
+    expect(evaluate(min6, input(snap({ civ: { stage: 5 } }))).ok).toBe(false);
+    expect(evaluate(min6, input(snap({ civ: { stage: 5 } }))).why).toBe('文明の段階が 5(帆) まで下がった');
+    expect(evaluate(min6, input(snap({ civ: null }))).ok).toBe(false);
+    expect(evaluate(min6, input(snap({ civ: null }))).why).toBe('文明の段階が 0(なし) まで下がった');
+  });
+  it('years ありなら直近 years 年の最小段階で判定する', () => {
+    const c = { type: 'civ_stage', min: 6, years: 10 } as const;
+    const okHist = [6, 6, 7, 6, 6, 6, 6, 6, 6, 6];
+    expect(evaluate(c, { ...input(snap({ civ: { stage: 6 } })), civHistory: okHist }).ok).toBe(true);
+    const dipHist = [6, 6, 6, 5, 6, 6, 6, 6, 6, 6];
+    const r = evaluate(c, { ...input(snap({ civ: { stage: 6 } })), civHistory: dipHist });
+    expect(r.ok).toBe(false);
+    expect(r.why).toBe('文明の段階が 5(帆) まで下がった');
+    // civHistory 省略時は今年の段階だけで見る
+    expect(evaluate(c, input(snap({ civ: { stage: 6 } }))).ok).toBe(true);
   });
 });

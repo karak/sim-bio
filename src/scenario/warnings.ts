@@ -1,8 +1,9 @@
 import type { WorldSnapshot } from '../simulation/types';
 import { landRatio } from './judge';
+import { FUEL_YEARS } from '../simulation/civilizationFuel';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income';
+export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low';
 
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
 export type Warning = {
@@ -15,6 +16,9 @@ export type Warning = {
 
 /** 警告の材料になる力の情報 (ScenarioRunner.budget() と同じ形)。budget のないシナリオでは null */
 export type PowerInfo = { power: number; max: number; incomeLastYear: number; upkeepLastYear: number };
+
+/** civ_declining の材料。前年の文明の段階。文明が無い/前年が無い (最初の年) なら null */
+export type CivContext = { prevStage: number } | null;
 
 /** 種の総量がこの割合を下回ると警告 */
 export const SPECIES_LOW_RATIO = 0.25;
@@ -44,8 +48,9 @@ export function speciesInCondition(c: Condition): string[] {
  * power_low: どのコマンドも買えない。power_capped: 上限に達していて収入を捨てている。
  * upkeep_over_income: 直前の年の維持費が収入を超えている。
  * def.ignoreWarnings にある種類は出さない (予言どおりの進行を警告にしないため)。
+ * civ_declining: 文明の段階が前年より下がった年に出す (civ 引数を渡したときだけ。省略時は評価しない)。陸のあとに置く。
  */
-export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: StartStats, power: PowerInfo | null): Warning[] {
+export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: StartStats, power: PowerInfo | null, civ: CivContext = null): Warning[] {
   const out: Warning[] = [];
   const ids = [...new Set(speciesInCondition(def.alive))];
   for (const id of ids) {
@@ -60,6 +65,23 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
   if (start.landRatio > 0) {
     const ratio = landRatio(s) / start.landRatio;
     if (ratio < LAND_LOW_RATIO) out.push({ kind: 'land_low', key: 'land_low', text: `陸が減っている(基準の ${Math.round(ratio * 100)}%)` });
+  }
+  if (civ) {
+    const stage = s.civ?.stage ?? 0;
+    if (stage < civ.prevStage) {
+      out.push({ kind: 'civ_declining', key: `civ_declining:${stage}`, text: `文明が衰えている(段階 ${civ.prevStage} → ${stage})` });
+    }
+  }
+  // 塔の燃料 (M8-08): 直近の年次実績が必要量に足りていない年に出す
+  // M8-06 (v2): 蓄えの導入後は「その年に集めた量」ではなく蓄えと負債で判断する。集めた量が 0 でも蓄えがあれば塔は立つので、
+  // 蓄えが 1 年分を割った年に「心細い」、負債が積み上がっている年に「足りない(不足 N 年分)」を出す
+  if (s.civ?.fuel && s.civ.fuel.need > 0) {
+    const { stock, need, debt } = s.civ.fuel;
+    if (debt > 0) {
+      out.push({ kind: 'fuel_low', key: 'fuel_low', text: `塔の燃料が足りない(不足 ${(debt / need).toFixed(1)} 年分。${FUEL_YEARS} 年分で一段崩れる)` });
+    } else if (stock < need) {
+      out.push({ kind: 'fuel_low', key: 'fuel_low:stock', text: `塔の燃料が心細い(蓄え ${Math.round(stock)} / 年に ${Math.round(need)})` });
+    }
   }
   if (def.budget && power) {
     const cheapest = Math.min(def.budget.costs.spawn, def.budget.costs.disaster, def.budget.costs.climate);

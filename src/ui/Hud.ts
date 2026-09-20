@@ -1,10 +1,25 @@
 import type { Command, DisasterKind, SaveData, WorldSnapshot } from '../simulation/types';
+import type { CivState } from '../simulation/civilization';
+import { STAGE_NAMES, NEED } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
 import { drawGraph, type GraphLine, type GraphMarker } from './graph';
 import { SEA_LEVEL } from '../simulation/terrain';
 import './hud.css';
+
+/** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
+export function formatCiv(civ: CivState | null): string | null {
+  if (!civ || civ.stage < 1) return null;
+  const name = STAGE_NAMES[civ.stage] ?? '?';
+  // 進みは次の段階に必要な量 (NEED) に対する割合。最終段階では 100%。民は密度の和 (小さい値) なので 100 倍して整数で見せる (M8-06)
+  const need = NEED[civ.stage];
+  const pct = Number.isFinite(need) && need > 0 ? Math.min(100, Math.round((civ.progress / need) * 100)) : 100;
+  // 燃料 (M8-08): stage 4 (石) 以降、fuel の実績があるときだけ「· 燃料 直近 / 必要」を足す
+  // 蓄え (M8-05 v2): 「燃料 蓄え / 年に必要」。蓄えが必要量を割ると足りない年になる
+  const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.stock)} / ${Math.round(civ.fuel.need)}年` : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}`;
+}
 
 export type HudHandlers = {
   onCommand(cmd: Command): void;
@@ -40,6 +55,7 @@ const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] =
   { id: 'moisture', label: '降水' },
   { id: 'vegetation', label: '植生' },
   { id: 'vitality', label: '生気' },
+  { id: 'crystal', label: '輝石' },
 ];
 const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'meteor', label: '隕石' },
@@ -55,6 +71,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     `
   <div class="hud hud-tl">
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
+    <div id="hud-civ" class="mono" hidden></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
@@ -71,6 +88,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <label>降水 <input id="rain-scale" type="range" min="0.3" max="2" step="0.05" value="1"><span id="rain-scale-v" class="mono">×1.00</span></label>
     <span class="sep"></span>
     ${DISASTERS.map((d) => `<button id="disaster-${d.kind}" class="chip">${d.label}</button>`).join('')}
+    <span id="volcano-hint" class="dim" hidden>火の山: 島の印(火口)に打てば熱が塔の燃料になる</span>
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
@@ -153,6 +171,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   const setArmed = (k: DisasterKind | null) => {
     armed = k;
     for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('armed', d.kind === k);
+    // 火山チップを持っているときだけ、火山セルへの誘導ヒントを出す (M8-08)
+    $('volcano-hint').hidden = k !== 'volcano';
     if (k !== null && spawnArmed !== null) setSpawnArmed(null);
     h.onDisasterArm(k);
   };
@@ -228,10 +248,12 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
         setLayerModeUI();
       });
     }
-    $('spawn-row').innerHTML = s.species
+    // spawnable: false の種 (M8-09: 炎蜥蜴) は放流チップを出さない。凡例・住みやすさレイヤーには出る (上のループ)
+    const spawnableSpecies = s.species.filter((d) => d.spawnable !== false);
+    $('spawn-row').innerHTML = spawnableSpecies
       .map((d) => `<button id="spawn-${d.id}" class="chip"><i class="swatch" style="background:${d.color}"></i>${d.name}</button>`)
       .join('');
-    for (const d of s.species) {
+    for (const d of spawnableSpecies) {
       $(`spawn-${d.id}`).addEventListener('click', () => {
         const next = spawnArmed === d.id ? null : d.id;
         if (next !== null && armed !== null) setArmed(null);
@@ -273,6 +295,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $('temp-offset-v').textContent = (s.climate.tempOffset >= 0 ? '+' : '') + s.climate.tempOffset.toFixed(1);
     }
     $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
+    const civText = formatCiv(s.civ);
+    const civEl = $('hud-civ');
+    civEl.hidden = civText === null;
+    if (civText !== null) civEl.textContent = civText;
     if (s.year !== lastYear) {
       lastYear = s.year;
       ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
@@ -307,6 +333,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       `<div><span>標高</span><span class="mono">${Math.round(L.elevation[cell] * 1000)} m</span></div>` +
       `<div><span>気温 / 水分</span><span class="mono">${L.temperature[cell].toFixed(1)}℃ / ${L.moisture[cell].toFixed(2)}</span></div>` +
       `<div><span>生気 / 枯死</span><span class="mono">${L.vitality[cell].toFixed(2)} / ${L.litter[cell].toFixed(2)}</span></div>` +
+      `<div><span>輝石</span><span class="mono">${L.crystal[cell].toFixed(2)}</span></div>` +
       s.species.map((d) => `<div><span>${d.name}</span><span class="mono">${L.populations[d.id][cell].toFixed(2)}</span></div>`).join('');
   };
 

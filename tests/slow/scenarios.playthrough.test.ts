@@ -5,6 +5,9 @@ import { createMemorySink } from '../../src/core/log/memorySink';
 import { createScenarioRunner, type ScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig, WorldSnapshot } from '../../src/simulation/types';
+import { resolveCivilizationStart } from '../../src/simulation/civilization';
+import { forEachInRadius } from '../../src/simulation/disaster';
+import { suitability } from '../../src/simulation/vegetation';
 
 /**
  * 5 本のシナリオを「放置」と「台本どおりの介入」で回し、
@@ -148,5 +151,111 @@ describe('scenario playthroughs (size 64)', { timeout: 600_000 }, () => {
     const v = play(def, (r, _s, y) => { if (y === 12) r.intervene({ type: 'set_climate', rainScale: 1.9 }); });
     expect(v.status).toBe('dead');
     expect(v.reason).toContain('wolf');
+  });
+});
+
+/**
+ * 「塔の重さ」v2 (M8-05)。レベルデザイン docs/design/2026-09-20-level-design-tower.md §5 の判定行列。
+ * 塔は燃料で立つ。火 (火山の熱、炎蜥蜴の代償) と樹 (鐘樹の材、陰の代償) の配分だけが生き延びる。
+ * 集落 2847、火口 3167 (島で最も暖かい低地。噴火で 31℃ を超え炎蜥蜴が湧く)、鐘樹は集落半径 8 内の適地に植える。
+ * 校正の続き (2026-09-21): 火口を 3223 (同じ暖かさの低地、集落から 10 セル) に移した。5 セルでは噴火の焼け跡が集落の支え半径 8 と重なり、
+ * 鹿の谷と重なった 1 回の噴火で民が 4 年続けて塔の必要量を割って衰退した (火が「時期を当てるゲーム」になる)。10 セルなら熱は徴収半径 12 に入り、炎蜥蜴だけが歩いてくる。
+ */
+const TOWER_HOME = 2847;
+const TOWER_VOLCANO = 3223;
+const ERUPT_COST = 24;
+
+/** 集落半径 8 内で鐘樹の適合度が高いセルを、互いに 2.5 セル以上離して選ぶ (プレイヤーが植える場所の近似) */
+function belltreeSites(s: WorldSnapshot, max: number): number[] {
+  const bt = species.find((d) => d.id === 'belltree');
+  if (!bt) throw new Error('belltree missing');
+  const sites: number[] = [];
+  forEachInRadius(TOWER_HOME, 8, SIZE, (i) => {
+    if (sites.length >= max || s.layers.elevation[i] < 0.3) return;
+    if (suitability(bt, s.layers.temperature[i], s.layers.moisture[i]) <= 0.75) return;
+    const x = i % SIZE;
+    const y = Math.floor(i / SIZE);
+    if (sites.every((c) => Math.hypot(x - (c % SIZE), y - Math.floor(c / SIZE)) > 2.5)) sites.push(i);
+  });
+  return sites;
+}
+
+type TowerOps = { plant: (n: number) => void; erupt: () => void; short: (mult: number) => boolean };
+const towerOps = (r: ScenarioRunner, s: WorldSnapshot, state: { planted: number; sites: number[] }): TowerOps => {
+  if (state.sites.length === 0) state.sites = belltreeSites(s, 12);
+  const f = s.civ?.fuel;
+  return {
+    plant: (n) => {
+      for (let k = 0; k < n && state.planted < state.sites.length; k++, state.planted++) {
+        r.intervene({ type: 'spawn_species', speciesId: 'belltree', cell: state.sites[state.planted], amount: 0.5, radius: 1 });
+      }
+    },
+    erupt: () => {
+      if (r.power() >= ERUPT_COST) r.intervene({ type: 'disaster', kind: 'volcano', cell: TOWER_VOLCANO, radius: 4 });
+    },
+    short: (mult) => (f ? f.stock < f.need * mult : false),
+  };
+};
+
+const towerScripts: Record<string, Script> = {};
+{
+  // 火だけ: 蓄えが 2 年分を割るたびに噴火。力が続かず 30 年目前後に燃料切れで一段落ち、戻れない
+  const st1 = { planted: 0, sites: [] as number[] };
+  towerScripts['fire-only'] = (r, s, y) => { const o = towerOps(r, s, st1); if (y >= 1 && o.short(2)) o.erupt(); };
+  // 樹だけ: 4 年ごとに 5 か所ずつ植える。材が間に合わず 22 年目までに歌まで落ちる
+  const st2 = { planted: 0, sites: [] as number[] };
+  towerScripts['tree-only'] = (r, s, y) => { const o = towerOps(r, s, st2); if (y >= 1 && y % 4 === 1) o.plant(5); };
+  // 想定解 1: 40 年目まで 2 年ごとに 3 か所植えつつ、蓄えが 1 年分を割ったら噴火 (約 12 回)
+  const st3 = { planted: 0, sites: [] as number[] };
+  towerScripts['fire-and-trees'] = (r, s, y) => { const o = towerOps(r, s, st3); if (y >= 1 && y <= 40 && y % 2 === 1) o.plant(3); if (y >= 1 && o.short(1)) o.erupt(); };
+  // 想定解 2: 最初の 20 年で毎年 2 か所植え、蓄えが 1 年分を割ったら噴火 (約 11 回)
+  const st4 = { planted: 0, sites: [] as number[] };
+  towerScripts['trees-first'] = (r, s, y) => { const o = towerOps(r, s, st4); if (y >= 1 && y <= 20) o.plant(2); if (y >= 1 && o.short(1)) o.erupt(); };
+}
+
+function playTower(def: ScenarioDef, script: Script | null) {
+  const cfg: WorldConfig = {
+    ...structuredClone(base),
+    size: SIZE,
+    species: species.map((d) => ({ ...d, ...(def.start?.species?.[d.id] ?? {}) })),
+    seed: def.start?.seed ?? base.seed,
+    civilization: resolveCivilizationStart(def.start?.civilization, SIZE),
+    volcanoCell: def.start?.volcanoCell,
+  };
+  const w = World.create(cfg, { log: createMemorySink() });
+  const r = createScenarioRunner(def, w, { ticksPerYear: cfg.ticksPerYear });
+  for (let y = 0; y <= def.years; y++) {
+    const s = w.snapshot();
+    script?.(r, s, y);
+    const v = r.update(s);
+    if (v.status !== 'running') return v;
+    w.step(cfg.ticksPerYear);
+  }
+  return r.verdict();
+}
+
+describe('tower scenario v2 playthroughs (size 64)', { timeout: 600_000 }, () => {
+  const def = defs.find((d) => d.id === 'tower');
+  if (!def) throw new Error('scenario tower missing');
+  it('idle → dead (燃料切れで段階が落ちる)', () => {
+    const v = playTower(def, null);
+    expect(v.status).toBe('dead');
+    expect(v.reason).toContain('文明の段階');
+  });
+  it('naive fire-only → dead', () => {
+    const v = playTower(def, towerScripts['fire-only']);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('naive tree-only → dead', () => {
+    const v = playTower(def, towerScripts['tree-only']);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('fire + trees (想定解 1) → alive', () => {
+    const v = playTower(def, towerScripts['fire-and-trees']);
+    expect(v.status, v.reason).toBe('alive');
+  });
+  it('trees first + fire (想定解 2) → alive', () => {
+    const v = playTower(def, towerScripts['trees-first']);
+    expect(v.status, v.reason).toBe('alive');
   });
 });

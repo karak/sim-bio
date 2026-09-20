@@ -25,7 +25,13 @@ describe('assets/data', () => {
       deer.push(w.snapshot().totals.deer);
     }
     const t = w.snapshot().totals;
-    for (const s of species) expect(t[s.id], s.id).toBeGreaterThan(0);
+    // 炎蜥蜴 (M8-09) は熱でしか増えない設計で、この試験は噴火を起こさないので絶滅して 0 になるのが正しい (tests/unit/firelizard.test.ts で検証)。
+    // initialDensity 0 の種 (M8-10 鐘樹など) は放流でしか増えないので、自然発生では総量 0 のままでよい
+    for (const s of species) {
+      if (s.id === 'firelizard' || s.initialDensity === 0) continue;
+      expect(t[s.id], s.id).toBeGreaterThan(0);
+    }
+    expect(t.firelizard).toBe(0);
     expect(species.map((s) => s.trophic)).toEqual(expect.arrayContaining(['plant', 'herbivore', 'carnivore']));
     // M3: 捕食者・被食者の波が持続する (後半 50 年で極大値 3 以上、振幅比 0.2 以上)
     expect(countPeaks(secondHalf(deer), 0.5)).toBeGreaterThanOrEqual(3);
