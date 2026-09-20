@@ -29,3 +29,4 @@ M20-01
 
 ## 作業ログ
 
+- 2026-09-20 決定: filter-repo で author を noreply に書き換え(squash しない)。生成画像も含めて公開し、PNG を LFS 化する(既存履歴の PNG を LFS に移すには filter-repo の --path-based LFS 変換または `git lfs migrate import --include='assets/textures/**/*.png' --everything` を使う)。実施は M8 の全ブランチ統合後。

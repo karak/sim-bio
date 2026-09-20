@@ -29,3 +29,4 @@ M20-02, M20-03
 
 ## 作業ログ
 
+- 2026-09-20 決定: リポジトリ名 sim-bio(仮称)。LFS を有効にして push(Uploading LFS objects を確認)。

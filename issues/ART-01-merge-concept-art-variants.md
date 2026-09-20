@@ -35,7 +35,7 @@ None (can start immediately)
 ブランチ worktree-concept-art-variants を、このチェックアウトのブランチ(feat/m8。別を指示された場合はそれに従う)にマージしてください。コンセプト画 → Blender ローポリモデル(rabbit / deer / wolf)と、その検証ツール・QA 文書を含むブランチです。詳細な手順書は `git show worktree-concept-art-variants:docs/design/qa/handoff-T18-merge.md` で読めます。
 
 前提(検証済み)
-- マージ元の HEAD は `git log -1 worktree-concept-art-variants` で確認。worktree は `<repo>/.claude/worktrees/concept-art-variants`(別セッションが使用中。中は触らない)。
+- マージ元の HEAD は `git log -1 worktree-concept-art-variants` で確認。worktree は `.claude/worktrees/concept-art-variants`(リポジトリルートからの相対)(別セッションが使用中。中は触らない)。
 - 分岐点 b09d573(feat/m4 の途中)。独自コミット 21、変更ファイル 58。tools/blender/、tools/gen-concept-art.mjs、assets/models/、assets/textures/concept/、docs/design/qa/、.gitattributes、.gitignore のみ。src/ と tests/ は無変更。
 - feat/m8・main への試しマージで、衝突は .gitignore 末尾ブロックのみ。こちらの `# Python / __pycache__/` と相手の `# 他エージェントの worktree / .claude/worktrees/` を両方残す。
 - assets/models/{rabbit,deer,wolf}.{blend,glb} の 6 ファイルは git LFS 管理(.gitattributes)。`git lfs install` は同リポジトリで実行済み。
