@@ -8,8 +8,8 @@
 | ファイル | 役割 |
 |---|---|
 | `tools/blender/creature_parts.py` | 個体別のパーツ定義。評価パーツ、ID 色、マテリアル名 → パーツの対応、材質の初期色、参照画像の HSV 分類ルール |
-| `tools/blender/compare_ref.py` | 撮影と比較。`creature=<name>` を渡すか、ファイル名 (`deer.blend` / `deer-angular.png`) から個体を推定する |
-| `tools/blender/tune_colors.py` | 材質色の補正ループ。`--creature deer` のように個体を指定する |
+| `tools/blender/compare_ref.py` | 撮影と比較。`creature=<name>` を渡すか、ファイル名 (`deer.blend` / `deer-angular.png`) から個体を推定する。`proj=persp` (既定、50 mm) / `proj=ortho` (平行投影) |
+| `tools/blender/tune_colors.py` | 材質色の補正ループ。`--creature deer` のように個体を指定する。`--proj ortho` で平行投影 (生成側と揃える) |
 | `tools/blender/<creature>.py` | モデル生成スクリプト (rabbit / deer / wolf)。deer と wolf は共通部品 `lowpoly_kit.py` (材質・ロフト・参照座標系デカール・仕上げ) を使う |
 | `tools/blender/<creature>-colors.json` | 補正で収束した材質色 (生成スクリプトが読み込む) |
 
@@ -28,6 +28,8 @@
 
 - 方位: rabbit は 45° (右側面が手前、頭が画面左)。deer / wolf は参照の頭が画面右なので 135° (左側面が手前)。仰角は共通で 10°。
 - カメラ距離: 全高がフレームの 62% になる距離。横長の個体は画面上の概算幅 0.7·(dx+dy) が全高を超えるのでそれを基準にする (compare_ref.py と lowpoly_kit.py で同じ規則)。
+- 投影: rabbit / deer は透視 (50 mm)。wolf は平行投影 (`proj=ortho`)。参照が 4 本の足を同じ地面線に描いているため、横長の個体を透視で撮ると奥の脚が 0.2 H 高く写り尾側が 0.66 倍に縮む。
+  生成スクリプト側も `kit.setup_ref_camera(az, el, ortho=True)` で同じ投影にする (デカール・鰭の投影先が変わる)。仰角は 0 / 5 / 10° を比較し、10° が最も一致した (足の揃いより胴・頭の一致が効く)。
 - 正規化枠: シルエット bbox の高さを 1 とし中央揃え・上寄せ。`fx = (x − 中心)/高さ`, `fy = 上端からの距離/高さ`。
   横長の個体 (参照の縦横比 > 1) はクラス図とヒートマップを 2 倍幅で出力する (中央 S×S に切り出さない)。実行ログに `frame: unit = height, wide layout` と出る。
 
@@ -37,12 +39,15 @@
 # 1. 生成 (deer / wolf は tools/blender/<creature>.py を rabbit.py と同じ規約で作る)
 ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/deer.py -- assets/models
 
-# 2. 比較 (deer / wolf は方位 135°、rabbit は 45°。仰角 10°)
+# 2. 比較 (deer / wolf は方位 135°、rabbit は 45°。仰角 10°。wolf は proj=ortho を付ける)
 ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/compare_ref.py -- \
     assets/models/deer.blend assets/textures/concept/deer-angular.png <out_dir> 135 10 creature=deer
 
-# 3. 材質色の補正 (全パーツ ΔE76 < 1 まで)
+# 3. 材質色の補正 (全パーツ ΔE76 < 1 まで。wolf は --proj ortho)
 python3 tools/blender/tune_colors.py --creature deer --az 135 --target 1.0
+
+# 5. メッシュ検査 (孤立頂点・非多様体・法線)
+~/.claude/skills/blender/scripts/run_blender.sh ~/.claude/skills/blender/scripts/inspect_scene.py -- assets/models/deer.blend
 
 # 4. 証跡を docs/design/qa/<creature>-compare.png, -metrics.json, -ref-components.json, -tune-history.json にコピー
 ```
@@ -65,4 +70,5 @@ rabbit の `rabbit-acceptance-criteria.md` と同じ構成で作る。数値目�
 ## 個体ごとの注意
 
 - **deer**: 角 (glow) がシルエットの約 20% を占め、上半分の一致が支配的になる。参照は頭が画面右なので az=135 で撮る。パネル (dark) は面ごとに割り当てられる形なので、`deer.py` の `paint_faces` (参照座標の多角形に投影される面を塗る) で再現している。結果と残課題は `deer-acceptance-criteria.md` / `deer-remaining-issues.md`。
-- **wolf**: 横長で前傾姿勢。glow は幅 1〜2 px の縁線なので、モデル側は細いリボン (`Kit.ribbon`) で再現し、比較解像度 (S=384) で消えないよう幅 0.01 以上にする。dark は大半が陰 (脚の後ろ側・顔の下面) で、`wolf.py` の `shade_faces` が法線の向きで塗り分けるが位置は合わない。結果と残課題は `wolf-acceptance-criteria.md` / `wolf-remaining-issues.md`。
+- **wolf**: 横長で前傾姿勢。平行投影で評価する。glow は輪郭のすぐ内側を走る幅 1〜2 px の線で、表面のリボンだと横から潰れて見えないので、参照クラス図の glow 画素の内側の縁を折れ線にして輪郭から立てた薄い鰭 (`Kit.fin`, `screen=True`, 高さ 0.013 m) で表す。胸・首・耳の線は面上のリボン (`Kit.ribbon`)。dark は大半が陰 (脚の後ろ側・顔の下面) で、`wolf.py` の `shade_faces` が法線の向きで塗り分けるが位置は合わない。結果と残課題は `wolf-acceptance-criteria.md` / `wolf-remaining-issues.md`。
+- **列ごとの輪郭比較**: 参照クラス図とモデルクラス図の各 fx 列で非背景画素の fy 区間を並べると (セッション内の補助スクリプト cols.py、T15 で取り込み予定)、頭・背・尾・脚のどこがずれているか数値で分かる。wolf の 2 回目はこの表と `WOLF_DEBUG=1` のランドマーク投影で合わせた。

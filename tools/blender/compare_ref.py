@@ -2,11 +2,13 @@
 
 使い方:
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/compare_ref.py -- \
-      assets/models/<creature>.blend assets/textures/concept/<creature>-angular.png <out_dir> [az] [el] [creature=<name>]
+      assets/models/<creature>.blend assets/textures/concept/<creature>-angular.png <out_dir> [az] [el] [creature=<name>] [proj=persp|ortho]
 
   az: カメラ方位 (度)。0 = 被写体の右真横 (+X)、正で正面側 (-Y) に回る。既定 45
   el: カメラ仰角 (度)。既定 10
   creature: rabbit / deer / wolf。省略時は blend または参照画像のファイル名の先頭から推定する
+  proj: persp (既定、50 mm) / ortho (平行投影)。参照画像は地面線を揃えて描かれているので、横長の個体 (wolf) は
+        透視だと奥の脚が高く写り評価の下限になる。ortho では奥行きによる縮小がなくなる (生成側も同じ proj で組むこと)
 
 評価の考え方:
   モデル側はマテリアルを ID 色で描いた「ID パス」でパーツを正確に分割する。マテリアル名は <creature>_<part> (fur / dark / glow /
@@ -53,13 +55,16 @@ az = float(argv[3]) if len(argv) > 3 else 45.0
 el = float(argv[4]) if len(argv) > 4 else 10.0
 os.makedirs(out_dir, exist_ok=True)
 
+PROJ = kw.get("proj", "persp")
+if PROJ not in ("persp", "ortho"):
+    raise SystemExit(f"proj は persp / ortho のどちらか: {PROJ}")
 CREATURE = kw.get("creature") or creature_from_path(blend, ref_path)
 CFG = CREATURES[CREATURE]
 PARTS = CFG["parts"]
 ID_COLORS = CFG["id_colors"]
 # クラス図の表示色
 CLASS_VIS = CFG["class_vis"]
-print(f"creature: {CREATURE}, parts: {PARTS}")
+print(f"creature: {CREATURE}, parts: {PARTS}, projection: {PROJ}")
 
 
 # ---------- 色空間 ----------
@@ -134,6 +139,9 @@ fov = 2 * math.atan(cam_data.sensor_width / 2 / cam_data.lens)
 # 横長の個体は幅がフレームからはみ出すので、画面上の概算幅 (0.7·(dx+dy)) が全高を超えるときはそれを基準にする
 fill_dim = max(height, 0.7 * ((hi.x - lo.x) + (hi.y - lo.y)))
 dist = (fill_dim / 0.62) / 2 / math.tan(fov / 2)
+if PROJ == "ortho":
+    cam_data.type = "ORTHO"
+    cam_data.ortho_scale = fill_dim / 0.62  # 平行投影: フレーム幅 = fill_dim / 0.62 (m)。距離は視野に影響しない
 a, e = math.radians(az), math.radians(el)
 cam.location = center + Vector((math.cos(a) * math.cos(e) * dist, -math.sin(a) * math.cos(e) * dist, math.sin(e) * dist))
 cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
@@ -312,7 +320,7 @@ pixel_color = {
 }
 
 metrics = {
-    "camera": {"azimuth_deg": az, "elevation_deg": el, "distance_m": dist},
+    "camera": {"azimuth_deg": az, "elevation_deg": el, "distance_m": dist, "projection": PROJ},
     "faces": int(sum(len(o.data.polygons) for o in meshes)),
     "tris": int(sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in meshes)),
     "parts": parts,

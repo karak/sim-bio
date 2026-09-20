@@ -59,6 +59,7 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--az", default="45")
     ap.add_argument("--el", default="10")
+    ap.add_argument("--proj", default="persp", choices=["persp", "ortho"], help="compare_ref.py の proj= (生成スクリプト側の設定と揃える)")
     a = ap.parse_args()
     cfg = CREATURES[a.creature]
     class_materials = cfg["class_materials"]
@@ -79,7 +80,7 @@ def main():
     for it in range(a.max_iter + 1):
         json.dump(colors, open(colors_path, "w"), indent=2)
         run([RUN, build_script, "--", "assets/models"])
-        run([RUN, "tools/blender/compare_ref.py", "--", blend, ref_png, out, a.az, a.el, f"creature={a.creature}"])
+        run([RUN, "tools/blender/compare_ref.py", "--", blend, ref_png, out, a.az, a.el, f"creature={a.creature}", f"proj={a.proj}"])
         m = json.load(open(os.path.join(out, "metrics.json")))
         des = {p: m["parts"][p]["color"]["delta_e76"] for p in class_materials}
         history.append({"iter": it, "colors": dict(colors), "delta_e76": des})

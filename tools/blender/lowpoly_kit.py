@@ -74,12 +74,13 @@ def tube(bm, pts, radii, n=6, phase=0.0, tip=True):
     """折れ線 pts に沿って半径 radii のリングを置きロフトする (角・脚・尾など)。tip=True で最後を点に収束"""
     rings = []
     for i, (p, r) in enumerate(zip(pts, radii)):
+        if tip and i == len(pts) - 1:
+            rings.append(bm.verts.new(p))  # 先端は 1 点 (リングを作ってから置き換えると孤立頂点が残る)
+            continue
         d = ((pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)])).normalized()
         u = (Z.cross(d) if abs(d.z) < 0.9 else X.cross(d)).normalized()
         v = d.cross(u).normalized()
         rings.append(ring(bm, p, u, v, r, r, n, phase))
-    if tip:
-        rings[-1] = bm.verts.new(pts[-1])
     return loft(bm, rings, cap_start=True, cap_end=not tip)
 
 
@@ -151,8 +152,8 @@ class Kit:
         return o
 
     # ---------- 参照座標系 ----------
-    def setup_ref_camera(self, az, el, lens=50, fill=0.62):
-        """compare_ref.py と同じカメラを組み、基本パーツの投影 bbox を控える"""
+    def setup_ref_camera(self, az, el, lens=50, fill=0.62, ortho=False):
+        """compare_ref.py と同じカメラを組み、基本パーツの投影 bbox を控える。ortho=True で平行投影 (compare_ref の proj=ortho)"""
         bpy.context.view_layer.update()
         self.depsgraph = bpy.context.evaluated_depsgraph_get()
         pts = [o.matrix_world @ Vector(c) for o in self.base_parts for c in o.bound_box]
@@ -168,10 +169,14 @@ class Kit:
         fov = 2 * math.atan(cam_data.sensor_width / 2 / lens)
         fill_dim = max(height, 0.7 * ((hi.x - lo.x) + (hi.y - lo.y)))  # compare_ref.py と同じ規則 (横長の個体は幅基準)
         dist = (fill_dim / fill) / 2 / math.tan(fov / 2)
+        if ortho:
+            cam_data.type = "ORTHO"
+            cam_data.ortho_scale = fill_dim / fill
         a, e = math.radians(az), math.radians(el)
         cam.location = center + Vector((math.cos(a) * math.cos(e) * dist, -math.sin(a) * math.cos(e) * dist, math.sin(e) * dist))
         cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
         bpy.context.view_layer.update()
+        self.ortho = ortho
         proj = [world_to_camera_view(self.scene, cam, o.matrix_world @ v.co) for o in self.base_parts for v in o.data.vertices]
         self.x0, self.x1 = min(p.x for p in proj), max(p.x for p in proj)
         self.y0, self.y1 = min(p.y for p in proj), max(p.y for p in proj)
@@ -201,8 +206,13 @@ class Kit:
         iy = self.y1 - fy * self.h
         p_local = self.bl + (self.br - self.bl) * ix + (self.tl - self.bl) * iy
         p_world = self.ref_cam.matrix_world @ p_local
-        origin = self.ref_cam.matrix_world.translation
-        d = (p_world - origin).normalized()
+        if self.ortho:
+            # 平行投影: 視線はすべてカメラの -Z 方向。原点は画枠上の点をカメラ側へ戻した位置
+            d = (self.ref_cam.matrix_world.to_3x3() @ Vector((0, 0, -1))).normalized()
+            origin = p_world - d * 10.0
+        else:
+            origin = self.ref_cam.matrix_world.translation
+            d = (p_world - origin).normalized()
         best = self._cast(objs, origin, d)
         if best is None:
             # 参照の輪郭がモデルより外側にある点: 枠の中心 (0, 0.5) へ 0.01 ずつ寄せて当たる所に置く
@@ -262,6 +272,48 @@ class Kit:
                 f = bm.faces.new((prev[0], prev[1], pair[1], pair[0]))
                 f.material_index = mat
             prev = pair
+        return self.finish(bm, name, base=False)
+
+    def view_dir(self, p):
+        """参照カメラから点 p を見る視線方向 (平行投影ならカメラの -Z)"""
+        if self.ortho:
+            return (self.ref_cam.matrix_world.to_3x3() @ Vector((0, 0, -1))).normalized()
+        return (Vector(p) - self.ref_cam.matrix_world.translation).normalized()
+
+    def fin(self, name, pts, mat, height=0.01, thickness=0.004, mirror=False, step=0.012, objs=None, screen=False):
+        """参照座標の折れ線 (輪郭沿いの縁線) を表面に投影し、height だけ立てた薄い板 (鰭) にする。
+        輪郭に沿う光の線は表面に貼った帯だと横から見ると潰れて見えないので、輪郭から突き出す形で表す。閉じた薄い箱にして両面から見える。
+        screen=False: 表面の法線方向へ立てる (輪郭上の点用)。
+        screen=True: 画面上で折れ線と直交する向き (視線 × 接線) へ立てる。参照の線が輪郭の内側 (縁から幅 w の帯) にあるとき、
+        帯の内側の縁を折れ線に渡し height=w にすると、鰭の上端がちょうど輪郭に来る"""
+        dense = []
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            k = max(1, int(math.hypot(bx - ax, by - ay) / step))
+            dense += [(ax + (bx - ax) * i / k, ay + (by - ay) * i / k) for i in range(k)]
+        dense.append(pts[-1])
+        hits = [self.at_ref(fx, fy, objs=objs, mirror=mirror) for fx, fy in dense]
+        bm = bmesh.new()
+        prev = None
+        for i, (loc, n, _, _) in enumerate(hits):
+            d = (hits[i + 1][0] - loc) if i + 1 < len(hits) else (loc - hits[i - 1][0])
+            d = d.normalized()
+            up = n
+            if screen:
+                up = d.cross(self.view_dir(loc)).normalized()
+                if up.dot(n) < 0:
+                    up = -up
+            side = up.cross(d).normalized() * (thickness / 2)
+            base = loc - up * 0.002  # 根元は表面に少し埋める
+            quad = (bm.verts.new(base - side), bm.verts.new(base + side), bm.verts.new(base + up * height + side), bm.verts.new(base + up * height - side))
+            if prev is None:
+                bm.faces.new(quad)  # 始端のキャップ
+            else:
+                for a, b in ((0, 1), (1, 2), (2, 3), (3, 0)):
+                    bm.faces.new((prev[a], prev[b], quad[b], quad[a]))
+            prev = quad
+        bm.faces.new(tuple(reversed(prev)))  # 終端のキャップ
+        for f in bm.faces:
+            f.material_index = mat
         return self.finish(bm, name, base=False)
 
     def panel(self, name, fx, fy, w_frame, h_frame, mat, mirror=False, objs=None, offset=0.0015, shape=None):
