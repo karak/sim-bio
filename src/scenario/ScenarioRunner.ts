@@ -9,7 +9,9 @@ export type TimelineEvent =
   | { year: number; kind: 'scheduled'; command: Command }
   | { year: number; kind: 'power_exhausted' }
   | { year: number; kind: 'warning'; warning: Warning }
-  | { year: number; kind: 'verdict'; verdict: Verdict };
+  | { year: number; kind: 'verdict'; verdict: Verdict }
+  /** 文明の段階が年をまたいで変わった (M8-04)。from/to は STAGE_NAMES の index */
+  | { year: number; kind: 'civ_stage'; from: number; to: number };
 
 type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
 
@@ -79,6 +81,8 @@ export function createScenarioRunner(
   const warned = new Set<string>();
   const timeline: TimelineEvent[] = [];
   let currentYear = 0;
+  /** 直近に見た文明の段階。年をまたいで変わったら timeline に積む (M8-04) */
+  let lastCivStage = first.civ?.stage ?? 0;
 
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
@@ -185,6 +189,10 @@ export function createScenarioRunner(
         const civStage = s.civ?.stage ?? 0;
         civHistory.push(civStage);
         prevCivStage = civStage;
+        if (civStage !== lastCivStage) {
+          timeline.push({ year, kind: 'civ_stage', from: lastCivStage, to: civStage });
+          lastCivStage = civStage;
+        }
         verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };

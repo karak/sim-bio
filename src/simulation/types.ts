@@ -1,3 +1,5 @@
+import type { CivState, CivilizationConfig } from './civilization';
+
 /** decomposer は枯死 (litter) を餌にし、いる場所の分解を速める第 4 の階層 */
 export type Trophic = 'plant' | 'herbivore' | 'carnivore' | 'decomposer';
 
@@ -51,6 +53,8 @@ export type WorldConfig = {
     co2ToTemp: number;
     iceAlbedo: number;
   };
+  /** 文明を持つ種 (M8-02)。省略時は文明なし (既定の世界・既存シナリオはすべてこれ) */
+  civilization?: CivilizationConfig;
 };
 
 export type DisasterKind = 'meteor' | 'volcano' | 'wildfire' | 'plague';
@@ -90,8 +94,8 @@ export type WorldSnapshot = {
   species: SpeciesDef[];
   /** 現在の気候設定 (set_climate で変わる)。星の力の維持費の計算に使う */
   climate: { tempOffset: number; rainScale: number };
-  /** 文明の状態 (M8-02)。まだ実装されていない/その世界に文明が無ければ null。段階だけ先に読めるよう最小限の形にしてある */
-  civ?: { stage: number } | null;
+  /** 文明の状態のコピー。config.civilization が無ければ null (M8-02) */
+  civ: CivState | null;
 };
 
 export type SaveData = {
@@ -109,4 +113,6 @@ export type SaveData = {
   /** M8 で追加。古いセーブには無い場合、restore 時に seed から決定論的に埋め直す */
   crystal?: number[];
   populations: Record<string, number[]>;
+  /** M8-02 で追加。config.civilization が無ければ無い */
+  civ?: CivState;
 };

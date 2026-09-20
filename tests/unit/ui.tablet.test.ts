@@ -16,4 +16,9 @@ describe('describeEvent (年表の文)', () => {
     expect(describeEvent({ year: 3, kind: 'verdict', verdict: alive }, names)).toBe('島は生き延びた');
     expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'spawn_species', speciesId: 'unknown', cell: 0, amount: 0.5 } }, names)).toBe('unknownを放った');
   });
+  it('文明の段階の上下・崩壊を人が読める文にする (M8-04)', () => {
+    expect(describeEvent({ year: 5, kind: 'civ_stage', from: 2, to: 3 }, names)).toBe('文明が 火 → 歌 に上がった');
+    expect(describeEvent({ year: 5, kind: 'civ_stage', from: 3, to: 2 }, names)).toBe('文明が 歌 → 火 に下がった');
+    expect(describeEvent({ year: 5, kind: 'civ_stage', from: 1, to: 0 }, names)).toBe('文明が崩壊した');
+  });
 });

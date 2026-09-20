@@ -1,5 +1,6 @@
 import {
   AmbientLight,
+  BoxGeometry,
   BufferAttribute,
   Color,
   DirectionalLight,
@@ -20,7 +21,13 @@ import type { WorldSnapshot } from '../simulation/types';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { layerToColors, type LayerKind } from './layerToColors';
 import { scatterInstances } from './scatter';
+import { settlementInstances } from './settlement';
 import type { AssetTable } from './assetTable';
+
+/** 集落の箱 1 個の寸法。stage の数だけ縦に積む */
+const SETTLEMENT_BOX = { width: 0.5, height: 0.4, depth: 0.5 };
+/** 文明は 0..7 段階なので最大でもこれだけあれば足りる */
+const SETTLEMENT_MAX_STAGE = 8;
 
 export type SceneView = {
   /** 毎フレーム呼ぶ。tick かレイヤーが変わった時だけ頂点色とインスタンスを更新する */
@@ -90,6 +97,13 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   const pos = new Float32Array(maxInst * 3);
   const dummy = new Object3D();
 
+  // 集落: 段階の数だけ積んだ小さな箱。文明なし・stage 0 では count 0 になり何も描かれない (M8-04)
+  const settlementGeo = new BoxGeometry(SETTLEMENT_BOX.width, SETTLEMENT_BOX.height, SETTLEMENT_BOX.depth);
+  const settlementMesh = new InstancedMesh(settlementGeo, new MeshLambertMaterial({ color: '#C9A24B' }), SETTLEMENT_MAX_STAGE);
+  settlementMesh.count = 0;
+  settlementMesh.frustumCulled = false;
+  scene.add(settlementMesh);
+
   let layer: LayerKind = 'terrain';
   let lastTick = -1;
   let lastLayer: LayerKind | null = null;
@@ -137,6 +151,20 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
         m.count = count;
         m.instanceMatrix.needsUpdate = true;
       }
+      const settlement = settlementInstances(s.civ, size);
+      if (settlement.count > 0) {
+        const cx = settlement.cell % size;
+        const cy = (settlement.cell - cx) / size;
+        const baseY = s.layers.elevation[settlement.cell] * hs;
+        for (let k = 0; k < settlement.count; k++) {
+          dummy.position.set(cx - size / 2 + 0.5, baseY + (k + 0.5) * SETTLEMENT_BOX.height, cy - size / 2 + 0.5);
+          dummy.scale.setScalar(1);
+          dummy.updateMatrix();
+          settlementMesh.setMatrixAt(k, dummy.matrix);
+        }
+      }
+      settlementMesh.count = settlement.count;
+      settlementMesh.instanceMatrix.needsUpdate = true;
       lastTick = s.tick;
       lastLayer = layer;
     }
@@ -172,6 +200,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       controls.dispose();
       renderer.dispose();
       geo.dispose();
+      settlementGeo.dispose();
     },
   };
 }

@@ -10,7 +10,7 @@ const snap = (over: Partial<{ totals: Record<string, number>; elevation: number[
   const vegetation = Float32Array.from(over.vegetation ?? [0, 0.5, 0.5, 1]);
   const n = elevation.length;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 },
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null,
     totals: over.totals ?? { grass: 10, deer: 5, wolf: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation, vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: vegetation } },
     civ: over.civ,

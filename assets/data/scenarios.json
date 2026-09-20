@@ -255,6 +255,28 @@
     }
   },
   {
+    "id": "test-civ",
+    "title": "文明の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。石の文明を最初から据えて、表示だけを確かめる。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 4,
+        "home": -1
+      }
+    },
+    "years": 5,
+    "schedule": [],
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
+  },
+  {
     "id": "tower",
     "title": "塔の重さ",
     "hidden": true,
