@@ -8,7 +8,7 @@ import {
   MINE_RATE,
   NEED,
   MAX_STAGE,
-  HOME_RADIUS,
+  SUPPORT_RADIUS,
   EMERGE_VEGETATION,
   type CivState,
 } from '../../src/simulation/civilization';
@@ -108,11 +108,13 @@ describe('populationAround', () => {
     const home = 4 * size + 4;
     const sum = populationAround(pops, home, elevation, size);
     let expected = 0;
-    for (let y = Math.max(0, 4 - HOME_RADIUS); y <= Math.min(size - 1, 4 + HOME_RADIUS); y++) {
-      for (let x = Math.max(0, 4 - HOME_RADIUS); x <= Math.min(size - 1, 4 + HOME_RADIUS); x++) {
+    for (let y = Math.max(0, 4 - SUPPORT_RADIUS); y <= Math.min(size - 1, 4 + SUPPORT_RADIUS); y++) {
+      for (let x = Math.max(0, 4 - SUPPORT_RADIUS); x <= Math.min(size - 1, 4 + SUPPORT_RADIUS); x++) {
         const dx = x - 4;
         const dy = y - 4;
-        if (dx * dx + dy * dy <= HOME_RADIUS * HOME_RADIUS) expected += 0.1;
+        if (dx * dx + dy * dy > SUPPORT_RADIUS * SUPPORT_RADIUS) continue;
+        if (elevation[y * size + x] <= 0) continue; // populationAround と同じく海は数えない
+        expected += 0.1;
       }
     }
     expect(sum).toBeCloseTo(expected, 6);

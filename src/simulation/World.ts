@@ -6,7 +6,7 @@ import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
-import { checkEmergence, HOME_RADIUS, populationAround, stepMining, type CivState } from './civilization';
+import { checkEmergence, HOME_RADIUS, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, checkDecline } from './civilizationLoad';
 
 export type WorldDeps = {
@@ -212,7 +212,8 @@ export class World {
     // forest 種が居ない世界では捨て配列 (常に 0) を渡し、生気の負荷だけがかかるようにする
     if (this.civ && this.civ.stage >= 1) {
       const forestPop = this.populations['forest'] ?? this.zeroForest;
-      applyLoad(this.civ.stage, this.civ.home, { forest: forestPop, litter: this.litter, vitality: this.vitality, elevation: this.elevation }, size);
+      const civPopulation = this.populations[this.civ.speciesId];
+      applyLoad(this.civ.stage, this.civ.home, { forest: forestPop, litter: this.litter, vitality: this.vitality, elevation: this.elevation, civPopulation }, size);
     }
     this.refresh();
     // 文明(M8-02): 発生済み (stage >= 1) なら毎 tick 輝石を掘り、段階が上がればログを出す
@@ -292,7 +293,7 @@ export class World {
     if (civ.stage >= 1) {
       let vitSum = 0;
       let vitCount = 0;
-      forEachInRadius(civ.home, HOME_RADIUS, this.config.size, (i) => {
+      forEachInRadius(civ.home, SUPPORT_RADIUS, this.config.size, (i) => {
         if (this.elevation[i] >= SEA_LEVEL) {
           vitSum += this.vitality[i];
           vitCount++;

@@ -1,7 +1,7 @@
 import type { Command, WorldSnapshot } from '../simulation/types';
 import { judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
 import type { ScenarioDef, StartStats, Verdict } from './types';
-import { scenarioWarnings, type Warning } from './warnings';
+import { scenarioWarnings, type CivContext, type Warning } from './warnings';
 
 /** 年表の 1 行。石板が種名などに整形して出す */
 export type TimelineEvent =
@@ -73,6 +73,10 @@ export function createScenarioRunner(
   let warnings: Warning[] = [];
   /** 年ごとの総量の履歴 (species_mean の判定用)。年に 1 件 */
   const history: Record<string, number>[] = [];
+  /** 年ごとの文明の段階の履歴 (civ_stage の years 判定用)。history と同じ並びで年に 1 件 */
+  const civHistory: number[] = [];
+  /** 前年の文明の段階。civ_declining の判定に使う。最初の年はまだ「前年」が無いので null */
+  let prevCivStage: number | null = null;
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
   const warned = new Set<string>();
   const timeline: TimelineEvent[] = [];
@@ -158,7 +162,10 @@ export function createScenarioRunner(
         powerSpent += cost;
       }
       interventions++;
-      world.dispatch(cmd);
+      // 予定コマンド (fireDue) と同じく cell = -1 (島の中心) と半径の縮尺を解決してから流す。
+      // 以前は resolve を通さず生の cmd を dispatch していたため、プレイヤー操作由来の介入で
+      // cell: -1 を使うと (-1, 0) 相当の意図しない位置に適用されていた (M8-05 で発覚)
+      world.dispatch(resolve(cmd));
       timeline.push({ year: currentYear, kind: 'intervene', command: cmd });
       return { ok: true };
     },
@@ -173,7 +180,8 @@ export function createScenarioRunner(
         lastYear = year;
         if (year === baselineYear) start = startStats(s);
         if (!isFirstCheck) applyBudgetYearChange(s);
-        warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null);
+        const civ: CivContext = prevCivStage === null ? null : { prevStage: prevCivStage };
+        warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ);
         for (const w of warnings) {
           if (warned.has(w.key)) continue;
           warned.add(w.key);
@@ -182,11 +190,13 @@ export function createScenarioRunner(
         }
         history.push({ ...s.totals });
         const civStage = s.civ?.stage ?? 0;
+        civHistory.push(civStage);
+        prevCivStage = civStage;
         if (civStage !== lastCivStage) {
           timeline.push({ year, kind: 'civ_stage', from: lastCivStage, to: civStage });
           lastCivStage = civStage;
         }
-        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, areaScale });
+        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
           timeline.push({ year, kind: 'verdict', verdict });

@@ -16,6 +16,8 @@ export type Condition =
   | { type: 'vegetation_ratio'; min?: number; max?: number }
   | { type: 'vitality_ratio'; min?: number; max?: number }
   | { type: 'total_ratio_vs_start'; id: string; min?: number; max?: number }
+  /** 文明の段階 (0..7)。years があれば直近 years 年の最小段階で判定する (瞬間的な回復で勝てないように) */
+  | { type: 'civ_stage'; min?: number; max?: number; years?: number }
   | { type: 'year_reached'; year: number }
   | { type: 'no_intervention' }
   | { type: 'all'; of: Condition[] }

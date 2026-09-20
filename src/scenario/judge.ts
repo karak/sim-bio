@@ -13,7 +13,13 @@ export type JudgeInput = {
   history?: Record<string, number>[];
   /** 総量の面積スケール (size / referenceSize)²。species_mean の min は referenceSize のグリッドで書くので、実行時の size に合わせて掛ける。省略時 1 */
   areaScale?: number;
+  /** 年ごとの文明の段階の履歴 (開始年から今年まで、history と同じ並び)。civ_stage の years が使う。省略時は今年の段階だけ */
+  civHistory?: number[];
 };
+
+/** 文明の段階の名前 (0 = なし〜7 = 星)。src/simulation/civilization.ts の STAGE_NAMES と揃える (M8-02 未着地のため暫定でここに置く) */
+const STAGE_NAMES = ['なし', '巣', '火', '歌', '石', '帆', '塔', '星'];
+const civStageLabel = (n: number) => `${n}(${STAGE_NAMES[n] ?? '?'})`;
 
 export function landRatio(s: WorldSnapshot): number {
   let land = 0;
@@ -94,6 +100,17 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
       const base = input.start.totals[c.id] ?? 0;
       const v = base > 0 ? (s.totals[c.id] ?? 0) / base : 0;
       return { ok: inRange(v, c.min, c.max), why: `${c.id} は開始時の ${v.toFixed(2)} 倍` };
+    }
+    case 'civ_stage': {
+      const stage = s.civ?.stage ?? 0;
+      if (c.years !== undefined) {
+        const hist = (input.civHistory ?? [stage]).slice(-c.years);
+        const minStage = hist.length ? Math.min(...hist) : stage;
+        const ok = inRange(minStage, c.min, c.max);
+        return { ok, why: ok ? `文明の段階 ${civStageLabel(minStage)}` : `文明の段階が ${civStageLabel(minStage)} まで下がった` };
+      }
+      const ok = inRange(stage, c.min, c.max);
+      return { ok, why: ok ? `文明の段階 ${civStageLabel(stage)}` : `文明の段階が ${civStageLabel(stage)} まで下がった` };
     }
     case 'year_reached':
       return { ok: input.year >= c.year, why: `${input.year} 年目` };
