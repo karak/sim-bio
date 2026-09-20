@@ -1,0 +1,177 @@
+{
+  "camera": {
+    "azimuth_deg": 45.0,
+    "elevation_deg": 10.0,
+    "distance_m": 2.1717
+  },
+  "faces": 1046,
+  "tris": 1863,
+  "parts": {
+    "fur": {
+      "fraction": {
+        "ref": 0.7307,
+        "model": 0.705,
+        "diff": -0.0257
+      },
+      "centroid": {
+        "ref": [
+          0.4865,
+          0.6268
+        ],
+        "model": [
+          0.4811,
+          0.6296
+        ],
+        "dist": 0.006
+      },
+      "mask_iou": 0.6042,
+      "color": {
+        "ref_mean_rgb": [
+          203,
+          162,
+          82
+        ],
+        "model_mean_rgb": [
+          203,
+          162,
+          82
+        ],
+        "delta_e76": 0.2249,
+        "material_rgb": [
+          248,
+          196,
+          100
+        ],
+        "delta_e_material": 15.5326
+      }
+    },
+    "ear_inner": {
+      "fraction": {
+        "ref": 0.138,
+        "model": 0.1872,
+        "diff": 0.0492
+      },
+      "centroid": {
+        "ref": [
+          0.5083,
+          0.1665
+        ],
+        "model": [
+          0.4972,
+          0.1822
+        ],
+        "dist": 0.0193
+      },
+      "mask_iou": 0.6811,
+      "color": {
+        "ref_mean_rgb": [
+          89,
+          58,
+          47
+        ],
+        "model_mean_rgb": [
+          89,
+          58,
+          47
+        ],
+        "delta_e76": 0.3299,
+        "material_rgb": [
+          84,
+          54,
+          44
+        ],
+        "delta_e_material": 2.1533
+      }
+    },
+    "dark": {
+      "fraction": {
+        "ref": 0.0349,
+        "model": 0.0217,
+        "diff": -0.0132
+      },
+      "centroid": {
+        "ref": [
+          0.4907,
+          0.8539
+        ],
+        "model": [
+          0.539,
+          0.7775
+        ],
+        "dist": 0.0905
+      },
+      "mask_iou": 0.0619,
+      "color": {
+        "ref_mean_rgb": [
+          89,
+          69,
+          56
+        ],
+        "model_mean_rgb": [
+          88,
+          69,
+          55
+        ],
+        "delta_e76": 0.3096,
+        "material_rgb": [
+          112,
+          88,
+          73
+        ],
+        "delta_e_material": 8.5434
+      }
+    },
+    "glow": {
+      "fraction": {
+        "ref": 0.0964,
+        "model": 0.0861,
+        "diff": -0.0103
+      },
+      "centroid": {
+        "ref": [
+          0.4847,
+          0.661
+        ],
+        "model": [
+          0.4759,
+          0.651
+        ],
+        "dist": 0.0134
+      },
+      "mask_iou": 0.3278,
+      "color": {
+        "ref_mean_rgb": [
+          117,
+          198,
+          185
+        ],
+        "model_mean_rgb": [
+          116,
+          197,
+          184
+        ],
+        "delta_e76": 0.4146,
+        "material_rgb": [
+          127,
+          255,
+          232
+        ],
+        "delta_e_material": 21.9828
+      }
+    }
+  },
+  "pixel_color": {
+    "overlap_pixels": 38595,
+    "mean_delta_e": 19.7588,
+    "median_delta_e": 12.1336,
+    "p90_delta_e": 57.8068,
+    "fraction_delta_e_over_20": 0.2537
+  },
+  "silhouette": {
+    "iou": 0.8081,
+    "aspect": {
+      "ref": 0.561,
+      "model": 0.5359
+    }
+  }
+}

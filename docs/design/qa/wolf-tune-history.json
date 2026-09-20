@@ -1,0 +1,44 @@
+[
+  {
+    "iter": 0,
+    "colors": {
+      "fur": "#F28A5D",
+      "dark": "#9F4439",
+      "glow": "#90EBCA",
+      "teal": "#90EBCA"
+    },
+    "delta_e76": {
+      "fur": 0.2677,
+      "dark": 0.3253,
+      "glow": 1.8581
+    }
+  },
+  {
+    "iter": 1,
+    "colors": {
+      "fur": "#F28A5D",
+      "dark": "#9F4539",
+      "glow": "#8DE6C8",
+      "teal": "#8DE6C8"
+    },
+    "delta_e76": {
+      "fur": 0.2685,
+      "dark": 0.1851,
+      "glow": 1.6065
+    }
+  },
+  {
+    "iter": 2,
+    "colors": {
+      "fur": "#F28A5D",
+      "dark": "#9F4539",
+      "glow": "#8DE3C8",
+      "teal": "#8DE3C8"
+    },
+    "delta_e76": {
+      "fur": 0.2712,
+      "dark": 0.1791,
+      "glow": 0.5974
+    }
+  }
+]
