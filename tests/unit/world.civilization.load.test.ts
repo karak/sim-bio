@@ -87,8 +87,10 @@ describe('World civilization load & decline (M8-03)', () => {
     );
     expect(w.snapshot().civ?.population).toBe(0);
     // 個体数 0 なので毎年 population 理由で衰退圧がかかる。輝石の採掘 (M8-02) は home 周りの残量が
-    // 尽きるまで一時的に段階を押し上げうるが、輝石は再生しないのでいずれ衰退が追いつき崩壊する
-    w.step(360 * 8);
+    // 尽きるまで一時的に段階を押し上げうるが、輝石は再生しないのでいずれ衰退が追いつき崩壊する。
+    // 校正 (M8-06): 衰退は DECLINE_YEARS (4) 年連続で初めて段階を落とすので、stage 3 → 0 には
+    // 最低でも 3 段階 × 4 年 = 12 年かかる。余裕を見て 16 年回す
+    w.step(360 * 16);
     // sim.civ.stage は採掘による上昇 (M8-02、reason 無し) にも出るので、衰退 (reason 付き) だけを見る
     const declineEvents = log.find('sim.civ.stage').filter((r) => (r as { reason?: string }).reason !== undefined);
     expect(declineEvents.length).toBeGreaterThanOrEqual(1);

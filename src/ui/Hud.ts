@@ -1,6 +1,6 @@
 import type { Command, DisasterKind, SaveData, WorldSnapshot } from '../simulation/types';
 import type { CivState } from '../simulation/civilization';
-import { STAGE_NAMES } from '../simulation/civilization';
+import { STAGE_NAMES, NEED } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
@@ -12,7 +12,10 @@ import './hud.css';
 export function formatCiv(civ: CivState | null): string | null {
   if (!civ || civ.stage < 1) return null;
   const name = STAGE_NAMES[civ.stage] ?? '?';
-  return `文明 ${name}(${civ.stage}) · 進み ${Math.round(civ.progress * 100)}% · 民 ${Math.round(civ.population)}`;
+  // 進みは次の段階に必要な量 (NEED) に対する割合。最終段階では 100%。民は密度の和 (小さい値) なので 100 倍して整数で見せる (M8-06)
+  const need = NEED[civ.stage];
+  const pct = Number.isFinite(need) && need > 0 ? Math.min(100, Math.round((civ.progress / need) * 100)) : 100;
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}`;
 }
 
 export type HudHandlers = {

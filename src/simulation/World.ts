@@ -6,8 +6,8 @@ import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
-import { checkEmergence, HOME_RADIUS, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
-import { applyLoad, checkDecline } from './civilizationLoad';
+import { checkEmergence, HOME_RADIUS, MAX_STAGE, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
+import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
 
 export type WorldDeps = {
   log: LogSink;
@@ -56,6 +56,8 @@ export class World {
   private readonly co2 = 280;
   /** 文明の状態。config.civilization が無ければ null のまま (M8-02) */
   private civ: CivState | null = null;
+  /** 衰退条件が連続で成り立っている年数 (M8-06) */
+  private civDeclineStreak = 0;
   /** 文明の種の年次総量、直近 EMERGE_HISTORY_YEARS 年分 (発生判定用)。古い順 */
   private civHistory: number[] = [];
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
@@ -219,7 +221,9 @@ export class World {
     // 文明(M8-02): 発生済み (stage >= 1) なら毎 tick 輝石を掘り、段階が上がればログを出す
     if (this.civ && this.civ.stage >= 1) {
       const before = this.civ.stage;
-      const { state } = stepMining(this.civ, this.crystal, this.elevation, size);
+      // 次の段階に必要な民がいなければ掘っても上がらない (M8-06)。民は年 1 回更新される
+      const canAdvance = this.civ.stage >= MAX_STAGE || this.civ.population >= POP_NEED[this.civ.stage + 1];
+      const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance);
       this.civ = state;
       if (this.civ.stage !== before) {
         this.log('info', 'sim.civ.stage', { from: before, to: this.civ.stage, year: Math.floor(this.tick / ticksPerYear) });
@@ -301,7 +305,10 @@ export class World {
       });
       const vitalityMean = vitCount ? vitSum / vitCount : 0;
       const { decline, reason } = checkDecline(civ.stage, civ.population, vitalityMean);
-      if (decline) {
+      // 衰退条件が DECLINE_YEARS 年続いたときだけ段階を下げる (M8-06)。途切れれば数え直す
+      this.civDeclineStreak = decline ? this.civDeclineStreak + 1 : 0;
+      if (decline && this.civDeclineStreak >= DECLINE_YEARS) {
+        this.civDeclineStreak = 0;
         const before = civ.stage;
         civ.stage -= 1;
         civ.progress = 0;

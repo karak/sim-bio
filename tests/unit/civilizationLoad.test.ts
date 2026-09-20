@@ -41,7 +41,8 @@ describe('applyLoad', () => {
     const layers = mkLayers();
     const stage = 4;
     applyLoad(stage, CENTER, layers, SIZE);
-    expect(layers.forest[CENTER]).toBeCloseTo(0.6 - LOGGING[stage], 6);
+    // 森は立木 (0.6) に比例して減る (M8-06: 定量ではなく定率)
+    expect(layers.forest[CENTER]).toBeCloseTo(0.6 - 0.6 * LOGGING[stage], 6);
     expect(layers.vitality[CENTER]).toBeCloseTo(0.5 - VITALITY_DRAIN[stage], 6);
     // 半径の外 (LOAD_RADIUS[4] = 5 なので (0,0) は届かない)
     const outside = 0;
@@ -64,16 +65,24 @@ describe('applyLoad', () => {
     applyLoad(stage, CENTER, layers, SIZE);
     const removed = before - layers.forest[CENTER];
     expect(layers.litter[CENTER]).toBeCloseTo(removed, 6);
-    expect(removed).toBeCloseTo(LOGGING[stage], 6);
+    // 森は立木に比例して減る (M8-06) ので、減った量は before × LOGGING[stage]
+    expect(removed).toBeCloseTo(before * LOGGING[stage], 6);
   });
 
-  it('森は 0 未満にならない', () => {
+  it('森は 0 未満にならない (比例なので 0 に近づくだけで負にはならない)', () => {
     const layers = mkLayers();
     layers.forest.fill(0.0002);
-    const stage = 7; // LOGGING[7] は 0.0002 よりずっと大きい
-    applyLoad(stage, CENTER, layers, SIZE);
-    expect(layers.forest[CENTER]).toBe(0);
-    expect(layers.litter[CENTER]).toBeCloseTo(0.0002, 6);
+    const stage = 7;
+    // M8-06 で定量 (min(forest, logging)) から定率 (forest * logging) に変えたため、
+    // 一度で 0 に落ちることはなく、繰り返し適用しても 0 未満にはならず単調に減っていく
+    let prev = layers.forest[CENTER];
+    for (let i = 0; i < 50; i++) {
+      applyLoad(stage, CENTER, layers, SIZE);
+      expect(layers.forest[CENTER]).toBeGreaterThanOrEqual(0);
+      expect(layers.forest[CENTER]).toBeLessThan(prev);
+      prev = layers.forest[CENTER];
+    }
+    expect(layers.litter[CENTER]).toBeGreaterThan(0);
   });
 
   it('生気は 0 未満にならない', () => {

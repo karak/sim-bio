@@ -17,6 +17,11 @@ export type CivState = {
   home: number;
   /** 集落半径内のその種の総量 */
   population: number;
+  /**
+   * 塔の燃料の直近の年次実績 (M8-08)。stepCivYearly が年に一度更新するので、発生直後・年をまたぐ前は
+   * まだ無い (undefined)。既存のテスト・セーブとの互換を保つため省略可にしてある。
+   */
+  fuel?: { last: number; need: number; shortYears: number };
 };
 
 /** 段階の名前。stage をそのまま index に使う。 */
@@ -53,7 +58,9 @@ export const MINE_RADIUS: readonly number[] = [0, 2, 2, 3, 3, 4, 4, 5];
  * 段階ごとの採掘量 (1 tick あたり、半径内の輝石から合計で取り除く上限)。index = stage。
  * stage 7 (星) は最大段階なのでこれ以上掘っても進まない → 0 にして輝石を無駄に消費しない。
  */
-export const MINE_RATE: readonly number[] = [0, 0.004, 0.005, 0.006, 0.007, 0.008, 0.01, 0];
+export const MINE_RATE: readonly number[] = [0, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.001, 0];
+// 校正 (M8-06): 元の 10 倍の値では stage 6 → 7 が 1 年で終わり、塔の重さで放置の塔がすぐ星になった。
+// 1 段階に約 9 年 (NEED / (rate × 360)) かかる速さに落とした
 
 /**
  * 段階ごとに次の段階へ上がるのに必要な progress の累計。index = stage (現在の段階)。
@@ -83,6 +90,8 @@ export function stepMining(
   crystal: Float32Array,
   elevation: Float32Array,
   size: number,
+  /** false なら掘っても段階は上がらず、progress は NEED で頭打ち (民が次の段階の必要量に足りないとき。M8-06) */
+  canAdvance = true,
 ): { state: CivState; mined: number } {
   if (state.home < 0 || state.stage < 1 || state.stage > MAX_STAGE) return { state, mined: 0 };
   const radius = MINE_RADIUS[state.stage];
@@ -101,8 +110,12 @@ export function stepMining(
   let stage = state.stage;
   let progress = state.progress + mined;
   if (stage < MAX_STAGE && progress >= NEED[stage]) {
-    stage += 1;
-    progress = 0;
+    if (canAdvance) {
+      stage += 1;
+      progress = 0;
+    } else {
+      progress = NEED[stage];
+    }
   }
   return { state: { ...state, stage, progress }, mined };
 }

@@ -70,14 +70,16 @@ describe('World civilization wiring (M8-02)', () => {
   it('NEED に到達すると sim.civ.stage をログに出す', () => {
     const home = bestCrystalCell();
     const log = createMemorySink();
-    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 4, home } } }), { log });
-    // NEED[4] を MINE_RATE[4] で掘り切るのに必要な tick 数より十分多く回す
-    const ticksNeeded = Math.ceil(NEED[4] / MINE_RATE[4]) + 20;
+    // stage 2 → 3 で試す (M8-08: FUEL_NEED は stage 4 以降だけ 0 でないので、燃料切れの段階下げと
+    // 競合しない範囲で採掘による段階上昇だけを見たい)
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 2, home } } }), { log });
+    // NEED[2] を MINE_RATE[2] で掘り切るのに必要な tick 数より十分多く回す
+    const ticksNeeded = Math.ceil(NEED[2] / MINE_RATE[2]) + 20;
     w.step(ticksNeeded);
     const events = log.find('sim.civ.stage');
     expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0].from).toBe(4);
-    expect(events[0].to).toBe(5);
+    expect(events[0].from).toBe(2);
+    expect(events[0].to).toBe(3);
     expect(typeof events[0].year).toBe('number');
   });
 
