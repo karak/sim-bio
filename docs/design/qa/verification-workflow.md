@@ -71,4 +71,4 @@ rabbit の `rabbit-acceptance-criteria.md` と同じ構成で作る。数値目�
 
 - **deer**: 角 (glow) がシルエットの約 20% を占め、上半分の一致が支配的になる。参照は頭が画面右なので az=135 で撮る (平行投影)。角の 3D 折れ線は、参照クラス図の左右の角を fy 行ごとに読み、左右対称を仮定して fx = a(x − y) + c、fy = p − q z − r x の連立で復元した (`make_antler` のコメント)。パネル (dark) は `Kit.cut_along` で参照座標の多角形の辺に沿って胴の面を切ってから `paint_faces` で塗る (境界が直線になる)。結果と残課題は `deer-acceptance-criteria.md` / `deer-remaining-issues.md`。
 - **wolf**: 横長で前傾姿勢。平行投影で評価する。glow は輪郭のすぐ内側を走る幅 1〜2 px の線で、表面のリボンだと横から潰れて見えないので、参照クラス図の glow 画素の内側の縁を折れ線にして輪郭から立てた薄い鰭 (`Kit.fin`, `screen=True`, 高さ 0.013 m) で表す。胸・首・耳の線は面上のリボン (`Kit.ribbon`)。dark は大半が陰 (脚の後ろ側・顔の下面) で、`wolf.py` の `shade_faces` が法線の向きで塗り分けるが位置は合わない。結果と残課題は `wolf-acceptance-criteria.md` / `wolf-remaining-issues.md`。
-- **行・列ごとのクラス比較**: 参照クラス図とモデルクラス図の各 fy 行 (または fx 列) で、シルエットや指定クラス (glow / dark) の画素区間を並べると (セッション内の補助スクリプト classrows.py、T15 で取り込み予定)、角・パネル・脚のどこがずれているか数値で分かる。wolf / deer の 2 回目はこの表と `*_DEBUG=1` のランドマーク投影で合わせた。
+- **行・列ごとのクラス比較**: `compare_ref.py` が `<out_dir>/classrows.txt` に、シルエットと各パーツの fy 行 (0.02 刻み) / fx 列 (0.05 刻み) ごとの画素区間を参照 | モデルで並べて出力する。角・パネル・脚のどこがどれだけずれているか数値で分かる。wolf / deer の 2 回目はこの表と `*_DEBUG=1` のランドマーク投影で合わせた。

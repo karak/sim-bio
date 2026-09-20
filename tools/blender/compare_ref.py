@@ -22,6 +22,8 @@
   render_shaded.png  EEVEE の陰影付き撮影 (色比較に使う)
   compare.png        参照 | 陰影付き撮影 | 参照のクラス図 | モデルのクラス図 | 画素 ΔE ヒートマップ
   metrics.json       指標
+  classrows.txt      正規化枠での行 (fy 0.02 刻み) と列 (fx 0.05 刻み) ごとの画素区間。シルエットと各パーツについて
+                     参照 | モデル を並べる。形状合わせのとき、どの高さ・位置でどれだけずれているかを数値で読む
 
 metrics.json の主な項目:
   parts.<name>.fraction       シルエット内でそのパーツが占める割合 (ref / model / diff)
@@ -318,6 +320,39 @@ pixel_color = {
     "p90_delta_e": float(np.percentile(dE_ov, 90)),
     "fraction_delta_e_over_20": float((dE_ov > 20).mean()),
 }
+
+
+
+def runs(line, scale, offset):
+    """1 次元マスクの True 区間を枠座標 (round 3) の (始, 終) 列にする"""
+    idx = np.flatnonzero(line)
+    if len(idx) == 0:
+        return "-"
+    cuts = np.flatnonzero(np.diff(idx) > 1)
+    starts = np.concatenate([[idx[0]], idx[cuts + 1]])
+    ends = np.concatenate([idx[cuts], [idx[-1]]])
+    return " ".join(f"({(a - offset) / scale:.3f},{(b - offset) / scale:.3f})" for a, b in zip(starts, ends))
+
+
+def class_rows(rmask, mmask, name, out):
+    out.append(f"## {name}: rows (fy | ref fx segments | model fx segments)")
+    for y in range(0, S, max(1, int(round(0.02 * S)))):
+        r, m = runs(rmask[y], S, S), runs(mmask[y], S, S)
+        if r != "-" or m != "-":
+            out.append(f"{y / S:6.3f} | {r:<48} | {m}")
+    out.append(f"## {name}: cols (fx | ref fy segments | model fy segments)")
+    for x in range(0, 2 * S, max(1, int(round(0.05 * S)))):
+        r, m = runs(rmask[:, x], S, 0), runs(mmask[:, x], S, 0)
+        if r != "-" or m != "-":
+            out.append(f"{(x - S) / S:6.3f} | {r:<48} | {m}")
+
+
+rows_out = [f"# {CREATURE} class rows/cols in the normalized frame (fx = (x - center)/height, fy = y_from_top/height)"]
+class_rows(r_silN, m_silN, "silhouette", rows_out)
+for p in PARTS:
+    class_rows(rN[p], mN[p], p, rows_out)
+with open(os.path.join(out_dir, "classrows.txt"), "w") as f:
+    f.write("\n".join(rows_out) + "\n")
 
 metrics = {
     "camera": {"azimuth_deg": az, "elevation_deg": el, "distance_m": dist, "projection": PROJ},
