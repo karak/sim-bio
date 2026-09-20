@@ -29,6 +29,8 @@ export type SpeciesDef = {
   assetId: string;
   /** グラフ・ヒートマップの色 (#rrggbb) */
   color: string;
+  /** HUD の放流チップに出すか。省略時 true。false は凡例・住みやすさレイヤーには出るが、見守り手が放てない種 (M8-09: 炎蜥蜴) */
+  spawnable?: boolean;
 };
 
 export type WorldConfig = {

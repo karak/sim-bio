@@ -38,6 +38,16 @@ test('species palette: pick a species and click the island to spawn it', async (
   expect(logs.filter((l) => l.includes('"event":"cmd.rejected"'))).toHaveLength(0);
 });
 
+test('firelizard (M8-09): shown in legend but not spawnable by the watcher', async ({ page }) => {
+  await page.goto('/');
+  // 凡例には出る (熱でしか増えない種でも観測対象ではある)
+  await expect(page.locator('#legend-firelizard')).toBeVisible();
+  // 住みやすさレイヤーの種チップにも出る
+  await expect(page.locator('#layer-species-firelizard')).toBeVisible();
+  // 見守り手は炎蜥蜴を放てない (放流チップには出ない)
+  await expect(page.locator('#spawn-firelizard')).toHaveCount(0);
+});
+
 test('suitability layer: mode toggle + species chip reflect the choice in DOM state', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#layer-mode-density')).toHaveClass(/on/);
