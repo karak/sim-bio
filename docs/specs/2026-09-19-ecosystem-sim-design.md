@@ -353,6 +353,32 @@ hud.showCell(cellIndex: number | null): void
 
   文明は開始直後(輝石の残りで stage 6→7 へ一時的に上がってしまう。M8-05 の作業ログに既知の挙動として記録)に森を急激に伐り、放置なら森は年 5〜10 のうちに開始の 17% まで落ちて以後横ばいになる。石板の節目は当初「30 年目: 森が痩せ始める」だったが実測に合わせて「10 年目: 森はすでに大きく痩せた」に修正した。
 
+### 4.15 実装時の差分(M8-05 v2: 「塔の重さ」をキーアイテムで作り直す)
+
+レベルデザイン `docs/design/2026-09-20-level-design-tower.md`。M8-06 の手動プレイで「森の総量は塔にも介入にも鈍感」と分かり、§4.14 の森の 3 割条件と森の放流前提を捨てた。塔は **燃料** で立ち、燃料の取り方(火の山の熱 / 鐘樹の材)の配分だけが生き延びる形に作り直した。M8-08〜10 でキーアイテム(燃料モデル・炎蜥蜴・鐘樹)を入れ、本チケットで判定行列(LD §5)をヘッドレスで分離させた。
+
+- **燃料の蓄えと負債**(`civilizationFuel.ts` / `World.ts`): 噴火 1 回の熱をその年に使い切れず捨てていたので、余りを蓄え(上限 `FUEL_STOCK_YEARS = 4` 年分)に積む。上限は集める量にだけ掛け、開始時の蓄え 45(7 年分)は切り捨てない(切り捨てると 4 年で尽き、石板の「七年」と合わなかった)。年次で `collectFuel(..., room)` が蓄えの空き分まで集め、必要量 `FUEL_NEED[stage]` を蓄えから引く。不足分は負債 `debt` に累積し、足りた年は必要量分だけ返す。`debt ≥ need × FUEL_YEARS(3)` で段階が 1 下がる(理由 `fuel`、負債は 0 に戻す)。「3 年連続不足」判定だと細い供給(年 2.2)で塔が立ち続ける穴があったので負債の累積にした。`CivState.fuel = { last, need, shortYears, stock, debt }`、`start.civilization.fuelStock`(塔の重さは 45 = 7 年分の猶予)。HUD は「燃料 蓄え / 必要年」。
+- **炎蜥蜴を熱の門で縛る**(`populations.ts` / `species.json`): 気温帯ではなく `SpeciesDef.minHeat` で門を掛ける。`heatGate = clamp(heat / minHeat, HEAT_FLOOR, 1)` を成長にだけ掛け(`fg = f × heatGate`、死亡は `mortality × (2 − fg)`)、熱のあるセルには `HEAT_SEED = 0.01` で自然に湧く(絶滅していても噴火で戻る。`heatSpecies` 条件で炎蜥蜴以外には掛けない)。`HEAT_FLOOR` は 0.25 だと島中に広がって鹿を全滅させたので 0 にし、代わりに死亡率 0.0015 で「熱が冷めても数年歩き回る」形にした。炎蜥蜴: `tempRange [-10, 80]`、`minHeat 1.0`、`growthRate 4`、`predation 0.6`、`diffusion 0.3`、`initialDensity 0`、`spawnable false`。噴火 1 回(size 128 の実測)で半径 3 の平均密度はピーク 0.05、半径 5 の鹿は 0.027 → 0.0014(95% 減)、熱が 1 を割ってからも門が 0.3 程度ある 4 年目まで居着き、8 年目に 0。
+- **鐘樹の陰を弱め、広がりを遅くする**: `shade` 0.8 → 0.2(0.8 では 12 か所でも民の餌が尽きた)、`diffusion` 0.005 → 0.002。0.005 では植えた 12 か所から 100 年で島中(総量 106)に広がり、陰で島全体の鹿が半分(10 年平均 13.2)まで減って、火と樹をどう配分しても判定を割った。0.002 では総量 56 に留まり鹿は 19.6(陰の代償は残る)。0.001 では 25.5 で代償がほぼ消える。LD §3.3 の「広げるのは歌鳥(M17-04)の役目」に合う。
+- **火口を暖かい低地に、集落の外に**(`start.volcanoCell = 3223`、集落 `home = 2847`、距離 10): 標高最大の火口は噴火後も 22.6℃ で炎蜥蜴が湧かない(気温門だった頃の名残)。島で最も暖かい低地を火口にし、集落は火口を徴収半径 12 に、鐘樹の育つ湿地を支え半径 8 に持つ 2847 に置いた。火口が集落から 5 セル(3167)だと噴火の焼け跡が支え半径と重なり、鹿の谷と重なった 1 回の噴火で民が 4 年続けて `POP_NEED` を割って衰退した(火が「時期を当てるゲーム」になる)。10 セル離すと焼け跡は支え半径の外で、炎蜥蜴だけが歩いてくる。HUD の火の山の案内も「島の印(火口)に打てば」に直した。
+- **段階を上げる民の条件**: `POP_NEED = [0, 0.05, 0.1, 0.2, 0.3, 0.6, 1.2, 4.0]`。集落 2847 の自然な民(半径 8 の密度和)は 6 前後で、塔(1.2)は保て、星(4.0)には届かない(輝石の残りで星まで上がらない)。`stepMining` は `POP_NEED[stage+1]` を満たすときだけ進む。
+- **火と樹を分ける予算**: `disaster 24`(噴火 1 回 = 2 年分の収入)。`HEAT_FUEL` 1.5 では噴火 1 回が 14 年分になり火だけで勝てたので 0.8 に。火だけは力が尽きて燃料切れになり、樹だけは材が間に合わない。
+- **判定**: `alive = civ_stage ≥ 6(直近 10 年)かつ species_mean deer(10 年)≥ 13.8`、`dead = civ_stage ≤ 0 or species_extinct deer`。`ignoreWarnings: ['land_low']`。
+
+  校正の行列(seed 42、size 64、`tests/slow/scenarios.playthrough.test.ts` の台本。植える場所は集落半径 8 の鐘樹適合度 > 0.75 のセルを 2.5 セル以上離して最大 12 か所、1 か所 0.5 半径 1。噴火は火口 3167 半径 4、力 24 以上のときだけ):
+
+  | 戦略 | 操作 | 結果 |
+  |---|---|---|
+  | 放置 | なし | dead: 蓄えが 7 年で尽き、11 年目から段階が落ちる(11/14/17) |
+  | 火だけ | 蓄えが 2 年分を割るたびに噴火 | dead: 力が続かず 29 年目から燃料切れで落ちる(噴火 6 回) |
+  | 樹だけ | 4 年ごとに 5 か所 | dead: 材が間に合わず 19 年目から落ちる |
+  | 火で凌いで樹を育てる(想定解 1) | 40 年目まで 2 年ごとに 3 か所、蓄えが 1 年分を割ったら噴火 | alive: 噴火 11 回、鹿の 10 年平均 19.7 |
+  | 樹を先に(想定解 2) | 20 年目まで毎年 2 か所、蓄えが 1 年分を割ったら噴火 | alive: 噴火 11 回、鹿の 10 年平均 19.6 |
+
+  炎蜥蜴の捕食を 0 にしても鹿の 10 年平均はほぼ変わらず(鐘樹の広がりが主因)、火の代償は噴火直後の局所(集落の民が数年減る)に効く。
+
+  LD §5 の感度・定着・副作用は単体テスト(`tests/unit/civilizationFuel.test.ts`、`tests/unit/belltree.test.ts`、`tests/unit/firelizard.test.ts`)で確認。捨てた案は LD 文書 §7 に。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -423,6 +449,16 @@ hud.showCell(cellIndex: number | null): void
 | 判定条件 `civ_stage`(直近 years 年の最小段階)、警告 `civ_declining` | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.warnings.test.ts` · 2f54853 |
 | 「塔の重さ」: 放置・森の放流だけ・疫病だけは dead、雨+放流・疫病(間引き)+放流の 2 通りは alive、既存 15 件も通る | `tests/slow/scenarios.playthrough.test.ts` · 2f54853(20 件通過) |
 | `POP_NEED`・`SUPPORT_RADIUS`・`applyLoad` の人口ベース負荷減衰の校正、`ScenarioRunner.intervene()` の `resolve()` 未適用バグ修正 | `tests/unit/civilizationLoad.test.ts`、`tests/unit/world.civilization.load.test.ts` · 2f54853 |
+
+### M8-05 v2: 「塔の重さ」をキーアイテムで作り直す
+
+| 受入項目 | 証跡 |
+|---|---|
+| 燃料の蓄えと負債(蓄え上限 4 年分、負債 ≥ 3 年分で衰退)、`start.fuelStock` | `tests/unit/civilizationFuel.test.ts`、`tests/unit/world.civilization.fuel.test.ts` · M805V2 |
+| 炎蜥蜴は熱の門(`minHeat`)で湧き、噴火後に鹿を減らし、熱が冷めれば消える | `tests/unit/firelizard.test.ts` · M805V2 |
+| 鐘樹の陰(`shade 0.2`)の代償と放流の定着 | `tests/unit/belltree.test.ts` · M805V2 |
+| 塔の重さ v2: 放置・火だけ・樹だけは dead、配分 2 通りは alive。既存 15 件も通る | `tests/slow/scenarios.playthrough.test.ts` · M805V2(20 件通過) |
+| HUD の燃料表示「蓄え / 必要年」と火の山の案内 | `tests/e2e/smoke.spec.ts` · M805V2 |
 
 ### M4: シナリオ層の基盤
 

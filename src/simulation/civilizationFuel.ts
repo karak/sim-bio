@@ -11,19 +11,26 @@ import { LOAD_RADIUS } from './civilizationLoad';
  * 段階ごとに年に必要な燃料の量。index = stage。
  * stage 1〜3 は 0 (初期の文明は燃料を気にしなくてよい)。4 (石) 以降だけ燃料が要る設計 (§3.1)。
  */
-export const FUEL_NEED: readonly number[] = [0, 0, 0, 0, 4, 6, 9, 14];
+export const FUEL_NEED: readonly number[] = [0, 0, 0, 0, 3, 4, 6, 9];
 
 /** 熱 1 単位を消費して得られる燃料の量。tuning: 火山 1 回 (VOLCANO_HEAT) で複数年分の燃料が賄えるように校正 */
-export const HEAT_FUEL = 0.5;
+export const HEAT_FUEL = 0.8;
 
 /**
  * 鐘樹の立木のうち年に伐り出す割合 (M8-10 の belltree レイヤーが対象)。伐った分は密度から引き、
  * 1:1 で燃料に変わる (灰・枯死への計上は M8-10 の負荷モデル側の役目なのでここではしない)。
  */
-export const TIMBER_RATE = 0.1;
+export const TIMBER_RATE = 0.3;
 
 /** 燃料が必要量に足りない年がこの年数続くと段階が 1 下がる */
 export const FUEL_YEARS = 3;
+
+/**
+ * 燃料の蓄えの上限 (必要量の何年分か)。M8-05 v2 の校正で追加。
+ * 噴火 1 回の熱をその年に使い切れずに捨てていたため、余った分を蓄えに積めるようにした。
+ * 開始時の蓄え (start.fuelStock) が尽きるまでが猶予になり、「燃料が減っていく」のが石板で見える。
+ */
+export const FUEL_STOCK_YEARS = 4;
 
 export type FuelLayers = {
   /** 局所加熱 [0, ...]。火山などで積み上がり、HEAT_DECAY で減衰する (climate.ts) */
@@ -45,10 +52,13 @@ export function collectFuel(
   home: number,
   layers: FuelLayers,
   size: number,
+  /** 集める上限 (省略時はその段階の必要量)。蓄えの空き分まで集めるときに渡す (M8-05 v2) */
+  cap?: number,
 ): { fuel: number; heatUsed: number; timberUsed: number } {
-  const need = FUEL_NEED[stage] ?? 0;
+  const stageNeed = FUEL_NEED[stage] ?? 0;
+  const need = cap ?? stageNeed;
   const radius = LOAD_RADIUS[stage] ?? 0;
-  if (need <= 0 || home < 0 || !(radius > 0)) return { fuel: 0, heatUsed: 0, timberUsed: 0 };
+  if (stageNeed <= 0 || need <= 0 || home < 0 || !(radius > 0)) return { fuel: 0, heatUsed: 0, timberUsed: 0 };
 
   // 優先度 1: 熱。半径内の熱の総量に対して、必要な熱量 (heatNeeded) を超えない範囲で按分して取る
   let heatTotal = 0;

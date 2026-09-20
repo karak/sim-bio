@@ -8,7 +8,7 @@ import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, HOME_RADIUS, MAX_STAGE, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
-import { collectFuel, FUEL_NEED, FUEL_YEARS } from './civilizationFuel';
+import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 
 export type WorldDeps = {
   log: LogSink;
@@ -330,22 +330,35 @@ export class World {
     {
       const need = FUEL_NEED[civ.stage] ?? 0;
       const belltree = this.populations['belltree'];
-      const { fuel } = collectFuel(civ.stage, civ.home, { heat: this.heat, belltree, elevation: this.elevation }, this.config.size);
-      const prevShortYears = civ.fuel?.shortYears ?? 0;
-      const shortYears = fuel < need ? prevShortYears + 1 : 0;
-      civ.fuel = { last: fuel, need, shortYears };
-      if (civ.stage >= 1 && shortYears >= FUEL_YEARS) {
+      // 蓄え (M8-05 v2): 空きの分まで集めて蓄えに積み、その年の必要量を蓄えから引く。
+      // 蓄えの初期値は config.civilization.start.fuelStock (省略時 0)
+      const stockMax = need * FUEL_STOCK_YEARS;
+      const prevStock = civ.fuel?.stock ?? this.config.civilization?.start?.fuelStock ?? 0;
+      const room = Math.max(0, stockMax - prevStock);
+      const { fuel } = collectFuel(civ.stage, civ.home, { heat: this.heat, belltree, elevation: this.elevation }, this.config.size, room);
+      // 上限は「集める量」にだけ掛ける (room)。開始時の蓄え (fuelStock) が上限を超えていても切り捨てない
+      // (石板の「蓄えは七年で尽きる」を成り立たせる)
+      let stock = prevStock + fuel;
+      // 不足は累積する (M8-05 v2): 蓄えから必要量を引き、足りない分を負債に積む。足りた年は負債が必要量ぶん減る。
+      // 負債が FUEL_YEARS 年分に達したら段階を下げる。「3 年に 1 度だけ足りる」細い供給で塔が立ち続ける穴を塞ぐ
+      const deficit = Math.max(0, need - stock);
+      stock = Math.max(0, stock - need);
+      const prevDebt = civ.fuel?.debt ?? 0;
+      const debt = deficit > 0 ? prevDebt + deficit : Math.max(0, prevDebt - need);
+      const shortYears = need > 0 ? Math.floor(debt / need) : 0;
+      civ.fuel = { last: fuel, need, shortYears, stock, debt };
+      if (civ.stage >= 1 && need > 0 && debt >= need * FUEL_YEARS) {
         const before = civ.stage;
         civ.stage -= 1;
         civ.progress = 0;
-        civ.fuel = { ...civ.fuel, shortYears: 0 };
+        civ.fuel = { ...civ.fuel, shortYears: 0, debt: 0 };
         this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'fuel', year });
         if (civ.stage === 0) {
           civ.home = -1;
           this.log('info', 'sim.civ.collapsed', { reason: 'fuel' });
         }
       }
-      this.log('info', 'sim.civ.fuel', { fuel: civ.fuel.last, need: civ.fuel.need, shortYears: civ.fuel.shortYears });
+      this.log('info', 'sim.civ.fuel', { fuel: civ.fuel.last, need: civ.fuel.need, shortYears: civ.fuel.shortYears, stock: civ.fuel.stock });
     }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
     if (civ.stage >= 1) {

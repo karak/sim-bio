@@ -16,7 +16,8 @@ export function formatCiv(civ: CivState | null): string | null {
   const need = NEED[civ.stage];
   const pct = Number.isFinite(need) && need > 0 ? Math.min(100, Math.round((civ.progress / need) * 100)) : 100;
   // 燃料 (M8-08): stage 4 (石) 以降、fuel の実績があるときだけ「· 燃料 直近 / 必要」を足す
-  const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.last)} / ${Math.round(civ.fuel.need)}` : '';
+  // 蓄え (M8-05 v2): 「燃料 蓄え / 年に必要」。蓄えが必要量を割ると足りない年になる
+  const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.stock)} / ${Math.round(civ.fuel.need)}年` : '';
   return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}`;
 }
 
@@ -87,7 +88,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <label>降水 <input id="rain-scale" type="range" min="0.3" max="2" step="0.05" value="1"><span id="rain-scale-v" class="mono">×1.00</span></label>
     <span class="sep"></span>
     ${DISASTERS.map((d) => `<button id="disaster-${d.kind}" class="chip">${d.label}</button>`).join('')}
-    <span id="volcano-hint" class="dim" hidden>火の山: 島の最高地点に打てば熱が塔の燃料になる</span>
+    <span id="volcano-hint" class="dim" hidden>火の山: 島の印(火口)に打てば熱が塔の燃料になる</span>
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>

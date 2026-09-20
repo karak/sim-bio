@@ -20,6 +20,12 @@ import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
  * - growthRate 6 / predation 1 / handlingTime 3 / mortality 0.005 で実測したところ (半径 3 平均密度):
  *   噴火前 (tick 90) 0.00084 → 噴火後 tick 60 で 0.0087 (ピーク、約 10 倍) → tick 360 で 0.00006 → tick 540 で 0 (絶滅)。
  *   同じ半径の鹿は噴火前 0.0174 → tick 360 で 0.0020 (約 88% 減、基準の 5 割を大きく割る)。
+ *
+ * M8-05 v2 (2026-09-21) の再測定 (minHeat 1.0 / growthRate 4 / mortality 0.0015 / diffusion 0.3、VOLCANO_HEAT 6、半減期 1 年):
+ * - 熱の門は heat/minHeat で成長にだけ掛かるので、熱が 1 を割っても (噴火 2.6 年後) 門が 0.3 程度ある間は増減が拮抗し、
+ *   半径 3 の平均密度は y1 0.014 → y2 0.010 → y3 0.024 → y4 0.026 → y5 0.008 → y6 0.005 → y7 0.0006 → y8 0 (総量も 0)。
+ * - ピーク (半径 3 平均) は 0.036 (2 年以内) / 0.053 (4 年以内)。鹿は半径 5 の平均で噴火前 0.027 → 最小 0.0014 (95% 減)。
+ * - つまり「熱が冷めれば消える」は 3 年ではなく 7〜8 年の尺度で成り立つ。テストは噴火 8 年後にピークの 1 割未満を確認する。
  */
 describe('firelizard (M8-09)', () => {
   const species = JSON.parse(readFileSync('assets/data/species.json', 'utf8')) as SpeciesDef[];
@@ -31,7 +37,9 @@ describe('firelizard (M8-09)', () => {
     expect(lizard?.trophic).toBe('carnivore');
     expect(lizard?.eats).toEqual(['deer']);
     expect(lizard?.spawnable).toBe(false);
-    expect(lizard?.tempRange[0]).toBeGreaterThan(25.48); // 実測した自然の最高気温より上
+    // M8-05 v2: 気温ではなく熱 (minHeat) で門を掛ける。気温帯は広く取り、熱の無い場所では増えない
+    expect(lizard?.minHeat).toBeGreaterThan(0);
+    expect(lizard?.initialDensity).toBe(0);
   });
 
   it('heat 0 の島では数年で絶滅する (総量が 0 に近づく)', { timeout: 60_000 }, () => {
@@ -77,9 +85,10 @@ describe('firelizard (M8-09)', () => {
     expect(deerMin).toBeLessThan(deerBefore * 0.5);
 
     // 熱が冷めた後 (3 年目) には炎蜥蜴がほぼ消える
-    for (let t = 0; t < 360; t++) w.step(1);
-    const after3y = w.snapshot();
-    const lizardAfter3y = avg(after3y.layers.populations.firelizard);
-    expect(lizardAfter3y).toBeLessThan(lizardPeak * 0.1);
+    // M8-05 v2: 熱の門は徐々に閉じるので、消えるのは 7〜8 年の尺度 (上の再測定を参照)。噴火 8 年後にピークの 1 割未満を確認する
+    for (let t = 0; t < 360 * 6; t++) w.step(1);
+    const after8y = w.snapshot();
+    const lizardAfter8y = avg(after8y.layers.populations.firelizard);
+    expect(lizardAfter8y).toBeLessThan(lizardPeak * 0.1);
   });
 });

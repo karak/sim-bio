@@ -44,7 +44,7 @@ export type ScenarioDef = {
     /** 種ごとの上書き (initialDensity など) */
     species?: Record<string, Partial<Pick<SpeciesDefLike, 'initialDensity' | 'growthRate' | 'mortality' | 'diffusion'>>>;
     /** 文明の初期状態の上書き (M8-02)。stage/home 省略時は stage 0 / home -1 (未発生) */
-    civilization?: { speciesId: string; stage?: number; home?: number };
+    civilization?: { speciesId: string; stage?: number; home?: number; fuelStock?: number };
     /**
      * 火山セルの上書き (M8-08)。省略時は World が標高最大の陸セルを既定にする。
      * -1 は他のセル指定と同じ規約で島の中心。M8-09 の校正で標高最大セルは寒すぎ

@@ -23,6 +23,11 @@ export type SpeciesDef = {
   predation?: number;
   /** 餌 1 単位の処理時間 (動物のみ、省略時 0 = 線形応答)。大きいほど摂食が飽和し、振動が出やすい (Holling II 型) */
   handlingTime?: number;
+  /**
+   * 熱でしか生きられない種 (炎蜥蜴、M8-05 v2)。セルの局所加熱 (heat) がこの値以上で適合度が満点、
+   * 0 なら適合度 0 (heat / minHeat で線形)。気温の適温帯とは別に掛かる。省略時は熱を見ない
+   */
+  minHeat?: number;
   /** create 時に陸の全セルへ与える初期密度。省略時は植物 0.05、動物 0 */
   initialDensity?: number;
   /** 同じセルの他の植物の成長倍率 = (1 − shade・このセルの自分の密度)。省略時 0 (影響なし)。植物のみ (M8-10 鐘樹) */

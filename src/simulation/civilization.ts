@@ -21,7 +21,7 @@ export type CivState = {
    * 塔の燃料の直近の年次実績 (M8-08)。stepCivYearly が年に一度更新するので、発生直後・年をまたぐ前は
    * まだ無い (undefined)。既存のテスト・セーブとの互換を保つため省略可にしてある。
    */
-  fuel?: { last: number; need: number; shortYears: number };
+  fuel?: { last: number; need: number; shortYears: number; stock: number; debt: number };
 };
 
 /** 段階の名前。stage をそのまま index に使う。 */
@@ -131,17 +131,17 @@ export function populationAround(pops: Float32Array, home: number, elevation: Fl
 }
 
 /** WorldConfig.civilization の形 (main.ts がシナリオの start.civilization をこの形へ解決する) */
-export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number } };
+export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number } };
 
 /**
  * シナリオの start.civilization を WorldConfig.civilization へ解決する。
  * home は他のコマンドと同じ規約で、省略または -1 なら島の中心セルにする。stage 省略時は 0 (まだ発生していない)。
  */
 export function resolveCivilizationStart(
-  start: { speciesId: string; stage?: number; home?: number } | undefined,
+  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number } | undefined,
   size: number,
 ): CivilizationConfig | undefined {
   if (!start) return undefined;
   const home = start.home === undefined || start.home === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : start.home;
-  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home } };
+  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock } };
 }

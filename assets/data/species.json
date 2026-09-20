@@ -137,26 +137,27 @@
     "id": "firelizard",
     "name": "炎蜥蜴",
     "trophic": "carnivore",
-    "growthRate": 6,
-    "mortality": 0.005,
-    "predation": 1,
+    "growthRate": 4,
+    "mortality": 0.0015,
+    "predation": 0.6,
     "tempRange": [
-      30,
+      -10,
       80
     ],
     "moistureRange": [
       0,
       1
     ],
-    "diffusion": 0.15,
+    "diffusion": 0.3,
     "eats": [
       "deer"
     ],
     "assetId": "firelizard",
     "color": "#FF6A3D",
-    "initialDensity": 0.002,
+    "initialDensity": 0,
     "handlingTime": 3,
-    "spawnable": false
+    "spawnable": false,
+    "minHeat": 1.0
   },
   {
     "id": "belltree",
@@ -172,8 +173,8 @@
       0.4,
       1.0
     ],
-    "diffusion": 0.005,
-    "shade": 0.8,
+    "diffusion": 0.002,
+    "shade": 0.2,
     "litterBoost": 2,
     "assetId": "belltree",
     "color": "#3E8E6A",

@@ -11,10 +11,20 @@ export type PopulationEnv = {
   grazed?: Float32Array;
   /** 枯死。動物の死亡分を積み、分解者の餌になる。省略可 */
   litter?: Float32Array;
+  /** 局所加熱 (火山の熱)。minHeat を持つ種の適合度に掛かる。省略可 */
+  heat?: Float32Array;
 };
 
 /** 植物を 1 単位食べたとき grazed に積む量。大きいほど回復が遅い */
 export const GRAZE_IMPACT = 3;
+/** 熱でしか生きられない種 (minHeat) が、熱のあるセルに自然に湧くときの密度 (M8-05 v2)。絶滅していても熱があれば戻る */
+export const HEAT_SEED = 0.01;
+/**
+ * 熱の外での繁殖力の下限 (M8-05 v2)。0 だと熱が冷めた瞬間に消える種になり、火の代償が残らない。
+ * 下限を持たせると、一度湧いた種は弱い捕食者として居着き、噴火のたびに増える。校正 (M8-05 v2) では 0.25 で
+ * 島中に広がってしまったので 0 にし、代わりに死亡率を低くして「熱が冷めても 2 年ほど歩き回る」形で代償を残す
+ */
+export const HEAT_FLOOR = 0;
 
 const TROPHIC_ORDER = { plant: 0, herbivore: 1, carnivore: 2, decomposer: 3 } as const;
 
@@ -62,11 +72,17 @@ export function stepPopulations(
       let food = 0;
       if (eatsLitter) food = litter ? litter[i] : 0;
       else for (const q of prey) food += q[i];
+      // 熱でしか生きられない種 (minHeat): 熱が無ければ適合度 0、minHeat 以上で満点 (M8-05 v2)
+      const heatGate = d.minHeat && d.minHeat > 0 ? Math.max(HEAT_FLOOR, Math.min(1, (env.heat ? env.heat[i] : 0) / d.minHeat)) : 1;
       const f = suitability(d, env.temperature[i], env.moisture[i]);
-      const v = p[i];
+      // 熱のあるセルには、いなくても湧く (熱でしか生きられない種の特性)。熱が冷めれば増えなくなり、
+      // 死亡率 (2 − f·熱) で消えていくが、それまでは拡散で歩き回って周りの餌を食う
+      const heatSpecies = !!d.minHeat && d.minHeat > 0;
+      const v = heatSpecies && heatGate >= 1 && p[i] < HEAT_SEED ? HEAT_SEED : p[i];
       const g = functionalResponse(predation, handling, food);
-      const death = d.mortality * (2 - f) * v;
-      scratch[i] = v + d.growthRate * f * g * v - death;
+      const fg = f * heatGate;
+      const death = d.mortality * (2 - fg) * v;
+      scratch[i] = v + d.growthRate * fg * g * v - death;
       if (litter && !eatsLitter) litter[i] = Math.min(1, litter[i] + death);
       if (!eatsLitter && g > 0 && v > 0 && food > 0) {
         // 取り除く総量 g·v を餌種ごとに比例配分する。1 を超えないよう clamp
