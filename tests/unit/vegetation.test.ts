@@ -88,4 +88,74 @@ describe('stepVegetation', () => {
     expect(e.vitality[1]).toBeLessThan(1);
     expect(e.litter[1]).toBeGreaterThan(0);
   });
+
+  // M8-10 鐘樹: shade (他種の成長を弱める) と litterBoost (自分の死亡分の枯死への積み増し) の単体テスト
+  describe('shade / litterBoost (M8-10)', () => {
+    it('shade reduces another plant growth in the same cell in proportion to the shading species density', () => {
+      const n = 1;
+      // 1 セル、拡散なし。shader は growthRate=mortality=0 で密度が固定されたまま (計測をぶれさせない)
+      const shaderWith = { ...grass, id: 'shader', growthRate: 0, mortality: 0, diffusion: 0, shade: 0.8 };
+      const shaderWithout = { ...shaderWith, shade: 0 };
+      const g = { ...grass, diffusion: 0 };
+      const run = (shader: SpeciesDef) => {
+        const p = { grass: new Float32Array([0.1]), shader: new Float32Array([0.5]) };
+        const s = new Float32Array(n);
+        stepVegetation(p, s, env(n), [g, shader], 1);
+        return p.grass[0];
+      };
+      const withShade = run(shaderWith);
+      const withoutShade = run(shaderWithout);
+      // 陰があるほうが成長が抑えられ、密度が低い (死亡分は shade の影響を受けないので差は growth の分だけ)
+      expect(withShade).toBeLessThan(withoutShade);
+      // shade=0.8, v_shader=0.5 → 成長倍率 (1 − 0.8·0.5) = 0.6。理論値と一致することを確認
+      const f = 1;
+      const total = 0.1 + 0.5;
+      const growthNoShade = g.growthRate * f * 1 * 1 * 0.1 * (1 - total);
+      const death = g.mortality * (2 - f) * 0.1;
+      const expectedWithShade = 0.1 + growthNoShade * 0.6 - death;
+      const expectedWithoutShade = 0.1 + growthNoShade - death;
+      expect(withShade).toBeCloseTo(expectedWithShade, 5);
+      expect(withoutShade).toBeCloseTo(expectedWithoutShade, 5);
+    });
+    it('litterBoost multiplies the litter added by that species death', () => {
+      const n = 1;
+      const boosted = { ...grass, diffusion: 0, litterBoost: 2 };
+      const plain = { ...grass, diffusion: 0 };
+      const run = (d: SpeciesDef) => {
+        const litter = new Float32Array(1);
+        const p = { grass: new Float32Array([0.5]) };
+        const s = new Float32Array(n);
+        stepVegetation(p, s, { ...env(n), litter }, [d], 1);
+        return litter[0];
+      };
+      const litterBoosted = run(boosted);
+      const litterPlain = run(plain);
+      expect(litterBoosted).toBeCloseTo(litterPlain * 2, 6);
+    });
+    it('absent shade/litterBoost fields give identical results to a run without any M8-10 species present', () => {
+      const n = 4;
+      const litterA = new Float32Array(n);
+      const litterB = new Float32Array(n);
+      const pA = { grass: new Float32Array(n).fill(0.2) };
+      // belltree 相当の種を同じ環境に足すが、密度は 0 のまま (放流していない状態を模す)。
+      // shade/litterBoost を持つ種が存在しても、密度 0 なら他種の結果に一切影響しないはず
+      const belltreeLike: SpeciesDef = {
+        id: 'belltree', name: '鐘樹', trophic: 'plant', growthRate: 0.005, mortality: 0.0026,
+        tempRange: [2, 26], moistureRange: [0.4, 1], diffusion: 0.005, shade: 0.8, litterBoost: 2,
+        assetId: 'belltree', color: '#3E8E6A',
+      };
+      const pB = { grass: new Float32Array(n).fill(0.2), belltree: new Float32Array(n) };
+      const sA = new Float32Array(n);
+      const sB = new Float32Array(n);
+      for (let k = 0; k < 100; k++) {
+        stepVegetation(pA, sA, { ...env(n), litter: litterA }, [grass], 2);
+        stepVegetation(pB, sB, { ...env(n), litter: litterB }, [grass, belltreeLike], 2);
+      }
+      for (let i = 0; i < n; i++) {
+        expect(pB.grass[i]).toBeCloseTo(pA.grass[i], 9);
+        expect(litterB[i]).toBeCloseTo(litterA[i], 9);
+        expect(pB.belltree[i]).toBe(0);
+      }
+    });
+  });
 });

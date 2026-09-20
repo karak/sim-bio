@@ -38,6 +38,14 @@ test('species palette: pick a species and click the island to spawn it', async (
   expect(logs.filter((l) => l.includes('"event":"cmd.rejected"'))).toHaveLength(0);
 });
 
+test('鐘樹 (belltree, M8-10): spawn chip and legend appear in free mode', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#spawn-belltree')).toBeVisible();
+  // 凡例に種名 鐘樹 が出る (対応する legend-belltree の総量表示と対で存在する)
+  await expect(page.locator('#legend')).toContainText('鐘樹');
+  await expect(page.locator('#legend-belltree')).toHaveText(/^\d+$/);
+});
+
 test('suitability layer: mode toggle + species chip reflect the choice in DOM state', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#layer-mode-density')).toHaveClass(/on/);
