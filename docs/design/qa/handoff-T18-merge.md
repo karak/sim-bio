@@ -13,7 +13,7 @@ push はリモートが設定されている場合のみ行い、LFS の転送�
 ## 前提の事実 (2026-09-20 11:30 時点で検証済み)
 
 - マージ元: `worktree-concept-art-variants`、HEAD はこの文書を含む最新コミット (`git log -1 worktree-concept-art-variants` で確認)。worktree の場所は `<repo>/.claude/worktrees/concept-art-variants` (別セッションが使用中。中のファイルは触らない)。
-- 分岐点: `b09d573` (feat/m4 の途中)。マージ元の独自コミット 21、変更ファイル 58。触っているのは `tools/blender/`、`tools/gen-concept-art.mjs`、`assets/models/`、`assets/textures/concept/`、`docs/design/qa/`、`.gitattributes`、`.gitignore` のみで、`src/` と `tests/` には変更なし。
+- 分岐点: `b09d573` (feat/m4 の途中)。マージ元の独自コミット 23、変更ファイル 70 (archive への移動 12 枚を含む)。触っているのは `tools/blender/`、`tools/gen-concept-art.mjs`、`assets/models/`、`assets/textures/concept/`、`docs/design/qa/`、`.gitattributes`、`.gitignore` のみで、`src/` と `tests/` には変更なし。
 - `feat/m8` は分岐点から 47 コミット、`main` は 27 コミット進んでいる。**両側で変更したファイルは `.gitignore` の 1 つだけ**。
 - `feat/m8` と `main` のそれぞれに対して `git merge --no-commit --no-ff` で試しにマージしたところ、衝突は `.gitignore` 末尾のブロックだけで他は自動マージされた (検証後に `--abort` 済み)。
   - こちら側の追記: `# Python` / `__pycache__/`
@@ -21,7 +21,7 @@ push はリモートが設定されている場合のみ行い、LFS の転送�
   - **両方のブロックを残す**のが正解。
 - マージ元は git LFS を使う。`.gitattributes` で `assets/**/*.blend` と `assets/**/*.glb` を LFS 管理にしており、対象は `assets/models/{rabbit,deer,wolf}.{blend,glb}` の 6 ファイル。`git lfs install` は同じリポジトリで実行済み (hooks は `.git/hooks` で worktree 間共通)。
 - リモートは未設定だった (`git remote -v` が空)。設定されていれば push まで、なければ push は行わずその旨を報告する。
-- マージ元の作業ツリーには、ユーザーが Finder で移動した `assets/textures/concept/*-v*.png` → `assets/textures/concept/archive/` が**未コミット**で残っている。これはマージ対象外 (コミットされていない)。マージ後にどう扱うかはユーザーに確認する。
+- 参照画像の旧バリエーション 12 枚は `assets/textures/concept/archive/` へ移動してコミット済み (`484b632`、リネーム)。マージ元の作業ツリーは clean。
 
 ## 手順
 

@@ -76,12 +76,12 @@
 
 ## ブランチの状況 (T18 の材料、2026-09-20 11:00 時点)
 
-- 分岐点 `b09d573` (feat/m4 の途中、2026-09-19 17:17)。このブランチの独自コミット 19、変更ファイル 56 (tools/blender、assets/models、assets/textures/concept、docs/design/qa、.gitattributes、.gitignore)。
+- 分岐点 `b09d573` (feat/m4 の途中、2026-09-19 17:17)。このブランチの独自コミット 23、変更ファイル 70 (tools/blender、assets/models、assets/textures/concept、docs/design/qa、.gitattributes、.gitignore)。
 - `main` は分岐点から 27 コミット (M4 末尾〜M8 計画、114 ファイル)、`feat/m8` は 47 コミット (M5〜M8-05、128 ファイル) 進んでいる。本体の checkout は `feat/m8`。
 - 両側で変更したファイルは `.gitignore` の 1 つだけ。`main` / `feat/m8` を `--no-commit` で試しにマージすると、衝突は `.gitignore` 末尾のブロック
   (こちら: `# Python __pycache__/`、相手: `# 他エージェントの worktree .claude/worktrees/`) のみで、両方を残せば解決する。他は自動マージ。検証後 `merge --abort` 済み。
 - リモートは未設定 (`git remote -v` が空)。push と LFS 転送の確認はリモート設定後。LFS 追跡は `assets/models/{rabbit,deer,wolf}.{blend,glb}` の 6 ファイル。
-- 作業ツリーには Finder で移動された `assets/textures/concept/*-v*.png` → `archive/` が未コミットで残っている (ユーザー操作。コミットするか元に戻すかは未決)。
+- 参照画像の旧バリエーション 12 枚 (`assets/textures/concept/*-v*.png`) は `archive/` へ移動してコミット済み (`484b632`)。作業ツリーは clean。
 
 ## 進め方の提案
 
