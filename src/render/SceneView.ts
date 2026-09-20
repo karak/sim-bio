@@ -3,6 +3,7 @@ import {
   BoxGeometry,
   BufferAttribute,
   Color,
+  ConeGeometry,
   DirectionalLight,
   DoubleSide,
   InstancedMesh,
@@ -28,12 +29,16 @@ import type { AssetTable } from './assetTable';
 const SETTLEMENT_BOX = { width: 0.5, height: 0.4, depth: 0.5 };
 /** 文明は 0..7 段階なので最大でもこれだけあれば足りる */
 const SETTLEMENT_MAX_STAGE = 8;
+/** 火山セルの誘導マーカー (円錐) の寸法 (M8-08) */
+const VOLCANO_MARKER = { radius: 0.7, height: 1.6 };
 
 export type SceneView = {
   /** 毎フレーム呼ぶ。tick かレイヤーが変わった時だけ頂点色とインスタンスを更新する */
   update(s: WorldSnapshot): void;
   setLayer(l: LayerKind): void;
   getLayer(): LayerKind;
+  /** 火山チップを持っている間だけ、火山セルの誘導マーカーを出す (M8-08) */
+  setVolcanoHint(active: boolean): void;
   /** クライアント座標からセル index。地形に当たらなければ null */
   pickCell(clientX: number, clientY: number): number | null;
   resize(): void;
@@ -104,6 +109,12 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   settlementMesh.frustumCulled = false;
   scene.add(settlementMesh);
 
+  // 火山セルの誘導マーカー: 火山チップを持っている間だけ見せる小さな円錐 (M8-08)
+  const volcanoMarkerGeo = new ConeGeometry(VOLCANO_MARKER.radius, VOLCANO_MARKER.height, 12);
+  const volcanoMarker = new Mesh(volcanoMarkerGeo, new MeshLambertMaterial({ color: '#FF6640' }));
+  volcanoMarker.visible = false;
+  scene.add(volcanoMarker);
+
   let layer: LayerKind = 'terrain';
   let lastTick = -1;
   let lastLayer: LayerKind | null = null;
@@ -165,6 +176,10 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       }
       settlementMesh.count = settlement.count;
       settlementMesh.instanceMatrix.needsUpdate = true;
+      // 火山セルの誘導マーカー: 位置はセルの標高から毎回計算する (火山セル自体は create/restore 時に固定)
+      const vx = s.volcanoCell % size;
+      const vy = (s.volcanoCell - vx) / size;
+      volcanoMarker.position.set(vx - size / 2 + 0.5, s.layers.elevation[s.volcanoCell] * hs + VOLCANO_MARKER.height / 2, vy - size / 2 + 0.5);
       lastTick = s.tick;
       lastLayer = layer;
     }
@@ -193,6 +208,9 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       layer = l;
     },
     getLayer: () => layer,
+    setVolcanoHint: (active) => {
+      volcanoMarker.visible = active;
+    },
     pickCell,
     resize,
     dispose: () => {
@@ -201,6 +219,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       renderer.dispose();
       geo.dispose();
       settlementGeo.dispose();
+      volcanoMarkerGeo.dispose();
     },
   };
 }

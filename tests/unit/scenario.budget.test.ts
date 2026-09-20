@@ -23,6 +23,7 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
     civ: civStage > 0 ? { speciesId: 'deer', stage: civStage, progress: 0, home: 0, population: 0 } : null,
+    volcanoCell: 0,
   });
   const dispatch = (c: Command) => {
     cmds.push(c);

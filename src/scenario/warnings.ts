@@ -2,7 +2,7 @@ import type { WorldSnapshot } from '../simulation/types';
 import { landRatio } from './judge';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining';
+export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low';
 
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
 export type Warning = {
@@ -70,6 +70,11 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
     if (stage < civ.prevStage) {
       out.push({ kind: 'civ_declining', key: `civ_declining:${stage}`, text: `文明が衰えている(段階 ${civ.prevStage} → ${stage})` });
     }
+  }
+  // 塔の燃料 (M8-08): 直近の年次実績が必要量に足りていない年に出す
+  if (s.civ?.fuel && s.civ.fuel.last < s.civ.fuel.need) {
+    const { last, need } = s.civ.fuel;
+    out.push({ kind: 'fuel_low', key: 'fuel_low', text: `塔の燃料が足りない(${Math.round(last)} / ${Math.round(need)})` });
   }
   if (def.budget && power) {
     const cheapest = Math.min(def.budget.costs.spawn, def.budget.costs.disaster, def.budget.costs.climate);

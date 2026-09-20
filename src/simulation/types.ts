@@ -55,6 +55,13 @@ export type WorldConfig = {
   };
   /** 文明を持つ種 (M8-02)。省略時は文明なし (既定の世界・既存シナリオはすべてこれ) */
   civilization?: CivilizationConfig;
+  /**
+   * 火の山として使うセル (M8-08)。省略時は World が標高最大の陸セルを既定にする。
+   * 標高最大セルは LAPSE (標高による気温低下) で冷えすぎ、噴火を重ねても炎蜥蜴の適温 (30℃〜) に
+   * 届かないことが M8-09 の校正で分かったため、シナリオ側で暖かい低地セルを指定できるようにした
+   * (main.ts が scenario.start.volcanoCell を解決してここに入れる)
+   */
+  volcanoCell?: number;
 };
 
 export type DisasterKind = 'meteor' | 'volcano' | 'wildfire' | 'plague';
@@ -96,6 +103,8 @@ export type WorldSnapshot = {
   climate: { tempOffset: number; rainScale: number };
   /** 文明の状態のコピー。config.civilization が無ければ null (M8-02) */
   civ: CivState | null;
+  /** 火山セル。config.volcanoCell があればそれ、無ければ標高最大の陸セル (M8-08) */
+  volcanoCell: number;
 };
 
 export type SaveData = {

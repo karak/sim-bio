@@ -8,6 +8,7 @@ import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, HOME_RADIUS, MAX_STAGE, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
+import { collectFuel, FUEL_NEED, FUEL_YEARS } from './civilizationFuel';
 
 export type WorldDeps = {
   log: LogSink;
@@ -62,6 +63,11 @@ export class World {
   private civHistory: number[] = [];
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
   private readonly zeroForest: Float32Array;
+  /**
+   * 火山セル: config.volcanoCell があればそれ、無ければ標高最大の陸セル。create 時に 1 度だけ決める (M8-08)。
+   * HUD が火山チップの誘導先として使う
+   */
+  private readonly _volcanoCell: number;
 
   private constructor(
     private readonly config: WorldConfig,
@@ -89,6 +95,22 @@ export class World {
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
     this.zeroForest = new Float32Array(this.n);
+    // 火山セルは config.volcanoCell があればそれを使う。無ければ標高最大の陸セルを既定にする (M8-08)。
+    // 標高最大セルは冷えすぎて炎蜥蜴が湧かない (M8-09 の校正) ことがあるので、シナリオ側で暖かい
+    // 低地セルを指定できるようにしてある
+    if (config.volcanoCell !== undefined) {
+      this._volcanoCell = config.volcanoCell;
+    } else {
+      let volcanoCell = 0;
+      let volcanoElevation = -Infinity;
+      for (let i = 0; i < this.n; i++) {
+        if (this.elevation[i] >= SEA_LEVEL && this.elevation[i] > volcanoElevation) {
+          volcanoElevation = this.elevation[i];
+          volcanoCell = i;
+        }
+      }
+      this._volcanoCell = volcanoCell;
+    }
     // config.civilization があるときだけ文明の状態を持つ。start 省略時は stage 0 / home -1 (未発生) から始める
     if (config.civilization) {
       const start = config.civilization.start;
@@ -150,6 +172,11 @@ export class World {
     this.queue.push(cmd);
   }
 
+  /** 火山セル (config.volcanoCell、無ければ標高最大の陸セル)。HUD が火山チップの誘導先として使う (M8-08) */
+  volcanoCell(): number {
+    return this._volcanoCell;
+  }
+
   step(ticks = 1): void {
     for (let k = 0; k < ticks; k++) this.stepOnce();
   }
@@ -177,6 +204,7 @@ export class World {
       species: this.config.species,
       climate: { tempOffset: this.config.climate.tempOffset, rainScale: this.config.climate.rainScale },
       civ: this.civ ? { ...this.civ } : null,
+      volcanoCell: this._volcanoCell,
     };
   }
 
@@ -248,6 +276,8 @@ export class World {
       if (this.civ) {
         summary.civStage = this.civ.stage;
         summary.civProgress = this.civ.progress;
+        // 燃料は stepCivYearly (直前で呼んでいる) が毎年必ず設定するので、ここでは存在チェック不要
+        summary.civFuel = this.civ.fuel;
       }
       this.log('info', 'sim.tick.summary', summary);
     }
@@ -293,6 +323,30 @@ export class World {
       }
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    const year = Math.floor(this.tick / this.config.ticksPerYear);
+    // 塔の燃料 (M8-08): 決定判定より前に、毎年 1 度だけ集落半径内の熱・鐘樹の材から燃料を徴収する。
+    // 足りない年が FUEL_YEARS 続いたら段階を 1 下げる (reason: 'fuel')。belltree レイヤーは M8-10 が
+    // 追加するまで存在しないので、無い世界では熱だけが燃料源になる (collectFuel が省略時ガード)
+    {
+      const need = FUEL_NEED[civ.stage] ?? 0;
+      const belltree = this.populations['belltree'];
+      const { fuel } = collectFuel(civ.stage, civ.home, { heat: this.heat, belltree, elevation: this.elevation }, this.config.size);
+      const prevShortYears = civ.fuel?.shortYears ?? 0;
+      const shortYears = fuel < need ? prevShortYears + 1 : 0;
+      civ.fuel = { last: fuel, need, shortYears };
+      if (civ.stage >= 1 && shortYears >= FUEL_YEARS) {
+        const before = civ.stage;
+        civ.stage -= 1;
+        civ.progress = 0;
+        civ.fuel = { ...civ.fuel, shortYears: 0 };
+        this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'fuel', year });
+        if (civ.stage === 0) {
+          civ.home = -1;
+          this.log('info', 'sim.civ.collapsed', { reason: 'fuel' });
+        }
+      }
+      this.log('info', 'sim.civ.fuel', { fuel: civ.fuel.last, need: civ.fuel.need, shortYears: civ.fuel.shortYears });
+    }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
     if (civ.stage >= 1) {
       let vitSum = 0;
@@ -312,7 +366,7 @@ export class World {
         const before = civ.stage;
         civ.stage -= 1;
         civ.progress = 0;
-        this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason, year: Math.floor(this.tick / this.config.ticksPerYear) });
+        this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason, year });
         if (civ.stage === 0) {
           civ.home = -1;
           this.log('info', 'sim.civ.collapsed', { reason });

@@ -100,6 +100,24 @@ test('civilization: free mode has no civ line', async ({ page }) => {
   await expect(page.locator('#hud-civ')).toBeHidden();
 });
 
+test('tower fuel: ?scenario=test-civ shows the fuel line once a year has passed (M8-08)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await page.click('#speed-100');
+  // stage 4 なので、1 年たって fuel が一度でも計算されれば「· 燃料 N / M」が出る
+  await expect(page.locator('#hud-civ')).toContainText('燃料', { timeout: 8000 });
+});
+
+test('volcano hint: arming the 火山 chip shows the hint text, unarming hides it (M8-08)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#volcano-hint')).toBeHidden();
+  await page.click('#disaster-volcano');
+  await expect(page.locator('#disaster-volcano')).toHaveClass(/armed/);
+  await expect(page.locator('#volcano-hint')).toBeVisible();
+  await expect(page.locator('#volcano-hint')).toContainText('火の山');
+  await page.click('#disaster-volcano');
+  await expect(page.locator('#volcano-hint')).toBeHidden();
+});
+
 test('star power: budget line is shown, spawning costs power, and an unaffordable spawn is rejected', async ({ page }) => {
   const logs: string[] = [];
   page.on('console', (m) => logs.push(m.text()));

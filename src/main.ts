@@ -33,6 +33,11 @@ async function boot(): Promise<void> {
     if (scenario.start.rainScale !== undefined) config.climate.rainScale = scenario.start.rainScale;
     // 文明の初期段階・集落の上書き (M8-02)。home は他のコマンドと同じ規約で -1 なら島の中心
     config.civilization = resolveCivilizationStart(scenario.start.civilization, config.size);
+    // 火山セルの上書き (M8-08)。他のセル指定と同じ規約で -1 なら島の中心。省略時は World の既定 (標高最大の陸セル) のまま
+    if (scenario.start.volcanoCell !== undefined) {
+      const { size } = config;
+      config.volcanoCell = scenario.start.volcanoCell === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : scenario.start.volcanoCell;
+    }
   }
   const log = createConsoleSink();
   let world = World.create(config, { log });
@@ -83,6 +88,7 @@ async function boot(): Promise<void> {
     },
     onDisasterArm: (k) => {
       armed = k;
+      view.setVolcanoHint(k === 'volcano');
     },
     onSpawnArm: (id) => {
       spawnArmed = id;

@@ -15,7 +15,9 @@ export function formatCiv(civ: CivState | null): string | null {
   // 進みは次の段階に必要な量 (NEED) に対する割合。最終段階では 100%。民は密度の和 (小さい値) なので 100 倍して整数で見せる (M8-06)
   const need = NEED[civ.stage];
   const pct = Number.isFinite(need) && need > 0 ? Math.min(100, Math.round((civ.progress / need) * 100)) : 100;
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}`;
+  // 燃料 (M8-08): stage 4 (石) 以降、fuel の実績があるときだけ「· 燃料 直近 / 必要」を足す
+  const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.last)} / ${Math.round(civ.fuel.need)}` : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}`;
 }
 
 export type HudHandlers = {
@@ -85,6 +87,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <label>降水 <input id="rain-scale" type="range" min="0.3" max="2" step="0.05" value="1"><span id="rain-scale-v" class="mono">×1.00</span></label>
     <span class="sep"></span>
     ${DISASTERS.map((d) => `<button id="disaster-${d.kind}" class="chip">${d.label}</button>`).join('')}
+    <span id="volcano-hint" class="dim" hidden>火の山: 島の最高地点に打てば熱が塔の燃料になる</span>
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
@@ -167,6 +170,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   const setArmed = (k: DisasterKind | null) => {
     armed = k;
     for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('armed', d.kind === k);
+    // 火山チップを持っているときだけ、火山セルへの誘導ヒントを出す (M8-08)
+    $('volcano-hint').hidden = k !== 'volcano';
     if (k !== null && spawnArmed !== null) setSpawnArmed(null);
     h.onDisasterArm(k);
   };
