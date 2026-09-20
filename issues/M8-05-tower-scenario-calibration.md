@@ -1,11 +1,11 @@
 ---
 id: M8-05
 title: 判定条件と「塔の重さ」の校正
-status: in_progress
+status: done
 milestone: M8
 plan: docs/specs/plans/2026-09-19-m8-civilization-plan.md
 depends_on: [M8-03, M8-08, M8-09, M8-10]
-evidence: ["2f54853 tests/slow/scenarios.playthrough.test.ts tests/unit/scenario.judge.test.ts tests/unit/scenario.warnings.test.ts"]
+evidence: ["2f54853 tests/slow/scenarios.playthrough.test.ts tests/unit/scenario.judge.test.ts tests/unit/scenario.warnings.test.ts", "951de6b tests/slow/scenarios.playthrough.test.ts tests/unit/firelizard.test.ts tests/unit/belltree.test.ts tests/unit/civilizationFuel.test.ts tests/unit/world.civilization.fuel.test.ts tests/e2e/smoke.spec.ts"]
 ---
 
 # 判定条件と「塔の重さ」の校正

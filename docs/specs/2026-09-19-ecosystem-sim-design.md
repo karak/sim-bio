@@ -454,11 +454,11 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| 燃料の蓄えと負債(蓄え上限 4 年分、負債 ≥ 3 年分で衰退)、`start.fuelStock` | `tests/unit/civilizationFuel.test.ts`、`tests/unit/world.civilization.fuel.test.ts` · M805V2 |
-| 炎蜥蜴は熱の門(`minHeat`)で湧き、噴火後に鹿を減らし、熱が冷めれば消える | `tests/unit/firelizard.test.ts` · M805V2 |
-| 鐘樹の陰(`shade 0.2`)の代償と放流の定着 | `tests/unit/belltree.test.ts` · M805V2 |
-| 塔の重さ v2: 放置・火だけ・樹だけは dead、配分 2 通りは alive。既存 15 件も通る | `tests/slow/scenarios.playthrough.test.ts` · M805V2(20 件通過) |
-| HUD の燃料表示「蓄え / 必要年」と火の山の案内 | `tests/e2e/smoke.spec.ts` · M805V2 |
+| 燃料の蓄えと負債(蓄え上限 4 年分、負債 ≥ 3 年分で衰退)、`start.fuelStock` | `tests/unit/civilizationFuel.test.ts`、`tests/unit/world.civilization.fuel.test.ts` · 951de6b |
+| 炎蜥蜴は熱の門(`minHeat`)で湧き、噴火後に鹿を減らし、熱が冷めれば消える | `tests/unit/firelizard.test.ts` · 951de6b |
+| 鐘樹の陰(`shade 0.2`)の代償と放流の定着 | `tests/unit/belltree.test.ts` · 951de6b |
+| 塔の重さ v2: 放置・火だけ・樹だけは dead、配分 2 通りは alive。既存 15 件も通る | `tests/slow/scenarios.playthrough.test.ts` · 951de6b(20 件通過) |
+| HUD の燃料表示「蓄え / 必要年」と火の山の案内 | `tests/e2e/smoke.spec.ts` · 951de6b |
 
 ### M4: シナリオ層の基盤
 
