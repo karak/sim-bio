@@ -416,6 +416,14 @@ hud.showCell(cellIndex: number | null): void
 | 年表に介入・予定・力切れ・警告・勝敗が積まれ、沈降は積まれない。文の整形 | `tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 97a1327 |
 | 石板の年表に放流が出る | `tests/e2e/smoke.spec.ts` · 97a1327 |
 
+### M8-05: 判定条件と「塔の重さ」の校正
+
+| 受入項目 | 証跡 |
+|---|---|
+| 判定条件 `civ_stage`(直近 years 年の最小段階)、警告 `civ_declining` | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.warnings.test.ts` · 2f54853 |
+| 「塔の重さ」: 放置・森の放流だけ・疫病だけは dead、雨+放流・疫病(間引き)+放流の 2 通りは alive、既存 15 件も通る | `tests/slow/scenarios.playthrough.test.ts` · 2f54853(20 件通過) |
+| `POP_NEED`・`SUPPORT_RADIUS`・`applyLoad` の人口ベース負荷減衰の校正、`ScenarioRunner.intervene()` の `resolve()` 未適用バグ修正 | `tests/unit/civilizationLoad.test.ts`、`tests/unit/world.civilization.load.test.ts` · 2f54853 |
+
 ### M4: シナリオ層の基盤
 
 | 受入項目 | 証跡 |
