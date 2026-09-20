@@ -1,11 +1,11 @@
 ---
 id: M8-06
 title: 手動受入プレイテスト
-status: in_progress
+status: done
 milestone: M8
 plan: docs/specs/plans/2026-09-19-m8-civilization-plan.md
 depends_on: [M8-05, M8-08, M8-09, M8-10]
-evidence: []
+evidence: ["99ae814 docs/specs/plans/2026-09-20-m8-playtest.md tests/unit/scenario.warnings.test.ts tests/e2e/smoke.spec.ts"]
 ---
 
 # 手動受入プレイテスト

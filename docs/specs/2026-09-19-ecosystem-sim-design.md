@@ -464,9 +464,9 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| プレイ記録 3 回分(火だけ・樹だけは滅び、配分は生き延びる。理由が石板で分かる) | `docs/specs/plans/2026-09-20-m8-playtest.md` · M806SHA |
-| 燃料の警告を蓄えと負債で判定(「心細い」「足りない(不足 N 年分)」) | `tests/unit/scenario.warnings.test.ts` · M806SHA |
-| 企画書に文明と塔の一節 | `docs/design/2026-09-19-proposal.html` · M806SHA |
+| プレイ記録 3 回分(火だけ・樹だけは滅び、配分は生き延びる。理由が石板で分かる) | `docs/specs/plans/2026-09-20-m8-playtest.md` · 99ae814 |
+| 燃料の警告を蓄えと負債で判定(「心細い」「足りない(不足 N 年分)」) | `tests/unit/scenario.warnings.test.ts` · 99ae814 |
+| 企画書に文明と塔の一節 | `docs/design/2026-09-19-proposal.html` · 99ae814 |
 
 ### M4: シナリオ層の基盤
 
