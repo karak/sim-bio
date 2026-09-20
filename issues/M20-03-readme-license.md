@@ -1,7 +1,7 @@
 ---
 id: M20-03
 title: README と LICENSE
-status: todo
+status: in_progress
 milestone: M20
 plan: docs/specs/plans/2026-09-20-m20-public-release-plan.md
 depends_on: [M20-01]
