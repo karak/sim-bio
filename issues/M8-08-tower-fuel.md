@@ -1,7 +1,7 @@
 ---
 id: M8-08
 title: 塔の燃料モデルと火の山の導線
-status: todo
+status: in_progress
 milestone: M8
 plan: docs/design/2026-09-20-level-design-tower.md
 depends_on: [M8-07]

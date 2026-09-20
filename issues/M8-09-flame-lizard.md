@@ -1,7 +1,7 @@
 ---
 id: M8-09
 title: 炎蜥蜴(熱でしか増えない肉食)
-status: todo
+status: in_progress
 milestone: M8
 plan: docs/design/2026-09-20-level-design-tower.md
 depends_on: [M8-08]

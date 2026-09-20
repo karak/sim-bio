@@ -1,7 +1,7 @@
 ---
 id: M20-01
 title: 個人情報・秘密情報の監査と削除
-status: todo
+status: in_progress
 milestone: M20
 plan: docs/specs/plans/2026-09-20-m20-public-release-plan.md
 depends_on: []

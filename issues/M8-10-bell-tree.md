@@ -1,7 +1,7 @@
 ---
 id: M8-10
 title: 鐘樹(遅く育ち、材と生気を生み、草に陰を落とす)
-status: todo
+status: in_progress
 milestone: M8
 plan: docs/design/2026-09-20-level-design-tower.md
 depends_on: [M8-08]
