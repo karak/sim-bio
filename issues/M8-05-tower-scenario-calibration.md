@@ -1,10 +1,10 @@
 ---
 id: M8-05
 title: 判定条件と「塔の重さ」の校正
-status: done
+status: in_progress
 milestone: M8
 plan: docs/specs/plans/2026-09-19-m8-civilization-plan.md
-depends_on: [M8-03]
+depends_on: [M8-03, M8-08, M8-09, M8-10]
 evidence: ["2f54853 tests/slow/scenarios.playthrough.test.ts tests/unit/scenario.judge.test.ts tests/unit/scenario.warnings.test.ts"]
 ---
 
@@ -41,3 +41,7 @@ M8-03
 - 校正結果(詳細は設計書 §4.14): 放置・森の放流だけ・疫病だけは forest が開始の 0.17 倍で dead。雨 1.2 倍 + 放流(forest 0.34 倍、段階 6)、雨 1.15 倍 + 疫病(15 年おき)+ 放流(forest 0.33 倍、段階 6)はどちらも alive。節目を実測に合わせて「10 年目: 森はすでに大きく痩せた」等に修正。scenarios.json の `hidden` を解除。
 - 検証: `npm run typecheck && npm run lint`、`npx vitest run`(189 件)、`npx playwright test`(11 件)、`SLOW=1 npx vitest run tests/slow`(20 件、既存 15 + 新規 5)すべて通過。コミット 2f54853。
 
+- 2026-09-20: M8-06 の手動プレイで「森の総量は塔にも介入にも鈍感」と判明。森の 3 割条件と森の放流前提を捨て、
+  レベルデザイン(M8-07)で燃料モデル・火の山・炎蜥蜴・鐘樹を設計。本チケットは M8-08〜10 の後に
+  「塔の重さ v2 の判定行列(感度・定着・副作用・放置/素朴/配分)を tests/slow で固定」として再開する。
+  校正の試行は wip/m8-06-tower-rebalance に退避(伐採の立木比例・採掘 1/10・段階上げの民条件・衰退 4 年連続・HUD 表示は v2 で取り込む)。
