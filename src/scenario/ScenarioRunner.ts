@@ -162,7 +162,10 @@ export function createScenarioRunner(
         powerSpent += cost;
       }
       interventions++;
-      world.dispatch(cmd);
+      // 予定コマンド (fireDue) と同じく cell = -1 (島の中心) と半径の縮尺を解決してから流す。
+      // 以前は resolve を通さず生の cmd を dispatch していたため、プレイヤー操作由来の介入で
+      // cell: -1 を使うと (-1, 0) 相当の意図しない位置に適用されていた (M8-05 で発覚)
+      world.dispatch(resolve(cmd));
       timeline.push({ year: currentYear, kind: 'intervene', command: cmd });
       return { ok: true };
     },

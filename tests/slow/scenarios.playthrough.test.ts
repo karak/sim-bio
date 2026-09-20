@@ -5,6 +5,7 @@ import { createMemorySink } from '../../src/core/log/memorySink';
 import { createScenarioRunner, type ScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig, WorldSnapshot } from '../../src/simulation/types';
+import { resolveCivilizationStart } from '../../src/simulation/civilization';
 
 /**
  * 5 本のシナリオを「放置」と「台本どおりの介入」で回し、
@@ -152,11 +153,9 @@ describe('scenario playthroughs (size 64)', { timeout: 600_000 }, () => {
 });
 
 /**
- * 「塔の重さ」(M8-05)。M8-02 (文明の発生と段階) と M8-03 (文明の負荷と崩壊) が feat/m8 に着地するまでは
- * World が start.civilization を解釈しないので、この一式は下書きのまま describe.skip にしておく。
- * 校正 (M8-05 後半) で un-skip し、実測して閾値・予算・負荷係数を合わせる。
+ * 「塔の重さ」(M8-05)。M8-02 (文明の発生と段階) と M8-03 (文明の負荷と崩壊) が feat/m8 に着地したので un-skip し、
+ * 実測して閾値・予算・負荷係数を合わせた (作業ログ参照)。
  */
-type TowerCivilization = { speciesId: string; stage?: number; home?: number };
 
 /** 集落は島の中心 (start.civilization.home = -1)。クリック相当の放流は半径 1、疫病は半径 4 で統一する */
 const towerScripts: Record<string, Script> = {
@@ -168,28 +167,31 @@ const towerScripts: Record<string, Script> = {
   'plague-only': (r, _s, y) => {
     if (y >= 10 && y % 10 === 0) r.intervene({ type: 'disaster', kind: 'plague', cell: -1, radius: 4 });
   },
-  // 想定解 1: 雨で森を育てつつ、時々放流で底上げする
+  // 想定解 1: 雨で森を育てつつ、時々放流で底上げする。
+  // 校正 (M8-05): rainScale 1.25 以上は民の密度が急増して集落周りの生気が VITALITY_FLOOR を割り、
+  // 段階が 5 まで下がってしまう (森は育つが civ_stage 条件を落とす)。1.2 が段階 6 を保てる上限に近い
   'rain-and-spawn': (r, _s, y) => {
-    if (y === 10) r.intervene({ type: 'set_climate', rainScale: 1.3 });
+    if (y === 10) r.intervene({ type: 'set_climate', rainScale: 1.2 });
     if (y >= 10 && y % 10 === 0) r.intervene({ type: 'spawn_species', speciesId: 'forest', cell: -1, amount: 0.4, radius: 1 });
   },
-  // 想定解 2: 疫病で民を間引いて負荷を下げつつ、森を放流で補う (段階が下がりすぎない程度に間引く)
+  // 想定解 2: 控えめな雨 (1.15、想定解 1 より弱め) で森を育て、疫病で民を間引いて負荷への安全余裕を確保しつつ放流で補う。
+  // 校正 (M8-05): 疫病は集落周りの局所密度しか減らせず、島全体からすぐ流入し直すので森の総量への効果は小さい。
+  // rain-and-spawn とは異なる雨の強さで、もう一つの alive の道筋として固定する
   'plague-and-spawn': (r, _s, y) => {
+    if (y === 10) r.intervene({ type: 'set_climate', rainScale: 1.15 });
     if (y >= 10 && y % 15 === 0) r.intervene({ type: 'disaster', kind: 'plague', cell: -1, radius: 4 });
     if (y >= 10 && y % 5 === 0) r.intervene({ type: 'spawn_species', speciesId: 'forest', cell: -1, amount: 0.4, radius: 1 });
   },
 };
 
 function playTower(def: ScenarioDef, script: Script | null) {
-  // start.civilization / WorldConfig.civilization は M8-02 の型。着地前の今は unknown 経由でキャストしておく
-  const towerStart = def.start as (ScenarioDef['start'] & { civilization?: TowerCivilization }) | undefined;
-  const cfg = {
+  const cfg: WorldConfig = {
     ...structuredClone(base),
     size: SIZE,
     species: species.map((d) => ({ ...d, ...(def.start?.species?.[d.id] ?? {}) })),
     seed: def.start?.seed ?? base.seed,
-    civilization: towerStart?.civilization,
-  } as unknown as WorldConfig;
+    civilization: resolveCivilizationStart(def.start?.civilization, SIZE),
+  };
   const w = World.create(cfg, { log: createMemorySink() });
   const r = createScenarioRunner(def, w, { ticksPerYear: cfg.ticksPerYear });
   for (let y = 0; y <= def.years; y++) {
@@ -202,7 +204,7 @@ function playTower(def: ScenarioDef, script: Script | null) {
   return r.verdict();
 }
 
-describe.skip('tower scenario playthroughs (size 64) — M8-02/M8-03 待ち、M8-05 後半で un-skip', { timeout: 600_000 }, () => {
+describe('tower scenario playthroughs (size 64)', { timeout: 600_000 }, () => {
   const def = defs.find((d) => d.id === 'tower');
   if (!def) throw new Error('scenario tower missing');
   it('idle → dead', () => {

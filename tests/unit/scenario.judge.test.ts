@@ -75,13 +75,14 @@ describe('judgeScenario', () => {
 
 describe('assets/data/scenarios.json', () => {
   const defs = JSON.parse(readFileSync('assets/data/scenarios.json', 'utf8')) as ScenarioDef[];
-  it('contains the four first scenarios with prophecy and conditions', () => {
-    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine']);
+  it('contains the six first scenarios with prophecy and conditions', () => {
+    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine', 'tower']);
     for (const d of defs.filter((x) => !x.hidden)) {
       expect(d.prophecy.length).toBeGreaterThan(10);
       expect(d.years).toBeGreaterThan(0);
       expect(['prevent', 'endure', 'escape']).toContain(d.kind);
-      expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 } }), 0)).status).toBe('running');
+      // civ_stage 条件を使う塔の重さも running になるよう、開始段階相当の civ を入れておく
+      expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 }, civ: { stage: 6 } }), 0)).status).toBe('running');
     }
   });
 });

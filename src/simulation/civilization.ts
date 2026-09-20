@@ -25,8 +25,17 @@ export const STAGE_NAMES = ['なし', '巣', '火', '歌', '石', '帆', '塔', 
 /** 最大段階 (星)。これを超えては上がらない */
 export const MAX_STAGE = STAGE_NAMES.length - 1;
 
-/** 集落の人口を数える半径 (セル) */
+/** 集落候補地の発生判定 (植生チェック) に使う半径 (セル)。集落 1 つ分の局所的な広さでよい */
 export const HOME_RADIUS = 3;
+/**
+ * 文明を支える人口・生気を数える半径 (セル)。
+ * 校正 (M8-05): HOME_RADIUS (3、集落そのものの広さ) だと局所密度しか拾えず、
+ * 鹿のように島に薄く広がる種では人口がほぼ 0 になって POP_NEED と比較にならない
+ * (実測 stage 6 で HOME_RADIUS=3 なら ~0.0〜0.02、SUPPORT_RADIUS=8 で ~0.1〜0.3)。
+ * 段階の負荷が及ぶ範囲 (LOAD_RADIUS) に近い広さまで広げ、地域の豊かさを拾えるようにする。
+ * populationAround (population/vitality 判定) にだけ使い、発生判定の植生チェックには使わない。
+ */
+export const SUPPORT_RADIUS = 8;
 /** 発生条件: 集落候補セル周辺の植生 (森+草の合計) 平均がこれを超える */
 export const EMERGE_VEGETATION = 0.4;
 /** 発生条件: 直近 10 年の振幅比 (amplitudeRatio) がこれ未満 (振動していない) */
@@ -98,11 +107,11 @@ export function stepMining(
   return { state: { ...state, stage, progress }, mined };
 }
 
-/** home 半径 HOME_RADIUS 以内の陸セルにいるその種の総量 (人口)。home が無ければ 0。 */
+/** home 半径 SUPPORT_RADIUS 以内の陸セルにいるその種の総量 (人口)。home が無ければ 0。 */
 export function populationAround(pops: Float32Array, home: number, elevation: Float32Array, size: number): number {
   if (home < 0) return 0;
   let sum = 0;
-  forEachInRadius(home, HOME_RADIUS, size, (i) => {
+  forEachInRadius(home, SUPPORT_RADIUS, size, (i) => {
     if (elevation[i] >= SEA_LEVEL) sum += pops[i];
   });
   return sum;
