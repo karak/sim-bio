@@ -9,6 +9,7 @@ import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, HOME_RADIUS, MAX_STAGE, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
+import { commandKey, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
 
 export type WorldDeps = {
   log: LogSink;
@@ -61,6 +62,12 @@ export class World {
   private civDeclineStreak = 0;
   /** 文明の種の年次総量、直近 EMERGE_HISTORY_YEARS 年分 (発生判定用)。古い順 */
   private civHistory: number[] = [];
+  /** 信仰 (M9-01): 今年まだ集計していない、dispatch されたコマンドのキー (commandKey)。年ごとにリセット */
+  private civYearKeys: string[] = [];
+  /** 信仰 (M9-01): 今年の災害コマンドの回数 (プレイヤーも予定コマンドも)。年ごとにリセット */
+  private civYearDisasters = 0;
+  /** 信仰 (M9-01): 年ごとのコマンドキー履歴、直近 FAITH_HISTORY_YEARS 年分・古い順。updateFaith の recent の元 */
+  private civFaithHistory: string[][] = [];
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
   private readonly zeroForest: Float32Array;
   /**
@@ -170,6 +177,12 @@ export class World {
 
   dispatch(cmd: Command): void {
     this.queue.push(cmd);
+    // 信仰 (M9-01): civ が無い世界では何もしない (単純さ優先)。commandKey が null (sink) のコマンドは数えない
+    if (this.civ) {
+      const key = commandKey(cmd);
+      if (key !== null) this.civYearKeys.push(key);
+      if (cmd.type === 'disaster') this.civYearDisasters++;
+    }
   }
 
   /** 火山セル (config.volcanoCell、無ければ標高最大の陸セル)。HUD が火山チップの誘導先として使う (M8-08) */
@@ -324,6 +337,21 @@ export class World {
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     const year = Math.floor(this.tick / this.config.ticksPerYear);
+    // 信仰 (M9-01): 年ごとのコマンドキー履歴を先に積んでから (recent が今年を含むように)、
+    // stage >= 1 (この年に発生した場合も含む) なら信仰を更新する。civ.faith が無ければ発生した最初の年なので
+    // FAITH_INITIAL で生まれ、規則の更新はまだ効かない
+    this.civFaithHistory.push(this.civYearKeys);
+    if (this.civFaithHistory.length > FAITH_HISTORY_YEARS) this.civFaithHistory.shift();
+    if (civ.stage >= 1) {
+      const prevFaith = civ.faith;
+      civ.faith = prevFaith === undefined
+        ? FAITH_INITIAL
+        : updateFaith(prevFaith, { recent: this.civFaithHistory.flat(), disasters: this.civYearDisasters });
+      const delta = civ.faith - (prevFaith ?? civ.faith);
+      this.log('info', 'sim.civ.faith', { year, faith: civ.faith, delta });
+    }
+    this.civYearKeys = [];
+    this.civYearDisasters = 0;
     // 塔の燃料 (M8-08): 決定判定より前に、毎年 1 度だけ集落半径内の熱・鐘樹の材から燃料を徴収する。
     // 足りない年が FUEL_YEARS 続いたら段階を 1 下げる (reason: 'fuel')。belltree レイヤーは M8-10 が
     // 追加するまで存在しないので、無い世界では熱だけが燃料源になる (collectFuel が省略時ガード)

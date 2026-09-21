@@ -21,4 +21,8 @@ describe('describeEvent (年表の文)', () => {
     expect(describeEvent({ year: 5, kind: 'civ_stage', from: 3, to: 2 }, names)).toBe('文明が 歌 → 火 に下がった');
     expect(describeEvent({ year: 5, kind: 'civ_stage', from: 1, to: 0 }, names)).toBe('文明が崩壊した');
   });
+  it('信仰の上下を人が読める文にする (M9-01)', () => {
+    expect(describeEvent({ year: 5, kind: 'civ_faith', from: 0.4, to: 0.62 }, names)).toBe('信仰が 0.40 → 0.62 に上がった');
+    expect(describeEvent({ year: 5, kind: 'civ_faith', from: 0.62, to: 0.48 }, names)).toBe('信仰が 0.62 → 0.48 に下がった');
+  });
 });

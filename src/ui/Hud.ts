@@ -18,7 +18,9 @@ export function formatCiv(civ: CivState | null): string | null {
   // 燃料 (M8-08): stage 4 (石) 以降、fuel の実績があるときだけ「· 燃料 直近 / 必要」を足す
   // 蓄え (M8-05 v2): 「燃料 蓄え / 年に必要」。蓄えが必要量を割ると足りない年になる
   const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.stock)} / ${Math.round(civ.fuel.need)}年` : '';
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}`;
+  // 信仰 (M9-01): 発生済みでもまだ年をまたいでいなければ undefined なので、そのときは出さない
+  const faithText = civ.faith !== undefined ? ` · 信仰 ${civ.faith.toFixed(2)}` : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}`;
 }
 
 export type HudHandlers = {

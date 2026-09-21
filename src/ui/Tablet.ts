@@ -48,6 +48,8 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
     case 'civ_stage':
       if (e.to === 0) return '文明が崩壊した';
       return `文明が ${STAGE_NAMES[e.from]} → ${STAGE_NAMES[e.to]} に${e.to > e.from ? '上がった' : '下がった'}`;
+    case 'civ_faith':
+      return `信仰が ${e.from.toFixed(2)} → ${e.to.toFixed(2)} に${e.to > e.from ? '上がった' : '下がった'}`;
   }
 }
 

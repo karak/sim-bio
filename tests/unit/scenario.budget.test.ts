@@ -8,7 +8,7 @@ import { grass } from './helpers';
  * 星の力 (介入の予算) の性質。
  * 陸地率と生気を固定した偽の world で、値段・収入・維持費・枯渇を確かめる。
  */
-const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: number; tempOffset?: number; civStage?: number } = {}) => {
+const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: number; tempOffset?: number; civStage?: number; civFaith?: number } = {}) => {
   let tick = 0;
   const cmds: Command[] = [];
   const size = 4;
@@ -19,10 +19,12 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
   const climate = { rainScale: opts.rainScale ?? 1, tempOffset: opts.tempOffset ?? 0 };
   // 文明の段階 (M8-04)。テストから setCivStage で年をまたいで変えて timeline を確かめる
   let civStage = opts.civStage ?? 0;
+  // 信仰 (M9-01)。テストから setCivFaith で年をまたいで変えて civ_faith の timeline を確かめる。省略時は undefined (未設定)
+  let civFaith = opts.civFaith;
   const snapshot = (): WorldSnapshot => ({
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
-    civ: civStage > 0 ? { speciesId: 'deer', stage: civStage, progress: 0, home: 0, population: 0 } : null,
+    civ: civStage > 0 ? { speciesId: 'deer', stage: civStage, progress: 0, home: 0, population: 0, ...(civFaith !== undefined ? { faith: civFaith } : {}) } : null,
     volcanoCell: 0,
   });
   const dispatch = (c: Command) => {
@@ -32,7 +34,11 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
       if (c.tempOffset !== undefined) climate.tempOffset = c.tempOffset;
     }
   };
-  return { dispatch, snapshot, step: (t: number) => { tick += t; }, cmds, setCivStage: (s: number) => { civStage = s; } };
+  return {
+    dispatch, snapshot, step: (t: number) => { tick += t; }, cmds,
+    setCivStage: (s: number) => { civStage = s; },
+    setCivFaith: (f: number) => { civFaith = f; },
+  };
 };
 
 const base: ScenarioDef = {
@@ -244,5 +250,44 @@ describe('文明の年表 (civ_stage, M8-04)', () => {
     w.step(360);
     r.update(w.snapshot());
     expect(r.timeline().filter((e) => e.kind === 'civ_stage')).toEqual([]);
+  });
+});
+
+describe('文明の年表 (civ_faith, M9-01)', () => {
+  it('snapshot.civ.faith が前年から |Δ| >= 0.1 動いたら timeline に civ_faith を積む', () => {
+    const w = fakeWorld({ civStage: 4, civFaith: 0.5 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaith(0.62); // +0.12 (閾値超え)
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaith(0.48); // -0.14 (閾値超え)
+    r.update(w.snapshot());
+    const faithEvents = r.timeline().filter((e) => e.kind === 'civ_faith');
+    expect(faithEvents).toEqual([
+      { year: 1, kind: 'civ_faith', from: 0.5, to: 0.62 },
+      { year: 2, kind: 'civ_faith', from: 0.62, to: 0.48 },
+    ]);
+  });
+
+  it('|Δ| < 0.1 なら積まない', () => {
+    const w = fakeWorld({ civStage: 4, civFaith: 0.5 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaith(0.55); // +0.05 (閾値未満)
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'civ_faith')).toEqual([]);
+  });
+
+  it('発生前 (faith が undefined → 値が付く年) は積まない', () => {
+    const w = fakeWorld({ civStage: 4 }); // civFaith 省略 = undefined
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaith(0.5); // 誕生年相当。前年の値が無いので積まない
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'civ_faith')).toEqual([]);
   });
 });

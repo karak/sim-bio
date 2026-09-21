@@ -20,4 +20,12 @@ describe('formatCiv (HUD の文明の 1 行)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6 };
     expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360');
   });
+  it('faith があれば小数 2 桁で「· 信仰 0.62」を足す (M9-01)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6, faith: 0.62 };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360 · 信仰 0.62');
+  });
+  it('faith が undefined なら信仰の表示は出ない (M9-01)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 6, progress: 0.4, home: 10, population: 12 };
+    expect(formatCiv(civ)).toBe('文明 塔(6) · 進み 13% · 民 1200');
+  });
 });
