@@ -1,9 +1,10 @@
 import type { WorldSnapshot } from '../simulation/types';
 import { landRatio } from './judge';
 import { FUEL_YEARS } from '../simulation/civilizationFuel';
+import { UNREST_FAITH, UNREST_YEARS } from '../simulation/unrest';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low';
+export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low';
 
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
 export type Warning = {
@@ -24,6 +25,8 @@ export type CivContext = { prevStage: number } | null;
 export const SPECIES_LOW_RATIO = 0.25;
 /** 陸地率がこの割合を下回ると警告 */
 export const LAND_LOW_RATIO = 0.5;
+/** 信仰がこれを下回ると警告 (M9-03)。内乱の閾値 UNREST_FAITH (0.3) より手前で知らせる */
+export const FAITH_LOW = 0.4;
 
 /** alive 条件が参照している種の id を集める。警告はこの種だけに出す (勝敗に関わらない種は騒がない) */
 export function speciesInCondition(c: Condition): string[] {
@@ -82,6 +85,10 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
     } else if (stock < need) {
       out.push({ kind: 'fuel_low', key: 'fuel_low:stock', text: `塔の燃料が心細い(蓄え ${Math.round(stock)} / 年に ${Math.round(need)})` });
     }
+  }
+  // 信仰 (M9-03): 文明があり信仰が生まれていて、FAITH_LOW を下回った年に出す
+  if (s.civ?.faith !== undefined && s.civ.faith < FAITH_LOW) {
+    out.push({ kind: 'faith_low', key: 'faith_low', text: `民の信仰が揺らいでいる(${s.civ.faith.toFixed(2)}。${UNREST_FAITH} を ${UNREST_YEARS} 年割れば内乱)` });
   }
   if (def.budget && power) {
     const cheapest = Math.min(def.budget.costs.spawn, def.budget.costs.disaster, def.budget.costs.climate);

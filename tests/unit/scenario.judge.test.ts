@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { evaluate, judgeScenario, landRatio, startStats, type JudgeInput } from '../../src/scenario/judge';
+import { civVitality, evaluate, judgeScenario, landRatio, startStats, type JudgeInput } from '../../src/scenario/judge';
 import type { Condition, ScenarioDef } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
@@ -136,5 +136,37 @@ describe('civ_stage', () => {
     expect(r.why).toBe('文明の段階が 5(帆) まで下がった');
     // civHistory 省略時は今年の段階だけで見る
     expect(evaluate(c, input(snap({ civ: { stage: 6 } }))).ok).toBe(true);
+  });
+});
+
+describe('faith / civ_vitality (M9-03)', () => {
+  it('faith: civ の faith を min/max で判定。文明が無い・信仰が無ければ 0 扱い', () => {
+    const c = { type: 'faith', min: 0.6 } as const;
+    const withFaith = (faith: number | undefined) => {
+      const s = snap({ civ: { stage: 3 } });
+      if (faith !== undefined) s.civ!.faith = faith;
+      return s;
+    };
+    expect(evaluate(c, input(withFaith(0.6)))).toEqual({ ok: true, why: '信仰 0.60' });
+    expect(evaluate(c, input(withFaith(0.59))).ok).toBe(false);
+    expect(evaluate(c, input(withFaith(undefined))).ok).toBe(false);
+    expect(evaluate(c, input(snap({ civ: null }))).ok).toBe(false);
+    expect(evaluate({ type: 'faith', max: 0.3 }, input(withFaith(0.3))).ok).toBe(true);
+    expect(evaluate({ type: 'faith', max: 0.3 }, input(withFaith(0.31))).ok).toBe(false);
+  });
+  it('civ_vitality: 集落の支え半径内の生気平均。years があれば履歴の平均。集落が無ければ 0', () => {
+    const s = snap({ civ: { stage: 3 } });
+    s.civ!.home = 1;
+    s.layers.vitality.set([0.4, 0.2, 0.0, 0.6]); // snap() の海は index 0、陸は index 1..3。size 2 なので支え半径 8 は全セルを含む
+    expect(civVitality(s)).toBeCloseTo((0.2 + 0.0 + 0.6) / 3, 6);
+    const c = { type: 'civ_vitality', min: 0.3 } as const;
+    expect(evaluate(c, input(s)).ok).toBe(false);
+    expect(evaluate(c, input(s)).why).toBe('集落の生気が 27% まで落ちた');
+    const withYears = { type: 'civ_vitality', min: 0.3, years: 3 } as const;
+    expect(evaluate(withYears, { ...input(s), civVitalityHistory: [0.9, 0.9, 0.5, 0.3, 0.2] }).ok).toBe(true); // 直近 3 年 (0.5, 0.3, 0.2) の平均 0.33
+    expect(evaluate(withYears, { ...input(s), civVitalityHistory: [0.9, 0.2, 0.2, 0.2] }).ok).toBe(false);
+    const none = snap({ civ: null });
+    expect(civVitality(none)).toBe(0);
+    expect(evaluate(c, input(none)).ok).toBe(false);
   });
 });

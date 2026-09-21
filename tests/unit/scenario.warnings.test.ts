@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
+import { FAITH_LOW, scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
 import type { ScenarioDef, StartStats } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
@@ -92,5 +92,18 @@ describe('scenarioWarnings', () => {
     // 燃料の要らない段階 (need 0) では出さない
     const none = snap({ civ: { stage: 2, fuel: { stock: 0, need: 0, debt: 0 } } });
     expect(scenarioWarnings(def, none, start, null)).toEqual([]);
+  });
+});
+
+describe('faith_low (M9-03)', () => {
+  it('信仰が FAITH_LOW 未満なら出す。ちょうど FAITH_LOW、信仰が無い (未発生)、文明が無いときは出さない', () => {
+    const low = snap({ civ: { stage: 3 } });
+    low.civ!.faith = FAITH_LOW - 0.01;
+    expect(scenarioWarnings(def, low, start, null).map((w) => [w.kind, w.text])).toEqual([['faith_low', `民の信仰が揺らいでいる(${(FAITH_LOW - 0.01).toFixed(2)}。0.3 を 3 年割れば内乱)`]]);
+    const edge = snap({ civ: { stage: 3 } });
+    edge.civ!.faith = FAITH_LOW;
+    expect(scenarioWarnings(def, edge, start, null)).toEqual([]);
+    expect(scenarioWarnings(def, snap({ civ: { stage: 3 } }), start, null)).toEqual([]);
+    expect(scenarioWarnings(def, snap({ civ: null }), start, null)).toEqual([]);
   });
 });

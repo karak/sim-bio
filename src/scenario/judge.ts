@@ -1,5 +1,6 @@
 import type { WorldSnapshot } from '../simulation/types';
 import { SEA_LEVEL } from '../simulation/terrain';
+import { meanAround, SUPPORT_RADIUS } from '../simulation/civilization';
 import type { Condition, ScenarioDef, StartStats, Verdict } from './types';
 
 export type JudgeInput = {
@@ -15,7 +16,16 @@ export type JudgeInput = {
   areaScale?: number;
   /** 年ごとの文明の段階の履歴 (開始年から今年まで、history と同じ並び)。civ_stage の years が使う。省略時は今年の段階だけ */
   civHistory?: number[];
+  /** 年ごとの集落の生気平均の履歴 (M9-03、civHistory と同じ並び)。civ_vitality の years が使う。省略時は今年の値だけ */
+  civVitalityHistory?: number[];
 };
+
+/** 集落の支え半径 SUPPORT_RADIUS 内の陸セルの生気の平均 (M9-03)。文明が無い・集落が無ければ 0 */
+export function civVitality(s: WorldSnapshot): number {
+  const home = s.civ?.home ?? -1;
+  if (home < 0) return 0;
+  return meanAround(s.layers.vitality, home, SUPPORT_RADIUS, s.layers.elevation, s.size);
+}
 
 /** 文明の段階の名前 (0 = なし〜7 = 星)。src/simulation/civilization.ts の STAGE_NAMES と揃える (M8-02 未着地のため暫定でここに置く) */
 const STAGE_NAMES = ['なし', '巣', '火', '歌', '石', '帆', '塔', '星'];
@@ -111,6 +121,18 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
       }
       const ok = inRange(stage, c.min, c.max);
       return { ok, why: ok ? `文明の段階 ${civStageLabel(stage)}` : `文明の段階が ${civStageLabel(stage)} まで下がった` };
+    }
+    case 'faith': {
+      const faith = s.civ?.faith ?? 0;
+      const ok = inRange(faith, c.min, c.max);
+      return { ok, why: `信仰 ${faith.toFixed(2)}` };
+    }
+    case 'civ_vitality': {
+      const now = civVitality(s);
+      const hist = c.years !== undefined ? (input.civVitalityHistory ?? [now]).slice(-c.years) : [now];
+      const v = hist.length ? hist.reduce((a, b) => a + b, 0) / hist.length : now;
+      const ok = inRange(v, c.min, c.max);
+      return { ok, why: ok ? `集落の生気 ${(v * 100).toFixed(0)}%` : `集落の生気が ${(v * 100).toFixed(0)}% まで落ちた` };
     }
     case 'year_reached':
       return { ok: input.year >= c.year, why: `${input.year} 年目` };

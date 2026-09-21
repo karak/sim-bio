@@ -18,6 +18,10 @@ export type Condition =
   | { type: 'total_ratio_vs_start'; id: string; min?: number; max?: number }
   /** 文明の段階 (0..7)。years があれば直近 years 年の最小段階で判定する (瞬間的な回復で勝てないように) */
   | { type: 'civ_stage'; min?: number; max?: number; years?: number }
+  /** 文明の信仰 [0,1] (M9-03)。文明が無い・未発生なら 0 扱い */
+  | { type: 'faith'; min?: number; max?: number }
+  /** 集落の支え半径内の生気の平均 (M9-03)。years があれば直近 years 年の平均で判定する。文明が無ければ 0 扱い */
+  | { type: 'civ_vitality'; min?: number; max?: number; years?: number }
   | { type: 'year_reached'; year: number }
   | { type: 'no_intervention' }
   | { type: 'all'; of: Condition[] }
