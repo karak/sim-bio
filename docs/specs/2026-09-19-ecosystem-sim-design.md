@@ -493,9 +493,9 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| プレイ記録 3 回分(応える → dead、儀式 → alive、儀式で止める → alive) | `docs/specs/plans/2026-09-22-m9-playtest.md` · SHA_M905 |
-| 記録で挙がった表示の問題を直し E2E が通る(信仰の切り捨て表示 `formatFaith`、HUD の集落の生気と警告 `civ_vitality_low`) | `tests/unit/faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/e2e/smoke.spec.ts`(18 件) · SHA_M905 |
-| 設計書 §6 と企画書に反映 | 本表、`docs/design/2026-09-19-proposal.html` · SHA_M905 |
+| プレイ記録 3 回分(応える → dead、儀式 → alive、儀式で止める → alive) | `docs/specs/plans/2026-09-22-m9-playtest.md` · 5f040bb |
+| 記録で挙がった表示の問題を直し E2E が通る(信仰の切り捨て表示 `formatFaith`、HUD の集落の生気と警告 `civ_vitality_low`) | `tests/unit/faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/e2e/smoke.spec.ts`(18 件) · 5f040bb |
+| 設計書 §6 と企画書に反映 | 本表、`docs/design/2026-09-19-proposal.html` · 5f040bb |
 
 ### M9-04: 「祈りに応えるな」「霊脈枯れ(簡易版)」の校正
 

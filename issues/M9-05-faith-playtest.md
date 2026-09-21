@@ -1,11 +1,11 @@
 ---
 id: M9-05
 title: 手動受入プレイテスト(M9)
-status: todo
+status: done
 milestone: M9
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M9-00, M9-01, M9-02, M9-03, M9-04]
-evidence: []
+evidence: ["5f040bb docs/specs/plans/2026-09-22-m9-playtest.md", "5f040bb tests/unit/faith.test.ts tests/unit/ui.hud.test.ts tests/unit/scenario.warnings.test.ts", "5f040bb tests/e2e/smoke.spec.ts"]
 ---
 
 # 手動受入プレイテスト(M9)
