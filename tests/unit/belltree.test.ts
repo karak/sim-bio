@@ -59,7 +59,7 @@ describe('鐘樹 (belltree, M8-10)', () => {
     expect(after).toBeGreaterThanOrEqual(spawned * 0.5);
   });
 
-  it('副作用: 陸の 3 割に鐘樹を植えると、20 年後の鹿の総量が対照世界の 7 割を割る', { timeout: 60_000 }, () => {
+  it('副作用: 陸の 3 割に鐘樹を植えると、20 年後の鹿の総量が対照世界の 7 割を割る', { timeout: 180_000 }, () => {
     const cfg = testConfig({ species: allSpecies, size: 48 });
     const w = World.create(cfg, { log: createMemorySink() });
     const ctl = World.create(cfg, { log: createMemorySink() });

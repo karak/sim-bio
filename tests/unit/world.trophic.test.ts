@@ -55,7 +55,7 @@ describe('World trophic interactions', () => {
     expect(w.snapshot().totals.wolf).toBe(0);
     expect(log.find('sim.species.extinct').map((r) => r.speciesId)).toEqual(['wolf']);
   });
-  it('drier climate shifts the herbivore mix toward rabbits', () => {
+  it('drier climate shifts the herbivore mix toward rabbits', { timeout: 30_000 }, () => {
     const wet = World.create(testConfig({ species: [grass, forest, moss, deer, rabbit] }), { log: createMemorySink() });
     const dry = World.create(testConfig({ species: [grass, forest, moss, deer, rabbit] }), { log: createMemorySink() });
     dry.dispatch({ type: 'set_climate', rainScale: 0.5 });

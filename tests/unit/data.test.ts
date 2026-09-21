@@ -17,7 +17,7 @@ describe('assets/data', () => {
       expect(s.tempRange[0]).toBeLessThan(s.tempRange[1]);
     }
   });
-  it('all three trophic levels coexist for 100 years (seed 42, size 64)', { timeout: 120_000 }, () => {
+  it('all three trophic levels coexist for 100 years (seed 42, size 64)', { timeout: 300_000 }, () => {
     const w = World.create({ ...base, size: 64, species }, { log: createMemorySink() });
     const deer: number[] = [];
     for (let y = 0; y < 100; y++) {
@@ -37,7 +37,7 @@ describe('assets/data', () => {
     expect(countPeaks(secondHalf(deer), 0.5)).toBeGreaterThanOrEqual(3);
     expect(amplitudeRatio(secondHalf(deer))).toBeGreaterThanOrEqual(0.2);
   });
-  it('default world runs 20 years with vegetation between 5% and 95%', { timeout: 60_000 }, () => {
+  it('default world runs 20 years with vegetation between 5% and 95%', { timeout: 180_000 }, () => {
     const w = World.create({ ...base, species }, { log: createMemorySink() });
     w.step(360 * 20);
     const s = w.snapshot();

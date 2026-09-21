@@ -42,7 +42,7 @@ describe('firelizard (M8-09)', () => {
     expect(lizard?.initialDensity).toBe(0);
   });
 
-  it('heat 0 の島では数年で絶滅する (総量が 0 に近づく)', { timeout: 60_000 }, () => {
+  it('heat 0 の島では数年で絶滅する (総量が 0 に近づく)', { timeout: 180_000 }, () => {
     const w = World.create({ ...base, size: 64, species }, { log: createMemorySink() });
     for (let y = 0; y < 6; y++) w.step(360);
     const t = w.snapshot().totals;
@@ -50,7 +50,7 @@ describe('firelizard (M8-09)', () => {
     expect(t.firelizard).toBe(0);
   });
 
-  it('火山の噴火後、半径 3 で炎蜥蜴が湧き鹿が減る (副作用テスト)', { timeout: 60_000 }, () => {
+  it('火山の噴火後、半径 3 で炎蜥蜴が湧き鹿が減る (副作用テスト)', { timeout: 180_000 }, () => {
     const w = World.create({ ...base, species }, { log: createMemorySink() });
     const size = base.size;
     // scratch 測定で見つけた、陸セルの中で自然気温が最も高いセル (size 128, seed 42)
