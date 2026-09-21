@@ -430,6 +430,32 @@ hud.showCell(cellIndex: number | null): void
   - 塔の台本は変えていない(儀式を足す案は、力 4 / 3 年 が噴火の予算を圧迫して燃料切れになり捨てた)。通し 20 件通過。
 - **既知の制約**: size 128 の既定島は M9-00 と同じ理由で自然発生しない。祈りの基準は restore 後 3 年は無い。
 
+### 4.20 実装時の差分(M9-04: 「祈りに応えるな」「霊脈枯れ」の校正)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §4、§5、§8.3。予算は塔の重さと同じ(start 40 / 年収 12 / 放流 4・災害 24・気候 2 / 上限 120)。どちらも `schedule` で 6 年目から 12 年ごとに集落へ狼の群れ(`spawn_species wolf` 0.5、半径 3)が下り、民が「狼を減らして」と祈る(祈りは「いつもより」で出るので、圧はシナリオ側の舞台装置で作る)。
+
+- **祈りに応えるな**(`no-answer`): 歌 (3) の鹿の文明、集落 2787(採掘半径に輝石が無く段階が進まない、燃料も要らない)、信仰 0.5。`alive = civ_stage ≥ 3(直近 10 年)かつ prayers_answered ≤ 0`、`dead = civ_stage ≤ 0 または prayers_answered ≥ 1`(応えた瞬間に「民は考えるのをやめた」)。当初の alive は段階 ≥ 1 だったが、放置が内乱 2 回で 巣 (1) に留まり alive になったので「一段でも退けば滅び」にした(歌のままでいることが民の自立)。
+- **霊脈枯れ**(`vein-drain`): 石 (4) の鹿の文明、集落 1770(脈 71 セル・輝石 29.7 の上)、薪の蓄え 600(燃料を切り離す)、信仰 0.5。`alive = civ_stage ≥ 1(10 年)かつ civ_vitality ≥ 0.3(10 年平均)`、`dead = civ_stage ≤ 0`。
+- **民が望んだ災害は数えない**: 「狼を減らして」への疫病は集落を襲うが裏切りではないので、信仰の災害(−0.1)に数えない。数えると応えの +0.15 がほぼ消え、応えて信仰を上げる道(想定解 1)が 100 年で 0.5 → 0.5 のまま成り立たなかった(実測: 応え 3 回、勅令ゼロ、集落の生気 11% で dead)。
+- **先回り(想定解 2)の作り**: 狼が下りた年のうち(年末に祈りが出る前)に集落へ疫病を打つ。すでに祈りが出ている年に打てば応えになって滅びるので打たない。儀式は 1 年目から 2 年ごと(3 年ごとでは最初の狼 (6 年目) までに 3 回そろわず、8〜14 年目に信仰 0.30 で止まって 15 年目に内乱)。テスト側は `playTower(def, script, after)` の `after`(年次評価の後に呼ぶ台本)で同じ年の中の操作を表す。
+
+  校正の行列(seed 42、size 64、`tests/slow/scenarios.playthrough.test.ts`):
+
+  | シナリオ | 戦略 | 操作 | 結果 |
+  |---|---|---|---|
+  | 祈りに応えるな | 放置 | なし | dead: 内乱で一段退く |
+  | 〃 | 応える | 祈りが出たら集落へ疫病 | dead: 「祈りに 1 回応えた」 |
+  | 〃 | 気まぐれ | 毎年違う種を放つ | dead: 3 種類以上の混在と無視で内乱 |
+  | 〃 | 儀式(想定解 1) | 3 年ごとに苔を集落へ | alive |
+  | 〃 | 先回り(想定解 2) | 狼の年に祈りが出る前に疫病、2 年ごとの儀式 | alive |
+  | 霊脈枯れ | 放置 | なし | dead: 集落の生気が落ちる |
+  | 〃 | 苔だけ | 3 年ごとの苔 + 20 年目から 5 年ごとに周りへ苔 | dead: 脈が尽きて戻らない |
+  | 〃 | 信仰なしの勅令 | 5 年ごとに「止めよ」 | dead: 民が聞かない |
+  | 〃 | 応えて止める(想定解 1) | 祈りに疫病で応え、0.6 で「止めよ」 | alive |
+  | 〃 | 儀式で止める(想定解 2) | 3 年ごとの苔、0.6 で「止めよ」 | alive |
+
+  既存の 20 件も通る(塔 5 / 放置・台本 11 / 素朴・罠 7 の 3 分割)。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -462,6 +488,16 @@ hud.showCell(cellIndex: number | null): void
 | HUD の文明の行に「信仰 0.62」が出る。snapshot と保存データに含まれ、serialize→restore で一致する | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/e2e/smoke.spec.ts` · 40bd5c0 |
 | ログ sim.civ.faith を年 1 回、年表に ±0.1 以上動いた年だけ出す | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 40bd5c0 |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(242 テスト通過)、`npx playwright test`(16 テスト通過) · 40bd5c0 |
+
+### M9-04: 「祈りに応えるな」「霊脈枯れ(簡易版)」の校正
+
+| 受入項目 | 証跡 |
+|---|---|
+| 校正の前にレベルデザイン文書を書き、ユーザーの承認を得る | `docs/design/2026-09-21-level-design-faith.md` §9 · c94ed36 / 2654ffe(承認 2026-09-21) |
+| レバー感度・定着・副作用の確認がヘッドレスで通っている | `tests/unit/world.vein.test.ts`、`tests/unit/faith.test.ts`、`tests/unit/prayer.test.ts`、既存の通し 20 件 · 1e342f0 |
+| scenarios.json に 2 本(予言・開始の文明段階・予算・節目・alive/dead) | `assets/data/scenarios.json`、`tests/unit/scenario.judge.test.ts` · 6b75c9b |
+| tests/slow: 各シナリオで 放置 dead、素朴戦略 2 つ dead、想定解 2 つ alive。既存の通し実行も通る | `tests/slow/scenarios.playthrough.test.ts`(faith scenarios 10 件 + 既存 20 件) · 6b75c9b |
+| 設計書 §4 に係数と校正の表、§6 に証跡 | §4.19、§4.20 · SHA_M904 |
 
 ### M9-03: 信仰の効き(内乱と採掘の制止)
 
