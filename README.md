@@ -1,5 +1,9 @@
 # sim-bio(仮称)— ブラウザで動く 3D 生態系を見守るゲーム
 
+[![CI](https://github.com/karak/sim-bio/actions/workflows/ci.yml/badge.svg)](https://github.com/karak/sim-bio/actions/workflows/ci.yml)
+
+リポジトリ: https://github.com/karak/sim-bio
+
 > **English summary**: A browser-based 3D ecosystem simulation in the spirit of *SimEarth*. You watch over a small island — plants, herbivores, carnivores, and a rising civilization — through a prophecy engraved on a stone tablet, spending a limited "power of the stars" to nudge climate and life so the island survives its foretold doom.
 
 ## 概要
@@ -18,7 +22,7 @@ npm run dev        # 開発サーバ起動。http://localhost:5173
 npm run build       # 本番ビルド
 npm run preview     # ビルド結果をローカルで確認
 npm run test        # 単体テスト(vitest)
-npm run test:slow   # 通し(放置/校正)テスト。約 15 分、CI では走らせない
+npm run test:slow   # 通し(放置/校正)テスト。約 15〜20 分、CI では走らせない(下記)
 npm run check       # typecheck + lint + test
 ```
 
@@ -28,6 +32,10 @@ E2E(Playwright)は初回だけブラウザのセットアップが要る。
 npx playwright install   # 初回のみ(Chromium 等をダウンロード)
 npx playwright test
 ```
+
+3D モデル・Blender ファイル・PNG は Git LFS で管理している。クローン前に `git lfs install` を済ませておくこと(LFS が無いとポインタファイルだけが落ちてくる)。
+
+CI(GitHub Actions、`.github/workflows/ci.yml`)は push と PR ごとに `npm run check` と Playwright の E2E を走らせる。`npm run test:slow` は 1 件あたり数分かかる通し実行なので CI には含めず、シナリオを触ったときに手元で回す(放置中の Mac ではバックグラウンド実行が極端に遅くなるので、`caffeinate` を付けて前面で回すか `-t` で分割する)。
 
 ## 遊び方
 
@@ -57,7 +65,7 @@ URL に `?scenario=<id>` を付けると、その石板の予言を背負って�
 
 ## 開発の流れ
 
-チケットは `issues/` で Markdown + frontmatter により管理する(状態は `todo` → `in_progress` → `done`)。`tools/issues.sh` で一覧、`tools/issue-status.sh` で状態更新ができる。マイルストーンは M1〜M8 が実装済み〜進行中(M1〜M7 完了、M8 は判定条件の校正と塔まわりの拡張が進行中)、M9 以降(信仰、文明拡張、公開作業まで)は計画中である。
+チケットは GitHub Issues ではなく `issues/` フォルダで Markdown + frontmatter により管理する(状態は `todo` → `in_progress` → `done`)。`tools/issues.sh` で一覧、`tools/issue-status.sh` で状態更新ができる。マイルストーンは M1〜M8 が完了(M8 は古代文明・輝石・「塔の重さ」)、M9 以降(信仰、文明拡張、公開作業の残り)は計画中である。GitHub の Issues/PR での提案も歓迎するが、進捗の正は `issues/` にある。
 
 シナリオを伴うマイルストーンでは、校正の前に必ず**レベルデザイン**のチケットを置く(`docs/design/<date>-level-design-<scenario>.md`)。体験の芯とキーアイテムを決め → 縦切りで実装 → 感度・定着・副作用がヘッドレスで通ってから数値を校正 → 手動で 3 回遊んで受入、という順で進める。詳細は `issues/README.md` を参照。
 
