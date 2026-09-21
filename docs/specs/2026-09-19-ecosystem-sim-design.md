@@ -450,11 +450,11 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| 祈りの生成は純粋関数。条件(草の密度・捕食者比・輝石量)ごとに 1 種類、同時に 1 つだけ、期限 5 年(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · PENDING_SHA |
-| 期限内に対応する種類の介入があれば「応えた」と判定して信仰 +、期限切れで −(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/faith.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · PENDING_SHA |
-| 石板に現在の祈りと残り年数が出て、応えた・無視したが年表に並ぶ(E2E: 試し読みシナリオで祈りが出て、対応する介入で消える) | `tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · PENDING_SHA |
-| ログ scenario.prayer(issued / answered / ignored) | `tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · PENDING_SHA |
-| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(287 テスト通過)、`npx playwright test`(17 テスト通過) · PENDING_SHA |
+| 祈りの生成は純粋関数。条件(草の密度・捕食者比・輝石量)ごとに 1 種類、同時に 1 つだけ、期限 5 年(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · ad80ea3 |
+| 期限内に対応する種類の介入があれば「応えた」と判定して信仰 +、期限切れで −(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/faith.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · ad80ea3 |
+| 石板に現在の祈りと残り年数が出て、応えた・無視したが年表に並ぶ(E2E: 試し読みシナリオで祈りが出て、対応する介入で消える) | `tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · ad80ea3 |
+| ログ scenario.prayer(issued / answered / ignored) | `tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · ad80ea3 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(287 テスト通過)、`npx playwright test`(17 テスト通過) · ad80ea3 |
 
 ### M1: 地形 + 植物 + 季節 + グラフ
 
