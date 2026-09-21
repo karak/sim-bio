@@ -11,7 +11,7 @@ import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilization
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
-import { computeVeinLoss, labelVeins } from './vein';
+import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
 import { applyEdict } from './edict';
 
@@ -57,7 +57,9 @@ export class World {
   /** 霊脈の細り [0,1] (M9-03)。年に 1 回 computeVeinLoss で更新し、stepVitality が分解率に掛ける */
   readonly veinLoss: Float32Array;
   /** 霊脈の番号 (M9-03、labelVeins)。開始時の輝石から create/restore で 1 度だけ決める */
-  readonly veins: Int32Array;
+  veins: Int32Array;
+  /** 脈ごとのセル一覧 (M9 レビュー: 採掘のたびに全セルを走査しないため)。veins と一緒に決める */
+  veinCells: number[][];
   readonly fire: Uint8Array;
   readonly burnt: Uint16Array;
   private readonly scratch: Float32Array;
@@ -131,6 +133,7 @@ export class World {
     this.crystal0 = Float32Array.from(this.crystal);
     this.veinLoss = new Float32Array(this.n);
     this.veins = labelVeins(this.crystal0, this.elevation, config.size);
+    this.veinCells = veinCellLists(this.veins);
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
@@ -199,7 +202,13 @@ export class World {
     if (save.litter) w.litter.set(save.litter);
     // 古いセーブには無いので、その場合は既に constructor で seed から埋めた決定論の値をそのまま使う
     if (save.crystal) w.crystal.set(save.crystal);
-    // 霊脈 (M9-03): 保存された輝石と seed の初期値から細りを復元する
+    // 霊脈 (M9-03): 保存された輝石と開始時の輝石から細りを復元する。crystal0 は沈降で陸が減ると seed から同じ値に
+    // 生成できない (陸セルの分位で閾値を決めるため) ので、セーブにあればそれを使う (M9 レビュー)
+    if (save.crystal0) {
+      w.crystal0.set(save.crystal0);
+      w.veins = labelVeins(w.crystal0, w.elevation, w.config.size);
+      w.veinCells = veinCellLists(w.veins);
+    }
     computeVeinLoss(w.crystal, w.crystal0, w.elevation, w.config.size, w.veinLoss, w.veins);
     // save.civ が無ければ constructor で config.civilization.start から作った初期状態のまま (M8-02)
     if (save.civ) w.civ = { ...save.civ };
@@ -216,15 +225,17 @@ export class World {
     return w;
   }
 
-  dispatch(cmd: Command): void {
+  dispatch(cmd: Command, opts: { fromStar?: boolean } = {}): void {
     this.queue.push(cmd);
-    // 信仰 (M9-01): civ が無い世界では何もしない (単純さ優先)。commandKey が null (sink) のコマンドは数えない
-    if (this.civ) {
-      const key = commandKey(cmd);
+    // M9 レビュー: apply で弾かれるコマンド (海への放流など) は信仰・祈りにも数えない。
+    // fromStar が false (予定コマンド、力切れの気候の戻し) は星の行為ではないので、儀式にも応えにも数えない (災害だけは民の目の前なら数える)
+    const fromStar = opts.fromStar ?? true;
+    if (this.civ && this.validate(cmd) === null) {
+      const key = fromStar ? commandKey(cmd) : null;
       if (key !== null) this.civYearKeys.push(key);
       // 祈り (M9-02): 有効な祈りがあり、この介入が応えなら即座に解決する (応えた)。
       // rainScaleBefore はこのコマンドを apply する前の値 (dispatch は queue に積むだけで、まだ climate を変えていない)
-      const answered = !!this.civ.prayer && isAnswer(this.civ.prayer.kind, cmd, { home: this.civ.home, size: this.config.size, rainScaleBefore: this.config.climate.rainScale });
+      const answered = fromStar && !!this.civ.prayer && isAnswer(this.civ.prayer.kind, cmd, { home: this.civ.home, size: this.config.size, rainScaleBefore: this.config.climate.rainScale });
       // M9-03: 集落そのものを襲った災害だけ数える (遠くの噴火は民の目の前ではない)。
       // 民が望んだ災害 (祈りへの応え、たとえば「狼を減らして」への疫病) は裏切りではないので数えない
       // (数えると応えの +0.15 が災害の −0.1 でほぼ消え、祈りに応えて信仰を上げる道が成り立たなかった。M9-04 の実測)
@@ -290,6 +301,7 @@ export class World {
       vitality: Array.from(this.vitality),
       litter: Array.from(this.litter),
       crystal: Array.from(this.crystal),
+      crystal0: Array.from(this.crystal0),
       populations,
       ...(this.civ ? { civ: { ...this.civ } } : {}),
     };
@@ -320,7 +332,7 @@ export class World {
       const before = this.civ.stage;
       // 次の段階に必要な民がいなければ掘っても上がらない (M8-06)。民は年 1 回更新される
       const canAdvance = this.civ.stage >= MAX_STAGE || this.civ.population >= POP_NEED[this.civ.stage + 1];
-      const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance, this.veins);
+      const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance, { ids: this.veins, cells: this.veinCells });
       this.civ = state;
       if (this.civ.stage !== before) {
         this.log('info', 'sim.civ.stage', { from: before, to: this.civ.stage, year: Math.floor(this.tick / ticksPerYear) });
@@ -352,6 +364,30 @@ export class World {
       }
       this.log('info', 'sim.tick.summary', summary);
     }
+  }
+
+  /**
+   * 崩壊 (段階 0) のときに文明の状態を「未発生」に戻す (M9 レビュー)。
+   * home だけでなく M9 の状態 (信仰・祈り・勅令・霊脈の基準・集落の生気) と発生判定の履歴も捨てる。
+   * 残すと次に芽生えた文明が古い勅令で掘らず、期限切れの祈りを翌年に無視し、信仰が古い値から始まる。
+   * 応えた/無視した/取り下げた祈りの数はシナリオの判定 (prayers_answered) の履歴なので残す
+   */
+  private collapseCiv(civ: CivState): void {
+    civ.home = -1;
+    civ.progress = 0;
+    delete civ.faith;
+    delete civ.prayer;
+    delete civ.crystalStart;
+    delete civ.miningStopped;
+    delete civ.edict;
+    delete civ.vitality;
+    this.civCandidate = -1;
+    this.civHistory = [];
+    this.civFaithHistory = [];
+    this.civPrayerHistory = [];
+    this.civUnrestStreak = 0;
+    this.civDeclineStreak = 0;
+    this.civPrayerCooldownUntil = -Infinity;
   }
 
   /**
@@ -481,7 +517,7 @@ export class World {
         this.log('info', 'sim.civ.unrest', { year, from: before, to: civ.stage });
         this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'unrest', year });
         if (civ.stage === 0) {
-          civ.home = -1;
+          this.collapseCiv(civ);
           this.log('info', 'sim.civ.collapsed', { reason: 'unrest' });
         }
       }
@@ -520,7 +556,7 @@ export class World {
         civ.fuel = { ...civ.fuel, shortYears: 0, debt: 0 };
         this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'fuel', year });
         if (civ.stage === 0) {
-          civ.home = -1;
+          this.collapseCiv(civ);
           this.log('info', 'sim.civ.collapsed', { reason: 'fuel' });
         }
       }
@@ -548,7 +584,7 @@ export class World {
         civ.progress = 0;
         this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason, year });
         if (civ.stage === 0) {
-          civ.home = -1;
+          this.collapseCiv(civ);
           this.log('info', 'sim.civ.collapsed', { reason });
         }
       }
@@ -596,7 +632,7 @@ export class World {
         // 勅令 (M9-03): 文明が無ければ何も起きない。信仰が EDICT_FAITH 以上なら従い、採掘の停止/再開を切り替える
         if (!this.civ) break;
         const year = Math.floor(this.tick / this.config.ticksPerYear);
-        const { civ, obeyed } = applyEdict(this.civ, cmd.edict, year);
+        const { civ, obeyed } = applyEdict(this.civ, cmd.edict, year, (this.civ.edict?.n ?? 0) + 1);
         this.civ = civ;
         this.log('info', 'sim.civ.edict', { year, edict: cmd.edict, obeyed, faith: civ.faith ?? 0, miningStopped: civ.miningStopped ?? false });
         break;

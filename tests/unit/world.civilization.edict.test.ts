@@ -4,6 +4,7 @@ import { createMemorySink } from '../../src/core/log/memorySink';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { applyEdict, EDICT_FAITH } from '../../src/simulation/edict';
 import { UNREST_FAITH, UNREST_FAITH_AFTER, UNREST_YEARS } from '../../src/simulation/unrest';
+import { updateFaith } from '../../src/simulation/faith';
 import { SUPPORT_RADIUS, type CivState } from '../../src/simulation/civilization';
 import { forEachInRadius } from '../../src/simulation/disaster';
 import { testConfig, grass, moss } from './helpers';
@@ -30,7 +31,7 @@ describe('applyEdict (M9-03 勅令、純粋関数)', () => {
     const r = applyEdict(civ({ faith: EDICT_FAITH }), 'stop_mining', 3);
     expect(r.obeyed).toBe(true);
     expect(r.civ.miningStopped).toBe(true);
-    expect(r.civ.edict).toEqual({ kind: 'stop_mining', year: 3, obeyed: true, faith: EDICT_FAITH });
+    expect(r.civ.edict).toEqual({ kind: 'stop_mining', year: 3, obeyed: true, faith: EDICT_FAITH, n: 1 });
     const back = applyEdict(r.civ, 'resume_mining', 4);
     expect(back.obeyed).toBe(true);
     expect(back.civ.miningStopped).toBe(false);
@@ -169,5 +170,74 @@ describe('集落の生気 civ.vitality (M9-05)', () => {
     expect(v).toBeGreaterThan(0);
     expect(v).toBeLessThanOrEqual(1);
     expect(World.restore(w.serialize(), { log: createMemorySink() }).snapshot().civ?.vitality).toBe(v);
+  });
+});
+
+describe('崩壊時のリセットと数えないコマンド (M9 レビュー)', () => {
+  it('内乱で段階 0 になると信仰・祈り・勅令・霊脈の基準・集落の生気が消え、応えた/無視した数は残る', () => {
+    const home = bestCrystalCell();
+    const log = createMemorySink();
+    const w = World.create(testConfig({ species: [grass, moss], civilization: { speciesId: 'grass', start: { stage: 1, home, faith: 0.7, prayer: 'rain' } } }), { log });
+    w.step(360);
+    w.dispatch({ type: 'civ_edict', edict: 'stop_mining' });
+    w.step(1);
+    expect(w.snapshot().civ?.miningStopped).toBe(true);
+    // 信仰を閾値の下へ書き換えて 3 年で内乱 → 巣 (1) から 0
+    const save = w.serialize();
+    save.civ!.faith = UNREST_FAITH - 0.05;
+    save.civ!.prayersIgnored = 2;
+    const r = World.restore(save, { log });
+    r.step(360 * UNREST_YEARS);
+    const civ = r.snapshot().civ!;
+    expect(civ.stage).toBe(0);
+    expect(civ.home).toBe(-1);
+    expect(civ.faith).toBeUndefined();
+    expect(civ.prayer).toBeUndefined();
+    expect(civ.miningStopped).toBeUndefined();
+    expect(civ.edict).toBeUndefined();
+    expect(civ.crystalStart).toBeUndefined();
+    expect(civ.vitality).toBeUndefined();
+    expect(civ.prayersIgnored).toBe(2);
+    expect(log.find('sim.civ.collapsed')).toHaveLength(1);
+  });
+  it('海への放流など apply で弾かれるコマンドは、祈りの応えにも儀式にも数えない', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.5, prayer: 'rain' } } }), { log: createMemorySink() });
+    const s = w.snapshot();
+    let sea = -1;
+    forEachInRadius(home, 4, 32, (i) => { if (sea < 0 && s.layers.elevation[i] < SEA_LEVEL) sea = i; });
+    if (sea < 0) sea = s.layers.elevation.findIndex((e) => e < SEA_LEVEL);
+    w.dispatch({ type: 'spawn_species', speciesId: 'grass', cell: sea, amount: 0.3, radius: 8 });
+    w.step(1);
+    expect(w.snapshot().civ?.prayer?.kind).toBe('rain');
+    expect(w.snapshot().civ?.prayersAnswered ?? 0).toBe(0);
+  });
+  it('fromStar: false (予定コマンド・力切れの戻し) は儀式にも応えにも数えないが、集落を襲った災害は数える', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.5, prayer: 'rain' } } }), { log: createMemorySink() });
+    w.step(360);
+    const f0 = w.snapshot().civ?.faith as number;
+    w.dispatch({ type: 'set_climate', rainScale: 1.5 }, { fromStar: false });
+    expect(w.snapshot().civ?.prayer?.kind).toBe('rain'); // 応えにならない
+    w.dispatch({ type: 'disaster', kind: 'plague', cell: home, radius: 2 }, { fromStar: false });
+    w.step(360);
+    // 儀式のキーは積まれず、災害 1 回 (−FAITH_DISASTER) と減衰だけ
+    expect(w.snapshot().civ?.faith).toBeCloseTo(updateFaith(f0, { recent: [], disasters: 1 }), 6);
+  });
+  it('crystal0 は serialize → restore で保たれる (沈降後も霊脈の枯渇の分母が変わらない)', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home } } }), { log: createMemorySink() });
+    w.step(360 * 2);
+    w.dispatch({ type: 'sink', amount: 0.05 });
+    w.step(1);
+    const before = Array.from(w.crystal0);
+    const save = w.serialize();
+    expect(save.crystal0).toEqual(before);
+    const r = World.restore(JSON.parse(JSON.stringify(save)), { log: createMemorySink() });
+    expect(Array.from(r.crystal0)).toEqual(before);
+    // 古いセーブ (crystal0 なし) は seed から生成した値で復元できる
+    const old = { ...save };
+    delete old.crystal0;
+    expect(() => World.restore(JSON.parse(JSON.stringify(old)), { log: createMemorySink() })).not.toThrow();
   });
 });

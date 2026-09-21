@@ -39,7 +39,7 @@ const fakeWorld = (
   let civPrayersAnswered = opts.civPrayersAnswered;
   let civPrayersIgnored = opts.civPrayersIgnored;
   // 勅令 (M9-03)。テストから setCivEdict で変えて civ_edict の timeline を確かめる
-  let civEdict: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number } | undefined;
+  let civEdict: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; n: number } | undefined;
   const snapshot = (): WorldSnapshot => ({
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
@@ -69,7 +69,7 @@ const fakeWorld = (
     setCivPrayer: (p: { kind: PrayerKind; issuedYear: number; deadlineYear: number } | undefined) => { civPrayer = p; },
     setCivPrayersAnswered: (n: number) => { civPrayersAnswered = n; },
     setCivPrayersIgnored: (n: number) => { civPrayersIgnored = n; },
-    setCivEdict: (e: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number } | undefined) => { civEdict = e; },
+    setCivEdict: (e: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; n: number } | undefined) => { civEdict = e; },
   };
 };
 
@@ -399,21 +399,26 @@ describe('文明の年表と石板表示 (prayer, M9-02)', () => {
 });
 
 describe('勅令の年表と力 (civ_edict, M9-03)', () => {
-  it('新しい勅令が記録された年に civ_edict を積む (従った / 聞かなかった)。同じ勅令は 1 度だけ', () => {
+  it('新しい勅令が記録された年に civ_edict を積む (従った / 聞かなかった)。同じ勅令 (同じ通し番号) は 1 度だけ、同じ年の 2 つ目 (番号が進む) も積む', () => {
     const w = fakeWorld({ civStage: 4, civFaith: 0.5 });
     const r = createScenarioRunner(base, w);
     r.update(w.snapshot());
     w.step(360);
-    w.setCivEdict({ kind: 'stop_mining', year: 1, obeyed: false, faith: 0.5 });
+    w.setCivEdict({ kind: 'stop_mining', year: 1, obeyed: false, faith: 0.5, n: 1 });
     r.update(w.snapshot());
     w.step(360);
     r.update(w.snapshot());
-    w.setCivEdict({ kind: 'stop_mining', year: 2, obeyed: true, faith: 0.7 });
+    w.setCivEdict({ kind: 'stop_mining', year: 2, obeyed: true, faith: 0.7, n: 2 });
+    w.step(360);
+    r.update(w.snapshot());
+    // 同じ年 (3) に再開の勅令 (番号 3) → 次の年次評価で積む (年で重複を弾くと落ちていた)
+    w.setCivEdict({ kind: 'resume_mining', year: 3, obeyed: true, faith: 0.7, n: 3 });
     w.step(360);
     r.update(w.snapshot());
     expect(r.timeline().filter((e) => e.kind === 'civ_edict')).toEqual([
       { year: 1, kind: 'civ_edict', edict: 'stop_mining', obeyed: false, faith: 0.5 },
       { year: 3, kind: 'civ_edict', edict: 'stop_mining', obeyed: true, faith: 0.7 },
+      { year: 4, kind: 'civ_edict', edict: 'resume_mining', obeyed: true, faith: 0.7 },
     ]);
   });
   it('勅令は力を消費しない (budget があっても 0)', () => {
@@ -422,6 +427,7 @@ describe('勅令の年表と力 (civ_edict, M9-03)', () => {
     r.update(w.snapshot());
     expect(r.intervene({ type: 'civ_edict', edict: 'stop_mining' })).toEqual({ ok: true });
     expect(r.power()).toBe(5);
+    expect(r.interventions()).toBe(0); // 言葉なので介入回数にも数えない
     expect(w.cmds).toEqual([{ type: 'civ_edict', edict: 'stop_mining' }]);
   });
 });

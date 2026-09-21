@@ -17,7 +17,7 @@ import {
   type CivState,
 } from '../../src/simulation/civilization';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
-import { labelVeins } from '../../src/simulation/vein';
+import { labelVeins, veinCellLists } from '../../src/simulation/vein';
 
 /** 10 年分、同じ値の履歴 (振動なし) */
 const stableHistory = (v: number, years = 10): number[] => Array.from({ length: years }, () => v);
@@ -173,7 +173,8 @@ describe('stepMining と霊脈 (M9-03: 民は脈を辿って掘る)', () => {
     for (let x = 4; x < 9; x++) crystal[4 * size + x] = 0.5;
     crystal[0] = 0.5;
     const c0 = crystal.slice();
-    const veins = labelVeins(c0, elevation, size);
+    const ids = labelVeins(c0, elevation, size);
+    const veins = { ids, cells: veinCellLists(ids) };
     const state: CivState = { speciesId: 'deer', stage: 1, progress: 0, home, population: 0 };
     const { mined } = stepMining(state, crystal, elevation, size, true, veins);
     expect(mined).toBeCloseTo(MINE_RATE[1], 9);

@@ -20,7 +20,7 @@ export type TimelineEvent =
   /** 文明の祈りが出た・応えられた・無視された (M9-02) */
   | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored' | 'withdrawn'; prayer: PrayerKind };
 
-type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
+type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void; snapshot(): WorldSnapshot };
 
 /** 信仰の年表イベント (civ_faith) を積む閾値。前年との差の絶対値がこれ以上のときだけ積む (M9-01) */
 const FAITH_TIMELINE_THRESHOLD = 0.1;
@@ -96,8 +96,8 @@ export function createScenarioRunner(
   const civHistory: number[] = [];
   /** 年ごとの集落の生気平均の履歴 (M9-03、civHistory と同じ並び)。civ_vitality の years 判定用 */
   const civVitalityHistory: number[] = [];
-  /** 前年の勅令 (M9-03)。年を跨いで新しい勅令が記録されていれば年表に積む */
-  let lastEdictYear: number | null = first.civ?.edict?.year ?? null;
+  /** 最後に年表に積んだ勅令の通し番号 (M9-03)。新しい勅令が記録されていれば年表に積む (同じ年の 2 つ目も) */
+  let lastEdictN: number | null = first.civ?.edict?.n ?? null;
   /** 前年の文明の段階。civ_declining の判定に使う。最初の年はまだ「前年」が無いので null */
   let prevCivStage: number | null = null;
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
@@ -138,7 +138,8 @@ export function createScenarioRunner(
         const key = `${idx}@${y}`;
         if (fired.has(key)) continue;
         fired.add(key);
-        world.dispatch(resolve(sc.command));
+        // 予定コマンドは星の行為ではない (信仰の儀式・祈りの応えに数えない。M9 レビュー)
+        world.dispatch(resolve(sc.command), { fromStar: false });
         // 毎年繰り返す進行 (沈降など) は年表に出さない。単発の予定イベントだけ
         if (!sc.everyYears) timeline.push({ year: y, kind: 'scheduled', command: sc.command });
         if (!sc.everyYears) break;
@@ -175,7 +176,7 @@ export function createScenarioRunner(
     power += income - upkeep;
     if (power < 0) {
       power = 0;
-      world.dispatch({ type: 'set_climate', rainScale: 1, tempOffset: 0 });
+      world.dispatch({ type: 'set_climate', rainScale: 1, tempOffset: 0 }, { fromStar: false });
       timeline.push({ year: currentYear, kind: 'power_exhausted' });
       opts.onPowerExhausted?.();
     } else {
@@ -201,7 +202,8 @@ export function createScenarioRunner(
         power -= cost;
         powerSpent += cost;
       }
-      interventions++;
+      // 勅令 (M9-03) は言葉であって行為ではないので介入回数に数えない (no_intervention の条件や内訳を変えない。M9 レビュー)
+      if (cmd.type !== 'civ_edict') interventions++;
       // 予定コマンド (fireDue) と同じく cell = -1 (島の中心) と半径の縮尺を解決してから流す。
       // 以前は resolve を通さず生の cmd を dispatch していたため、プレイヤー操作由来の介入で
       // cell: -1 を使うと (-1, 0) 相当の意図しない位置に適用されていた (M8-05 で発覚)
@@ -280,9 +282,9 @@ export function createScenarioRunner(
         if (prayerNow) lastPrayerKind = prayerNow.kind;
         // 勅令 (M9-03): 新しい勅令が記録されていれば、従ったか (採掘の停止/再開) 聞かなかったかを年表に積む
         const edict = s.civ?.edict;
-        if (edict && edict.year !== lastEdictYear) {
+        if (edict && edict.n !== lastEdictN) {
           timeline.push({ year, kind: 'civ_edict', edict: edict.kind, obeyed: edict.obeyed, faith: edict.faith });
-          lastEdictYear = edict.year;
+          lastEdictN = edict.n;
         }
         verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, civVitalityHistory, areaScale });
         if (verdict.status !== 'running') {

@@ -46,6 +46,18 @@ export function labelVeins(crystal0: Float32Array, elevation: Float32Array, size
   return ids;
 }
 
+/** 脈ごとのセル一覧 (index = 脈の番号)。labelVeins の結果から 1 度だけ作る */
+export function veinCellLists(ids: Int32Array): number[][] {
+  const out: number[][] = [];
+  for (let i = 0; i < ids.length; i++) {
+    const v = ids[i];
+    if (v < 0) continue;
+    while (out.length <= v) out.push([]);
+    out[v].push(i);
+  }
+  return out;
+}
+
 /** 脈ごとの枯渇 [0,1] = 1 − (脈の輝石の残り) / (脈の開始時の輝石)。index = 脈の番号 */
 export function veinDepletion(crystal: Float32Array, crystal0: Float32Array, veins: Int32Array): Float32Array {
   let count = 0;

@@ -90,7 +90,7 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
     }
   }
   // 信仰 (M9-03): 文明があり信仰が生まれていて、FAITH_LOW を下回った年に出す
-  if (s.civ?.faith !== undefined && s.civ.faith < FAITH_LOW) {
+  if (s.civ?.faith !== undefined && s.civ.stage >= 1 && s.civ.faith < FAITH_LOW) {
     out.push({ kind: 'faith_low', key: 'faith_low', text: `民の信仰が揺らいでいる(${formatFaith(s.civ.faith)}。${UNREST_FAITH} を ${UNREST_YEARS} 年割れば内乱)` });
   }
   // 集落の生気 (M9-05): 霊脈が細ると苔を放っても戻らないので、早めに知らせる

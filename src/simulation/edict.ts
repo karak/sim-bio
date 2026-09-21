@@ -15,11 +15,11 @@ export const EDICT_FAITH = 0.6;
  * どちらの場合も edict (最後の勅令と結果) を記録する (石板が「民は聞かなかった」を出すため)。
  * 文明が無い (stage 0) なら何も起きない (obeyed false、edict も残さない)。
  */
-export function applyEdict(civ: CivState, kind: EdictKind, year: number): { civ: CivState; obeyed: boolean } {
+export function applyEdict(civ: CivState, kind: EdictKind, year: number, n = 1): { civ: CivState; obeyed: boolean } {
   if (civ.stage < 1) return { civ, obeyed: false };
   const faith = civ.faith ?? 0;
   const obeyed = faith >= EDICT_FAITH;
-  const next: CivState = { ...civ, edict: { kind, year, obeyed, faith } };
+  const next: CivState = { ...civ, edict: { kind, year, obeyed, faith, n } };
   if (obeyed) next.miningStopped = kind === 'stop_mining';
   return { civ: next, obeyed };
 }

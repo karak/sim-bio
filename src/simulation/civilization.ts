@@ -46,7 +46,7 @@ export type CivState = {
   /** 勅令で採掘が止まっているか (M9-03)。省略時 false。止まっている間は stepMining を呼ばない */
   miningStopped?: boolean;
   /** 最後の勅令とその結果 (M9-03)。石板が「民は聞かなかった」を出すために残す */
-  edict?: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number };
+  edict?: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; /** 通し番号 (同じ年の 2 つ目の勅令も年表に出すため。M9 レビュー) */ n: number };
 };
 
 /** 段階の名前。stage をそのまま index に使う。 */
@@ -216,7 +216,7 @@ export function stepMining(
    * 霊脈の番号 (M9-03、vein.ts の labelVeins)。渡せば民は脈を辿って掘る: 採掘半径に掛かる脈のセル全体から残量に比例して
    * 取り除く。渡さなければ今までどおり採掘半径の中だけ (既存テスト・脈の無い世界)
    */
-  veins?: Int32Array,
+  veins?: { ids: Int32Array; cells: number[][] },
 ): { state: CivState; mined: number } {
   if (state.home < 0 || state.stage < 1 || state.stage > MAX_STAGE) return { state, mined: 0 };
   const radius = MINE_RADIUS[state.stage];
@@ -226,12 +226,11 @@ export function stepMining(
   const touched = new Set<number>();
   forEachInRadius(state.home, radius, size, (i) => {
     if (elevation[i] < SEA_LEVEL) return;
-    if (veins && veins[i] >= 0) touched.add(veins[i]);
+    if (veins && veins.ids[i] >= 0) touched.add(veins.ids[i]);
     else pool.push(i);
   });
-  if (veins && touched.size > 0) {
-    for (let i = 0; i < veins.length; i++) if (touched.has(veins[i]) && elevation[i] >= SEA_LEVEL) pool.push(i);
-  }
+  // 脈のセルは前計算の一覧から (全セルの走査をしない。M9 レビュー)
+  if (veins) for (const v of touched) for (const i of veins.cells[v]) if (elevation[i] >= SEA_LEVEL) pool.push(i);
   let total = 0;
   for (const i of pool) total += crystal[i];
   if (total <= 0 || rate <= 0) return { state, mined: 0 };

@@ -25,7 +25,9 @@ export type JudgeInput = {
 export function civVitality(s: WorldSnapshot): number {
   const home = s.civ?.home ?? -1;
   if (home < 0) return 0;
-  return meanAround(s.layers.vitality, home, SUPPORT_RADIUS, s.layers.elevation, s.size);
+  // World が年に 1 回記録した値 (HUD・警告と同じ) を優先し、無ければ (年をまたぐ前) その場で測る (M9 レビュー: 100 倍速では
+  // 年の境界から最大 100 tick 後に判定するので、測り直すと HUD と食い違う)
+  return s.civ?.vitality ?? meanAround(s.layers.vitality, home, SUPPORT_RADIUS, s.layers.elevation, s.size);
 }
 
 /** 文明の段階の名前 (0 = なし〜7 = 星)。src/simulation/civilization.ts の STAGE_NAMES と揃える (M8-02 未着地のため暫定でここに置く) */

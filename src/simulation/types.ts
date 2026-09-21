@@ -134,6 +134,8 @@ export type SaveData = {
   litter?: number[];
   /** M8 で追加。古いセーブには無い場合、restore 時に seed から決定論的に埋め直す */
   crystal?: number[];
+  /** M9-03 で追加。開始時の輝石 (霊脈の枯渇の分母)。古いセーブには無く、その場合は seed から生成した値を使う */
+  crystal0?: number[];
   populations: Record<string, number[]>;
   /** M8-02 で追加。config.civilization が無ければ無い */
   civ?: CivState;
