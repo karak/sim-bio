@@ -1,6 +1,7 @@
 import { SEA_LEVEL } from './terrain';
 import { forEachNeighbor4 } from './grid';
 import type { SpeciesDef } from './types';
+import { veinCap, veinFactor } from './vein';
 
 /** 分解者がいなくても進む基礎分解率 (1 tick に枯死のこの割合が生気になる) */
 export const BASE_DECOMPOSITION = 0.00005;
@@ -22,6 +23,8 @@ export type VitalityState = {
   vitality: Float32Array;
   litter: Float32Array;
   populations: Record<string, Float32Array>;
+  /** 霊脈の細り [0,1] (M9-03、vein.ts の computeVeinLoss)。省略時は 0 (今までどおり) */
+  veinLoss?: Float32Array;
 };
 
 /** 生気による植物の成長係数 [0,1] */
@@ -45,7 +48,9 @@ export function stepVitality(s: VitalityState, decomposers: SpeciesDef[], scratc
     }
     let boost = 0;
     for (const d of decomposers) boost += s.populations[d.id][i];
-    const k = Math.min(1, BASE_DECOMPOSITION + DECOMPOSER_BOOST * boost);
+    // 霊脈が細った土地では分解者の効きが落ちる (M9-03)。基礎分解は土地の性質なので落とさない
+    const vein = s.veinLoss ? veinFactor(s.veinLoss[i]) : 1;
+    const k = Math.min(1, BASE_DECOMPOSITION + DECOMPOSER_BOOST * boost * vein);
     const moved = s.litter[i] * k;
     s.litter[i] -= moved;
     scratch[i] = s.vitality[i] + moved;
@@ -63,6 +68,8 @@ export function stepVitality(s: VitalityState, decomposers: SpeciesDef[], scratc
     const mean = c ? sum / c : scratch[i];
     let v = scratch[i] + VITALITY_DIFFUSION * (mean - scratch[i]);
     v *= 1 - VITALITY_LEACH;
-    s.vitality[i] = v < 0 ? 0 : v > 1 ? 1 : v;
+    // 霊脈は生気の器 (M9-03): 脈が細った土地は 1 − VEIN_LOSS × veinLoss までしか生気を保てない。脈が尽きれば 0
+    const cap = s.veinLoss ? veinCap(s.veinLoss[i]) : 1;
+    s.vitality[i] = v < 0 ? 0 : v > cap ? cap : v;
   }
 }

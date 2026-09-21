@@ -1,0 +1,243 @@
+import { describe, it, expect } from 'vitest';
+import { World } from '../../src/simulation/World';
+import { createMemorySink } from '../../src/core/log/memorySink';
+import { SEA_LEVEL } from '../../src/simulation/terrain';
+import { applyEdict, EDICT_FAITH } from '../../src/simulation/edict';
+import { UNREST_FAITH, UNREST_FAITH_AFTER, UNREST_YEARS } from '../../src/simulation/unrest';
+import { updateFaith } from '../../src/simulation/faith';
+import { SUPPORT_RADIUS, type CivState } from '../../src/simulation/civilization';
+import { forEachInRadius } from '../../src/simulation/disaster';
+import { testConfig, grass, moss } from './helpers';
+
+/** testConfig() の地形 (seed 42, size 32) の陸で最も輝石が多いセル */
+function bestCrystalCell(): number {
+  const s = World.create(testConfig(), { log: createMemorySink() }).snapshot();
+  let home = -1;
+  let best = 0;
+  for (let i = 0; i < s.layers.crystal.length; i++) {
+    if (s.layers.elevation[i] >= SEA_LEVEL && s.layers.crystal[i] > best) {
+      best = s.layers.crystal[i];
+      home = i;
+    }
+  }
+  expect(home).toBeGreaterThanOrEqual(0);
+  return home;
+}
+
+const civ = (over: Partial<CivState> = {}): CivState => ({ speciesId: 'grass', stage: 3, progress: 0, home: 5, population: 1, ...over });
+
+describe('applyEdict (M9-03 勅令、純粋関数)', () => {
+  it('信仰 >= EDICT_FAITH なら従い miningStopped を切り替える。境界値: ちょうど EDICT_FAITH で従う', () => {
+    const r = applyEdict(civ({ faith: EDICT_FAITH }), 'stop_mining', 3);
+    expect(r.obeyed).toBe(true);
+    expect(r.civ.miningStopped).toBe(true);
+    expect(r.civ.edict).toEqual({ kind: 'stop_mining', year: 3, obeyed: true, faith: EDICT_FAITH, n: 1 });
+    const back = applyEdict(r.civ, 'resume_mining', 4);
+    expect(back.obeyed).toBe(true);
+    expect(back.civ.miningStopped).toBe(false);
+  });
+  it('信仰が足りなければ従わず、状態は変えないが edict に記録が残る。信仰が無ければ 0 扱い', () => {
+    const r = applyEdict(civ({ faith: EDICT_FAITH - 0.01 }), 'stop_mining', 3);
+    expect(r.obeyed).toBe(false);
+    expect(r.civ.miningStopped).toBeUndefined();
+    expect(r.civ.edict?.obeyed).toBe(false);
+    expect(applyEdict(civ(), 'stop_mining', 1).obeyed).toBe(false);
+  });
+  it('文明が無い (stage 0) なら何も起きない', () => {
+    const c = civ({ stage: 0, faith: 1 });
+    const r = applyEdict(c, 'stop_mining', 1);
+    expect(r.obeyed).toBe(false);
+    expect(r.civ).toBe(c);
+  });
+});
+
+describe('World の勅令の配線 (M9-03)', () => {
+  it('信仰 >= 0.6 なら「採掘を止めよ」で効いた年から採掘が 0 になり、輝石が減らない。「再開せよ」で再び減る', () => {
+    const home = bestCrystalCell();
+    const log = createMemorySink();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.7 } } }), { log });
+    w.step(360);
+    const before = w.snapshot().layers.crystal[home];
+    w.step(360);
+    expect(w.snapshot().layers.crystal[home]).toBeLessThan(before);
+    w.dispatch({ type: 'civ_edict', edict: 'stop_mining' });
+    w.step(1);
+    expect(w.snapshot().civ?.miningStopped).toBe(true);
+    const stopped = w.snapshot().layers.crystal[home];
+    const progress = w.snapshot().civ?.progress;
+    w.step(360);
+    expect(w.snapshot().layers.crystal[home]).toBe(stopped);
+    // 進みも止まる (掘った分は残るが増えない)
+    expect(w.snapshot().civ?.progress).toBe(progress);
+    const edicts = log.find('sim.civ.edict');
+    expect(edicts).toHaveLength(1);
+    expect(edicts[0]).toMatchObject({ edict: 'stop_mining', obeyed: true, miningStopped: true });
+    w.dispatch({ type: 'civ_edict', edict: 'resume_mining' });
+    w.step(360);
+    expect(w.snapshot().civ?.miningStopped).toBe(false);
+    expect(w.snapshot().layers.crystal[home]).toBeLessThan(stopped);
+  });
+  it('信仰が 0.6 未満なら民は聞かず、採掘は続く。ログに obeyed false', () => {
+    const home = bestCrystalCell();
+    const log = createMemorySink();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.5 } } }), { log });
+    w.step(360);
+    w.dispatch({ type: 'civ_edict', edict: 'stop_mining' });
+    w.step(1);
+    const s = w.snapshot();
+    expect(s.civ?.miningStopped).toBeUndefined();
+    expect(s.civ?.edict).toMatchObject({ kind: 'stop_mining', obeyed: false });
+    const c = s.layers.crystal[home];
+    w.step(360);
+    expect(w.snapshot().layers.crystal[home]).toBeLessThan(c);
+    expect(log.find('sim.civ.edict')[0]).toMatchObject({ obeyed: false });
+  });
+  it('文明のない世界では勅令は何も起こさない', () => {
+    const log = createMemorySink();
+    const w = World.create(testConfig(), { log });
+    w.dispatch({ type: 'civ_edict', edict: 'stop_mining' });
+    w.step(1);
+    expect(w.snapshot().civ).toBeNull();
+    expect(log.find('sim.civ.edict')).toHaveLength(0);
+  });
+  it('miningStopped と edict は serialize → restore で一致する', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.8 } } }), { log: createMemorySink() });
+    w.step(360);
+    w.dispatch({ type: 'civ_edict', edict: 'stop_mining' });
+    w.step(1);
+    const r = World.restore(w.serialize(), { log: createMemorySink() });
+    expect(r.snapshot().civ).toEqual(w.snapshot().civ);
+    expect(r.snapshot().civ?.miningStopped).toBe(true);
+  });
+  it('start.faith の指定があれば FAITH_INITIAL の代わりにその値で始まる', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.9 } } }), { log: createMemorySink() });
+    expect(w.snapshot().civ?.faith).toBe(0.9);
+  });
+});
+
+describe('World の内乱の配線 (M9-03)', () => {
+  it('信仰 < 0.3 が 3 年続くと集落の民が半減し段階 −1、信仰は 0.4 に戻る。ログ sim.civ.unrest', () => {
+    const home = bestCrystalCell();
+    const log = createMemorySink();
+    // 介入が無ければ減衰だけで 0.3 を割るのに年数がかかるので、開始の信仰を閾値のすぐ下に置く
+    const w = World.create(testConfig({ species: [grass, moss], civilization: { speciesId: 'grass', start: { stage: 3, home, faith: UNREST_FAITH - 0.05 } } }), { log });
+    const size = 32;
+    const popBefore = (): number => {
+      const s = w.snapshot();
+      let sum = 0;
+      forEachInRadius(home, SUPPORT_RADIUS, size, (i) => { if (s.layers.elevation[i] >= SEA_LEVEL) sum += s.layers.populations.grass[i]; });
+      return sum;
+    };
+    w.step(360 * (UNREST_YEARS - 1));
+    expect(log.find('sim.civ.unrest')).toHaveLength(0);
+    expect(w.snapshot().civ?.stage).toBe(3);
+    const pop = popBefore();
+    w.step(360);
+    const s = w.snapshot();
+    expect(log.find('sim.civ.unrest')).toHaveLength(1);
+    expect(log.find('sim.civ.unrest')[0]).toMatchObject({ from: 3, to: 2 });
+    expect(log.find('sim.civ.stage').some((e) => e.reason === 'unrest')).toBe(true);
+    expect(s.civ?.stage).toBe(2);
+    expect(s.civ?.faith).toBe(UNREST_FAITH_AFTER);
+    // 半減の直後 1 tick 分の成長は入るが、半分に近い
+    expect(popBefore()).toBeLessThan(pop * 0.6);
+  });
+  it('信仰が戻れば連続が切れて内乱は起きない', () => {
+    const home = bestCrystalCell();
+    const log = createMemorySink();
+    const w = World.create(testConfig({ species: [grass, moss], civilization: { speciesId: 'grass', start: { stage: 3, home, faith: UNREST_FAITH - 0.05 } } }), { log });
+    w.step(360 * (UNREST_YEARS - 1));
+    // 2 年低い → 祈りに応える形で信仰を戻す (儀式では間に合わないので直接 restore で書き換える)
+    const save = w.serialize();
+    save.civ!.faith = 0.5;
+    const r = World.restore(save, { log });
+    r.step(360 * 2);
+    expect(log.find('sim.civ.unrest')).toHaveLength(0);
+    expect(r.snapshot().civ?.stage).toBe(3);
+  });
+});
+
+describe('集落の生気 civ.vitality (M9-05)', () => {
+  it('年をまたぐと集落の支え半径の生気平均が civ.vitality に入り、serialize → restore で一致する', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home } } }), { log: createMemorySink() });
+    expect(w.snapshot().civ?.vitality).toBeUndefined();
+    w.step(360);
+    const v = w.snapshot().civ?.vitality;
+    expect(v).toBeTypeOf('number');
+    expect(v).toBeGreaterThan(0);
+    expect(v).toBeLessThanOrEqual(1);
+    expect(World.restore(w.serialize(), { log: createMemorySink() }).snapshot().civ?.vitality).toBe(v);
+  });
+});
+
+describe('崩壊時のリセットと数えないコマンド (M9 レビュー)', () => {
+  it('内乱で段階 0 になると信仰・祈り・勅令・霊脈の基準・集落の生気が消え、応えた/無視した数は残る', () => {
+    const home = bestCrystalCell();
+    const log = createMemorySink();
+    const w = World.create(testConfig({ species: [grass, moss], civilization: { speciesId: 'grass', start: { stage: 1, home, faith: 0.7, prayer: 'rain' } } }), { log });
+    w.step(360);
+    w.dispatch({ type: 'civ_edict', edict: 'stop_mining' });
+    w.step(1);
+    expect(w.snapshot().civ?.miningStopped).toBe(true);
+    // 信仰を閾値の下へ書き換えて 3 年で内乱 → 巣 (1) から 0
+    const save = w.serialize();
+    save.civ!.faith = UNREST_FAITH - 0.05;
+    save.civ!.prayersIgnored = 2;
+    const r = World.restore(save, { log });
+    r.step(360 * UNREST_YEARS);
+    const civ = r.snapshot().civ!;
+    expect(civ.stage).toBe(0);
+    expect(civ.home).toBe(-1);
+    expect(civ.faith).toBeUndefined();
+    expect(civ.prayer).toBeUndefined();
+    expect(civ.miningStopped).toBeUndefined();
+    expect(civ.edict).toBeUndefined();
+    expect(civ.crystalStart).toBeUndefined();
+    expect(civ.vitality).toBeUndefined();
+    expect(civ.prayersIgnored).toBe(2);
+    expect(log.find('sim.civ.collapsed')).toHaveLength(1);
+  });
+  it('海への放流など apply で弾かれるコマンドは、祈りの応えにも儀式にも数えない', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.5, prayer: 'rain' } } }), { log: createMemorySink() });
+    const s = w.snapshot();
+    let sea = -1;
+    forEachInRadius(home, 4, 32, (i) => { if (sea < 0 && s.layers.elevation[i] < SEA_LEVEL) sea = i; });
+    if (sea < 0) sea = s.layers.elevation.findIndex((e) => e < SEA_LEVEL);
+    w.dispatch({ type: 'spawn_species', speciesId: 'grass', cell: sea, amount: 0.3, radius: 8 });
+    w.step(1);
+    expect(w.snapshot().civ?.prayer?.kind).toBe('rain');
+    expect(w.snapshot().civ?.prayersAnswered ?? 0).toBe(0);
+  });
+  it('fromStar: false (予定コマンド・力切れの戻し) は儀式にも応えにも数えないが、集落を襲った災害は数える', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home, faith: 0.5, prayer: 'rain' } } }), { log: createMemorySink() });
+    w.step(360);
+    const f0 = w.snapshot().civ?.faith as number;
+    w.dispatch({ type: 'set_climate', rainScale: 1.5 }, { fromStar: false });
+    expect(w.snapshot().civ?.prayer?.kind).toBe('rain'); // 応えにならない
+    w.dispatch({ type: 'disaster', kind: 'plague', cell: home, radius: 2 }, { fromStar: false });
+    w.step(360);
+    // 儀式のキーは積まれず、災害 1 回 (−FAITH_DISASTER) と減衰だけ
+    expect(w.snapshot().civ?.faith).toBeCloseTo(updateFaith(f0, { recent: [], disasters: 1 }), 6);
+  });
+  it('crystal0 は serialize → restore で保たれる (沈降後も霊脈の枯渇の分母が変わらない)', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home } } }), { log: createMemorySink() });
+    w.step(360 * 2);
+    w.dispatch({ type: 'sink', amount: 0.05 });
+    w.step(1);
+    const before = Array.from(w.crystal0);
+    const save = w.serialize();
+    expect(save.crystal0).toEqual(before);
+    const r = World.restore(JSON.parse(JSON.stringify(save)), { log: createMemorySink() });
+    expect(Array.from(r.crystal0)).toEqual(before);
+    // 古いセーブ (crystal0 なし) は seed から生成した値で復元できる
+    const old = { ...save };
+    delete old.crystal0;
+    expect(() => World.restore(JSON.parse(JSON.stringify(old)), { log: createMemorySink() })).not.toThrow();
+  });
+});

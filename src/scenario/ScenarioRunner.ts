@@ -1,7 +1,8 @@
 import type { Command, WorldSnapshot } from '../simulation/types';
-import { judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
+import { civVitality, judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type CivContext, type Warning } from './warnings';
+import type { PrayerKind } from '../simulation/prayer';
 
 /** 年表の 1 行。石板が種名などに整形して出す */
 export type TimelineEvent =
@@ -11,9 +12,18 @@ export type TimelineEvent =
   | { year: number; kind: 'warning'; warning: Warning }
   | { year: number; kind: 'verdict'; verdict: Verdict }
   /** 文明の段階が年をまたいで変わった (M8-04)。from/to は STAGE_NAMES の index */
-  | { year: number; kind: 'civ_stage'; from: number; to: number };
+  | { year: number; kind: 'civ_stage'; from: number; to: number }
+  /** 文明の信仰が年をまたいで |Δ| >= 0.1 動いた (M9-01) */
+  | { year: number; kind: 'civ_faith'; from: number; to: number }
+  /** 勅令の結果 (M9-03)。obeyed なら民が採掘を止めた/再開した、でなければ聞かなかった (faith はそのときの信仰) */
+  | { year: number; kind: 'civ_edict'; edict: 'stop_mining' | 'resume_mining'; obeyed: boolean; faith: number }
+  /** 文明の祈りが出た・応えられた・無視された (M9-02) */
+  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored' | 'withdrawn'; prayer: PrayerKind };
 
-type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
+type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void; snapshot(): WorldSnapshot };
+
+/** 信仰の年表イベント (civ_faith) を積む閾値。前年との差の絶対値がこれ以上のときだけ積む (M9-01) */
+const FAITH_TIMELINE_THRESHOLD = 0.1;
 
 /** intervene が弾いた理由。budget = 力が足りない、finished = 既に判定が確定している */
 export type InterveneResult = { ok: true } | { ok: false; reason: 'budget' | 'finished' };
@@ -35,6 +45,8 @@ export type ScenarioRunner = {
   power(): number;
   /** 石板表示用の力の情報。budget のないシナリオでは null */
   budget(): BudgetInfo | null;
+  /** 現在有効な祈りと残り年数 (石板表示用、M9-02)。祈りが無ければ null */
+  prayer(): { kind: PrayerKind; yearsLeft: number } | null;
   /** 直近の年次評価で出た警告 (年に 1 回更新) */
   warnings(): Warning[];
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
@@ -48,7 +60,14 @@ export type ScenarioRunner = {
 export function createScenarioRunner(
   def: ScenarioDef,
   world: RunnerWorld,
-  opts: { onVerdict?: (v: Verdict) => void; onPowerExhausted?: () => void; onWarning?: (w: Warning) => void; ticksPerYear?: number } = {},
+  opts: {
+    onVerdict?: (v: Verdict) => void;
+    onPowerExhausted?: () => void;
+    onWarning?: (w: Warning) => void;
+    /** 祈りが出た・応えられた・無視された年に呼ぶ (M9-02)。onWarning と同じ形 */
+    onPrayer?: (e: Extract<TimelineEvent, { kind: 'prayer' }>) => void;
+    ticksPerYear?: number;
+  } = {},
 ): ScenarioRunner {
   const first = world.snapshot();
   const startTick = first.tick;
@@ -75,6 +94,10 @@ export function createScenarioRunner(
   const history: Record<string, number>[] = [];
   /** 年ごとの文明の段階の履歴 (civ_stage の years 判定用)。history と同じ並びで年に 1 件 */
   const civHistory: number[] = [];
+  /** 年ごとの集落の生気平均の履歴 (M9-03、civHistory と同じ並び)。civ_vitality の years 判定用 */
+  const civVitalityHistory: number[] = [];
+  /** 最後に年表に積んだ勅令の通し番号 (M9-03)。新しい勅令が記録されていれば年表に積む (同じ年の 2 つ目も) */
+  let lastEdictN: number | null = first.civ?.edict?.n ?? null;
   /** 前年の文明の段階。civ_declining の判定に使う。最初の年はまだ「前年」が無いので null */
   let prevCivStage: number | null = null;
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
@@ -83,6 +106,19 @@ export function createScenarioRunner(
   let currentYear = 0;
   /** 直近に見た文明の段階。年をまたいで変わったら timeline に積む (M8-04) */
   let lastCivStage = first.civ?.stage ?? 0;
+  /** 直近に見た信仰の値。文明が無い・stage 0 のあいだは null (M9-01) */
+  let lastCivFaith: number | null = first.civ?.faith ?? null;
+  /** 祈り (M9-02): 直近の年次評価で報告済みの issuedYear。同じ祈りを二重に issued 扱いしないための目印 */
+  let lastPrayerIssuedYear: number | null = first.civ?.prayer?.issuedYear ?? null;
+  /** 祈り (M9-02): 直近に見た祈りの種類。解決 (answered/ignored) された時点では civ.prayer が消えているので、
+   * 「何が解決されたか」を answered/ignored の件数が増えた瞬間まで覚えておく */
+  let lastPrayerKind: PrayerKind | null = first.civ?.prayer?.kind ?? null;
+  /** 祈り (M9-02): 直近に見た応えた・無視した回数。前年と比べて増えていれば TimelineEvent を積む */
+  let lastPrayersAnswered = first.civ?.prayersAnswered ?? 0;
+  let lastPrayersIgnored = first.civ?.prayersIgnored ?? 0;
+  let lastPrayersWithdrawn = first.civ?.prayersWithdrawn ?? 0;
+  /** 祈り (M9-02): 石板が毎フレーム読む現在の祈り。年次評価を待たず、最新の snapshot でそのまま更新する */
+  let currentPrayer = first.civ?.prayer ?? null;
 
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
@@ -102,7 +138,8 @@ export function createScenarioRunner(
         const key = `${idx}@${y}`;
         if (fired.has(key)) continue;
         fired.add(key);
-        world.dispatch(resolve(sc.command));
+        // 予定コマンドは星の行為ではない (信仰の儀式・祈りの応えに数えない。M9 レビュー)
+        world.dispatch(resolve(sc.command), { fromStar: false });
         // 毎年繰り返す進行 (沈降など) は年表に出さない。単発の予定イベントだけ
         if (!sc.everyYears) timeline.push({ year: y, kind: 'scheduled', command: sc.command });
         if (!sc.everyYears) break;
@@ -120,6 +157,9 @@ export function createScenarioRunner(
         return budgetDef.costs.disaster;
       case 'set_climate':
         return budgetDef.costs.climate;
+      // 勅令 (M9-03) は言葉なので力は要らない (信仰の門が代わり)
+      case 'civ_edict':
+        return 0;
       case 'sink':
         return 0;
     }
@@ -136,7 +176,7 @@ export function createScenarioRunner(
     power += income - upkeep;
     if (power < 0) {
       power = 0;
-      world.dispatch({ type: 'set_climate', rainScale: 1, tempOffset: 0 });
+      world.dispatch({ type: 'set_climate', rainScale: 1, tempOffset: 0 }, { fromStar: false });
       timeline.push({ year: currentYear, kind: 'power_exhausted' });
       opts.onPowerExhausted?.();
     } else {
@@ -151,6 +191,7 @@ export function createScenarioRunner(
     verdict: () => verdict,
     power: () => power,
     budget: () => (budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null),
+    prayer: () => (currentPrayer ? { kind: currentPrayer.kind, yearsLeft: Math.max(0, currentPrayer.deadlineYear - currentYear) } : null),
     warnings: () => warnings,
     timeline: () => timeline,
     intervene(cmd) {
@@ -161,7 +202,8 @@ export function createScenarioRunner(
         power -= cost;
         powerSpent += cost;
       }
-      interventions++;
+      // 勅令 (M9-03) は言葉であって行為ではないので介入回数に数えない (no_intervention の条件や内訳を変えない。M9 レビュー)
+      if (cmd.type !== 'civ_edict') interventions++;
       // 予定コマンド (fireDue) と同じく cell = -1 (島の中心) と半径の縮尺を解決してから流す。
       // 以前は resolve を通さず生の cmd を dispatch していたため、プレイヤー操作由来の介入で
       // cell: -1 を使うと (-1, 0) 相当の意図しない位置に適用されていた (M8-05 で発覚)
@@ -173,6 +215,8 @@ export function createScenarioRunner(
       if (verdict.status !== 'running') return verdict;
       const year = yearOf(s);
       currentYear = year;
+      // 祈り (M9-02): 石板が毎フレーム読めるように、年次評価を待たず最新の値に更新しておく
+      currentPrayer = s.civ?.prayer ?? null;
       fireDue(year);
       if (year !== lastYear) {
         // 最初の呼び出し (lastYear === -1) はまだ 1 年も経っていないので力は動かさない
@@ -191,12 +235,58 @@ export function createScenarioRunner(
         history.push({ ...s.totals });
         const civStage = s.civ?.stage ?? 0;
         civHistory.push(civStage);
+        civVitalityHistory.push(civVitality(s));
         prevCivStage = civStage;
         if (civStage !== lastCivStage) {
           timeline.push({ year, kind: 'civ_stage', from: lastCivStage, to: civStage });
           lastCivStage = civStage;
         }
-        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, areaScale });
+        // 信仰 (M9-01): 前年・今年とも値があり、差の絶対値が閾値以上のときだけ積む。
+        // 発生前 (undefined → 値が付く年) は「前年の値」が無いので積まない
+        const civFaith = s.civ?.faith;
+        if (civFaith !== undefined && lastCivFaith !== null && Math.abs(civFaith - lastCivFaith) >= FAITH_TIMELINE_THRESHOLD) {
+          timeline.push({ year, kind: 'civ_faith', from: lastCivFaith, to: civFaith });
+        }
+        if (civFaith !== undefined) lastCivFaith = civFaith;
+        // 祈り (M9-02): 前年と比べて解決 (無視 → 応えた の順、World の内部順序に合わせる) → 発生の順で積む。
+        // 解決の種類は civ.prayer が消えた後には残らないので、直近に見ていた種類 (lastPrayerKind) で補う
+        const prayersIgnored = s.civ?.prayersIgnored ?? 0;
+        if (prayersIgnored > lastPrayersIgnored && lastPrayerKind) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'ignored', prayer: lastPrayerKind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+        }
+        lastPrayersIgnored = prayersIgnored;
+        // 取り下げ (M9-03): 困りごとが消えて民が祈るのをやめた年
+        const prayersWithdrawn = s.civ?.prayersWithdrawn ?? 0;
+        if (prayersWithdrawn > lastPrayersWithdrawn && lastPrayerKind) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'withdrawn', prayer: lastPrayerKind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+        }
+        lastPrayersWithdrawn = prayersWithdrawn;
+        const prayersAnswered = s.civ?.prayersAnswered ?? 0;
+        if (prayersAnswered > lastPrayersAnswered && lastPrayerKind) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'answered', prayer: lastPrayerKind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+        }
+        lastPrayersAnswered = prayersAnswered;
+        const prayerNow = s.civ?.prayer ?? null;
+        if (prayerNow && prayerNow.issuedYear !== lastPrayerIssuedYear) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'issued', prayer: prayerNow.kind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+          lastPrayerIssuedYear = prayerNow.issuedYear;
+        }
+        if (prayerNow) lastPrayerKind = prayerNow.kind;
+        // 勅令 (M9-03): 新しい勅令が記録されていれば、従ったか (採掘の停止/再開) 聞かなかったかを年表に積む
+        const edict = s.civ?.edict;
+        if (edict && edict.n !== lastEdictN) {
+          timeline.push({ year, kind: 'civ_edict', edict: edict.kind, obeyed: edict.obeyed, faith: edict.faith });
+          lastEdictN = edict.n;
+        }
+        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, civVitalityHistory, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
           timeline.push({ year, kind: 'verdict', verdict });

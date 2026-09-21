@@ -379,6 +379,94 @@ hud.showCell(cellIndex: number | null): void
 
   LD §5 の感度・定着・副作用は単体テスト(`tests/unit/civilizationFuel.test.ts`、`tests/unit/belltree.test.ts`、`tests/unit/firelizard.test.ts`)で確認。捨てた案は LD 文書 §7 に。
 
+### 4.16 実装時の差分(M9-01: 信仰の値)
+
+計画 `docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算`。文明を持つ種が信仰を持つ。同じ種類の介入を繰り返す(予測可能)と上がり、種類がばらつく介入や災害で下がり、放置すればゆっくり減衰する。
+
+- **純粋関数として分離**(`src/simulation/faith.ts`、World には依存しない): `CivState.faith?: number` を追加(省略可。既存セーブ・テストとの互換を保つため、文明が stage ≥ 1 になった最初の年まで undefined のまま)。`commandKey(cmd)` がコマンドの「種類」のキーを返す(`spawn_species` → `spawn:<speciesId>`、`set_climate` → `climate`、`disaster` → `disaster:<kind>`、`sink` → `null` で数えない)。`updateFaith(prev, { recent, disasters })` が 1 年分の更新をする。`recent` は直近 `FAITH_HISTORY_YEARS`(10)年(今年を含む)に dispatch されたコマンドのキー、古い順。
+- **係数**(すべて `faith.ts` 先頭の定数): `FAITH_INITIAL = 0.5`(生まれた年の初期値)、`FAITH_UP = 0.05`(同じ種類が続いたときに足す)、`FAITH_DOWN = 0.05`(種類がばらついたときに引く)、`FAITH_DISASTER = 0.1`(災害 1 回につき引く)、`FAITH_DECAY = 0.03`(毎年の減衰率)、`FAITH_STREAK_THRESHOLD = 3` / `FAITH_VARIETY_THRESHOLD = 3`(「同じ種類が続く」「種類がばらつく」の閾値)。
+- **規則**: (a) recent の最後のキーと同じキーが recent に `FAITH_STREAK_THRESHOLD` 回以上あれば `+FAITH_UP`。(b) recent の異なるキーが `FAITH_VARIETY_THRESHOLD` 種類以上なら `−FAITH_DOWN`。(c) 今年の災害(disaster コマンド。プレイヤーも予定コマンドも)1 回につき `−FAITH_DISASTER`。(a)(b) は両方成り立てば両方掛かる。(d) 最後に `× (1 − FAITH_DECAY)` で減衰。(e) `[0,1]` にクランプ。災害の減点(0.1)は儀式の加点(0.05)より大きいので、儀式が 3 回そろっていても災害があれば正味は必ず下がる。
+- **World の配線**(`World.ts`): `dispatch` で civ があるときだけ `commandKey` の結果を今年のキー配列に積み(`disaster` はさらに今年の災害回数も数える)、`stepCivYearly` で年ごとの配列を `FAITH_HISTORY_YEARS` 年分保持したのち `updateFaith` を呼ぶ(stage ≥ 1 のときだけ。civ.faith が undefined ならこの年が誕生年で `FAITH_INITIAL` を入れるだけ)。ログ `sim.civ.faith` を年 1 回 info で `{ year, faith, delta }` を出す。restore 後のキー履歴は空から始める(信仰の値そのものは `civ.faith` としてセーブに含まれ、そのまま往復する)。
+- **ScenarioRunner**(`ScenarioRunner.ts`): 年次評価で `snapshot.civ?.faith` を見て、前年の値(定義されているとき)との差の絶対値が `FAITH_TIMELINE_THRESHOLD = 0.1` 以上なら `TimelineEvent { kind: 'civ_faith', from, to }` を年表に積む。誕生年(前年の値が無い)は積まない。
+- **表示**: `Tablet.describeEvent` が `civ_faith` を「信仰が 0.62 → 0.48 に下がった」の形(小数 2 桁)で整形する(`civ_stage` の隣の書式に合わせた)。`Hud.formatCiv` が文明の行の末尾に ` · 信仰 0.62`(小数 2 桁)を足す。faith が undefined(stage 0 など)なら出さない。
+
+### 4.17 実装時の差分(M9-00: 文明の自然発生を地域で測る)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §1、§8。M8-02 で「既定の島(seed 42、size 64、全種)では鹿の文明が 400 年たっても発生しない」と記録した件。閾値(`EMERGE_VEGETATION` 0.4、`EMERGE_AMPLITUDE` 0.15)は据え置き、**測り方** を島全体から集落候補の地域に変えた。
+
+- **実測(変更前、150 年放置)**: 島全体の鹿は 9 年周期で振動し続け振幅比 0.42〜0.53。集落候補(密度最大の陸セル)は年 2 から 2635 に固定され、その半径 3 の植生平均は 0.24〜0.26、半径 8 は 0.18 で頭打ち(密度最大点 = 採食圧最大点)。一方、候補の支え半径 8 の地域人口(3.8〜4.3)は振幅比 0.08〜0.11 で安定していた。条件は構造的に満たせないと分かった。
+- **`checkEmergence(history, { candidateVegetation, islandVegetation, hasCrystal })`**: `history` は候補の支え半径 `SUPPORT_RADIUS`(8)内の年次総量。植生は候補の半径 8 の平均が `EMERGE_VEGETATION × 島の陸の植生平均` を超えること(相対値)。さらに候補の採掘半径 `MINE_RADIUS[1]`(2)以内に輝石があること(掘るものが無ければ知性は生まれない。世界観 §1.5)。
+- **候補の追い方 `trackHomeCandidate`**: 密度最大の陸セルは輝石が近くにあるものに限る(`pickHomeCandidate`)。前年の候補があれば、その周り `EMERGE_CANDIDATE_MOVE`(= 8)で追い直した候補の地域人口が島で最大の候補の `EMERGE_STICKY`(0.5)倍以上なら群れに留まる。候補が前年から 8 セルより遠くへ移れば別の群れとして履歴を捨てる。留まりを入れる前の size 128 では密度最大セルが複数の群れの間を数年ごとに飛び(80 年で 32 回)、履歴が 10 年たまらなかった。
+- **結果**: seed 42 / size 64 / 全種で鹿の文明が **22 年目** に集落 2635(地域人口 4.1)で発生する。草だけの世界(size 32)の既存テスト(10 年目に発生)は変わらない。既存の通し実行 20 件は段階を指定して始めるので影響なし(通過)。
+- **既知の制約**: size 128(`world.default.json` の既定)では地域の群れ自体が振幅比 0.8〜0.9 で波打つ(3 → 19 → 3)ためどの地域も安定せず、80 年で発生しない。シナリオはすべて size 64 か段階指定で始めるので M9 では扱わず、通しの年表(M18)で size 128 の自然発生が要るときに戻る。
+
+### 4.18 実装時の差分(M9-02: 祈り)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §3.1、§4。集落の困りごとが石板に「祈り」として届き、期限内に対応する介入があれば信仰が上がり、無視すれば下がる。
+
+- **純粋関数として分離**(`src/simulation/prayer.ts`、World には依存しない): `PrayerKind = 'rain' | 'wolves' | 'crystal'`、`PrayerState = { kind; issuedYear; deadlineYear }`。`CivState` に `prayer?`、`prayersAnswered?`、`prayersIgnored?`、`crystalStart?` を追加(既存セーブ・テストとの互換を保つため省略可)。`issuePrayer({ grassMean, predatorRatio, crystalRatio })` が今年出す祈りの種類 (`PrayerKind | null`) を返す。複数当てはまれば `crystal > wolves > rain` の優先。`isAnswer(kind, cmd, { home, size, rainScaleBefore })` がこの介入が応えかどうかを返す。
+- **係数**(すべて `prayer.ts` 先頭の定数): `PRAYER_YEARS = 5`(期限)、`PRAYER_COOLDOWN = 3`(解決から次が出るまでの年数、同時に 1 つだけ)、`PRAYER_CRYSTAL_LOW = 0.1`(LD §3.1 の据え置き値)。`PRAYER_GRASS_LOW`・`PRAYER_PREDATOR_HIGH` は実測で決めた(下記)。
+- **実測(閾値の校正)**: seed 42 / size 64 / 全種、`civilization: { speciesId: 'deer', start: { stage: 3, home: 2635 } }` で 100 年放置し、年ごとに支え半径 `SUPPORT_RADIUS`(8)の草 (`grass`) の密度平均・捕食者 (肉食トロフィック) の総量 / 民の総量を測った。草の密度平均は **0.074〜0.132(中央値 0.107)** で終始低く張り付き、捕食者比は **0.165〜1.924(中央値 0.301)** だった(参考: 輝石比は 0.621〜0.842 で `PRAYER_CRYSTAL_LOW` 0.1 には遠く、この実測レンジでは「星の砂を」は出ない)。`issuePrayer` を優先度どおりに 100 年通したとき「雨を」が 4〜12 回・「狼を減らして」が 1〜6 回になる組を探索し、`PRAYER_GRASS_LOW = 0.15`(中央値よりわずかに高い。草は常にこの近辺かそれ以下)、`PRAYER_PREDATOR_HIGH = 0.33`(中央値よりわずかに高い)を選んだ。この組では 100 年で「雨を」10 回・「狼を減らして」3 回(受入基準の範囲内)。使い捨ての計測スクリプトはコミットしていない。
+- **World の配線**(`World.ts`): `dispatch` で civ に有効な祈りがあり `isAnswer` が真なら即座に解決する(`prayersAnswered++`、今年の answered 数に積む、ログ `sim.civ.prayer` phase `answered`)。`rainScaleBefore` は dispatch 前(コマンド適用前)の `config.climate.rainScale`。`stepCivYearly`(stage ≥ 1)で、まず `crystalStart`(stage ≥ 1 になった最初の年の `MINE_RADIUS[MAX_STAGE]` 内輝石総量)を記録し、次に期限切れの祈りを無視した扱いで解決し(`prayersIgnored++`)、空いていてクールダウンが明けていれば `issuePrayer` で新しい祈りを出す。信仰の更新 (`updateFaith`) に今年の `answered`/`ignored` を渡す。
+- **faith.ts の追加**: `FAITH_ANSWER = 0.15`(応えた 1 件につき加点)、`FAITH_IGNORE = 0.15`(無視した 1 件につき減点)。`updateFaith` の規則 (c) の直後、減衰の前に `+answered × FAITH_ANSWER − ignored × FAITH_IGNORE` を掛ける(省略時 0、既存の呼び出し・テストは変わらない)。
+- **開始時の祈り**(E2E の決定論のため): `CivilizationConfig.start.prayer?: PrayerKind` と `scenarios.json` の `start.civilization.prayer` を追加。指定があれば World 生成時に `{ kind, issuedYear: 0, deadlineYear: PRAYER_YEARS }` で有効にする。`test-civ` に `"prayer": "rain"` を足した。
+- **ScenarioRunner**: `snapshot.civ` の `prayer`/`prayersAnswered`/`prayersIgnored` を前年の年次評価と比べ、`TimelineEvent { kind: 'prayer'; phase; prayer }` を積んで `opts.onPrayer?.()` を呼ぶ(前年と比べる作りは `civ_stage`/`civ_faith` と同じ設計)。`runner.prayer()` が現在の祈りと残り年数 (`deadlineYear − 現在年`) を毎フレーム返す(石板表示用)。
+- **表示**: `Tablet` が `id="tablet-prayer"` の行に「祈り: 雨を(残り 3 年)」の形で出す(無ければ `hidden`)。`describeEvent` が `prayer` を「民が祈った: 雨を」「祈りに応えた: 雨を」「祈りを無視した: 雨を」の形で整形する(種類の文言: rain=「雨を」、wolves=「狼を減らして」、crystal=「星の砂を」)。`main.ts` の `onPrayer` が `scenario.prayer` を `{ scenario, phase, kind }` でログする(`onWarning` と同じ形)。
+
+### 4.19 実装時の差分(M9-03: 信仰の効き — 勅令・内乱・霊脈)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §3.2〜3.4、§5、§8.2。
+
+- **勅令**(`edict.ts` / `Command { type: 'civ_edict', edict: 'stop_mining' | 'resume_mining' }`): 信仰 ≥ `EDICT_FAITH`(0.6)のときだけ民が従い、`CivState.miningStopped` を切り替える(止まっている間は `stepMining` を呼ばない。負荷 `applyLoad` は残る)。従わなくても `CivState.edict = { kind, year, obeyed, faith }` に残し、石板が「民は聞かなかった(信仰 0.45 < 0.6)」を出す。力は消費せず(`costOf` 0)、信仰の「同じ種類」にも数えない(`commandKey` null)。HUD に勅令の行(「採掘を止めよ / 再開せよ」)と文明の行の「· 採掘 止」。ログ `sim.civ.edict`。
+- **内乱**(`unrest.ts`): 信仰 < `UNREST_FAITH`(0.3)の年が `UNREST_YEARS`(3)続くと、集落の支え半径の民を `UNREST_SURVIVORS`(0.5)倍にし段階 −1、信仰を `UNREST_FAITH_AFTER`(0.4)に戻す(3 年ごとに連鎖しないため)。ログ `sim.civ.unrest` と `sim.civ.stage`(reason `unrest`)。
+- **霊脈**(`vein.ts`): 開始時の輝石(`crystal0`、seed から決定論。restore でも保存値で上書きしない)を 4 近傍で繋いだ連結成分を脈として番号付け(`labelVeins`)。民は **脈を辿って掘る**(`stepMining` に `veins` を渡すと、採掘半径に掛かる脈のセル全体から残量に比例して取り除く)。枯渇 `1 − 残り / 開始` は脈全体で共有し(`veinDepletion`)、脈から `VEIN_REACH`(8 歩)以内の陸は最寄りの脈の枯渇を `veinLoss` として受ける。`stepVitality` は生気の上限を `veinCap = 1 − VEIN_LOSS(1.0) × veinLoss` に抑える(霊脈は生気の器)。分解率の分解者項にも `veinFactor` を掛けるが、実測では効かない(下記)。輝石の無かった土地は枯渇 0 なので既存シナリオの平衡は変わらない。
+  - 捨てた形(実測、seed 42 / size 64、集落 1770 = 脈 71 セル・輝石 29.7 の上、石 (4) で放置): (1) セルごとの枯渇 + 半径 3 の平均: 採掘半径 3 の輝石 1.05 は 4 年で尽きて採掘が止まり、半径 8 の脈は 5% しか減らず、生気 1.0 のまま。(2) 脈全体の共有 + 分解率の低下: 100 年で脈は 9% まで減ったが、集落の苔は密度 0.99 で分解率が漏出の 70 倍あり、分解者の効きを 1 割にしても生気 1.0 のまま。(3) 器(上限)にして初めて生気が動いた。
+  - 結果(信仰 1.0 で始めて内乱を避けた放置): 脈 1.0 → 0.09、集落の生気 0.93 → 0.21、島全体の生気 0.97 → 0.61(100 年)。脈が 5 割の時点(53 年目)で「止めよ」→ 20 年後も生気 0.57。2 割の時点(88 年目)→ 0.31。苔だけ放っても落ち続ける(0.60 → 0.39 / 0.31 → 0.11)。
+- **判定条件・警告**: `faith { min, max }`、`prayers_answered { min, max }`(「祈りに応えるな」の dead に `max: 0`)、`civ_vitality { min, max, years }`(集落の支え半径の生気平均。`JudgeInput.civVitalityHistory` で直近 years 年の平均)。警告 `faith_low`(信仰 < 0.4)。`start.civilization.faith` で開始時の信仰を指定できる(E2E の `test-civ` は 0.7)。
+- **副作用の校正(塔の重さ v2 が滅びた)**: 祈りと内乱を入れた直後、塔の想定解 2 通りが 56 年目に段階 0 で滅びた。原因は 3 つあり、順に仕組みで直した。
+  1. 塔の集落(2847)では狼/鹿の密度比が常に 1.5〜8.5 で、2635 で決めた絶対閾値(`PRAYER_PREDATOR_HIGH` 0.33)を恒常的に超え、「狼を減らして」が 8 年ごとに出て無視され続けた(−0.15 × 7)。→ 祈りの条件を **「いつもより」**(直近 `PRAYER_BASELINE_YEARS` 10 年の平均に対する比。草は `PRAYER_GRASS_DROP` 0.7 倍未満、捕食者比は `PRAYER_PREDATOR_RISE` 1.5 倍超。基準ができる `PRAYER_BASELINE_MIN` 3 年までは出ない)に変えた。輝石は開始比のまま。絶対値の定数は参照のため残した。
+  2. 期限の前に困りごとが消えた祈りも「無視」になっていた。→ **取り下げ**(`prayerStillNeeded` が偽なら `prayersWithdrawn++`、信仰は動かない。基準が無い間は判断できないので残す)。年表「困りごとが消え、民は祈るのをやめた」。
+  3. 集落から 10 セル離れた噴火まで信仰を削り(−0.1 × 11)、減衰 3%/年 が儀式で埋まらなかった。→ 災害は **集落そのもの(`HOME_RADIUS` + 半径)を襲ったときだけ** 数える(`disasterHitsHome`)、`FAITH_DECAY` 0.03 → 0.01(「ゆっくり減衰」: 0.5 → 0.3 に 51 年)。
+  - 塔の台本は変えていない(儀式を足す案は、力 4 / 3 年 が噴火の予算を圧迫して燃料切れになり捨てた)。通し 20 件通過。
+- **既知の制約**: size 128 の既定島は M9-00 と同じ理由で自然発生しない。祈りの基準は restore 後 3 年は無い。
+
+### 4.20 実装時の差分(M9-04: 「祈りに応えるな」「霊脈枯れ」の校正)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §4、§5、§8.3。予算は塔の重さと同じ(start 40 / 年収 12 / 放流 4・災害 24・気候 2 / 上限 120)。どちらも `schedule` で 6 年目から 12 年ごとに集落へ狼の群れ(`spawn_species wolf` 0.5、半径 3)が下り、民が「狼を減らして」と祈る(祈りは「いつもより」で出るので、圧はシナリオ側の舞台装置で作る)。
+
+- **祈りに応えるな**(`no-answer`): 歌 (3) の鹿の文明、集落 2787(採掘半径に輝石が無く段階が進まない、燃料も要らない)、信仰 0.5。`alive = civ_stage ≥ 3(直近 10 年)かつ prayers_answered ≤ 0`、`dead = civ_stage ≤ 0 または prayers_answered ≥ 1`(応えた瞬間に「民は考えるのをやめた」)。当初の alive は段階 ≥ 1 だったが、放置が内乱 2 回で 巣 (1) に留まり alive になったので「一段でも退けば滅び」にした(歌のままでいることが民の自立)。
+- **霊脈枯れ**(`vein-drain`): 石 (4) の鹿の文明、集落 1770(脈 71 セル・輝石 29.7 の上)、薪の蓄え 600(燃料を切り離す)、信仰 0.5。`alive = civ_stage ≥ 1(10 年)かつ civ_vitality ≥ 0.3(10 年平均)`、`dead = civ_stage ≤ 0`。
+- **民が望んだ災害は数えない**: 「狼を減らして」への疫病は集落を襲うが裏切りではないので、信仰の災害(−0.1)に数えない。数えると応えの +0.15 がほぼ消え、応えて信仰を上げる道(想定解 1)が 100 年で 0.5 → 0.5 のまま成り立たなかった(実測: 応え 3 回、勅令ゼロ、集落の生気 11% で dead)。
+- **先回り(想定解 2)の作り**: 狼が下りた年のうち(年末に祈りが出る前)に集落へ疫病を打つ。すでに祈りが出ている年に打てば応えになって滅びるので打たない。儀式は 1 年目から 2 年ごと(3 年ごとでは最初の狼 (6 年目) までに 3 回そろわず、8〜14 年目に信仰 0.30 で止まって 15 年目に内乱)。テスト側は `playTower(def, script, after)` の `after`(年次評価の後に呼ぶ台本)で同じ年の中の操作を表す。
+
+  校正の行列(seed 42、size 64、`tests/slow/scenarios.playthrough.test.ts`):
+
+  | シナリオ | 戦略 | 操作 | 結果 |
+  |---|---|---|---|
+  | 祈りに応えるな | 放置 | なし | dead: 内乱で一段退く |
+  | 〃 | 応える | 祈りが出たら集落へ疫病 | dead: 「祈りに 1 回応えた」 |
+  | 〃 | 気まぐれ | 毎年違う種を放つ | dead: 3 種類以上の混在と無視で内乱 |
+  | 〃 | 儀式(想定解 1) | 3 年ごとに苔を集落へ | alive |
+  | 〃 | 先回り(想定解 2) | 狼の年に祈りが出る前に疫病、2 年ごとの儀式 | alive |
+  | 霊脈枯れ | 放置 | なし | dead: 集落の生気が落ちる |
+  | 〃 | 苔だけ | 3 年ごとの苔 + 20 年目から 5 年ごとに周りへ苔 | dead: 脈が尽きて戻らない |
+  | 〃 | 信仰なしの勅令 | 5 年ごとに「止めよ」 | dead: 民が聞かない |
+  | 〃 | 応えて止める(想定解 1) | 祈りに疫病で応え、0.6 で「止めよ」 | alive |
+  | 〃 | 儀式で止める(想定解 2) | 3 年ごとの苔、0.6 で「止めよ」 | alive |
+
+  既存の 20 件も通る(塔 5 / 放置・台本 11 / 素朴・罠 7 の 3 分割)。
+
+### 4.21 実装時の差分(M9 レビューの修正、2026-09-22)
+
+マージ前のコードレビュー(main との差分)で挙がった 10 件をすべて直した。
+
+- **崩壊時のリセット**(`World.collapseCiv`): 段階 0 になったとき home だけでなく信仰・祈り・勅令・`crystalStart`・集落の生気・発生判定と信仰の履歴・内乱と衰退の連続数を捨てる。残すと次に芽生えた文明が古い勅令で掘らず、期限切れの祈りを翌年に無視し、信仰が古い値から始まり、発生判定が古い履歴で 1 年後に再発生した。応えた/無視した/取り下げた数はシナリオの判定の履歴なので残す。`faith_low` にも段階 ≥ 1 の門。
+- **数えないコマンド**: `apply` で弾かれるコマンド(海への放流など)は信仰・祈りに数えない(`dispatch` で先に `validate`)。`dispatch(cmd, { fromStar: false })` で予定コマンドと力切れの気候の戻しは星の行為ではない(儀式にも応えにも数えない。集落を襲った災害だけは数える)。
+- **勅令**: `CivState.edict.n`(通し番号)で年表の重複を弾く(同じ年の 2 つ目も出る)。勅令は介入回数(`interventions`)に数えない。
+- **セーブ**: `crystal0` を保存し、restore で使う(沈降で陸が減ると seed から同じ値に生成できない)。古いセーブは seed から生成。
+- **判定**: `civVitality` は World が年に 1 回記録した `civ.vitality` を使う(100 倍速では年の境界から最大 100 tick 後に判定するので、測り直すと HUD と食い違う)。
+- **採掘の走査**: 脈ごとのセル一覧(`veinCellLists`)を前計算し、`stepMining` は全セルを走査しない。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -391,6 +479,66 @@ hud.showCell(cellIndex: number | null): void
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
+
+### M9-00: 文明の自然発生を地域で測る
+
+| 受入項目 | 証跡 |
+|---|---|
+| checkEmergence が地域の履歴・輝石の有無・相対植生で判定する(境界値つき)、pickHomeCandidate / trackHomeCandidate / cellDistance | `tests/unit/civilization.test.ts` · 2a35b32 |
+| seed 42 / size 64 / 全種で鹿の文明が 60 年以内に発生する(実測 22 年目、集落 2635) | `tests/unit/world.civilization.test.ts` · 2a35b32 |
+| 草だけの世界の既存テストが変わらない | `tests/unit/world.civilization.test.ts` · 2a35b32 |
+| 既存の通し実行 20 件が通る(塔 v2 5 件 / 放置・台本 11 件 / 素朴・罠 7 件の 3 分割) | `tests/slow/scenarios.playthrough.test.ts` · 8ac0fa6 |
+
+### M9-01: 信仰の値
+
+| 受入項目 | 証跡 |
+|---|---|
+| 純粋関数で信仰を更新する。同じ種類のコマンドが 10 年内に 3 回続くと上がり、直近 10 年で 3 種類以上のコマンドが混ざると下がる。災害は必ず下げる(単体テスト、境界値つき) | `tests/unit/faith.test.ts` · 40bd5c0 |
+| 介入がなければ年ごとに一定率で減衰し 0 未満・1 超にならない(性質テスト) | `tests/unit/faith.test.ts` · 40bd5c0 |
+| 文明のない世界では信仰の値も表示も存在しない(既存テストが変わらない) | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts` · 40bd5c0 |
+| HUD の文明の行に「信仰 0.62」が出る。snapshot と保存データに含まれ、serialize→restore で一致する | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/e2e/smoke.spec.ts` · 40bd5c0 |
+| ログ sim.civ.faith を年 1 回、年表に ±0.1 以上動いた年だけ出す | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 40bd5c0 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(242 テスト通過)、`npx playwright test`(16 テスト通過) · 40bd5c0 |
+
+### M9-05: 手動受入プレイテスト(信仰と祈り)
+
+| 受入項目 | 証跡 |
+|---|---|
+| プレイ記録 3 回分(応える → dead、儀式 → alive、儀式で止める → alive) | `docs/specs/plans/2026-09-22-m9-playtest.md` · 5f040bb |
+| 記録で挙がった表示の問題を直し E2E が通る(信仰の切り捨て表示 `formatFaith`、HUD の集落の生気と警告 `civ_vitality_low`) | `tests/unit/faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/e2e/smoke.spec.ts`(18 件) · 5f040bb |
+| 設計書 §6 と企画書に反映 | 本表、`docs/design/2026-09-19-proposal.html` · 5f040bb |
+
+### M9-04: 「祈りに応えるな」「霊脈枯れ(簡易版)」の校正
+
+| 受入項目 | 証跡 |
+|---|---|
+| 校正の前にレベルデザイン文書を書き、ユーザーの承認を得る | `docs/design/2026-09-21-level-design-faith.md` §9 · c94ed36 / 2654ffe(承認 2026-09-21) |
+| レバー感度・定着・副作用の確認がヘッドレスで通っている | `tests/unit/world.vein.test.ts`、`tests/unit/faith.test.ts`、`tests/unit/prayer.test.ts`、既存の通し 20 件 · 1e342f0 |
+| scenarios.json に 2 本(予言・開始の文明段階・予算・節目・alive/dead) | `assets/data/scenarios.json`、`tests/unit/scenario.judge.test.ts` · 6b75c9b |
+| tests/slow: 各シナリオで 放置 dead、素朴戦略 2 つ dead、想定解 2 つ alive。既存の通し実行も通る | `tests/slow/scenarios.playthrough.test.ts`(faith scenarios 10 件 + 既存 20 件) · 6b75c9b |
+| 設計書 §4 に係数と校正の表、§6 に証跡 | §4.19、§4.20 · d33de56 |
+
+### M9-03: 信仰の効き(内乱と採掘の制止)
+
+| 受入項目 | 証跡 |
+|---|---|
+| 信仰 < 0.3 が 3 年続くと内乱: 集落の民が半減し段階 −1。ログ sim.civ.unrest | `tests/unit/unrest.test.ts`、`tests/unit/world.civilization.edict.test.ts`(内乱の配線) · 1e342f0 |
+| 「採掘を止めよ / 再開せよ」は信仰 ≥ 0.6 のときだけ効き、効いた年から採掘が 0(単体 + E2E) | `tests/unit/world.civilization.edict.test.ts`、`tests/e2e/smoke.spec.ts`(edict) · 1e342f0 |
+| Condition faith { min?, max? }、警告 faith_low(< 0.4)。prayers_answered、civ_vitality | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/unit/scenario.budget.test.ts`(civ_edict の年表・力 0) · 1e342f0 |
+| 文明のない世界では何も起きない | `tests/unit/world.civilization.edict.test.ts`(文明のない世界では勅令は何も起こさない) · 1e342f0 |
+| 霊脈: 脈の番号付け・脈全体の枯渇・器としての上限、民は脈を辿って掘る。感度と定着(LD §5) | `tests/unit/vein.test.ts`、`tests/unit/civilization.test.ts`(stepMining と霊脈)、`tests/unit/world.vein.test.ts` · 1e342f0 |
+| 祈りの「いつもより」と取り下げ(副作用の校正) | `tests/unit/prayer.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · 1e342f0 |
+| 既存の通し実行 20 件が通る(塔 v2 は台本を変えずに通る) | `tests/slow/scenarios.playthrough.test.ts` · 1e342f0 |
+
+### M9-02: 祈り
+
+| 受入項目 | 証跡 |
+|---|---|
+| 祈りの生成は純粋関数。条件(草の密度・捕食者比・輝石量)ごとに 1 種類、同時に 1 つだけ、期限 5 年(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · ad80ea3 |
+| 期限内に対応する種類の介入があれば「応えた」と判定して信仰 +、期限切れで −(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/faith.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · ad80ea3 |
+| 石板に現在の祈りと残り年数が出て、応えた・無視したが年表に並ぶ(E2E: 試し読みシナリオで祈りが出て、対応する介入で消える) | `tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · ad80ea3 |
+| ログ scenario.prayer(issued / answered / ignored) | `tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · ad80ea3 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(287 テスト通過)、`npx playwright test`(17 テスト通過) · ad80ea3 |
 
 ### M1: 地形 + 植物 + 季節 + グラフ
 

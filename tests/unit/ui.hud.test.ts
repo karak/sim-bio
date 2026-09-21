@@ -20,4 +20,30 @@ describe('formatCiv (HUD の文明の 1 行)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6 };
     expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360');
   });
+  it('faith があれば小数 2 桁で「· 信仰 0.62」を足す (M9-01)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6, faith: 0.62 };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360 · 信仰 0.62');
+  });
+  it('faith が undefined なら信仰の表示は出ない (M9-01)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 6, progress: 0.4, home: 10, population: 12 };
+    expect(formatCiv(civ)).toBe('文明 塔(6) · 進み 13% · 民 1200');
+  });
+});
+
+describe('formatCiv の採掘の停止 (M9-03)', () => {
+  it('miningStopped なら末尾に「· 採掘 止」を足し、そうでなければ出さない', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 3, progress: 0, home: 10, population: 1, faith: 0.7, miningStopped: true };
+    expect(formatCiv(civ)).toBe('文明 歌(3) · 進み 0% · 民 100 · 信仰 0.70 · 採掘 止');
+    expect(formatCiv({ ...civ, miningStopped: false })).toBe('文明 歌(3) · 進み 0% · 民 100 · 信仰 0.70');
+  });
+});
+
+describe('formatCiv の集落の生気 (M9-05)', () => {
+  it('vitality があれば「· 生気 NN%」を信仰の後・採掘の前に足す。無ければ出さない', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 10, population: 1, faith: 0.5, vitality: 0.574, miningStopped: true };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 0% · 民 100 · 信仰 0.50 · 生気 57% · 採掘 止');
+    const noVit: CivState = { ...civ };
+    delete noVit.vitality;
+    expect(formatCiv(noVit)).toBe('文明 石(4) · 進み 0% · 民 100 · 信仰 0.50 · 採掘 止');
+  });
 });

@@ -258,7 +258,7 @@
     "id": "test-civ",
     "title": "文明の試し読み",
     "hidden": true,
-    "prophecy": "この石板は試し読み用。石の文明を最初から据えて、表示だけを確かめる。",
+    "prophecy": "この石板は試し読み用。石の文明を最初から据え、信仰 0.7 と「雨を」の祈りを添えて、表示と勅令だけを確かめる。",
     "kind": "endure",
     "start": {
       "seed": 42,
@@ -266,7 +266,9 @@
       "civilization": {
         "speciesId": "deer",
         "stage": 4,
-        "home": -1
+        "home": -1,
+        "prayer": "rain",
+        "faith": 0.7
       }
     },
     "years": 5,
@@ -341,6 +343,177 @@
           ]
         }
       ]
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 12,
+      "costs": {
+        "spawn": 4,
+        "disaster": 24,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 80,
+        "tempOffset": 16
+      },
+      "max": 120
+    },
+    "ignoreWarnings": [
+      "land_low"
+    ]
+  },
+  {
+    "id": "no-answer",
+    "title": "祈りに応えるな",
+    "prophecy": "この島の民は歌を持ち、星を見上げて祈ることを覚えた。十二年ごとに北の谷から狼の群れが下りてきて、民は「狼を減らして」と祈るだろう。応えれば民は喜び、星を信じる。だが一度でも応えれば、民は考えるのをやめ、島は滅びる。応えずに信仰を保て。同じことを同じように繰り返す星を、民は信じる。気まぐれな星と、黙ったままの星を、民は見捨てる。信仰が細れば内乱が起き、集落は半ば焼け、民は一段退く。百年目、民が一度も退かず歌を保っていれば、島は生き延びたと言える。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 3,
+        "home": 2787,
+        "faith": 0.5
+      }
+    },
+    "referenceSize": 64,
+    "years": 100,
+    "schedule": [
+      {
+        "atYear": 6,
+        "everyYears": 12,
+        "command": {
+          "type": "spawn_species",
+          "speciesId": "wolf",
+          "cell": 2787,
+          "amount": 0.5,
+          "radius": 3
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 6,
+        "text": "狼の群れが下りてくる。民は祈る"
+      },
+      {
+        "atYear": 18,
+        "text": "二度目の群れ。祈りを無視した分だけ信仰は細っている"
+      },
+      {
+        "atYear": 90,
+        "text": "ここからの十年、民が歌のままなら判定される"
+      }
+    ],
+    "alive": {
+      "type": "all",
+      "of": [
+        {
+          "type": "civ_stage",
+          "min": 3,
+          "years": 10
+        },
+        {
+          "type": "prayers_answered",
+          "max": 0
+        }
+      ]
+    },
+    "dead": {
+      "type": "any",
+      "of": [
+        {
+          "type": "civ_stage",
+          "max": 0
+        },
+        {
+          "type": "prayers_answered",
+          "min": 1
+        }
+      ]
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 12,
+      "costs": {
+        "spawn": 4,
+        "disaster": 24,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 80,
+        "tempOffset": 16
+      },
+      "max": 120
+    },
+    "ignoreWarnings": [
+      "land_low"
+    ]
+  },
+  {
+    "id": "vein-drain",
+    "title": "霊脈枯れ",
+    "prophecy": "この島の民は石を積み、地の下を走る霊脈から輝石を掘る。霊脈は一本の脈で、どこを掘っても脈全体が細る。脈が細れば土地は生気を保てず、苔を放っても戻らない。民は勝手に掘り続ける。止めよと言えるのは、民が星を信じたときだけ(信仰が六割)。信仰は、祈りに応えれば速く上がり、同じことを繰り返す儀式でゆっくり上がる。十二年ごとに狼が下りて民は祈る。早く止めれば残った脈が土地を養う。遅ければ、百年目に集落の生気は尽きている。百年目、民が残り、集落の生気が三割あれば島は生き延びたと言える。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 4,
+        "home": 1770,
+        "fuelStock": 600,
+        "faith": 0.5
+      }
+    },
+    "referenceSize": 64,
+    "years": 100,
+    "schedule": [
+      {
+        "atYear": 6,
+        "everyYears": 12,
+        "command": {
+          "type": "spawn_species",
+          "speciesId": "wolf",
+          "cell": 1770,
+          "amount": 0.5,
+          "radius": 3
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 6,
+        "text": "狼が下りてくる。民は祈る。応えるか、儀式で信仰を積むか"
+      },
+      {
+        "atYear": 30,
+        "text": "脈は七割。この頃までに止めれば土地は保つ"
+      },
+      {
+        "atYear": 90,
+        "text": "ここからの十年の集落の生気で判定される"
+      }
+    ],
+    "alive": {
+      "type": "all",
+      "of": [
+        {
+          "type": "civ_stage",
+          "min": 1,
+          "years": 10
+        },
+        {
+          "type": "civ_vitality",
+          "min": 0.3,
+          "years": 10
+        }
+      ]
+    },
+    "dead": {
+      "type": "civ_stage",
+      "max": 0
     },
     "budget": {
       "start": 40,

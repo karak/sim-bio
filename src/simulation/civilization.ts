@@ -5,6 +5,7 @@
 import { forEachInRadius } from './disaster';
 import { amplitudeRatio } from './oscillation';
 import { SEA_LEVEL } from './terrain';
+import type { PrayerKind, PrayerState } from './prayer';
 
 /** 文明の状態。stage 0 = まだ発生していない。 */
 export type CivState = {
@@ -22,6 +23,30 @@ export type CivState = {
    * まだ無い (undefined)。既存のテスト・セーブとの互換を保つため省略可にしてある。
    */
   fuel?: { last: number; need: number; shortYears: number; stock: number; debt: number };
+  /**
+   * 信仰の値 [0,1] (M9-01)。文明が stage ≥ 1 になった最初の年に faith.ts の FAITH_INITIAL で生まれる。
+   * stage 0 や civ が無いあいだは undefined のまま。既存のテスト・セーブとの互換を保つため省略可にしてある。
+   */
+  faith?: number;
+  /** 現在有効な祈り (M9-02)。無ければ undefined。既存のテスト・セーブとの互換を保つため省略可にしてある */
+  prayer?: PrayerState;
+  /** 応えた祈りの累計 (M9-02, M9-03 の判定条件が読む)。省略時は 0 相当 */
+  prayersAnswered?: number;
+  /** 無視した (期限切れの) 祈りの累計 (M9-02)。省略時は 0 相当 */
+  prayersIgnored?: number;
+  /** 期限の前に困りごとが消えて取り下げられた祈りの数 (M9-03)。信仰は動かない */
+  prayersWithdrawn?: number;
+  /**
+   * 採掘半径 MINE_RADIUS[MAX_STAGE] 内の輝石の総量 (M9-02)。stage ≥ 1 になった最初の年 (発生時か開始時) に
+   * 記録し、以後は変えない。「星の砂を」の判定 (crystalRatio) の分母。既存のテスト・セーブとの互換を保つため省略可
+   */
+  crystalStart?: number;
+  /** 集落の支え半径内の生気の平均 (M9-05)。年に 1 回 stepCivYearly が更新する。HUD の「生気 NN%」と警告 civ_vitality_low に使う */
+  vitality?: number;
+  /** 勅令で採掘が止まっているか (M9-03)。省略時 false。止まっている間は stepMining を呼ばない */
+  miningStopped?: boolean;
+  /** 最後の勅令とその結果 (M9-03)。石板が「民は聞かなかった」を出すために残す */
+  edict?: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; /** 通し番号 (同じ年の 2 つ目の勅令も年表に出すため。M9 レビュー) */ n: number };
 };
 
 /** 段階の名前。stage をそのまま index に使う。 */
@@ -43,10 +68,40 @@ export const HOME_RADIUS = 3;
 export const SUPPORT_RADIUS = 8;
 /** 発生条件: 集落候補セル周辺の植生 (森+草の合計) 平均がこれを超える */
 export const EMERGE_VEGETATION = 0.4;
+// M9-00: 絶対値ではなく「島の陸の植生平均に対する倍率」として読む (候補の支え半径 8 の平均 > EMERGE_VEGETATION × 島の平均)。
+// 実測 (seed 42, size 64, 全種, 150 年放置) で候補の半径 3 の植生は 0.25、半径 8 は 0.18 で頭打ちになり、
+// 密度最大点 = 採食圧最大点という構造上、絶対値 0.4 には届かなかった (LD 2026-09-21 §1, §8)
 /** 発生条件: 直近 10 年の振幅比 (amplitudeRatio) がこれ未満 (振動していない) */
 export const EMERGE_AMPLITUDE = 0.15;
+// M9-00: 振幅比は島全体の総量ではなく、候補セルの支え半径 (SUPPORT_RADIUS) 内の総量で測る。
+// 島全体の鹿は 9 年周期で振動し続ける (振幅比 0.42〜0.53) が、地域の群れは 0.08〜0.11 で安定していた
 /** 発生に必要な年次履歴の年数 */
 export const EMERGE_HISTORY_YEARS = 10;
+/**
+ * 集落候補が前年の候補からこの距離 (セル) 以内なら、地域の履歴を引き継ぐ (M9-00)。
+ * 候補は密度最大セルなので年ごとに数セル揺れる。支え半径と同じ広さまでは「同じ群れ」とみなす
+ */
+export const EMERGE_CANDIDATE_MOVE = SUPPORT_RADIUS;
+/**
+ * 群れへの留まり (M9-00)。前年の候補の周り (EMERGE_CANDIDATE_MOVE) で追い直した候補の地域人口が、
+ * 島で最大の候補の地域人口のこの倍率以上なら、最大の方へ飛ばずに同じ群れを見続ける。
+ * size 128 の既定島では密度最大セルが複数の群れの間を数年ごとに飛び (80 年で 32 回)、履歴が 10 年たまらなかった
+ */
+export const EMERGE_STICKY = 0.5;
+
+/**
+ * 今年の集落候補を決める (M9-00)。島で密度最大の候補を取り、前年の候補があればその群れの中で追い直した候補が
+ * 最大の EMERGE_STICKY 倍以上の人口なら群れに留まる。返り値が前年から EMERGE_CANDIDATE_MOVE より遠ければ別の群れ
+ */
+export function trackHomeCandidate(pops: Float32Array, crystal: Float32Array, elevation: Float32Array, size: number, prev: number): number {
+  const best = pickHomeCandidate(pops, crystal, elevation, size);
+  if (prev < 0 || best < 0) return best;
+  const local = pickHomeCandidate(pops, crystal, elevation, size, { center: prev, radius: EMERGE_CANDIDATE_MOVE });
+  if (local < 0) return best;
+  const localPop = populationAround(pops, local, elevation, size);
+  const bestPop = populationAround(pops, best, elevation, size);
+  return localPop >= EMERGE_STICKY * bestPop ? local : best;
+}
 
 /**
  * 段階ごとの採掘半径 (セル)。index = stage。index 0 (なし) は未使用 (0 を入れておく)。
@@ -68,14 +123,79 @@ export const MINE_RATE: readonly number[] = [0, 0.0004, 0.0005, 0.0006, 0.0007, 
  */
 export const NEED: readonly number[] = [Infinity, 0.6, 1.0, 1.4, 1.8, 2.4, 3.2, Infinity];
 
+/** 発生判定の入力 (M9-00)。すべて候補セルの周りで測った値 */
+export type EmergenceInput = {
+  /** 候補の支え半径内の植生 (森+草) 平均 */
+  candidateVegetation: number;
+  /** 島の陸セル全体の植生平均。候補の植生はこれに対する倍率で判定する */
+  islandVegetation: number;
+  /** 候補の採掘半径 MINE_RADIUS[1] 以内に輝石があるか (掘るものが無ければ知性は生まれない。世界観 §1.5) */
+  hasCrystal: boolean;
+};
+
 /**
  * 発生判定。stage 0 のとき年に 1 回呼ぶ。
  * history はその種の年次総量 (直近 10 年、古い順)。振動していない (振幅比が小さい) かつ
  * 集落候補地の植生が十分あれば true。
+ * M9-00: history は島全体ではなく候補の支え半径内の総量、植生は島の平均に対する倍率、
+ * さらに候補の近くに輝石があることを条件に足した (LD 2026-09-21 §8)。
  */
-export function checkEmergence(history: number[], candidateVegetation: number): boolean {
+export function checkEmergence(history: number[], input: EmergenceInput): boolean {
   if (history.length < EMERGE_HISTORY_YEARS) return false;
-  return amplitudeRatio(history) < EMERGE_AMPLITUDE && candidateVegetation > EMERGE_VEGETATION;
+  if (!input.hasCrystal) return false;
+  if (amplitudeRatio(history) >= EMERGE_AMPLITUDE) return false;
+  return input.candidateVegetation > EMERGE_VEGETATION * input.islandVegetation;
+}
+
+/** 2 セル間の距離 (セル単位のユークリッド距離) */
+export function cellDistance(a: number, b: number, size: number): number {
+  const ax = a % size;
+  const ay = (a - ax) / size;
+  const bx = b % size;
+  const by = (b - bx) / size;
+  return Math.hypot(ax - bx, ay - by);
+}
+
+/**
+ * 集落候補 (M9-00): その種の密度が最大の陸セルのうち、採掘半径 MINE_RADIUS[1] 以内に輝石があるもの。
+ * 民は遺産のそばに集まる (世界観 §1.5)。該当が無ければ -1
+ */
+export function pickHomeCandidate(
+  pops: Float32Array,
+  crystal: Float32Array,
+  elevation: Float32Array,
+  size: number,
+  /** 指定があれば center の半径 radius 以内だけから選ぶ (前年の群れの中で候補を追い直す) */
+  within?: { center: number; radius: number },
+): number {
+  let candidate = -1;
+  let best = 0;
+  const radius = MINE_RADIUS[1];
+  for (let i = 0; i < pops.length; i++) {
+    if (elevation[i] < SEA_LEVEL || pops[i] <= best) continue;
+    if (within && cellDistance(i, within.center, size) > within.radius) continue;
+    let has = false;
+    forEachInRadius(i, radius, size, (j) => {
+      if (!has && elevation[j] >= SEA_LEVEL && crystal[j] > 0) has = true;
+    });
+    if (!has) continue;
+    best = pops[i];
+    candidate = i;
+  }
+  return candidate;
+}
+
+/** cell の半径 radius 以内の陸セルの arr の平均 (陸が無ければ 0) */
+export function meanAround(arr: Float32Array, cell: number, radius: number, elevation: Float32Array, size: number): number {
+  let sum = 0;
+  let count = 0;
+  forEachInRadius(cell, radius, size, (i) => {
+    if (elevation[i] >= SEA_LEVEL) {
+      sum += arr[i];
+      count++;
+    }
+  });
+  return count ? sum / count : 0;
 }
 
 /**
@@ -92,21 +212,32 @@ export function stepMining(
   size: number,
   /** false なら掘っても段階は上がらず、progress は NEED で頭打ち (民が次の段階の必要量に足りないとき。M8-06) */
   canAdvance = true,
+  /**
+   * 霊脈の番号 (M9-03、vein.ts の labelVeins)。渡せば民は脈を辿って掘る: 採掘半径に掛かる脈のセル全体から残量に比例して
+   * 取り除く。渡さなければ今までどおり採掘半径の中だけ (既存テスト・脈の無い世界)
+   */
+  veins?: { ids: Int32Array; cells: number[][] },
 ): { state: CivState; mined: number } {
   if (state.home < 0 || state.stage < 1 || state.stage > MAX_STAGE) return { state, mined: 0 };
   const radius = MINE_RADIUS[state.stage];
   const rate = MINE_RATE[state.stage];
-  let total = 0;
+  // 掘る対象のセル: 採掘半径内の陸セル。脈があれば、半径に掛かる脈を辿ってその脈のセル全体
+  const pool: number[] = [];
+  const touched = new Set<number>();
   forEachInRadius(state.home, radius, size, (i) => {
-    if (elevation[i] >= SEA_LEVEL) total += crystal[i];
+    if (elevation[i] < SEA_LEVEL) return;
+    if (veins && veins.ids[i] >= 0) touched.add(veins.ids[i]);
+    else pool.push(i);
   });
+  // 脈のセルは前計算の一覧から (全セルの走査をしない。M9 レビュー)
+  if (veins) for (const v of touched) for (const i of veins.cells[v]) if (elevation[i] >= SEA_LEVEL) pool.push(i);
+  let total = 0;
+  for (const i of pool) total += crystal[i];
   if (total <= 0 || rate <= 0) return { state, mined: 0 };
   const mined = Math.min(rate, total);
   // 残量に比例して各セルから取り除く (多いセルほど多く掘る、輝石が無いセルは変化なし)
   const k = mined / total;
-  forEachInRadius(state.home, radius, size, (i) => {
-    if (elevation[i] >= SEA_LEVEL && crystal[i] > 0) crystal[i] -= crystal[i] * k;
-  });
+  for (const i of pool) if (crystal[i] > 0) crystal[i] -= crystal[i] * k;
   let stage = state.stage;
   let progress = state.progress + mined;
   if (stage < MAX_STAGE && progress >= NEED[stage]) {
@@ -131,17 +262,18 @@ export function populationAround(pops: Float32Array, home: number, elevation: Fl
 }
 
 /** WorldConfig.civilization の形 (main.ts がシナリオの start.civilization をこの形へ解決する) */
-export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number } };
+export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } };
 
 /**
  * シナリオの start.civilization を WorldConfig.civilization へ解決する。
  * home は他のコマンドと同じ規約で、省略または -1 なら島の中心セルにする。stage 省略時は 0 (まだ発生していない)。
+ * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため。期限は World 側で開始年 + PRAYER_YEARS にする)。
  */
 export function resolveCivilizationStart(
-  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number } | undefined,
+  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } | undefined,
   size: number,
 ): CivilizationConfig | undefined {
   if (!start) return undefined;
   const home = start.home === undefined || start.home === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : start.home;
-  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock } };
+  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer, faith: start.faith } };
 }

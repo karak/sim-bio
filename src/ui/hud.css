@@ -34,6 +34,8 @@
 .tablet-prophecy { font-size: 12px; color: #c9d6cd; line-height: 1.6; margin: 4px 0 6px; }
 .tablet .row { justify-content: center; }
 .tablet-power { margin-top: 2px; }
+/* 祈り (M9-02)。tablet-milestones と同じ書式 */
+.tablet-prayer { font-size: 12px; color: #e0b055; }
 .tablet-milestones { font-size: 12px; color: #9fb3c2; }
 .tablet-warnings { font-size: 12px; color: #e0b055; line-height: 1.5; }
 .tablet-timeline { font-size: 12px; color: #9fb3c2; text-align: left; margin-top: 4px; }

@@ -125,6 +125,49 @@ test('tower fuel: ?scenario=test-civ shows the fuel line once a year has passed 
   await expect(page.locator('#hud-civ')).toContainText('燃料', { timeout: 8000 });
 });
 
+test('faith: ?scenario=test-civ shows the faith line once a year has passed (M9-01)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await page.click('#speed-100');
+  // stage 4 で始まるので、1 年たって信仰が生まれれば「· 信仰 0.50」が出る (小数 2 桁まで内容を確認)
+  await expect(page.locator('#hud-civ')).toContainText(/信仰 \d\.\d\d/, { timeout: 8000 });
+});
+
+test('prayer: ?scenario=test-civ shows the current prayer, and an answering intervention clears it and logs answered (M9-02)', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/?scenario=test-civ');
+  // test-civ の start.civilization.prayer: "rain" で開始時から祈りが有効になっている (期限 5 年)
+  await expect(page.locator('#tablet-prayer')).toBeVisible();
+  await expect(page.locator('#tablet-prayer')).toHaveText('祈り: 雨を(残り 5 年)');
+  // 雨を今より増やす (既存 E2E の気候操作と同じ操作) で応える
+  await page.locator('#rain-scale').evaluate((el) => {
+    const input = el as HTMLInputElement;
+    input.value = '1.5';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#tablet-prayer')).toBeHidden();
+  // 年表の prayer イベントは年次評価 (年をまたぐタイミング) でしか積まれないので、1 年進める
+  await page.click('#speed-100');
+  await expect(page.locator('#tablet-timeline')).toContainText('祈りに応えた: 雨を', { timeout: 20_000 });
+  // ログ scenario.prayer(answered)
+  await expect
+    .poll(() => logs.filter((l) => l.includes('"event":"scenario.prayer"') && l.includes('"phase":"answered"') && l.includes('"kind":"rain"')).length)
+    .toBeGreaterThanOrEqual(1);
+});
+
+test('edict: ?scenario=test-civ の勅令「採掘を止めよ」は信仰 0.7 の民が従い、HUD に「採掘 止」、年表に「民は採掘を止めた」が出る (M9-03)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await expect(page.locator('#hud-edict')).toBeVisible();
+  await expect(page.locator('#hud-civ')).not.toContainText('採掘 止');
+  await page.click('#edict-stop');
+  await expect(page.locator('#hud-civ')).toContainText('採掘 止');
+  await expect(page.locator('#edict-stop')).toHaveClass(/on/);
+  // 年表の civ_edict は年次評価 (年をまたぐタイミング) でしか積まれないので、1 年進める
+  await page.click('#speed-100');
+  await expect(page.locator('#tablet-timeline')).toContainText('民は採掘を止めた', { timeout: 20_000 });
+  await expect(page.locator('#tablet-timeline')).toContainText('石板が告げた: 採掘を止めよ');
+});
+
 test('volcano hint: arming the 火山 chip shows the hint text, unarming hides it (M8-08)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#volcano-hint')).toBeHidden();

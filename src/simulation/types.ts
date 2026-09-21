@@ -84,7 +84,9 @@ export type Command =
   | { type: 'set_climate'; tempOffset?: number; rainScale?: number }
   | { type: 'disaster'; kind: DisasterKind; cell: number; radius: number }
   /** 島全体の標高を amount 下げる (沈降)。シナリオの「滅びの進行」用 */
-  | { type: 'sink'; amount: number };
+  | { type: 'sink'; amount: number }
+  /** 石板の勅令 (M9-03)。信仰が EDICT_FAITH 以上のときだけ民が従う。力は消費しない */
+  | { type: 'civ_edict'; edict: 'stop_mining' | 'resume_mining' };
 
 /** 読み取り専用ビュー。layers は内部バッファそのもの (コピーしない)。 */
 export type WorldSnapshot = {
@@ -132,6 +134,8 @@ export type SaveData = {
   litter?: number[];
   /** M8 で追加。古いセーブには無い場合、restore 時に seed から決定論的に埋め直す */
   crystal?: number[];
+  /** M9-03 で追加。開始時の輝石 (霊脈の枯渇の分母)。古いセーブには無く、その場合は seed から生成した値を使う */
+  crystal0?: number[];
   populations: Record<string, number[]>;
   /** M8-02 で追加。config.civilization が無ければ無い */
   civ?: CivState;
