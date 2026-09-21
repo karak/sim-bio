@@ -4,7 +4,7 @@ title: 祈り
 status: todo
 milestone: M9
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M9-01]
+depends_on: [M9-01, M9-06]
 evidence: []
 ---
 

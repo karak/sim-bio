@@ -4,7 +4,7 @@ title: 手動受入プレイテスト(M9)
 status: todo
 milestone: M9
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M9-01, M9-02, M9-03, M9-04]
+depends_on: [M9-00, M9-01, M9-02, M9-03, M9-04]
 evidence: []
 ---
 

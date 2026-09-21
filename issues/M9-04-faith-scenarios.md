@@ -4,7 +4,7 @@ title: 「祈りに応えるな」「霊脈枯れ(簡易版)」の校正
 status: todo
 milestone: M9
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M9-03]
+depends_on: [M9-03, M9-06, M9-00]
 evidence: []
 ---
 
