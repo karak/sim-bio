@@ -403,6 +403,17 @@ hud.showCell(cellIndex: number | null): void
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
 
+### M9-01: 信仰の値
+
+| 受入項目 | 証跡 |
+|---|---|
+| 純粋関数で信仰を更新する。同じ種類のコマンドが 10 年内に 3 回続くと上がり、直近 10 年で 3 種類以上のコマンドが混ざると下がる。災害は必ず下げる(単体テスト、境界値つき) | `tests/unit/faith.test.ts` · 40bd5c0 |
+| 介入がなければ年ごとに一定率で減衰し 0 未満・1 超にならない(性質テスト) | `tests/unit/faith.test.ts` · 40bd5c0 |
+| 文明のない世界では信仰の値も表示も存在しない(既存テストが変わらない) | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts` · 40bd5c0 |
+| HUD の文明の行に「信仰 0.62」が出る。snapshot と保存データに含まれ、serialize→restore で一致する | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/e2e/smoke.spec.ts` · 40bd5c0 |
+| ログ sim.civ.faith を年 1 回、年表に ±0.1 以上動いた年だけ出す | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 40bd5c0 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(242 テスト通過)、`npx playwright test`(16 テスト通過) · 40bd5c0 |
+
 ### M1: 地形 + 植物 + 季節 + グラフ
 
 | 受入項目 | 証跡 |
