@@ -213,7 +213,8 @@ const towerScripts: Record<string, Script> = {};
   towerScripts['trees-first'] = (r, s, y) => { const o = towerOps(r, s, st4); if (y >= 1 && y <= 20) o.plant(2); if (y >= 1 && o.short(1)) o.erupt(); };
 }
 
-function playTower(def: ScenarioDef, script: Script | null) {
+/** after は年次評価 (予定コマンドの発火) の後に呼ぶ台本。狼が下りた年にその場で動く「先回り」に使う (M9-04) */
+function playTower(def: ScenarioDef, script: Script | null, after: Script | null = null) {
   const cfg: WorldConfig = {
     ...structuredClone(base),
     size: SIZE,
@@ -229,6 +230,7 @@ function playTower(def: ScenarioDef, script: Script | null) {
     script?.(r, s, y);
     const v = r.update(s);
     if (v.status !== 'running') return v;
+    after?.(r, w.snapshot(), y);
     w.step(cfg.ticksPerYear);
   }
   return r.verdict();
@@ -256,6 +258,99 @@ describe('tower scenario v2 playthroughs (size 64)', { timeout: 600_000 }, () =>
   });
   it('trees first + fire (想定解 2) → alive', () => {
     const v = playTower(def, towerScripts['trees-first']);
+    expect(v.status, v.reason).toBe('alive');
+  });
+});
+
+/**
+ * M9-04: 「祈りに応えるな」「霊脈枯れ」。レベルデザイン docs/design/2026-09-21-level-design-faith.md §4、§5 の判定行列。
+ * どちらも 12 年ごとに集落へ狼の群れが下りて (schedule)、民が「狼を減らして」と祈る。
+ * 祈りに応えるな (歌 (3)、集落 2787 = 輝石が無く段階が進まない): 応えれば即 dead。儀式 (同じ放流を 3 年ごと) か先回り (狼が来た年に疫病) で信仰を保つ。
+ * 霊脈枯れ (石 (4)、集落 1770 = 脈の上、薪の蓄え 600): 信仰 0.6 で「止めよ」。応えて速く上げるか、儀式で積むか。止めずに苔を放っても戻らない。
+ */
+const NO_ANSWER_HOME = 2787;
+const VEIN_HOME = 1770;
+/** 儀式: 集落に苔を放つ (4)。同じ種類の介入を 3 年ごとに続けると信仰が上がる */
+const ritual = (r: ScenarioRunner, home: number) => r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: home, amount: 0.3, radius: 1 });
+/** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered、出る前なら先回り) */
+const plagueHome = (r: ScenarioRunner, home: number) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: home, radius: 4 }); };
+/** 狼の群れが下りる年 (schedule と同じ) */
+const wolfYear = (y: number) => y >= 6 && (y - 6) % 12 === 0;
+
+const noAnswerScripts: Record<string, Script> = {
+  // 応える: 祈りが出たら疫病。一度でも応えれば民は考えるのをやめる → dead
+  answer: (r, s) => { if (s.civ?.prayer?.kind === 'wolves') plagueHome(r, NO_ANSWER_HOME); },
+  // 気まぐれ: 毎年違う種を放つ。3 種類以上が混ざって信仰が下がり、祈りの無視と合わせて内乱 → dead
+  capricious: (r, _s, y) => { const ids = ['grass', 'moss', 'forest', 'rabbit']; if (y >= 1) r.intervene({ type: 'spawn_species', speciesId: ids[y % ids.length], cell: NO_ANSWER_HOME, amount: 0.3, radius: 1 }); },
+  // 想定解 1: 儀式。3 年ごとに苔を放つだけ。祈りは無視するが、儀式の分で信仰が保たれる
+  ritual: (r, _s, y) => { if (y >= 1 && y % 3 === 1) ritual(r, NO_ANSWER_HOME); },
+  // 想定解 2: 先回り (after で使う)。狼が下りた年のうち (年末に祈りが出る前) に集落へ疫病を打ち、祈りそのものを出させない
+  // 祈りがすでに出ている年は打たない (打てば応えになって滅びる)。その分は儀式で埋める
+  preempt: (r, s, y) => { if (wolfYear(y) && !s.civ?.prayer) plagueHome(r, NO_ANSWER_HOME); },
+  // 先回りの儀式 (災害の −0.1 を埋める)。最初の狼 (6 年目) までに 3 回そろうよう 1 年目から 2 年ごと (3 年ごとでは 8〜14 年目に 0.30 で止まり 15 年目に内乱)
+  preemptRitual: (r, _s, y) => { if (y >= 1 && y % 2 === 1) ritual(r, NO_ANSWER_HOME); },
+};
+
+const veinScripts: Record<string, Script> = {
+  // 苔だけ: 信仰も勅令も無し。脈が尽きて生気が戻らない → dead
+  'moss-only': (r, _s, y) => { if (y >= 1 && y % 3 === 1) ritual(r, VEIN_HOME); if (y >= 20 && y % 5 === 0) for (const c of [VEIN_HOME - 2, VEIN_HOME + 2, VEIN_HOME - 2 * SIZE, VEIN_HOME + 2 * SIZE]) r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: c, amount: 0.5, radius: 1 }); },
+  // 信仰を上げずに止めよ: 民は聞かない → dead (放置と同じ)
+  'edict-without-faith': (r, s, y) => { if (y >= 1 && y % 5 === 0 && !s.civ?.miningStopped) r.intervene({ type: 'civ_edict', edict: 'stop_mining' }); },
+  // 想定解 1: 祈りに応えて速く上げ、0.6 になったら止めよ
+  'answer-then-stop': (r, s) => {
+    if (s.civ?.prayer?.kind === 'wolves') plagueHome(r, VEIN_HOME);
+    if ((s.civ?.faith ?? 0) >= 0.6 && !s.civ?.miningStopped) r.intervene({ type: 'civ_edict', edict: 'stop_mining' });
+  },
+  // 想定解 2: 儀式で積み、0.6 になったら止めよ
+  'ritual-then-stop': (r, s, y) => {
+    if (y >= 1 && y % 3 === 1) ritual(r, VEIN_HOME);
+    if ((s.civ?.faith ?? 0) >= 0.6 && !s.civ?.miningStopped) r.intervene({ type: 'civ_edict', edict: 'stop_mining' });
+  },
+};
+
+describe('faith scenarios (M9-04, size 64)', { timeout: 600_000 }, () => {
+  const noAnswer = defs.find((d) => d.id === 'no-answer');
+  const vein = defs.find((d) => d.id === 'vein-drain');
+  if (!noAnswer || !vein) throw new Error('faith scenarios missing');
+  it('no-answer: idle → dead (祈りの無視と減衰で内乱、一段退けば dead)', () => {
+    const v = playTower(noAnswer, null);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('no-answer: answer the prayer → dead (民は考えるのをやめた)', () => {
+    const v = playTower(noAnswer, noAnswerScripts.answer);
+    expect(v.status, v.reason).toBe('dead');
+    expect(v.reason).toContain('祈り');
+  });
+  it('no-answer: capricious → dead', () => {
+    const v = playTower(noAnswer, noAnswerScripts.capricious);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('no-answer: ritual (想定解 1) → alive', () => {
+    const v = playTower(noAnswer, noAnswerScripts.ritual);
+    expect(v.status, v.reason).toBe('alive');
+  });
+  it('no-answer: preempt (想定解 2) → alive', () => {
+    const v = playTower(noAnswer, noAnswerScripts.preemptRitual, noAnswerScripts.preempt);
+    expect(v.status, v.reason).toBe('alive');
+  });
+  it('vein-drain: idle → dead', () => {
+    const v = playTower(vein, null);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('vein-drain: moss-only → dead', () => {
+    const v = playTower(vein, veinScripts['moss-only']);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('vein-drain: edict without faith → dead', () => {
+    const v = playTower(vein, veinScripts['edict-without-faith']);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('vein-drain: answer then stop (想定解 1) → alive', () => {
+    const v = playTower(vein, veinScripts['answer-then-stop']);
+    expect(v.status, v.reason).toBe('alive');
+  });
+  it('vein-drain: ritual then stop (想定解 2) → alive', () => {
+    const v = playTower(vein, veinScripts['ritual-then-stop']);
     expect(v.status, v.reason).toBe('alive');
   });
 });

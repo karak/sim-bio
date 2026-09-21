@@ -222,12 +222,14 @@ export class World {
     if (this.civ) {
       const key = commandKey(cmd);
       if (key !== null) this.civYearKeys.push(key);
-      if (cmd.type === 'disaster') this.civYearDisasters++;
-      // M9-03: 集落そのものを襲った災害だけ数える (遠くの噴火は民の目の前ではない)。上の行は残し、こちらで数え直す
-      if (cmd.type === 'disaster' && !disasterHitsHome(cmd, this.civ.home, this.config.size)) this.civYearDisasters--;
       // 祈り (M9-02): 有効な祈りがあり、この介入が応えなら即座に解決する (応えた)。
       // rainScaleBefore はこのコマンドを apply する前の値 (dispatch は queue に積むだけで、まだ climate を変えていない)
-      if (this.civ.prayer && isAnswer(this.civ.prayer.kind, cmd, { home: this.civ.home, size: this.config.size, rainScaleBefore: this.config.climate.rainScale })) {
+      const answered = !!this.civ.prayer && isAnswer(this.civ.prayer.kind, cmd, { home: this.civ.home, size: this.config.size, rainScaleBefore: this.config.climate.rainScale });
+      // M9-03: 集落そのものを襲った災害だけ数える (遠くの噴火は民の目の前ではない)。
+      // 民が望んだ災害 (祈りへの応え、たとえば「狼を減らして」への疫病) は裏切りではないので数えない
+      // (数えると応えの +0.15 が災害の −0.1 でほぼ消え、祈りに応えて信仰を上げる道が成り立たなかった。M9-04 の実測)
+      if (cmd.type === 'disaster' && !answered && disasterHitsHome(cmd, this.civ.home, this.config.size)) this.civYearDisasters++;
+      if (answered && this.civ.prayer) {
         const kind = this.civ.prayer.kind;
         this.civ.prayer = undefined;
         this.civ.prayersAnswered = (this.civ.prayersAnswered ?? 0) + 1;

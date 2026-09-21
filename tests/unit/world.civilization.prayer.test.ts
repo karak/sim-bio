@@ -160,6 +160,23 @@ describe('World civilization prayer wiring (M9-02)', () => {
     expect(FAITH_ANSWER).toBeGreaterThan(0);
   });
 
+  it('「狼を減らして」に応える疫病は民が望んだ災害なので、信仰の災害 (−FAITH_DISASTER) には数えない (M9-03)', () => {
+    const home = someLandCell();
+    const log = createMemorySink();
+    const w = World.create(prayerConfig({ civilization: { speciesId: 'deer', start: { stage: 4, home, prayer: 'wolves', faith: 0.5 } } }), { log });
+    w.step(360);
+    const faithBefore = w.snapshot().civ?.faith as number;
+    w.dispatch({ type: 'disaster', kind: 'plague', cell: home, radius: 2 });
+    expect(w.snapshot().civ?.prayersAnswered).toBe(1);
+    w.step(360);
+    expect(w.snapshot().civ?.faith).toBeCloseTo(updateFaith(faithBefore, { recent: ['disaster:plague'], disasters: 0, answered: 1 }), 6);
+    // 祈りが無いときの集落の疫病は数える
+    const faith2 = w.snapshot().civ?.faith as number;
+    w.dispatch({ type: 'disaster', kind: 'plague', cell: home, radius: 2 });
+    w.step(360);
+    expect(w.snapshot().civ?.faith).toBeCloseTo(updateFaith(faith2, { recent: ['disaster:plague', 'disaster:plague'], disasters: 1 }), 6);
+  });
+
   it('rain の祈りは set_climate で雨を今より増やしても応えになる', () => {
     const log = createMemorySink();
     const home = someLandCell();
