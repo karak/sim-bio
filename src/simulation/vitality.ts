@@ -1,7 +1,7 @@
 import { SEA_LEVEL } from './terrain';
 import { forEachNeighbor4 } from './grid';
 import type { SpeciesDef } from './types';
-import { veinFactor } from './vein';
+import { veinCap, veinFactor } from './vein';
 
 /** 分解者がいなくても進む基礎分解率 (1 tick に枯死のこの割合が生気になる) */
 export const BASE_DECOMPOSITION = 0.00005;
@@ -68,6 +68,8 @@ export function stepVitality(s: VitalityState, decomposers: SpeciesDef[], scratc
     const mean = c ? sum / c : scratch[i];
     let v = scratch[i] + VITALITY_DIFFUSION * (mean - scratch[i]);
     v *= 1 - VITALITY_LEACH;
-    s.vitality[i] = v < 0 ? 0 : v > 1 ? 1 : v;
+    // 霊脈は生気の器 (M9-03): 脈が細った土地は 1 − VEIN_LOSS × veinLoss までしか生気を保てない。脈が尽きれば 0
+    const cap = s.veinLoss ? veinCap(s.veinLoss[i]) : 1;
+    s.vitality[i] = v < 0 ? 0 : v > cap ? cap : v;
   }
 }

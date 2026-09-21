@@ -29,3 +29,11 @@ describe('formatCiv (HUD の文明の 1 行)', () => {
     expect(formatCiv(civ)).toBe('文明 塔(6) · 進み 13% · 民 1200');
   });
 });
+
+describe('formatCiv の採掘の停止 (M9-03)', () => {
+  it('miningStopped なら末尾に「· 採掘 止」を足し、そうでなければ出さない', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 3, progress: 0, home: 10, population: 1, faith: 0.7, miningStopped: true };
+    expect(formatCiv(civ)).toBe('文明 歌(3) · 進み 0% · 民 100 · 信仰 0.70 · 採掘 止');
+    expect(formatCiv({ ...civ, miningStopped: false })).toBe('文明 歌(3) · 進み 0% · 民 100 · 信仰 0.70');
+  });
+});

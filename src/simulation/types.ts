@@ -84,7 +84,9 @@ export type Command =
   | { type: 'set_climate'; tempOffset?: number; rainScale?: number }
   | { type: 'disaster'; kind: DisasterKind; cell: number; radius: number }
   /** 島全体の標高を amount 下げる (沈降)。シナリオの「滅びの進行」用 */
-  | { type: 'sink'; amount: number };
+  | { type: 'sink'; amount: number }
+  /** 石板の勅令 (M9-03)。信仰が EDICT_FAITH 以上のときだけ民が従う。力は消費しない */
+  | { type: 'civ_edict'; edict: 'stop_mining' | 'resume_mining' };
 
 /** 読み取り専用ビュー。layers は内部バッファそのもの (コピーしない)。 */
 export type WorldSnapshot = {

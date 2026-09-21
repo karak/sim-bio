@@ -11,6 +11,9 @@ import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilization
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 import { commandKey, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
 import { isAnswer, issuePrayer, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
+import { computeVeinLoss, labelVeins } from './vein';
+import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
+import { applyEdict } from './edict';
 
 export type WorldDeps = {
   log: LogSink;
@@ -49,6 +52,12 @@ export class World {
   readonly litter: Float32Array;
   /** 輝石 [0,1]。陸だけに決定論で塊状に置かれる。海は 0 (M8-01) */
   readonly crystal: Float32Array;
+  /** 開始時の輝石 (M9-03 霊脈)。seed から決定論で生成した値で、restore でも保存値で上書きしない。枯渇 = 1 − crystal / crystal0 */
+  readonly crystal0: Float32Array;
+  /** 霊脈の細り [0,1] (M9-03)。年に 1 回 computeVeinLoss で更新し、stepVitality が分解率に掛ける */
+  readonly veinLoss: Float32Array;
+  /** 霊脈の番号 (M9-03、labelVeins)。開始時の輝石から create/restore で 1 度だけ決める */
+  readonly veins: Int32Array;
   readonly fire: Uint8Array;
   readonly burnt: Uint16Array;
   private readonly scratch: Float32Array;
@@ -82,6 +91,8 @@ export class World {
    * セーブには含めない (restore 直後はクールダウン無しから再開する。値そのものの互換は civ.prayer が担う)
    */
   private civPrayerCooldownUntil = -Infinity;
+  /** 内乱 (M9-03): 信仰が UNREST_FAITH 未満の年の連続数。セーブには含めない (restore 直後は数え直す) */
+  private civUnrestStreak = 0;
   /** 捕食者 (肉食トロフィック) の種。祈り「狼を減らして」の捕食者比の分子に使う (M9-02) */
   private readonly carnivores: SpeciesDef[];
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
@@ -115,6 +126,9 @@ export class World {
     this.litter = new Float32Array(this.n);
     // seed から決定論で生成しておく。create はそのまま使い、restore は save.crystal があればそれで上書きする
     this.crystal = generateCrystal(config.seed, this.elevation, config.size);
+    this.crystal0 = Float32Array.from(this.crystal);
+    this.veinLoss = new Float32Array(this.n);
+    this.veins = labelVeins(this.crystal0, this.elevation, config.size);
     this.fire = new Uint8Array(this.n);
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
@@ -143,6 +157,8 @@ export class World {
       if (start?.prayer) {
         this.civ.prayer = { kind: start.prayer, issuedYear: 0, deadlineYear: PRAYER_YEARS };
       }
+      // 信仰の開始指定 (M9-03): 指定があれば FAITH_INITIAL の代わりにこの値で生まれる (E2E の決定論と、シナリオの開始状態のため)
+      if (start?.faith !== undefined) this.civ.faith = start.faith;
     }
     for (const d of config.species) {
       this.populations[d.id] = new Float32Array(this.n);
@@ -181,6 +197,8 @@ export class World {
     if (save.litter) w.litter.set(save.litter);
     // 古いセーブには無いので、その場合は既に constructor で seed から埋めた決定論の値をそのまま使う
     if (save.crystal) w.crystal.set(save.crystal);
+    // 霊脈 (M9-03): 保存された輝石と seed の初期値から細りを復元する
+    computeVeinLoss(w.crystal, w.crystal0, w.elevation, w.config.size, w.veinLoss, w.veins);
     // save.civ が無ければ constructor で config.civilization.start から作った初期状態のまま (M8-02)
     if (save.civ) w.civ = { ...save.civ };
     w.tick = save.tick;
@@ -291,11 +309,12 @@ export class World {
     }
     this.refresh();
     // 文明(M8-02): 発生済み (stage >= 1) なら毎 tick 輝石を掘り、段階が上がればログを出す
-    if (this.civ && this.civ.stage >= 1) {
+    // 勅令 (M9-03): 民が採掘を止めている間は掘らない (段階も進まない)。負荷 (applyLoad) は残る
+    if (this.civ && this.civ.stage >= 1 && !this.civ.miningStopped) {
       const before = this.civ.stage;
       // 次の段階に必要な民がいなければ掘っても上がらない (M8-06)。民は年 1 回更新される
       const canAdvance = this.civ.stage >= MAX_STAGE || this.civ.population >= POP_NEED[this.civ.stage + 1];
-      const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance);
+      const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance, this.veins);
       this.civ = state;
       if (this.civ.stage !== before) {
         this.log('info', 'sim.civ.stage', { from: before, to: this.civ.stage, year: Math.floor(this.tick / ticksPerYear) });
@@ -308,6 +327,8 @@ export class World {
     this.prevTotals = { ...this.totals };
     this.tick++;
     if (this.tick % ticksPerYear === 0) {
+      // 霊脈 (M9-03): 年に 1 回、輝石の枯渇から細りを更新する。掘っていなければ全セル 0 で今までどおり
+      computeVeinLoss(this.crystal, this.crystal0, this.elevation, size, this.veinLoss, this.veins);
       if (this.civ) this.stepCivYearly();
       const summary: Record<string, unknown> = {
         totals: { ...this.totals },
@@ -423,6 +444,22 @@ export class World {
           });
       const delta = civ.faith - (prevFaith ?? civ.faith);
       this.log('info', 'sim.civ.faith', { year, faith: civ.faith, delta });
+      // 内乱 (M9-03): 信仰が低い年が UNREST_YEARS 続いたら、集落の民が半減し段階が 1 下がる。信仰は少し上へ戻す (連鎖させない)
+      const unrest = stepUnrest(civ.faith, this.civUnrestStreak);
+      this.civUnrestStreak = unrest.streak;
+      if (unrest.unrest) {
+        applyUnrest(this.populations[civ.speciesId], civ.home, this.elevation, size);
+        const before = civ.stage;
+        civ.stage -= 1;
+        civ.progress = 0;
+        civ.faith = UNREST_FAITH_AFTER;
+        this.log('info', 'sim.civ.unrest', { year, from: before, to: civ.stage });
+        this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'unrest', year });
+        if (civ.stage === 0) {
+          civ.home = -1;
+          this.log('info', 'sim.civ.collapsed', { reason: 'unrest' });
+        }
+      }
     }
     this.civYearKeys = [];
     this.civYearDisasters = 0;
@@ -527,6 +564,15 @@ export class World {
           if (before >= SEA_LEVEL && after < SEA_LEVEL) drowned++;
         }
         this.log('info', 'sim.sink', { amount: cmd.amount, drownedCells: drowned });
+        break;
+      }
+      case 'civ_edict': {
+        // 勅令 (M9-03): 文明が無ければ何も起きない。信仰が EDICT_FAITH 以上なら従い、採掘の停止/再開を切り替える
+        if (!this.civ) break;
+        const year = Math.floor(this.tick / this.config.ticksPerYear);
+        const { civ, obeyed } = applyEdict(this.civ, cmd.edict, year);
+        this.civ = civ;
+        this.log('info', 'sim.civ.edict', { year, edict: cmd.edict, obeyed, faith: civ.faith ?? 0, miningStopped: civ.miningStopped ?? false });
         break;
       }
     }

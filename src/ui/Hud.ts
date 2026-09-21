@@ -6,6 +6,7 @@ import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
 import { drawGraph, type GraphLine, type GraphMarker } from './graph';
 import { SEA_LEVEL } from '../simulation/terrain';
+import { EDICT_FAITH } from '../simulation/edict';
 import './hud.css';
 
 /** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
@@ -20,7 +21,9 @@ export function formatCiv(civ: CivState | null): string | null {
   const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.stock)} / ${Math.round(civ.fuel.need)}年` : '';
   // 信仰 (M9-01): 発生済みでもまだ年をまたいでいなければ undefined なので、そのときは出さない
   const faithText = civ.faith !== undefined ? ` · 信仰 ${civ.faith.toFixed(2)}` : '';
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}`;
+  // 勅令 (M9-03): 民が採掘を止めている間は「採掘 止」を足す (止めるまでは出さない)
+  const miningText = civ.miningStopped ? ' · 採掘 止' : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${miningText}`;
 }
 
 export type HudHandlers = {
@@ -74,6 +77,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   <div class="hud hud-tl">
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
     <div id="hud-civ" class="mono" hidden></div>
+    <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
@@ -181,6 +185,9 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   for (const d of DISASTERS) {
     $(`disaster-${d.kind}`).addEventListener('click', () => setArmed(armed === d.kind ? null : d.kind));
   }
+  // 勅令 (M9-03): 石板の言葉として dispatch する (力は要らない。信仰の門は World 側)
+  $('edict-stop').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'stop_mining' }));
+  $('edict-resume').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'resume_mining' }));
   $('save-btn').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(h.onSave())], { type: 'application/json' });
     const a = document.createElement('a');
@@ -301,6 +308,14 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const civEl = $('hud-civ');
     civEl.hidden = civText === null;
     if (civText !== null) civEl.textContent = civText;
+    // 勅令 (M9-03): 文明があるときだけ石板の勅令を出す。止まっていれば「止めよ」を、掘っていれば「再開せよ」を沈める
+    const edictEl = $('hud-edict');
+    edictEl.hidden = civText === null;
+    if (civText !== null) {
+      const stopped = s.civ?.miningStopped ?? false;
+      $('edict-stop').classList.toggle('on', stopped);
+      $('edict-resume').classList.toggle('on', !stopped);
+    }
     if (s.year !== lastYear) {
       lastYear = s.year;
       ts.push(s.year, { ...s.totals, temp: s.meanTemperature });

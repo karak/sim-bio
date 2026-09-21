@@ -39,6 +39,10 @@ export type CivState = {
    * 記録し、以後は変えない。「星の砂を」の判定 (crystalRatio) の分母。既存のテスト・セーブとの互換を保つため省略可
    */
   crystalStart?: number;
+  /** 勅令で採掘が止まっているか (M9-03)。省略時 false。止まっている間は stepMining を呼ばない */
+  miningStopped?: boolean;
+  /** 最後の勅令とその結果 (M9-03)。石板が「民は聞かなかった」を出すために残す */
+  edict?: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number };
 };
 
 /** 段階の名前。stage をそのまま index に使う。 */
@@ -204,21 +208,33 @@ export function stepMining(
   size: number,
   /** false なら掘っても段階は上がらず、progress は NEED で頭打ち (民が次の段階の必要量に足りないとき。M8-06) */
   canAdvance = true,
+  /**
+   * 霊脈の番号 (M9-03、vein.ts の labelVeins)。渡せば民は脈を辿って掘る: 採掘半径に掛かる脈のセル全体から残量に比例して
+   * 取り除く。渡さなければ今までどおり採掘半径の中だけ (既存テスト・脈の無い世界)
+   */
+  veins?: Int32Array,
 ): { state: CivState; mined: number } {
   if (state.home < 0 || state.stage < 1 || state.stage > MAX_STAGE) return { state, mined: 0 };
   const radius = MINE_RADIUS[state.stage];
   const rate = MINE_RATE[state.stage];
-  let total = 0;
+  // 掘る対象のセル: 採掘半径内の陸セル。脈があれば、半径に掛かる脈を辿ってその脈のセル全体
+  const pool: number[] = [];
+  const touched = new Set<number>();
   forEachInRadius(state.home, radius, size, (i) => {
-    if (elevation[i] >= SEA_LEVEL) total += crystal[i];
+    if (elevation[i] < SEA_LEVEL) return;
+    if (veins && veins[i] >= 0) touched.add(veins[i]);
+    else pool.push(i);
   });
+  if (veins && touched.size > 0) {
+    for (let i = 0; i < veins.length; i++) if (touched.has(veins[i]) && elevation[i] >= SEA_LEVEL) pool.push(i);
+  }
+  let total = 0;
+  for (const i of pool) total += crystal[i];
   if (total <= 0 || rate <= 0) return { state, mined: 0 };
   const mined = Math.min(rate, total);
   // 残量に比例して各セルから取り除く (多いセルほど多く掘る、輝石が無いセルは変化なし)
   const k = mined / total;
-  forEachInRadius(state.home, radius, size, (i) => {
-    if (elevation[i] >= SEA_LEVEL && crystal[i] > 0) crystal[i] -= crystal[i] * k;
-  });
+  for (const i of pool) if (crystal[i] > 0) crystal[i] -= crystal[i] * k;
   let stage = state.stage;
   let progress = state.progress + mined;
   if (stage < MAX_STAGE && progress >= NEED[stage]) {
@@ -243,7 +259,7 @@ export function populationAround(pops: Float32Array, home: number, elevation: Fl
 }
 
 /** WorldConfig.civilization の形 (main.ts がシナリオの start.civilization をこの形へ解決する) */
-export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number; prayer?: PrayerKind } };
+export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } };
 
 /**
  * シナリオの start.civilization を WorldConfig.civilization へ解決する。
@@ -251,10 +267,10 @@ export type CivilizationConfig = { speciesId: string; start?: { stage: number; h
  * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため。期限は World 側で開始年 + PRAYER_YEARS にする)。
  */
 export function resolveCivilizationStart(
-  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind } | undefined,
+  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } | undefined,
   size: number,
 ): CivilizationConfig | undefined {
   if (!start) return undefined;
   const home = start.home === undefined || start.home === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : start.home;
-  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer } };
+  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer, faith: start.faith } };
 }

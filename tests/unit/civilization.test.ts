@@ -17,6 +17,7 @@ import {
   type CivState,
 } from '../../src/simulation/civilization';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
+import { labelVeins } from '../../src/simulation/vein';
 
 /** 10 年分、同じ値の履歴 (振動なし) */
 const stableHistory = (v: number, years = 10): number[] => Array.from({ length: years }, () => v);
@@ -159,6 +160,36 @@ describe('stepMining', () => {
     const state: CivState = { speciesId: 'deer', stage: 1, progress: 0, home: -1, population: 0 };
     const { mined } = stepMining(state, crystal, elevation, size);
     expect(mined).toBe(0);
+  });
+});
+
+describe('stepMining と霊脈 (M9-03: 民は脈を辿って掘る)', () => {
+  const size = 9;
+  const home = 4 * size + 4;
+  it('veins を渡すと、採掘半径に掛かる脈のセル全体から残量に比例して掘る。掛からない脈は減らない', () => {
+    const elevation = new Float32Array(size * size).fill(0.5);
+    const crystal = new Float32Array(size * size);
+    // 中心から右へ 8 セル続く脈 (半径 2 の外まで伸びる) と、左上に孤立した脈
+    for (let x = 4; x < 9; x++) crystal[4 * size + x] = 0.5;
+    crystal[0] = 0.5;
+    const c0 = crystal.slice();
+    const veins = labelVeins(c0, elevation, size);
+    const state: CivState = { speciesId: 'deer', stage: 1, progress: 0, home, population: 0 };
+    const { mined } = stepMining(state, crystal, elevation, size, true, veins);
+    expect(mined).toBeCloseTo(MINE_RATE[1], 9);
+    // 半径 2 の外 (x=8) も同じ脈なので減っている。孤立した脈は無傷
+    expect(crystal[4 * size + 8]).toBeLessThan(0.5);
+    expect(crystal[4 * size + 8]).toBeCloseTo(crystal[4 * size + 4], 9);
+    expect(crystal[0]).toBe(0.5);
+  });
+  it('veins を渡さなければ今までどおり採掘半径の中だけ', () => {
+    const elevation = new Float32Array(size * size).fill(0.5);
+    const crystal = new Float32Array(size * size);
+    for (let x = 4; x < 9; x++) crystal[4 * size + x] = 0.5;
+    const state: CivState = { speciesId: 'deer', stage: 1, progress: 0, home, population: 0 };
+    stepMining(state, crystal, elevation, size, true);
+    expect(crystal[4 * size + 8]).toBe(0.5);
+    expect(crystal[4 * size + 4]).toBeLessThan(0.5);
   });
 });
 

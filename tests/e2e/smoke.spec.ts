@@ -155,6 +155,19 @@ test('prayer: ?scenario=test-civ shows the current prayer, and an answering inte
     .toBeGreaterThanOrEqual(1);
 });
 
+test('edict: ?scenario=test-civ の勅令「採掘を止めよ」は信仰 0.7 の民が従い、HUD に「採掘 止」、年表に「民は採掘を止めた」が出る (M9-03)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await expect(page.locator('#hud-edict')).toBeVisible();
+  await expect(page.locator('#hud-civ')).not.toContainText('採掘 止');
+  await page.click('#edict-stop');
+  await expect(page.locator('#hud-civ')).toContainText('採掘 止');
+  await expect(page.locator('#edict-stop')).toHaveClass(/on/);
+  // 年表の civ_edict は年次評価 (年をまたぐタイミング) でしか積まれないので、1 年進める
+  await page.click('#speed-100');
+  await expect(page.locator('#tablet-timeline')).toContainText('民は採掘を止めた', { timeout: 20_000 });
+  await expect(page.locator('#tablet-timeline')).toContainText('石板が告げた: 採掘を止めよ');
+});
+
 test('volcano hint: arming the 火山 chip shows the hint text, unarming hides it (M8-08)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#volcano-hint')).toBeHidden();

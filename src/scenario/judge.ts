@@ -127,6 +127,11 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
       const ok = inRange(faith, c.min, c.max);
       return { ok, why: `信仰 ${faith.toFixed(2)}` };
     }
+    case 'prayers_answered': {
+      const n = s.civ?.prayersAnswered ?? 0;
+      const ok = inRange(n, c.min, c.max);
+      return { ok, why: n === 0 ? '祈りに一度も応えなかった' : `祈りに ${n} 回応えた` };
+    }
     case 'civ_vitality': {
       const now = civVitality(s);
       const hist = c.years !== undefined ? (input.civVitalityHistory ?? [now]).slice(-c.years) : [now];

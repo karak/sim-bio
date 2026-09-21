@@ -2,6 +2,7 @@ import type { BudgetInfo, TimelineEvent } from '../scenario/ScenarioRunner';
 import type { ScenarioDef, Verdict } from '../scenario/types';
 import type { Command } from '../simulation/types';
 import type { Warning } from '../scenario/warnings';
+import { EDICT_FAITH } from '../simulation/edict';
 import { STAGE_NAMES } from '../simulation/civilization';
 import type { PrayerKind } from '../simulation/prayer';
 
@@ -42,6 +43,8 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
         return [c.rainScale !== undefined ? `雨 ×${c.rainScale.toFixed(2)}` : '', c.tempOffset !== undefined ? `気温 ${c.tempOffset >= 0 ? '+' : ''}${c.tempOffset.toFixed(1)}` : ''].filter(Boolean).join('、');
       case 'sink':
         return '海が上がった';
+      case 'civ_edict':
+        return c.edict === 'stop_mining' ? '石板が告げた: 採掘を止めよ' : '石板が告げた: 採掘を再開せよ';
     }
   };
   switch (e.kind) {
@@ -60,6 +63,10 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       return `文明が ${STAGE_NAMES[e.from]} → ${STAGE_NAMES[e.to]} に${e.to > e.from ? '上がった' : '下がった'}`;
     case 'civ_faith':
       return `信仰が ${e.from.toFixed(2)} → ${e.to.toFixed(2)} に${e.to > e.from ? '上がった' : '下がった'}`;
+    case 'civ_edict': {
+      if (!e.obeyed) return `民は聞かなかった(信仰 ${e.faith.toFixed(2)} < ${EDICT_FAITH})`;
+      return e.edict === 'stop_mining' ? '民は採掘を止めた' : '民は採掘を再開した';
+    }
     case 'prayer': {
       const label = PRAYER_LABEL[e.prayer];
       if (e.phase === 'issued') return `民が祈った: ${label}`;

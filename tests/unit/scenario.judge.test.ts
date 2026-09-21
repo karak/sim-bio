@@ -170,3 +170,15 @@ describe('faith / civ_vitality (M9-03)', () => {
     expect(evaluate(c, input(none)).ok).toBe(false);
   });
 });
+
+describe('prayers_answered (M9-03)', () => {
+  it('応えた祈りの数を min/max で判定。文明が無い・数が無ければ 0', () => {
+    const c = { type: 'prayers_answered', max: 0 } as const;
+    const s0 = snap({ civ: { stage: 3 } });
+    expect(evaluate(c, input(s0))).toEqual({ ok: true, why: '祈りに一度も応えなかった' });
+    s0.civ!.prayersAnswered = 1;
+    expect(evaluate(c, input(s0))).toEqual({ ok: false, why: '祈りに 1 回応えた' });
+    expect(evaluate(c, input(snap({ civ: null }))).ok).toBe(true);
+    expect(evaluate({ type: 'prayers_answered', min: 1 }, input(s0)).ok).toBe(true);
+  });
+});

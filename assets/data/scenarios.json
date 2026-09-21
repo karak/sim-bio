@@ -258,7 +258,7 @@
     "id": "test-civ",
     "title": "文明の試し読み",
     "hidden": true,
-    "prophecy": "この石板は試し読み用。石の文明を最初から据えて、表示だけを確かめる。",
+    "prophecy": "この石板は試し読み用。石の文明を最初から据え、信仰 0.7 と「雨を」の祈りを添えて、表示と勅令だけを確かめる。",
     "kind": "endure",
     "start": {
       "seed": 42,
@@ -267,7 +267,8 @@
         "speciesId": "deer",
         "stage": 4,
         "home": -1,
-        "prayer": "rain"
+        "prayer": "rain",
+        "faith": 0.7
       }
     },
     "years": 5,

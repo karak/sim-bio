@@ -124,7 +124,7 @@ describe('World civilization wiring (M8-02)', () => {
     expect(save.civ).toBeUndefined();
   });
 
-  it('MINE_RADIUS[stage] の外の輝石は掘られない', () => {
+  it('MINE_RADIUS[stage] の外の輝石は掘られない (M9-03: ただし採掘半径に掛かる脈は、脈を辿って半径の外も掘られる)', () => {
     const home = bestCrystalCell();
     const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 1, home } } }), { log: createMemorySink() });
     const before = Array.from(w.snapshot().layers.crystal);
@@ -135,13 +135,32 @@ describe('World civilization wiring (M8-02)', () => {
     const cx = home % size;
     const cy = (home - cx) / size;
     const radius = MINE_RADIUS[1];
+    // 採掘半径に掛かる脈の番号 (M9-03)
+    const touched = new Set<number>();
+    for (let i = 0; i < after.length; i++) {
+      const x = i % size;
+      const y = (i - x) / size;
+      if ((x - cx) ** 2 + (y - cy) ** 2 <= radius * radius && w.veins[i] >= 0) touched.add(w.veins[i]);
+    }
+    expect(touched.size).toBeGreaterThan(0);
+    let outsideOnVein = 0;
     for (let i = 0; i < after.length; i++) {
       if (elevation[i] < SEA_LEVEL) continue;
       const x = i % size;
       const y = (i - x) / size;
       const dx = x - cx;
       const dy = y - cy;
-      if (dx * dx + dy * dy > radius * radius) expect(after[i]).toBeCloseTo(before[i], 6);
+      if (dx * dx + dy * dy <= radius * radius) continue;
+      if (touched.has(w.veins[i])) {
+        // 同じ脈なら半径の外でも減る
+        if (before[i] > 0) {
+          expect(after[i]).toBeLessThan(before[i]);
+          outsideOnVein++;
+        }
+      } else {
+        expect(after[i]).toBeCloseTo(before[i], 6);
+      }
     }
+    expect(outsideOnVein).toBeGreaterThan(0);
   });
 });

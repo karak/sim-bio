@@ -40,6 +40,9 @@ export function commandKey(cmd: Command): string | null {
       return `disaster:${cmd.kind}`;
     case 'sink':
       return null;
+    // 勅令 (M9-03) は言葉であって行為ではないので、儀式にも気まぐれにも数えない
+    case 'civ_edict':
+      return null;
   }
 }
 

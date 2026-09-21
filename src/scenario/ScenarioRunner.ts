@@ -1,5 +1,5 @@
 import type { Command, WorldSnapshot } from '../simulation/types';
-import { judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
+import { civVitality, judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type CivContext, type Warning } from './warnings';
 import type { PrayerKind } from '../simulation/prayer';
@@ -15,6 +15,8 @@ export type TimelineEvent =
   | { year: number; kind: 'civ_stage'; from: number; to: number }
   /** 文明の信仰が年をまたいで |Δ| >= 0.1 動いた (M9-01) */
   | { year: number; kind: 'civ_faith'; from: number; to: number }
+  /** 勅令の結果 (M9-03)。obeyed なら民が採掘を止めた/再開した、でなければ聞かなかった (faith はそのときの信仰) */
+  | { year: number; kind: 'civ_edict'; edict: 'stop_mining' | 'resume_mining'; obeyed: boolean; faith: number }
   /** 文明の祈りが出た・応えられた・無視された (M9-02) */
   | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored'; prayer: PrayerKind };
 
@@ -92,6 +94,10 @@ export function createScenarioRunner(
   const history: Record<string, number>[] = [];
   /** 年ごとの文明の段階の履歴 (civ_stage の years 判定用)。history と同じ並びで年に 1 件 */
   const civHistory: number[] = [];
+  /** 年ごとの集落の生気平均の履歴 (M9-03、civHistory と同じ並び)。civ_vitality の years 判定用 */
+  const civVitalityHistory: number[] = [];
+  /** 前年の勅令 (M9-03)。年を跨いで新しい勅令が記録されていれば年表に積む */
+  let lastEdictYear: number | null = first.civ?.edict?.year ?? null;
   /** 前年の文明の段階。civ_declining の判定に使う。最初の年はまだ「前年」が無いので null */
   let prevCivStage: number | null = null;
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
@@ -149,6 +155,9 @@ export function createScenarioRunner(
         return budgetDef.costs.disaster;
       case 'set_climate':
         return budgetDef.costs.climate;
+      // 勅令 (M9-03) は言葉なので力は要らない (信仰の門が代わり)
+      case 'civ_edict':
+        return 0;
       case 'sink':
         return 0;
     }
@@ -223,6 +232,7 @@ export function createScenarioRunner(
         history.push({ ...s.totals });
         const civStage = s.civ?.stage ?? 0;
         civHistory.push(civStage);
+        civVitalityHistory.push(civVitality(s));
         prevCivStage = civStage;
         if (civStage !== lastCivStage) {
           timeline.push({ year, kind: 'civ_stage', from: lastCivStage, to: civStage });
@@ -259,7 +269,13 @@ export function createScenarioRunner(
           lastPrayerIssuedYear = prayerNow.issuedYear;
         }
         if (prayerNow) lastPrayerKind = prayerNow.kind;
-        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, areaScale });
+        // 勅令 (M9-03): 新しい勅令が記録されていれば、従ったか (採掘の停止/再開) 聞かなかったかを年表に積む
+        const edict = s.civ?.edict;
+        if (edict && edict.year !== lastEdictYear) {
+          timeline.push({ year, kind: 'civ_edict', edict: edict.kind, obeyed: edict.obeyed, faith: edict.faith });
+          lastEdictYear = edict.year;
+        }
+        verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, civVitalityHistory, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
           timeline.push({ year, kind: 'verdict', verdict });
