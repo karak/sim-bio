@@ -18,7 +18,7 @@ export type TimelineEvent =
   /** 勅令の結果 (M9-03)。obeyed なら民が採掘を止めた/再開した、でなければ聞かなかった (faith はそのときの信仰) */
   | { year: number; kind: 'civ_edict'; edict: 'stop_mining' | 'resume_mining'; obeyed: boolean; faith: number }
   /** 文明の祈りが出た・応えられた・無視された (M9-02) */
-  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored'; prayer: PrayerKind };
+  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored' | 'withdrawn'; prayer: PrayerKind };
 
 type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
 
@@ -116,6 +116,7 @@ export function createScenarioRunner(
   /** 祈り (M9-02): 直近に見た応えた・無視した回数。前年と比べて増えていれば TimelineEvent を積む */
   let lastPrayersAnswered = first.civ?.prayersAnswered ?? 0;
   let lastPrayersIgnored = first.civ?.prayersIgnored ?? 0;
+  let lastPrayersWithdrawn = first.civ?.prayersWithdrawn ?? 0;
   /** 祈り (M9-02): 石板が毎フレーム読む現在の祈り。年次評価を待たず、最新の snapshot でそのまま更新する */
   let currentPrayer = first.civ?.prayer ?? null;
 
@@ -254,6 +255,14 @@ export function createScenarioRunner(
           opts.onPrayer?.(e);
         }
         lastPrayersIgnored = prayersIgnored;
+        // 取り下げ (M9-03): 困りごとが消えて民が祈るのをやめた年
+        const prayersWithdrawn = s.civ?.prayersWithdrawn ?? 0;
+        if (prayersWithdrawn > lastPrayersWithdrawn && lastPrayerKind) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'withdrawn', prayer: lastPrayerKind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+        }
+        lastPrayersWithdrawn = prayersWithdrawn;
         const prayersAnswered = s.civ?.prayersAnswered ?? 0;
         if (prayersAnswered > lastPrayersAnswered && lastPrayerKind) {
           const e: TimelineEvent = { year, kind: 'prayer', phase: 'answered', prayer: lastPrayerKind };

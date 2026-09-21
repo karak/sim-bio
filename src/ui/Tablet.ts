@@ -71,6 +71,7 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       const label = PRAYER_LABEL[e.prayer];
       if (e.phase === 'issued') return `民が祈った: ${label}`;
       if (e.phase === 'answered') return `祈りに応えた: ${label}`;
+      if (e.phase === 'withdrawn') return `困りごとが消え、民は祈るのをやめた: ${label}`;
       return `祈りを無視した: ${label}`;
     }
   }

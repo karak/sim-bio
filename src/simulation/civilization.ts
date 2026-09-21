@@ -34,6 +34,8 @@ export type CivState = {
   prayersAnswered?: number;
   /** 無視した (期限切れの) 祈りの累計 (M9-02)。省略時は 0 相当 */
   prayersIgnored?: number;
+  /** 期限の前に困りごとが消えて取り下げられた祈りの数 (M9-03)。信仰は動かない */
+  prayersWithdrawn?: number;
   /**
    * 採掘半径 MINE_RADIUS[MAX_STAGE] 内の輝石の総量 (M9-02)。stage ≥ 1 になった最初の年 (発生時か開始時) に
    * 記録し、以後は変えない。「星の砂を」の判定 (crystalRatio) の分母。既存のテスト・セーブとの互換を保つため省略可

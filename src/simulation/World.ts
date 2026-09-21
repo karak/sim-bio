@@ -9,8 +9,8 @@ import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
-import { commandKey, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
-import { isAnswer, issuePrayer, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
+import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
+import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 import { computeVeinLoss, labelVeins } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
 import { applyEdict } from './edict';
@@ -91,6 +91,8 @@ export class World {
    * セーブには含めない (restore 直後はクールダウン無しから再開する。値そのものの互換は civ.prayer が担う)
    */
   private civPrayerCooldownUntil = -Infinity;
+  /** 祈りの基準 (M9-03): 年ごとの草の密度平均と捕食者比、直近 PRAYER_BASELINE_YEARS 年・古い順。セーブには含めない (restore 後は数え直す) */
+  private civPrayerHistory: { grassMean: number; predatorRatio: number }[] = [];
   /** 内乱 (M9-03): 信仰が UNREST_FAITH 未満の年の連続数。セーブには含めない (restore 直後は数え直す) */
   private civUnrestStreak = 0;
   /** 捕食者 (肉食トロフィック) の種。祈り「狼を減らして」の捕食者比の分子に使う (M9-02) */
@@ -221,6 +223,8 @@ export class World {
       const key = commandKey(cmd);
       if (key !== null) this.civYearKeys.push(key);
       if (cmd.type === 'disaster') this.civYearDisasters++;
+      // M9-03: 集落そのものを襲った災害だけ数える (遠くの噴火は民の目の前ではない)。上の行は残し、こちらで数え直す
+      if (cmd.type === 'disaster' && !disasterHitsHome(cmd, this.civ.home, this.config.size)) this.civYearDisasters--;
       // 祈り (M9-02): 有効な祈りがあり、この介入が応えなら即座に解決する (応えた)。
       // rainScaleBefore はこのコマンドを apply する前の値 (dispatch は queue に積むだけで、まだ climate を変えていない)
       if (this.civ.prayer && isAnswer(this.civ.prayer.kind, cmd, { home: this.civ.home, size: this.config.size, rainScaleBefore: this.config.climate.rainScale })) {
@@ -397,15 +401,8 @@ export class World {
         civ.crystalStart = crystalSum;
       }
       // 期限切れの解決 (無視した) を先に判定してから、空いていれば新しい祈りを出す
-      if (civ.prayer && year >= civ.prayer.deadlineYear) {
-        const kind = civ.prayer.kind;
-        civ.prayer = undefined;
-        civ.prayersIgnored = (civ.prayersIgnored ?? 0) + 1;
-        this.civYearIgnored++;
-        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
-        this.log('info', 'sim.civ.prayer', { year, phase: 'ignored', kind });
-      }
-      if (!civ.prayer && year >= this.civPrayerCooldownUntil) {
+      // 祈りの材料 (M9-03: 取り下げの判定にも使うので、祈りの有無に関わらず毎年計る)
+      const prayerInput = (() => {
         const grassPop = this.populations['grass'];
         // grass 種が居ない世界では「雨を」の判定材料が無いので、常に閾値を上回る扱いにして rain を出さない
         const grassMean = grassPop ? meanAround(grassPop, civ.home, SUPPORT_RADIUS, this.elevation, this.config.size) : Number.POSITIVE_INFINITY;
@@ -420,7 +417,33 @@ export class World {
         });
         // crystalStart が 0 (もともと輝石が無かった) なら「星の砂を」は成り立たないので比は 1 (常に閾値以上) にする
         const crystalRatio = civ.crystalStart > 0 ? crystalNow / civ.crystalStart : 1;
-        const kind = issuePrayer({ grassMean, predatorRatio, crystalRatio });
+        // 基準 (M9-03): 今年を含まない直近の平均。PRAYER_BASELINE_MIN 年たつまでは無い
+        const hist = this.civPrayerHistory;
+        const baseline = hist.length >= PRAYER_BASELINE_MIN
+          ? { grassMean: hist.reduce((a, h) => a + h.grassMean, 0) / hist.length, predatorRatio: hist.reduce((a, h) => a + h.predatorRatio, 0) / hist.length }
+          : undefined;
+        hist.push({ grassMean: Number.isFinite(grassMean) ? grassMean : 0, predatorRatio });
+        if (hist.length > PRAYER_BASELINE_YEARS) hist.shift();
+        return { grassMean, predatorRatio, crystalRatio, baseline };
+      })();
+      // 取り下げ (M9-03): 期限の前に困りごとが消えていれば、民は祈るのをやめる。信仰は動かず、無視にも応えにも数えない
+      if (civ.prayer && year < civ.prayer.deadlineYear && !prayerStillNeeded(civ.prayer.kind, prayerInput)) {
+        const kind = civ.prayer.kind;
+        civ.prayer = undefined;
+        civ.prayersWithdrawn = (civ.prayersWithdrawn ?? 0) + 1;
+        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
+        this.log('info', 'sim.civ.prayer', { year, phase: 'withdrawn', kind });
+      }
+      if (civ.prayer && year >= civ.prayer.deadlineYear) {
+        const kind = civ.prayer.kind;
+        civ.prayer = undefined;
+        civ.prayersIgnored = (civ.prayersIgnored ?? 0) + 1;
+        this.civYearIgnored++;
+        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
+        this.log('info', 'sim.civ.prayer', { year, phase: 'ignored', kind });
+      }
+      if (!civ.prayer && year >= this.civPrayerCooldownUntil) {
+        const kind = issuePrayer(prayerInput);
         if (kind) {
           civ.prayer = { kind, issuedYear: year, deadlineYear: year + PRAYER_YEARS };
           this.log('info', 'sim.civ.prayer', { year, phase: 'issued', kind });

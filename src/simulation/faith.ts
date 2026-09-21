@@ -4,6 +4,7 @@
  * 何もしなければゆっくり減衰する。係数はすべてこのファイルの定数にまとめる。
  */
 import type { Command } from './types';
+import { cellDistance, HOME_RADIUS } from './civilization';
 
 /** 文明が stage ≥ 1 になった最初の年に生まれる初期値 */
 export const FAITH_INITIAL = 0.5;
@@ -13,8 +14,12 @@ export const FAITH_UP = 0.05;
 export const FAITH_DOWN = 0.05;
 /** 災害 1 回につき引く量 (c) */
 export const FAITH_DISASTER = 0.1;
+// M9-03: 数えるのは集落そのもの (HOME_RADIUS) を襲った災害だけ (World.dispatch の disasterHitsHome)。
+// 塔の重さの噴火 (集落から 10 セル、半径 4) は民の目の前ではないので数えない
 /** 介入が無くても毎年これだけ減衰する (d) */
-export const FAITH_DECAY = 0.03;
+export const FAITH_DECAY = 0.01;
+// 校正 (M9-03、2026-09-21): 0.03 では 0.5 → 0.3 が 17 年で、塔の重さの想定解 (儀式つき) でも噴火と祈りの無視に儀式が追いつかず
+// 内乱の連鎖で崩れた。「何もしなければゆっくり減衰」の趣旨で 0.01 (0.5 → 0.3 に 51 年) にした
 /** recent の最後のキーがこれ以上あれば (a) が成り立つ */
 export const FAITH_STREAK_THRESHOLD = 3;
 /** recent に異なるキーがこれ以上あれば (b) が成り立つ */
@@ -75,4 +80,13 @@ export function updateFaith(prev: number, input: { recent: string[]; disasters: 
   faith += answered * FAITH_ANSWER - ignored * FAITH_IGNORE;
   faith *= 1 - FAITH_DECAY;
   return Math.min(1, Math.max(0, faith));
+}
+
+/**
+ * 災害が集落そのものを襲ったか (M9-03)。中心からの距離が 災害の半径 + HOME_RADIUS 以内なら民の目の前。
+ * 信仰を下げる災害 (updateFaith の disasters) はこれだけ数える
+ */
+export function disasterHitsHome(cmd: Command, home: number, size: number): boolean {
+  if (cmd.type !== 'disaster' || home < 0) return false;
+  return cellDistance(cmd.cell, home, size) <= cmd.radius + HOME_RADIUS;
 }

@@ -35,6 +35,18 @@ export const PRAYER_GRASS_LOW = 0.15;
 export const PRAYER_PREDATOR_HIGH = 0.33;
 /** 「星の砂を」が出る閾値: 採掘半径内の輝石の残量 / crystalStart がこれ未満 (LD §3.1 の据え置き値) */
 export const PRAYER_CRYSTAL_LOW = 0.1;
+// M9-03 (2026-09-21): 上の PRAYER_GRASS_LOW / PRAYER_PREDATOR_HIGH の絶対値は場所に依存した。塔の重さの集落 (2847) では狼/鹿の密度比が
+// 常に 1.5〜8.5 で、2635 で決めた 0.33 を恒常的に超え、「狼を減らして」が 8 年ごとに出て無視され続け、信仰が崩れて塔が内乱で落ちた。
+// 民は「いつもより」困ったときに祈るとし、直近 PRAYER_BASELINE_YEARS 年の基準に対する比で判定する (issuePrayer の baseline)。
+// 絶対値の定数は参照のため残す (issuePrayer では使わない)
+/** 「雨を」: 支え半径内の草の密度平均が、基準 (直近の平均) のこの倍率未満に落ちたら */
+export const PRAYER_GRASS_DROP = 0.7;
+/** 「狼を減らして」: 支え半径内の捕食者比が、基準のこの倍率を超えて上がったら */
+export const PRAYER_PREDATOR_RISE = 1.5;
+/** 基準に使う直近の年数 */
+export const PRAYER_BASELINE_YEARS = 10;
+/** 基準ができるまでの最小年数。これより短いと「いつも」が無いので雨・狼の祈りは出ない */
+export const PRAYER_BASELINE_MIN = 3;
 
 /** issuePrayer の入力。すべて集落の支え半径 (草・捕食者) または採掘半径 (輝石) で測った値 */
 export type PrayerCheckInput = {
@@ -44,6 +56,8 @@ export type PrayerCheckInput = {
   predatorRatio: number;
   /** 採掘半径内の輝石の残量 / crystalStart */
   crystalRatio: number;
+  /** 「いつも」の基準 (直近 PRAYER_BASELINE_YEARS 年の平均、今年を含まない)。無ければ雨・狼の祈りは出ない (M9-03) */
+  baseline?: { grassMean: number; predatorRatio: number };
 };
 
 /**
@@ -52,9 +66,26 @@ export type PrayerCheckInput = {
  */
 export function issuePrayer(input: PrayerCheckInput): PrayerKind | null {
   if (input.crystalRatio < PRAYER_CRYSTAL_LOW) return 'crystal';
-  if (input.predatorRatio > PRAYER_PREDATOR_HIGH) return 'wolves';
-  if (input.grassMean < PRAYER_GRASS_LOW) return 'rain';
+  // M9-03: 絶対値ではなく基準比 (「いつもより」)。基準が無ければ出ない
+  if (input.baseline && input.predatorRatio > 0 && input.predatorRatio > input.baseline.predatorRatio * PRAYER_PREDATOR_RISE) return 'wolves';
+  if (input.baseline && input.grassMean < input.baseline.grassMean * PRAYER_GRASS_DROP) return 'rain';
   return null;
+}
+
+/**
+ * その種類の困りごとがまだ続いているか (M9-03)。期限の前に困りごとが自然に消えれば、民は祈るのをやめる (取り下げ、信仰は動かない)。
+ * 塔の重さでは噴火の炎蜥蜴が数年で消えるので「狼を減らして」の大半がこれに当たる (期限切れの無視にすると信仰が崩れて塔が内乱で落ちた)
+ */
+export function prayerStillNeeded(kind: PrayerKind, input: PrayerCheckInput): boolean {
+  switch (kind) {
+    case 'crystal':
+      return input.crystalRatio < PRAYER_CRYSTAL_LOW;
+    // 基準がまだ無ければ判断できないので、祈りは残す (開始時に指定した祈りが最初の年に消えないように)
+    case 'wolves':
+      return !input.baseline || (input.predatorRatio > 0 && input.predatorRatio > input.baseline.predatorRatio * PRAYER_PREDATOR_RISE);
+    case 'rain':
+      return !input.baseline || input.grassMean < input.baseline.grassMean * PRAYER_GRASS_DROP;
+  }
 }
 
 /**

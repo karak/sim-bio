@@ -1,32 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { issuePrayer, isAnswer, PRAYER_GRASS_LOW, PRAYER_PREDATOR_HIGH, PRAYER_CRYSTAL_LOW, PRAYER_YEARS, PRAYER_COOLDOWN } from '../../src/simulation/prayer';
+import { issuePrayer, isAnswer, prayerStillNeeded, PRAYER_CRYSTAL_LOW, PRAYER_GRASS_DROP, PRAYER_PREDATOR_RISE, PRAYER_YEARS, PRAYER_COOLDOWN } from '../../src/simulation/prayer';
 import { SUPPORT_RADIUS } from '../../src/simulation/civilization';
 
-describe('issuePrayer (M9-02, 境界値)', () => {
+describe('issuePrayer (M9-02 → M9-03: 基準比「いつもより」、境界値)', () => {
+  const base = { grassMean: 0.2, predatorRatio: 0.5 };
   it('何も当てはまらなければ null', () => {
-    expect(issuePrayer({ grassMean: 1, predatorRatio: 0, crystalRatio: 1 })).toBeNull();
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: 0.5, crystalRatio: 1, baseline: base })).toBeNull();
   });
-  it('草が閾値未満なら rain', () => {
-    expect(issuePrayer({ grassMean: PRAYER_GRASS_LOW - 0.001, predatorRatio: 0, crystalRatio: 1 })).toBe('rain');
-    // 境界: ちょうど閾値では出ない (未満のみ)
-    expect(issuePrayer({ grassMean: PRAYER_GRASS_LOW, predatorRatio: 0, crystalRatio: 1 })).toBeNull();
+  it('基準が無ければ (最初の PRAYER_BASELINE_MIN 年) 雨・狼の祈りは出ない。輝石は出る', () => {
+    expect(issuePrayer({ grassMean: 0, predatorRatio: 100, crystalRatio: 1 })).toBeNull();
+    expect(issuePrayer({ grassMean: 0, predatorRatio: 100, crystalRatio: 0 })).toBe('crystal');
   });
-  it('捕食者比が閾値超なら wolves', () => {
-    expect(issuePrayer({ grassMean: 1, predatorRatio: PRAYER_PREDATOR_HIGH + 0.001, crystalRatio: 1 })).toBe('wolves');
-    // 境界: ちょうど閾値では出ない (超のみ)
-    expect(issuePrayer({ grassMean: 1, predatorRatio: PRAYER_PREDATOR_HIGH, crystalRatio: 1 })).toBeNull();
+  it('草が基準 × PRAYER_GRASS_DROP 未満なら rain (ちょうどでは出ない)', () => {
+    expect(issuePrayer({ grassMean: base.grassMean * PRAYER_GRASS_DROP - 1e-6, predatorRatio: 0.5, crystalRatio: 1, baseline: base })).toBe('rain');
+    expect(issuePrayer({ grassMean: base.grassMean * PRAYER_GRASS_DROP, predatorRatio: 0.5, crystalRatio: 1, baseline: base })).toBeNull();
   });
-  it('輝石比が閾値未満なら crystal', () => {
-    expect(issuePrayer({ grassMean: 1, predatorRatio: 0, crystalRatio: PRAYER_CRYSTAL_LOW - 0.001 })).toBe('crystal');
-    expect(issuePrayer({ grassMean: 1, predatorRatio: 0, crystalRatio: PRAYER_CRYSTAL_LOW })).toBeNull();
+  it('捕食者比が基準 × PRAYER_PREDATOR_RISE 超なら wolves (ちょうどでは出ない)。基準 0 でも捕食者が現れれば出る', () => {
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: base.predatorRatio * PRAYER_PREDATOR_RISE + 1e-6, crystalRatio: 1, baseline: base })).toBe('wolves');
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: base.predatorRatio * PRAYER_PREDATOR_RISE, crystalRatio: 1, baseline: base })).toBeNull();
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: 0.01, crystalRatio: 1, baseline: { grassMean: 0.2, predatorRatio: 0 } })).toBe('wolves');
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: 0, crystalRatio: 1, baseline: { grassMean: 0.2, predatorRatio: 0 } })).toBeNull();
+  });
+  it('輝石比が閾値未満なら crystal (絶対値、ちょうどでは出ない)', () => {
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: 0.5, crystalRatio: PRAYER_CRYSTAL_LOW - 0.001, baseline: base })).toBe('crystal');
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: 0.5, crystalRatio: PRAYER_CRYSTAL_LOW, baseline: base })).toBeNull();
   });
   it('複数当てはまれば crystal > wolves > rain の優先', () => {
-    // crystal と wolves 両方当てはまる → crystal
-    expect(issuePrayer({ grassMean: 1, predatorRatio: PRAYER_PREDATOR_HIGH + 1, crystalRatio: 0 })).toBe('crystal');
-    // wolves と rain 両方当てはまる → wolves
-    expect(issuePrayer({ grassMean: 0, predatorRatio: PRAYER_PREDATOR_HIGH + 1, crystalRatio: 1 })).toBe('wolves');
-    // 3 つとも当てはまる → crystal
-    expect(issuePrayer({ grassMean: 0, predatorRatio: PRAYER_PREDATOR_HIGH + 1, crystalRatio: 0 })).toBe('crystal');
+    expect(issuePrayer({ grassMean: 0.2, predatorRatio: 5, crystalRatio: 0, baseline: base })).toBe('crystal');
+    expect(issuePrayer({ grassMean: 0, predatorRatio: 5, crystalRatio: 1, baseline: base })).toBe('wolves');
+    expect(issuePrayer({ grassMean: 0, predatorRatio: 5, crystalRatio: 0, baseline: base })).toBe('crystal');
+  });
+  it('prayerStillNeeded (M9-03): 困りごとが続いているかを種類ごとに判定する', () => {
+    expect(prayerStillNeeded('rain', { grassMean: 0.1, predatorRatio: 0.5, crystalRatio: 1, baseline: base })).toBe(true);
+    expect(prayerStillNeeded('rain', { grassMean: 0.2, predatorRatio: 0.5, crystalRatio: 1, baseline: base })).toBe(false);
+    expect(prayerStillNeeded('wolves', { grassMean: 0.2, predatorRatio: 1, crystalRatio: 1, baseline: base })).toBe(true);
+    expect(prayerStillNeeded('wolves', { grassMean: 0.2, predatorRatio: 0.5, crystalRatio: 1, baseline: base })).toBe(false);
+    expect(prayerStillNeeded('crystal', { grassMean: 0.2, predatorRatio: 0.5, crystalRatio: 0.05, baseline: base })).toBe(true);
+    expect(prayerStillNeeded('crystal', { grassMean: 0.2, predatorRatio: 0.5, crystalRatio: 0.5, baseline: base })).toBe(false);
+    // 基準が無ければ判断できないので残す (開始時に指定した祈りが最初の年に消えない)
+    expect(prayerStillNeeded('rain', { grassMean: 1, predatorRatio: 0.5, crystalRatio: 1 })).toBe(true);
+    expect(prayerStillNeeded('wolves', { grassMean: 1, predatorRatio: 0, crystalRatio: 1 })).toBe(true);
   });
 });
 
