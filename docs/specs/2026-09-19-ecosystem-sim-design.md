@@ -413,6 +413,23 @@ hud.showCell(cellIndex: number | null): void
 - **ScenarioRunner**: `snapshot.civ` の `prayer`/`prayersAnswered`/`prayersIgnored` を前年の年次評価と比べ、`TimelineEvent { kind: 'prayer'; phase; prayer }` を積んで `opts.onPrayer?.()` を呼ぶ(前年と比べる作りは `civ_stage`/`civ_faith` と同じ設計)。`runner.prayer()` が現在の祈りと残り年数 (`deadlineYear − 現在年`) を毎フレーム返す(石板表示用)。
 - **表示**: `Tablet` が `id="tablet-prayer"` の行に「祈り: 雨を(残り 3 年)」の形で出す(無ければ `hidden`)。`describeEvent` が `prayer` を「民が祈った: 雨を」「祈りに応えた: 雨を」「祈りを無視した: 雨を」の形で整形する(種類の文言: rain=「雨を」、wolves=「狼を減らして」、crystal=「星の砂を」)。`main.ts` の `onPrayer` が `scenario.prayer` を `{ scenario, phase, kind }` でログする(`onWarning` と同じ形)。
 
+### 4.19 実装時の差分(M9-03: 信仰の効き — 勅令・内乱・霊脈)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §3.2〜3.4、§5、§8.2。
+
+- **勅令**(`edict.ts` / `Command { type: 'civ_edict', edict: 'stop_mining' | 'resume_mining' }`): 信仰 ≥ `EDICT_FAITH`(0.6)のときだけ民が従い、`CivState.miningStopped` を切り替える(止まっている間は `stepMining` を呼ばない。負荷 `applyLoad` は残る)。従わなくても `CivState.edict = { kind, year, obeyed, faith }` に残し、石板が「民は聞かなかった(信仰 0.45 < 0.6)」を出す。力は消費せず(`costOf` 0)、信仰の「同じ種類」にも数えない(`commandKey` null)。HUD に勅令の行(「採掘を止めよ / 再開せよ」)と文明の行の「· 採掘 止」。ログ `sim.civ.edict`。
+- **内乱**(`unrest.ts`): 信仰 < `UNREST_FAITH`(0.3)の年が `UNREST_YEARS`(3)続くと、集落の支え半径の民を `UNREST_SURVIVORS`(0.5)倍にし段階 −1、信仰を `UNREST_FAITH_AFTER`(0.4)に戻す(3 年ごとに連鎖しないため)。ログ `sim.civ.unrest` と `sim.civ.stage`(reason `unrest`)。
+- **霊脈**(`vein.ts`): 開始時の輝石(`crystal0`、seed から決定論。restore でも保存値で上書きしない)を 4 近傍で繋いだ連結成分を脈として番号付け(`labelVeins`)。民は **脈を辿って掘る**(`stepMining` に `veins` を渡すと、採掘半径に掛かる脈のセル全体から残量に比例して取り除く)。枯渇 `1 − 残り / 開始` は脈全体で共有し(`veinDepletion`)、脈から `VEIN_REACH`(8 歩)以内の陸は最寄りの脈の枯渇を `veinLoss` として受ける。`stepVitality` は生気の上限を `veinCap = 1 − VEIN_LOSS(1.0) × veinLoss` に抑える(霊脈は生気の器)。分解率の分解者項にも `veinFactor` を掛けるが、実測では効かない(下記)。輝石の無かった土地は枯渇 0 なので既存シナリオの平衡は変わらない。
+  - 捨てた形(実測、seed 42 / size 64、集落 1770 = 脈 71 セル・輝石 29.7 の上、石 (4) で放置): (1) セルごとの枯渇 + 半径 3 の平均: 採掘半径 3 の輝石 1.05 は 4 年で尽きて採掘が止まり、半径 8 の脈は 5% しか減らず、生気 1.0 のまま。(2) 脈全体の共有 + 分解率の低下: 100 年で脈は 9% まで減ったが、集落の苔は密度 0.99 で分解率が漏出の 70 倍あり、分解者の効きを 1 割にしても生気 1.0 のまま。(3) 器(上限)にして初めて生気が動いた。
+  - 結果(信仰 1.0 で始めて内乱を避けた放置): 脈 1.0 → 0.09、集落の生気 0.93 → 0.21、島全体の生気 0.97 → 0.61(100 年)。脈が 5 割の時点(53 年目)で「止めよ」→ 20 年後も生気 0.57。2 割の時点(88 年目)→ 0.31。苔だけ放っても落ち続ける(0.60 → 0.39 / 0.31 → 0.11)。
+- **判定条件・警告**: `faith { min, max }`、`prayers_answered { min, max }`(「祈りに応えるな」の dead に `max: 0`)、`civ_vitality { min, max, years }`(集落の支え半径の生気平均。`JudgeInput.civVitalityHistory` で直近 years 年の平均)。警告 `faith_low`(信仰 < 0.4)。`start.civilization.faith` で開始時の信仰を指定できる(E2E の `test-civ` は 0.7)。
+- **副作用の校正(塔の重さ v2 が滅びた)**: 祈りと内乱を入れた直後、塔の想定解 2 通りが 56 年目に段階 0 で滅びた。原因は 3 つあり、順に仕組みで直した。
+  1. 塔の集落(2847)では狼/鹿の密度比が常に 1.5〜8.5 で、2635 で決めた絶対閾値(`PRAYER_PREDATOR_HIGH` 0.33)を恒常的に超え、「狼を減らして」が 8 年ごとに出て無視され続けた(−0.15 × 7)。→ 祈りの条件を **「いつもより」**(直近 `PRAYER_BASELINE_YEARS` 10 年の平均に対する比。草は `PRAYER_GRASS_DROP` 0.7 倍未満、捕食者比は `PRAYER_PREDATOR_RISE` 1.5 倍超。基準ができる `PRAYER_BASELINE_MIN` 3 年までは出ない)に変えた。輝石は開始比のまま。絶対値の定数は参照のため残した。
+  2. 期限の前に困りごとが消えた祈りも「無視」になっていた。→ **取り下げ**(`prayerStillNeeded` が偽なら `prayersWithdrawn++`、信仰は動かない。基準が無い間は判断できないので残す)。年表「困りごとが消え、民は祈るのをやめた」。
+  3. 集落から 10 セル離れた噴火まで信仰を削り(−0.1 × 11)、減衰 3%/年 が儀式で埋まらなかった。→ 災害は **集落そのもの(`HOME_RADIUS` + 半径)を襲ったときだけ** 数える(`disasterHitsHome`)、`FAITH_DECAY` 0.03 → 0.01(「ゆっくり減衰」: 0.5 → 0.3 に 51 年)。
+  - 塔の台本は変えていない(儀式を足す案は、力 4 / 3 年 が噴火の予算を圧迫して燃料切れになり捨てた)。通し 20 件通過。
+- **既知の制約**: size 128 の既定島は M9-00 と同じ理由で自然発生しない。祈りの基準は restore 後 3 年は無い。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -445,6 +462,18 @@ hud.showCell(cellIndex: number | null): void
 | HUD の文明の行に「信仰 0.62」が出る。snapshot と保存データに含まれ、serialize→restore で一致する | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/e2e/smoke.spec.ts` · 40bd5c0 |
 | ログ sim.civ.faith を年 1 回、年表に ±0.1 以上動いた年だけ出す | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 40bd5c0 |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(242 テスト通過)、`npx playwright test`(16 テスト通過) · 40bd5c0 |
+
+### M9-03: 信仰の効き(内乱と採掘の制止)
+
+| 受入項目 | 証跡 |
+|---|---|
+| 信仰 < 0.3 が 3 年続くと内乱: 集落の民が半減し段階 −1。ログ sim.civ.unrest | `tests/unit/unrest.test.ts`、`tests/unit/world.civilization.edict.test.ts`(内乱の配線) · 1e342f0 |
+| 「採掘を止めよ / 再開せよ」は信仰 ≥ 0.6 のときだけ効き、効いた年から採掘が 0(単体 + E2E) | `tests/unit/world.civilization.edict.test.ts`、`tests/e2e/smoke.spec.ts`(edict) · 1e342f0 |
+| Condition faith { min?, max? }、警告 faith_low(< 0.4)。prayers_answered、civ_vitality | `tests/unit/scenario.judge.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/unit/scenario.budget.test.ts`(civ_edict の年表・力 0) · 1e342f0 |
+| 文明のない世界では何も起きない | `tests/unit/world.civilization.edict.test.ts`(文明のない世界では勅令は何も起こさない) · 1e342f0 |
+| 霊脈: 脈の番号付け・脈全体の枯渇・器としての上限、民は脈を辿って掘る。感度と定着(LD §5) | `tests/unit/vein.test.ts`、`tests/unit/civilization.test.ts`(stepMining と霊脈)、`tests/unit/world.vein.test.ts` · 1e342f0 |
+| 祈りの「いつもより」と取り下げ(副作用の校正) | `tests/unit/prayer.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · 1e342f0 |
+| 既存の通し実行 20 件が通る(塔 v2 は台本を変えずに通る) | `tests/slow/scenarios.playthrough.test.ts` · 1e342f0 |
 
 ### M9-02: 祈り
 
