@@ -3,10 +3,18 @@ import type { ScenarioDef, Verdict } from '../scenario/types';
 import type { Command } from '../simulation/types';
 import type { Warning } from '../scenario/warnings';
 import { STAGE_NAMES } from '../simulation/civilization';
+import type { PrayerKind } from '../simulation/prayer';
 
 export type Tablet = {
-  /** 開始からの年・判定・星の力 (budget が無いシナリオでは null) を表示する */
-  update(year: number, verdict: Verdict, budget: BudgetInfo | null, warnings?: Warning[], timeline?: TimelineEvent[]): void;
+  /** 開始からの年・判定・星の力 (budget が無いシナリオでは null)・現在の祈り (M9-02) を表示する */
+  update(
+    year: number,
+    verdict: Verdict,
+    budget: BudgetInfo | null,
+    warnings?: Warning[],
+    timeline?: TimelineEvent[],
+    prayer?: { kind: PrayerKind; yearsLeft: number } | null,
+  ): void;
   /** 勝敗が確定したときの大きな表示 */
   showVerdict(verdict: Verdict): void;
   /** 介入が弾かれた・力が尽きたときに石板を短く揺らして知らせる */
@@ -19,6 +27,8 @@ const MAX_WARNINGS = 3;
 /** 年表に出す直近の件数 */
 const MAX_TIMELINE = 6;
 const DISASTER_LABEL: Record<string, string> = { meteor: '隕石', volcano: '火山', wildfire: '山火事', plague: '疫病' };
+/** 祈りの種類の文言 (M9-02) */
+export const PRAYER_LABEL: Record<PrayerKind, string> = { rain: '雨を', wolves: '狼を減らして', crystal: '星の砂を' };
 
 /** 年表の 1 行を人が読める文にする */
 export function describeEvent(e: TimelineEvent, names: Record<string, string>): string {
@@ -50,6 +60,12 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       return `文明が ${STAGE_NAMES[e.from]} → ${STAGE_NAMES[e.to]} に${e.to > e.from ? '上がった' : '下がった'}`;
     case 'civ_faith':
       return `信仰が ${e.from.toFixed(2)} → ${e.to.toFixed(2)} に${e.to > e.from ? '上がった' : '下がった'}`;
+    case 'prayer': {
+      const label = PRAYER_LABEL[e.prayer];
+      if (e.phase === 'issued') return `民が祈った: ${label}`;
+      if (e.phase === 'answered') return `祈りに応えた: ${label}`;
+      return `祈りを無視した: ${label}`;
+    }
   }
 }
 
@@ -76,6 +92,7 @@ export function createTablet(
     ${def ? `<div class="tablet-title" id="tablet-title">${def.title} <span class="dim">· ${KIND_LABEL[def.kind]}</span></div>
     <div class="tablet-prophecy" id="tablet-prophecy">${def.prophecy}</div>
     <div class="row"><span id="tablet-year" class="mono">0 / ${def.years} 年</span><span id="tablet-status" class="dim"></span></div>
+    <div class="tablet-prayer" id="tablet-prayer" hidden></div>
     <div id="tablet-milestones" class="tablet-milestones"></div>
     <div id="tablet-warnings" class="tablet-warnings"></div>
     <details class="tablet-timeline"><summary id="tablet-timeline-summary">年表 (0)</summary><div id="tablet-timeline"></div></details>
@@ -103,10 +120,14 @@ export function createTablet(
   $('verdict-free').addEventListener('click', () => onSelect(null));
 
   return {
-    update(year, verdict, budget, warnings = [], timeline = []) {
+    update(year, verdict, budget, warnings = [], timeline = [], prayer = null) {
       if (!def) return;
       $('tablet-year').textContent = `${Math.min(year, def.years)} / ${def.years} 年`;
       $('tablet-status').textContent = verdict.status === 'running' ? `あと ${verdict.reason}` : verdict.reason;
+      // 現在の祈り (M9-02): 無ければ行ごと隠す
+      const prayerEl = $('tablet-prayer');
+      prayerEl.hidden = !prayer;
+      if (prayer) prayerEl.textContent = `祈り: ${PRAYER_LABEL[prayer.kind]}(残り ${prayer.yearsLeft} 年)`;
       // 節目は未到達のものだけ。到達したら消える
       const pending = (def.milestones ?? []).filter((m) => m.atYear > year);
       const msHtml = pending.map((m) => `<div class="tablet-milestone">${m.atYear} 年目: ${m.text}</div>`).join('');

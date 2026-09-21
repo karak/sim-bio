@@ -106,7 +106,7 @@ async function boot(): Promise<void> {
         if (runner) {
           const verdict = runner.update(s);
           const budgetInfo = runner.budget();
-          tablet.update(runner.yearOf(s), verdict, budgetInfo, runner.warnings(), runner.timeline());
+          tablet.update(runner.yearOf(s), verdict, budgetInfo, runner.warnings(), runner.timeline(), runner.prayer());
           const costs = scenario?.budget?.costs;
           hud.setAffordable(
             budgetInfo && costs
@@ -130,6 +130,10 @@ async function boot(): Promise<void> {
       onWarning: (w) => {
         const snap = world.snapshot();
         log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.warning', scenario: scenario.id, kind: w.kind, id: w.id, text: w.text });
+      },
+      onPrayer: (e) => {
+        const snap = world.snapshot();
+        log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.prayer', scenario: scenario.id, phase: e.phase, kind: e.prayer });
       },
       onPowerExhausted: () => {
         tablet.flash();

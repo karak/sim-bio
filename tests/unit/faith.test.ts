@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { commandKey, updateFaith, FAITH_UP, FAITH_DOWN, FAITH_DISASTER, FAITH_DECAY } from '../../src/simulation/faith';
+import { commandKey, updateFaith, FAITH_UP, FAITH_DOWN, FAITH_DISASTER, FAITH_DECAY, FAITH_ANSWER, FAITH_IGNORE } from '../../src/simulation/faith';
 import type { Command } from '../../src/simulation/types';
 
 describe('commandKey (M9-01)', () => {
@@ -74,6 +74,42 @@ describe('updateFaith (M9-01, 境界値)', () => {
       high = updateFaith(high, { recent: ['spawn:deer', 'spawn:deer', 'spawn:deer'], disasters: 0 });
       expect(low).toBeGreaterThanOrEqual(0);
       expect(high).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe('updateFaith の answered/ignored (M9-02, 境界値)', () => {
+  it('answered/ignored を省略すると今までどおり (既存の呼び出し・テストは変わらない)', () => {
+    const withOmitted = updateFaith(0.5, { recent: [], disasters: 0 });
+    const withZero = updateFaith(0.5, { recent: [], disasters: 0, answered: 0, ignored: 0 });
+    expect(withOmitted).toBe(withZero);
+    expect(withOmitted).toBeCloseTo(0.5 * (1 - FAITH_DECAY), 6);
+  });
+  it('祈りに応えた 1 件で +FAITH_ANSWER (減衰の前に掛かる)', () => {
+    const result = updateFaith(0.5, { recent: [], disasters: 0, answered: 1 });
+    expect(result).toBeCloseTo((0.5 + FAITH_ANSWER) * (1 - FAITH_DECAY), 6);
+    expect(result).toBeGreaterThan(0.5 * (1 - FAITH_DECAY));
+  });
+  it('祈りを無視した 1 件で −FAITH_IGNORE (減衰の前に掛かる)', () => {
+    const result = updateFaith(0.5, { recent: [], disasters: 0, ignored: 1 });
+    expect(result).toBeCloseTo((0.5 - FAITH_IGNORE) * (1 - FAITH_DECAY), 6);
+    expect(result).toBeLessThan(0.5 * (1 - FAITH_DECAY));
+  });
+  it('災害の後・減衰の前に掛かる (災害・儀式・応えた/無視したが同じ年に重なっても順序どおり)', () => {
+    const result = updateFaith(0.5, { recent: ['a', 'a', 'a'], disasters: 1, answered: 1, ignored: 1 });
+    // (0.5 + FAITH_UP [儀式] − FAITH_DISASTER [災害] + FAITH_ANSWER − FAITH_IGNORE) × (1 − FAITH_DECAY)
+    expect(result).toBeCloseTo((0.5 + FAITH_UP - FAITH_DISASTER + FAITH_ANSWER - FAITH_IGNORE) * (1 - FAITH_DECAY), 6);
+  });
+  it('応えた・無視した回数が複数なら回数分だけ効く', () => {
+    const result = updateFaith(0.5, { recent: [], disasters: 0, answered: 2, ignored: 1 });
+    expect(result).toBeCloseTo((0.5 + 2 * FAITH_ANSWER - FAITH_IGNORE) * (1 - FAITH_DECAY), 6);
+  });
+  it('0 未満・1 超にならない (answered/ignored ありの性質テスト)', () => {
+    let prev = 0.5;
+    for (let i = 0; i < 100; i++) {
+      prev = updateFaith(prev, { recent: [], disasters: 0, answered: Math.floor(Math.random() * 3), ignored: Math.floor(Math.random() * 3) });
+      expect(prev).toBeGreaterThanOrEqual(0);
+      expect(prev).toBeLessThanOrEqual(1);
     }
   });
 });

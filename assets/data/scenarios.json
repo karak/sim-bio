@@ -266,7 +266,8 @@
       "civilization": {
         "speciesId": "deer",
         "stage": 4,
-        "home": -1
+        "home": -1,
+        "prayer": "rain"
       }
     },
     "years": 5,
