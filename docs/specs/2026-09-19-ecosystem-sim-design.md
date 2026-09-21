@@ -400,6 +400,19 @@ hud.showCell(cellIndex: number | null): void
 - **結果**: seed 42 / size 64 / 全種で鹿の文明が **22 年目** に集落 2635(地域人口 4.1)で発生する。草だけの世界(size 32)の既存テスト(10 年目に発生)は変わらない。既存の通し実行 20 件は段階を指定して始めるので影響なし(通過)。
 - **既知の制約**: size 128(`world.default.json` の既定)では地域の群れ自体が振幅比 0.8〜0.9 で波打つ(3 → 19 → 3)ためどの地域も安定せず、80 年で発生しない。シナリオはすべて size 64 か段階指定で始めるので M9 では扱わず、通しの年表(M18)で size 128 の自然発生が要るときに戻る。
 
+### 4.18 実装時の差分(M9-02: 祈り)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §3.1、§4。集落の困りごとが石板に「祈り」として届き、期限内に対応する介入があれば信仰が上がり、無視すれば下がる。
+
+- **純粋関数として分離**(`src/simulation/prayer.ts`、World には依存しない): `PrayerKind = 'rain' | 'wolves' | 'crystal'`、`PrayerState = { kind; issuedYear; deadlineYear }`。`CivState` に `prayer?`、`prayersAnswered?`、`prayersIgnored?`、`crystalStart?` を追加(既存セーブ・テストとの互換を保つため省略可)。`issuePrayer({ grassMean, predatorRatio, crystalRatio })` が今年出す祈りの種類 (`PrayerKind | null`) を返す。複数当てはまれば `crystal > wolves > rain` の優先。`isAnswer(kind, cmd, { home, size, rainScaleBefore })` がこの介入が応えかどうかを返す。
+- **係数**(すべて `prayer.ts` 先頭の定数): `PRAYER_YEARS = 5`(期限)、`PRAYER_COOLDOWN = 3`(解決から次が出るまでの年数、同時に 1 つだけ)、`PRAYER_CRYSTAL_LOW = 0.1`(LD §3.1 の据え置き値)。`PRAYER_GRASS_LOW`・`PRAYER_PREDATOR_HIGH` は実測で決めた(下記)。
+- **実測(閾値の校正)**: seed 42 / size 64 / 全種、`civilization: { speciesId: 'deer', start: { stage: 3, home: 2635 } }` で 100 年放置し、年ごとに支え半径 `SUPPORT_RADIUS`(8)の草 (`grass`) の密度平均・捕食者 (肉食トロフィック) の総量 / 民の総量を測った。草の密度平均は **0.074〜0.132(中央値 0.107)** で終始低く張り付き、捕食者比は **0.165〜1.924(中央値 0.301)** だった(参考: 輝石比は 0.621〜0.842 で `PRAYER_CRYSTAL_LOW` 0.1 には遠く、この実測レンジでは「星の砂を」は出ない)。`issuePrayer` を優先度どおりに 100 年通したとき「雨を」が 4〜12 回・「狼を減らして」が 1〜6 回になる組を探索し、`PRAYER_GRASS_LOW = 0.15`(中央値よりわずかに高い。草は常にこの近辺かそれ以下)、`PRAYER_PREDATOR_HIGH = 0.33`(中央値よりわずかに高い)を選んだ。この組では 100 年で「雨を」10 回・「狼を減らして」3 回(受入基準の範囲内)。使い捨ての計測スクリプトはコミットしていない。
+- **World の配線**(`World.ts`): `dispatch` で civ に有効な祈りがあり `isAnswer` が真なら即座に解決する(`prayersAnswered++`、今年の answered 数に積む、ログ `sim.civ.prayer` phase `answered`)。`rainScaleBefore` は dispatch 前(コマンド適用前)の `config.climate.rainScale`。`stepCivYearly`(stage ≥ 1)で、まず `crystalStart`(stage ≥ 1 になった最初の年の `MINE_RADIUS[MAX_STAGE]` 内輝石総量)を記録し、次に期限切れの祈りを無視した扱いで解決し(`prayersIgnored++`)、空いていてクールダウンが明けていれば `issuePrayer` で新しい祈りを出す。信仰の更新 (`updateFaith`) に今年の `answered`/`ignored` を渡す。
+- **faith.ts の追加**: `FAITH_ANSWER = 0.15`(応えた 1 件につき加点)、`FAITH_IGNORE = 0.15`(無視した 1 件につき減点)。`updateFaith` の規則 (c) の直後、減衰の前に `+answered × FAITH_ANSWER − ignored × FAITH_IGNORE` を掛ける(省略時 0、既存の呼び出し・テストは変わらない)。
+- **開始時の祈り**(E2E の決定論のため): `CivilizationConfig.start.prayer?: PrayerKind` と `scenarios.json` の `start.civilization.prayer` を追加。指定があれば World 生成時に `{ kind, issuedYear: 0, deadlineYear: PRAYER_YEARS }` で有効にする。`test-civ` に `"prayer": "rain"` を足した。
+- **ScenarioRunner**: `snapshot.civ` の `prayer`/`prayersAnswered`/`prayersIgnored` を前年の年次評価と比べ、`TimelineEvent { kind: 'prayer'; phase; prayer }` を積んで `opts.onPrayer?.()` を呼ぶ(前年と比べる作りは `civ_stage`/`civ_faith` と同じ設計)。`runner.prayer()` が現在の祈りと残り年数 (`deadlineYear − 現在年`) を毎フレーム返す(石板表示用)。
+- **表示**: `Tablet` が `id="tablet-prayer"` の行に「祈り: 雨を(残り 3 年)」の形で出す(無ければ `hidden`)。`describeEvent` が `prayer` を「民が祈った: 雨を」「祈りに応えた: 雨を」「祈りを無視した: 雨を」の形で整形する(種類の文言: rain=「雨を」、wolves=「狼を減らして」、crystal=「星の砂を」)。`main.ts` の `onPrayer` が `scenario.prayer` を `{ scenario, phase, kind }` でログする(`onWarning` と同じ形)。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -432,6 +445,16 @@ hud.showCell(cellIndex: number | null): void
 | HUD の文明の行に「信仰 0.62」が出る。snapshot と保存データに含まれ、serialize→restore で一致する | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/e2e/smoke.spec.ts` · 40bd5c0 |
 | ログ sim.civ.faith を年 1 回、年表に ±0.1 以上動いた年だけ出す | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 40bd5c0 |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(242 テスト通過)、`npx playwright test`(16 テスト通過) · 40bd5c0 |
+
+### M9-02: 祈り
+
+| 受入項目 | 証跡 |
+|---|---|
+| 祈りの生成は純粋関数。条件(草の密度・捕食者比・輝石量)ごとに 1 種類、同時に 1 つだけ、期限 5 年(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · PENDING_SHA |
+| 期限内に対応する種類の介入があれば「応えた」と判定して信仰 +、期限切れで −(単体テスト) | `tests/unit/prayer.test.ts`、`tests/unit/faith.test.ts`、`tests/unit/world.civilization.prayer.test.ts` · PENDING_SHA |
+| 石板に現在の祈りと残り年数が出て、応えた・無視したが年表に並ぶ(E2E: 試し読みシナリオで祈りが出て、対応する介入で消える) | `tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · PENDING_SHA |
+| ログ scenario.prayer(issued / answered / ignored) | `tests/unit/scenario.budget.test.ts`、`tests/e2e/smoke.spec.ts` · PENDING_SHA |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(287 テスト通過)、`npx playwright test`(17 テスト通過) · PENDING_SHA |
 
 ### M1: 地形 + 植物 + 季節 + グラフ
 

@@ -2,13 +2,26 @@ import { describe, it, expect } from 'vitest';
 import { createScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
+import type { PrayerKind } from '../../src/simulation/prayer';
 import { grass } from './helpers';
 
 /**
  * 星の力 (介入の予算) の性質。
  * 陸地率と生気を固定した偽の world で、値段・収入・維持費・枯渇を確かめる。
  */
-const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: number; tempOffset?: number; civStage?: number; civFaith?: number } = {}) => {
+const fakeWorld = (
+  opts: {
+    landRatio?: number;
+    vitality?: number;
+    rainScale?: number;
+    tempOffset?: number;
+    civStage?: number;
+    civFaith?: number;
+    civPrayer?: { kind: PrayerKind; issuedYear: number; deadlineYear: number };
+    civPrayersAnswered?: number;
+    civPrayersIgnored?: number;
+  } = {},
+) => {
   let tick = 0;
   const cmds: Command[] = [];
   const size = 4;
@@ -21,10 +34,22 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
   let civStage = opts.civStage ?? 0;
   // 信仰 (M9-01)。テストから setCivFaith で年をまたいで変えて civ_faith の timeline を確かめる。省略時は undefined (未設定)
   let civFaith = opts.civFaith;
+  // 祈り (M9-02)。テストから setCivPrayer/setCivPrayersAnswered/setCivPrayersIgnored で年をまたいで変えて prayer の timeline を確かめる
+  let civPrayer = opts.civPrayer;
+  let civPrayersAnswered = opts.civPrayersAnswered;
+  let civPrayersIgnored = opts.civPrayersIgnored;
   const snapshot = (): WorldSnapshot => ({
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
-    civ: civStage > 0 ? { speciesId: 'deer', stage: civStage, progress: 0, home: 0, population: 0, ...(civFaith !== undefined ? { faith: civFaith } : {}) } : null,
+    civ: civStage > 0
+      ? {
+          speciesId: 'deer', stage: civStage, progress: 0, home: 0, population: 0,
+          ...(civFaith !== undefined ? { faith: civFaith } : {}),
+          ...(civPrayer !== undefined ? { prayer: civPrayer } : {}),
+          ...(civPrayersAnswered !== undefined ? { prayersAnswered: civPrayersAnswered } : {}),
+          ...(civPrayersIgnored !== undefined ? { prayersIgnored: civPrayersIgnored } : {}),
+        }
+      : null,
     volcanoCell: 0,
   });
   const dispatch = (c: Command) => {
@@ -38,6 +63,9 @@ const fakeWorld = (opts: { landRatio?: number; vitality?: number; rainScale?: nu
     dispatch, snapshot, step: (t: number) => { tick += t; }, cmds,
     setCivStage: (s: number) => { civStage = s; },
     setCivFaith: (f: number) => { civFaith = f; },
+    setCivPrayer: (p: { kind: PrayerKind; issuedYear: number; deadlineYear: number } | undefined) => { civPrayer = p; },
+    setCivPrayersAnswered: (n: number) => { civPrayersAnswered = n; },
+    setCivPrayersIgnored: (n: number) => { civPrayersIgnored = n; },
   };
 };
 
@@ -289,5 +317,79 @@ describe('文明の年表 (civ_faith, M9-01)', () => {
     w.setCivFaith(0.5); // 誕生年相当。前年の値が無いので積まない
     r.update(w.snapshot());
     expect(r.timeline().filter((e) => e.kind === 'civ_faith')).toEqual([]);
+  });
+});
+
+describe('文明の年表と石板表示 (prayer, M9-02)', () => {
+  it('祈りが出たら issued、応えたら answered、期限切れで無視されたら ignored を timeline に積み、onPrayer を呼ぶ', () => {
+    const events: unknown[] = [];
+    const w = fakeWorld({ civStage: 4 });
+    const r = createScenarioRunner(base, w, { onPrayer: (e) => events.push(e) });
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivPrayer({ kind: 'rain', issuedYear: 1, deadlineYear: 6 });
+    r.update(w.snapshot());
+    w.step(360 * 5);
+    w.setCivPrayer(undefined);
+    w.setCivPrayersIgnored(1);
+    r.update(w.snapshot());
+    const prayerEvents = r.timeline().filter((e) => e.kind === 'prayer');
+    expect(prayerEvents).toEqual([
+      { year: 1, kind: 'prayer', phase: 'issued', prayer: 'rain' },
+      { year: 6, kind: 'prayer', phase: 'ignored', prayer: 'rain' },
+    ]);
+    expect(events).toEqual(prayerEvents);
+  });
+
+  it('応えた (prayersAnswered が増えた) 年は answered を積む', () => {
+    const w = fakeWorld({ civStage: 4 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivPrayer({ kind: 'wolves', issuedYear: 1, deadlineYear: 6 });
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivPrayer(undefined);
+    w.setCivPrayersAnswered(1);
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'prayer')).toEqual([
+      { year: 1, kind: 'prayer', phase: 'issued', prayer: 'wolves' },
+      { year: 2, kind: 'prayer', phase: 'answered', prayer: 'wolves' },
+    ]);
+  });
+
+  it('同じ祈り (issuedYear が同じ) が続くあいだは issued を二重に積まない', () => {
+    const w = fakeWorld({ civStage: 4 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivPrayer({ kind: 'rain', issuedYear: 1, deadlineYear: 6 });
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot()); // まだ同じ祈り (issuedYear 1)
+    expect(r.timeline().filter((e) => e.kind === 'prayer')).toEqual([{ year: 1, kind: 'prayer', phase: 'issued', prayer: 'rain' }]);
+  });
+
+  it('文明のない世界・祈りの無い年は積まない', () => {
+    const w = fakeWorld();
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'prayer')).toEqual([]);
+  });
+
+  it('runner.prayer() は現在有効な祈りと残り年数を返す。無ければ null', () => {
+    const w = fakeWorld({ civStage: 4 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    expect(r.prayer()).toBeNull();
+    w.step(360);
+    w.setCivPrayer({ kind: 'rain', issuedYear: 1, deadlineYear: 6 });
+    r.update(w.snapshot());
+    expect(r.prayer()).toEqual({ kind: 'rain', yearsLeft: 5 });
+    w.step(360 * 3); // year 4、期限 (6) まで残り 2 年
+    r.update(w.snapshot());
+    expect(r.prayer()).toEqual({ kind: 'rain', yearsLeft: 2 });
   });
 });

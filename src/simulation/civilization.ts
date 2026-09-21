@@ -5,6 +5,7 @@
 import { forEachInRadius } from './disaster';
 import { amplitudeRatio } from './oscillation';
 import { SEA_LEVEL } from './terrain';
+import type { PrayerKind, PrayerState } from './prayer';
 
 /** 文明の状態。stage 0 = まだ発生していない。 */
 export type CivState = {
@@ -27,6 +28,17 @@ export type CivState = {
    * stage 0 や civ が無いあいだは undefined のまま。既存のテスト・セーブとの互換を保つため省略可にしてある。
    */
   faith?: number;
+  /** 現在有効な祈り (M9-02)。無ければ undefined。既存のテスト・セーブとの互換を保つため省略可にしてある */
+  prayer?: PrayerState;
+  /** 応えた祈りの累計 (M9-02, M9-03 の判定条件が読む)。省略時は 0 相当 */
+  prayersAnswered?: number;
+  /** 無視した (期限切れの) 祈りの累計 (M9-02)。省略時は 0 相当 */
+  prayersIgnored?: number;
+  /**
+   * 採掘半径 MINE_RADIUS[MAX_STAGE] 内の輝石の総量 (M9-02)。stage ≥ 1 になった最初の年 (発生時か開始時) に
+   * 記録し、以後は変えない。「星の砂を」の判定 (crystalRatio) の分母。既存のテスト・セーブとの互換を保つため省略可
+   */
+  crystalStart?: number;
 };
 
 /** 段階の名前。stage をそのまま index に使う。 */
@@ -231,17 +243,18 @@ export function populationAround(pops: Float32Array, home: number, elevation: Fl
 }
 
 /** WorldConfig.civilization の形 (main.ts がシナリオの start.civilization をこの形へ解決する) */
-export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number } };
+export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number; prayer?: PrayerKind } };
 
 /**
  * シナリオの start.civilization を WorldConfig.civilization へ解決する。
  * home は他のコマンドと同じ規約で、省略または -1 なら島の中心セルにする。stage 省略時は 0 (まだ発生していない)。
+ * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため。期限は World 側で開始年 + PRAYER_YEARS にする)。
  */
 export function resolveCivilizationStart(
-  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number } | undefined,
+  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind } | undefined,
   size: number,
 ): CivilizationConfig | undefined {
   if (!start) return undefined;
   const home = start.home === undefined || start.home === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : start.home;
-  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock } };
+  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer } };
 }

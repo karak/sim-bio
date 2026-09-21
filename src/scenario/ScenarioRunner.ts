@@ -2,6 +2,7 @@ import type { Command, WorldSnapshot } from '../simulation/types';
 import { judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type CivContext, type Warning } from './warnings';
+import type { PrayerKind } from '../simulation/prayer';
 
 /** 年表の 1 行。石板が種名などに整形して出す */
 export type TimelineEvent =
@@ -13,7 +14,9 @@ export type TimelineEvent =
   /** 文明の段階が年をまたいで変わった (M8-04)。from/to は STAGE_NAMES の index */
   | { year: number; kind: 'civ_stage'; from: number; to: number }
   /** 文明の信仰が年をまたいで |Δ| >= 0.1 動いた (M9-01) */
-  | { year: number; kind: 'civ_faith'; from: number; to: number };
+  | { year: number; kind: 'civ_faith'; from: number; to: number }
+  /** 文明の祈りが出た・応えられた・無視された (M9-02) */
+  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored'; prayer: PrayerKind };
 
 type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
 
@@ -40,6 +43,8 @@ export type ScenarioRunner = {
   power(): number;
   /** 石板表示用の力の情報。budget のないシナリオでは null */
   budget(): BudgetInfo | null;
+  /** 現在有効な祈りと残り年数 (石板表示用、M9-02)。祈りが無ければ null */
+  prayer(): { kind: PrayerKind; yearsLeft: number } | null;
   /** 直近の年次評価で出た警告 (年に 1 回更新) */
   warnings(): Warning[];
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
@@ -53,7 +58,14 @@ export type ScenarioRunner = {
 export function createScenarioRunner(
   def: ScenarioDef,
   world: RunnerWorld,
-  opts: { onVerdict?: (v: Verdict) => void; onPowerExhausted?: () => void; onWarning?: (w: Warning) => void; ticksPerYear?: number } = {},
+  opts: {
+    onVerdict?: (v: Verdict) => void;
+    onPowerExhausted?: () => void;
+    onWarning?: (w: Warning) => void;
+    /** 祈りが出た・応えられた・無視された年に呼ぶ (M9-02)。onWarning と同じ形 */
+    onPrayer?: (e: Extract<TimelineEvent, { kind: 'prayer' }>) => void;
+    ticksPerYear?: number;
+  } = {},
 ): ScenarioRunner {
   const first = world.snapshot();
   const startTick = first.tick;
@@ -90,6 +102,16 @@ export function createScenarioRunner(
   let lastCivStage = first.civ?.stage ?? 0;
   /** 直近に見た信仰の値。文明が無い・stage 0 のあいだは null (M9-01) */
   let lastCivFaith: number | null = first.civ?.faith ?? null;
+  /** 祈り (M9-02): 直近の年次評価で報告済みの issuedYear。同じ祈りを二重に issued 扱いしないための目印 */
+  let lastPrayerIssuedYear: number | null = first.civ?.prayer?.issuedYear ?? null;
+  /** 祈り (M9-02): 直近に見た祈りの種類。解決 (answered/ignored) された時点では civ.prayer が消えているので、
+   * 「何が解決されたか」を answered/ignored の件数が増えた瞬間まで覚えておく */
+  let lastPrayerKind: PrayerKind | null = first.civ?.prayer?.kind ?? null;
+  /** 祈り (M9-02): 直近に見た応えた・無視した回数。前年と比べて増えていれば TimelineEvent を積む */
+  let lastPrayersAnswered = first.civ?.prayersAnswered ?? 0;
+  let lastPrayersIgnored = first.civ?.prayersIgnored ?? 0;
+  /** 祈り (M9-02): 石板が毎フレーム読む現在の祈り。年次評価を待たず、最新の snapshot でそのまま更新する */
+  let currentPrayer = first.civ?.prayer ?? null;
 
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
@@ -158,6 +180,7 @@ export function createScenarioRunner(
     verdict: () => verdict,
     power: () => power,
     budget: () => (budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null),
+    prayer: () => (currentPrayer ? { kind: currentPrayer.kind, yearsLeft: Math.max(0, currentPrayer.deadlineYear - currentYear) } : null),
     warnings: () => warnings,
     timeline: () => timeline,
     intervene(cmd) {
@@ -180,6 +203,8 @@ export function createScenarioRunner(
       if (verdict.status !== 'running') return verdict;
       const year = yearOf(s);
       currentYear = year;
+      // 祈り (M9-02): 石板が毎フレーム読めるように、年次評価を待たず最新の値に更新しておく
+      currentPrayer = s.civ?.prayer ?? null;
       fireDue(year);
       if (year !== lastYear) {
         // 最初の呼び出し (lastYear === -1) はまだ 1 年も経っていないので力は動かさない
@@ -210,6 +235,30 @@ export function createScenarioRunner(
           timeline.push({ year, kind: 'civ_faith', from: lastCivFaith, to: civFaith });
         }
         if (civFaith !== undefined) lastCivFaith = civFaith;
+        // 祈り (M9-02): 前年と比べて解決 (無視 → 応えた の順、World の内部順序に合わせる) → 発生の順で積む。
+        // 解決の種類は civ.prayer が消えた後には残らないので、直近に見ていた種類 (lastPrayerKind) で補う
+        const prayersIgnored = s.civ?.prayersIgnored ?? 0;
+        if (prayersIgnored > lastPrayersIgnored && lastPrayerKind) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'ignored', prayer: lastPrayerKind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+        }
+        lastPrayersIgnored = prayersIgnored;
+        const prayersAnswered = s.civ?.prayersAnswered ?? 0;
+        if (prayersAnswered > lastPrayersAnswered && lastPrayerKind) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'answered', prayer: lastPrayerKind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+        }
+        lastPrayersAnswered = prayersAnswered;
+        const prayerNow = s.civ?.prayer ?? null;
+        if (prayerNow && prayerNow.issuedYear !== lastPrayerIssuedYear) {
+          const e: TimelineEvent = { year, kind: 'prayer', phase: 'issued', prayer: prayerNow.kind };
+          timeline.push(e);
+          opts.onPrayer?.(e);
+          lastPrayerIssuedYear = prayerNow.issuedYear;
+        }
+        if (prayerNow) lastPrayerKind = prayerNow.kind;
         verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };

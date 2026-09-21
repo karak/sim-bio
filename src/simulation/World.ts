@@ -6,10 +6,11 @@ import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
-import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
+import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 import { commandKey, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
+import { isAnswer, issuePrayer, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 
 export type WorldDeps = {
   log: LogSink;
@@ -71,6 +72,18 @@ export class World {
   private civYearDisasters = 0;
   /** 信仰 (M9-01): 年ごとのコマンドキー履歴、直近 FAITH_HISTORY_YEARS 年分・古い順。updateFaith の recent の元 */
   private civFaithHistory: string[][] = [];
+  /** 祈り (M9-02): 今年まだ集計していない、祈りに応えた回数。年ごとにリセット */
+  private civYearAnswered = 0;
+  /** 祈り (M9-02): 今年まだ集計していない、祈りを無視した (期限切れの) 回数。年ごとにリセット */
+  private civYearIgnored = 0;
+  /**
+   * 祈り (M9-02): 次の祈りを出してよい最初の年 (前回解決した年 + PRAYER_COOLDOWN)。
+   * -Infinity のままなら (まだ一度も解決していなければ) クールダウンは無いのと同じ。civFaithHistory と同じく
+   * セーブには含めない (restore 直後はクールダウン無しから再開する。値そのものの互換は civ.prayer が担う)
+   */
+  private civPrayerCooldownUntil = -Infinity;
+  /** 捕食者 (肉食トロフィック) の種。祈り「狼を減らして」の捕食者比の分子に使う (M9-02) */
+  private readonly carnivores: SpeciesDef[];
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
   private readonly zeroForest: Float32Array;
   /**
@@ -90,6 +103,7 @@ export class World {
     this.animals = config.species.filter((d) => d.trophic !== 'plant');
     this.decomposers = config.species.filter((d) => d.trophic === 'decomposer');
     this.burnable = config.species.filter((d) => d.trophic === 'plant' || d.trophic === 'decomposer');
+    this.carnivores = config.species.filter((d) => d.trophic === 'carnivore');
     this.elevation = terrain.elevation;
     this.moistureBase = terrain.moistureBase;
     this.heat = new Float32Array(this.n);
@@ -125,6 +139,10 @@ export class World {
     if (config.civilization) {
       const start = config.civilization.start;
       this.civ = { speciesId: config.civilization.speciesId, stage: start?.stage ?? 0, progress: 0, home: start?.home ?? -1, population: 0 };
+      // 祈りの開始指定 (M9-02): E2E の決定論のため、指定があれば開始時 (年 0) からその祈りを有効にする
+      if (start?.prayer) {
+        this.civ.prayer = { kind: start.prayer, issuedYear: 0, deadlineYear: PRAYER_YEARS };
+      }
     }
     for (const d of config.species) {
       this.populations[d.id] = new Float32Array(this.n);
@@ -185,6 +203,16 @@ export class World {
       const key = commandKey(cmd);
       if (key !== null) this.civYearKeys.push(key);
       if (cmd.type === 'disaster') this.civYearDisasters++;
+      // 祈り (M9-02): 有効な祈りがあり、この介入が応えなら即座に解決する (応えた)。
+      // rainScaleBefore はこのコマンドを apply する前の値 (dispatch は queue に積むだけで、まだ climate を変えていない)
+      if (this.civ.prayer && isAnswer(this.civ.prayer.kind, cmd, { home: this.civ.home, size: this.config.size, rainScaleBefore: this.config.climate.rainScale })) {
+        const kind = this.civ.prayer.kind;
+        this.civ.prayer = undefined;
+        this.civ.prayersAnswered = (this.civ.prayersAnswered ?? 0) + 1;
+        this.civYearAnswered++;
+        this.civPrayerCooldownUntil = Math.floor(this.tick / this.config.ticksPerYear) + PRAYER_COOLDOWN;
+        this.log('info', 'sim.civ.prayer', { year: Math.floor(this.tick / this.config.ticksPerYear), phase: 'answered', kind });
+      }
     }
   }
 
@@ -336,6 +364,48 @@ export class World {
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     const year = Math.floor(this.tick / this.config.ticksPerYear);
+    // 祈り (M9-02): 発生済み (stage >= 1、この年に発生した場合も含む) のときだけ扱う
+    if (civ.stage >= 1) {
+      // crystalStart: stage >= 1 になった最初の年 (発生時か開始時) に、採掘半径 MINE_RADIUS[MAX_STAGE] 内の
+      // 輝石の総量を記録する。「星の砂を」の判定 (crystalRatio) の分母。以後は変えない
+      if (civ.crystalStart === undefined) {
+        let crystalSum = 0;
+        forEachInRadius(civ.home, MINE_RADIUS[MAX_STAGE], this.config.size, (i) => {
+          if (this.elevation[i] >= SEA_LEVEL) crystalSum += this.crystal[i];
+        });
+        civ.crystalStart = crystalSum;
+      }
+      // 期限切れの解決 (無視した) を先に判定してから、空いていれば新しい祈りを出す
+      if (civ.prayer && year >= civ.prayer.deadlineYear) {
+        const kind = civ.prayer.kind;
+        civ.prayer = undefined;
+        civ.prayersIgnored = (civ.prayersIgnored ?? 0) + 1;
+        this.civYearIgnored++;
+        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
+        this.log('info', 'sim.civ.prayer', { year, phase: 'ignored', kind });
+      }
+      if (!civ.prayer && year >= this.civPrayerCooldownUntil) {
+        const grassPop = this.populations['grass'];
+        // grass 種が居ない世界では「雨を」の判定材料が無いので、常に閾値を上回る扱いにして rain を出さない
+        const grassMean = grassPop ? meanAround(grassPop, civ.home, SUPPORT_RADIUS, this.elevation, this.config.size) : Number.POSITIVE_INFINITY;
+        let predatorSum = 0;
+        forEachInRadius(civ.home, SUPPORT_RADIUS, this.config.size, (i) => {
+          if (this.elevation[i] >= SEA_LEVEL) for (const d of this.carnivores) predatorSum += this.populations[d.id][i];
+        });
+        const predatorRatio = civ.population > 0 ? predatorSum / civ.population : 0;
+        let crystalNow = 0;
+        forEachInRadius(civ.home, MINE_RADIUS[MAX_STAGE], this.config.size, (i) => {
+          if (this.elevation[i] >= SEA_LEVEL) crystalNow += this.crystal[i];
+        });
+        // crystalStart が 0 (もともと輝石が無かった) なら「星の砂を」は成り立たないので比は 1 (常に閾値以上) にする
+        const crystalRatio = civ.crystalStart > 0 ? crystalNow / civ.crystalStart : 1;
+        const kind = issuePrayer({ grassMean, predatorRatio, crystalRatio });
+        if (kind) {
+          civ.prayer = { kind, issuedYear: year, deadlineYear: year + PRAYER_YEARS };
+          this.log('info', 'sim.civ.prayer', { year, phase: 'issued', kind });
+        }
+      }
+    }
     // 信仰 (M9-01): 年ごとのコマンドキー履歴を先に積んでから (recent が今年を含むように)、
     // stage >= 1 (この年に発生した場合も含む) なら信仰を更新する。civ.faith が無ければ発生した最初の年なので
     // FAITH_INITIAL で生まれ、規則の更新はまだ効かない
@@ -345,12 +415,19 @@ export class World {
       const prevFaith = civ.faith;
       civ.faith = prevFaith === undefined
         ? FAITH_INITIAL
-        : updateFaith(prevFaith, { recent: this.civFaithHistory.flat(), disasters: this.civYearDisasters });
+        : updateFaith(prevFaith, {
+            recent: this.civFaithHistory.flat(),
+            disasters: this.civYearDisasters,
+            answered: this.civYearAnswered,
+            ignored: this.civYearIgnored,
+          });
       const delta = civ.faith - (prevFaith ?? civ.faith);
       this.log('info', 'sim.civ.faith', { year, faith: civ.faith, delta });
     }
     this.civYearKeys = [];
     this.civYearDisasters = 0;
+    this.civYearAnswered = 0;
+    this.civYearIgnored = 0;
     // 塔の燃料 (M8-08): 決定判定より前に、毎年 1 度だけ集落半径内の熱・鐘樹の材から燃料を徴収する。
     // 足りない年が FUEL_YEARS 続いたら段階を 1 下げる (reason: 'fuel')。belltree レイヤーは M8-10 が
     // 追加するまで存在しないので、無い世界では熱だけが燃料源になる (collectFuel が省略時ガード)

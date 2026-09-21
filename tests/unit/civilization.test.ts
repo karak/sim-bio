@@ -203,6 +203,12 @@ describe('resolveCivilizationStart', () => {
   it('stage/home を指定すればそのまま使われる', () => {
     expect(resolveCivilizationStart({ speciesId: 'deer', stage: 4, home: 123 }, 64)).toEqual({ speciesId: 'deer', start: { stage: 4, home: 123 } });
   });
+  it('prayer を指定すればそのまま使われる (M9-02)', () => {
+    expect(resolveCivilizationStart({ speciesId: 'deer', stage: 4, home: 123, prayer: 'rain' }, 64)).toEqual({
+      speciesId: 'deer',
+      start: { stage: 4, home: 123, prayer: 'rain' },
+    });
+  });
 });
 
 // 定数が壊れていないことの最低限の確認 (SEA_LEVEL を使う他のテストと足並みを揃える意図で import している)
