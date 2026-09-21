@@ -497,7 +497,7 @@ hud.showCell(cellIndex: number | null): void
 | レバー感度・定着・副作用の確認がヘッドレスで通っている | `tests/unit/world.vein.test.ts`、`tests/unit/faith.test.ts`、`tests/unit/prayer.test.ts`、既存の通し 20 件 · 1e342f0 |
 | scenarios.json に 2 本(予言・開始の文明段階・予算・節目・alive/dead) | `assets/data/scenarios.json`、`tests/unit/scenario.judge.test.ts` · 6b75c9b |
 | tests/slow: 各シナリオで 放置 dead、素朴戦略 2 つ dead、想定解 2 つ alive。既存の通し実行も通る | `tests/slow/scenarios.playthrough.test.ts`(faith scenarios 10 件 + 既存 20 件) · 6b75c9b |
-| 設計書 §4 に係数と校正の表、§6 に証跡 | §4.19、§4.20 · SHA_M904 |
+| 設計書 §4 に係数と校正の表、§6 に証跡 | §4.19、§4.20 · d33de56 |
 
 ### M9-03: 信仰の効き(内乱と採掘の制止)
 
