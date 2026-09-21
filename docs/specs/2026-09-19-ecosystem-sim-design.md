@@ -379,6 +379,17 @@ hud.showCell(cellIndex: number | null): void
 
   LD §5 の感度・定着・副作用は単体テスト(`tests/unit/civilizationFuel.test.ts`、`tests/unit/belltree.test.ts`、`tests/unit/firelizard.test.ts`)で確認。捨てた案は LD 文書 §7 に。
 
+### 4.16 実装時の差分(M9-01: 信仰の値)
+
+計画 `docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算`。文明を持つ種が信仰を持つ。同じ種類の介入を繰り返す(予測可能)と上がり、種類がばらつく介入や災害で下がり、放置すればゆっくり減衰する。
+
+- **純粋関数として分離**(`src/simulation/faith.ts`、World には依存しない): `CivState.faith?: number` を追加(省略可。既存セーブ・テストとの互換を保つため、文明が stage ≥ 1 になった最初の年まで undefined のまま)。`commandKey(cmd)` がコマンドの「種類」のキーを返す(`spawn_species` → `spawn:<speciesId>`、`set_climate` → `climate`、`disaster` → `disaster:<kind>`、`sink` → `null` で数えない)。`updateFaith(prev, { recent, disasters })` が 1 年分の更新をする。`recent` は直近 `FAITH_HISTORY_YEARS`(10)年(今年を含む)に dispatch されたコマンドのキー、古い順。
+- **係数**(すべて `faith.ts` 先頭の定数): `FAITH_INITIAL = 0.5`(生まれた年の初期値)、`FAITH_UP = 0.05`(同じ種類が続いたときに足す)、`FAITH_DOWN = 0.05`(種類がばらついたときに引く)、`FAITH_DISASTER = 0.1`(災害 1 回につき引く)、`FAITH_DECAY = 0.03`(毎年の減衰率)、`FAITH_STREAK_THRESHOLD = 3` / `FAITH_VARIETY_THRESHOLD = 3`(「同じ種類が続く」「種類がばらつく」の閾値)。
+- **規則**: (a) recent の最後のキーと同じキーが recent に `FAITH_STREAK_THRESHOLD` 回以上あれば `+FAITH_UP`。(b) recent の異なるキーが `FAITH_VARIETY_THRESHOLD` 種類以上なら `−FAITH_DOWN`。(c) 今年の災害(disaster コマンド。プレイヤーも予定コマンドも)1 回につき `−FAITH_DISASTER`。(a)(b) は両方成り立てば両方掛かる。(d) 最後に `× (1 − FAITH_DECAY)` で減衰。(e) `[0,1]` にクランプ。災害の減点(0.1)は儀式の加点(0.05)より大きいので、儀式が 3 回そろっていても災害があれば正味は必ず下がる。
+- **World の配線**(`World.ts`): `dispatch` で civ があるときだけ `commandKey` の結果を今年のキー配列に積み(`disaster` はさらに今年の災害回数も数える)、`stepCivYearly` で年ごとの配列を `FAITH_HISTORY_YEARS` 年分保持したのち `updateFaith` を呼ぶ(stage ≥ 1 のときだけ。civ.faith が undefined ならこの年が誕生年で `FAITH_INITIAL` を入れるだけ)。ログ `sim.civ.faith` を年 1 回 info で `{ year, faith, delta }` を出す。restore 後のキー履歴は空から始める(信仰の値そのものは `civ.faith` としてセーブに含まれ、そのまま往復する)。
+- **ScenarioRunner**(`ScenarioRunner.ts`): 年次評価で `snapshot.civ?.faith` を見て、前年の値(定義されているとき)との差の絶対値が `FAITH_TIMELINE_THRESHOLD = 0.1` 以上なら `TimelineEvent { kind: 'civ_faith', from, to }` を年表に積む。誕生年(前年の値が無い)は積まない。
+- **表示**: `Tablet.describeEvent` が `civ_faith` を「信仰が 0.62 → 0.48 に下がった」の形(小数 2 桁)で整形する(`civ_stage` の隣の書式に合わせた)。`Hud.formatCiv` が文明の行の末尾に ` · 信仰 0.62`(小数 2 桁)を足す。faith が undefined(stage 0 など)なら出さない。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -391,6 +402,17 @@ hud.showCell(cellIndex: number | null): void
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
+
+### M9-01: 信仰の値
+
+| 受入項目 | 証跡 |
+|---|---|
+| 純粋関数で信仰を更新する。同じ種類のコマンドが 10 年内に 3 回続くと上がり、直近 10 年で 3 種類以上のコマンドが混ざると下がる。災害は必ず下げる(単体テスト、境界値つき) | `tests/unit/faith.test.ts` · 40bd5c0 |
+| 介入がなければ年ごとに一定率で減衰し 0 未満・1 超にならない(性質テスト) | `tests/unit/faith.test.ts` · 40bd5c0 |
+| 文明のない世界では信仰の値も表示も存在しない(既存テストが変わらない) | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts` · 40bd5c0 |
+| HUD の文明の行に「信仰 0.62」が出る。snapshot と保存データに含まれ、serialize→restore で一致する | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/ui.hud.test.ts`、`tests/e2e/smoke.spec.ts` · 40bd5c0 |
+| ログ sim.civ.faith を年 1 回、年表に ±0.1 以上動いた年だけ出す | `tests/unit/world.civilization.faith.test.ts`、`tests/unit/scenario.budget.test.ts`、`tests/unit/ui.tablet.test.ts` · 40bd5c0 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(242 テスト通過)、`npx playwright test`(16 テスト通過) · 40bd5c0 |
 
 ### M1: 地形 + 植物 + 季節 + グラフ
 

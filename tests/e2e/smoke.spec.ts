@@ -125,6 +125,13 @@ test('tower fuel: ?scenario=test-civ shows the fuel line once a year has passed 
   await expect(page.locator('#hud-civ')).toContainText('燃料', { timeout: 8000 });
 });
 
+test('faith: ?scenario=test-civ shows the faith line once a year has passed (M9-01)', async ({ page }) => {
+  await page.goto('/?scenario=test-civ');
+  await page.click('#speed-100');
+  // stage 4 で始まるので、1 年たって信仰が生まれれば「· 信仰 0.50」が出る (小数 2 桁まで内容を確認)
+  await expect(page.locator('#hud-civ')).toContainText(/信仰 \d\.\d\d/, { timeout: 8000 });
+});
+
 test('volcano hint: arming the 火山 chip shows the hint text, unarming hides it (M8-08)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#volcano-hint')).toBeHidden();

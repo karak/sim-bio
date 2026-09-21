@@ -22,6 +22,11 @@ export type CivState = {
    * まだ無い (undefined)。既存のテスト・セーブとの互換を保つため省略可にしてある。
    */
   fuel?: { last: number; need: number; shortYears: number; stock: number; debt: number };
+  /**
+   * 信仰の値 [0,1] (M9-01)。文明が stage ≥ 1 になった最初の年に faith.ts の FAITH_INITIAL で生まれる。
+   * stage 0 や civ が無いあいだは undefined のまま。既存のテスト・セーブとの互換を保つため省略可にしてある。
+   */
+  faith?: number;
 };
 
 /** 段階の名前。stage をそのまま index に使う。 */

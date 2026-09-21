@@ -11,9 +11,14 @@ export type TimelineEvent =
   | { year: number; kind: 'warning'; warning: Warning }
   | { year: number; kind: 'verdict'; verdict: Verdict }
   /** 文明の段階が年をまたいで変わった (M8-04)。from/to は STAGE_NAMES の index */
-  | { year: number; kind: 'civ_stage'; from: number; to: number };
+  | { year: number; kind: 'civ_stage'; from: number; to: number }
+  /** 文明の信仰が年をまたいで |Δ| >= 0.1 動いた (M9-01) */
+  | { year: number; kind: 'civ_faith'; from: number; to: number };
 
 type RunnerWorld = { dispatch(cmd: Command): void; snapshot(): WorldSnapshot };
+
+/** 信仰の年表イベント (civ_faith) を積む閾値。前年との差の絶対値がこれ以上のときだけ積む (M9-01) */
+const FAITH_TIMELINE_THRESHOLD = 0.1;
 
 /** intervene が弾いた理由。budget = 力が足りない、finished = 既に判定が確定している */
 export type InterveneResult = { ok: true } | { ok: false; reason: 'budget' | 'finished' };
@@ -83,6 +88,8 @@ export function createScenarioRunner(
   let currentYear = 0;
   /** 直近に見た文明の段階。年をまたいで変わったら timeline に積む (M8-04) */
   let lastCivStage = first.civ?.stage ?? 0;
+  /** 直近に見た信仰の値。文明が無い・stage 0 のあいだは null (M9-01) */
+  let lastCivFaith: number | null = first.civ?.faith ?? null;
 
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
@@ -196,6 +203,13 @@ export function createScenarioRunner(
           timeline.push({ year, kind: 'civ_stage', from: lastCivStage, to: civStage });
           lastCivStage = civStage;
         }
+        // 信仰 (M9-01): 前年・今年とも値があり、差の絶対値が閾値以上のときだけ積む。
+        // 発生前 (undefined → 値が付く年) は「前年の値」が無いので積まない
+        const civFaith = s.civ?.faith;
+        if (civFaith !== undefined && lastCivFaith !== null && Math.abs(civFaith - lastCivFaith) >= FAITH_TIMELINE_THRESHOLD) {
+          timeline.push({ year, kind: 'civ_faith', from: lastCivFaith, to: civFaith });
+        }
+        if (civFaith !== undefined) lastCivFaith = civFaith;
         verdict = judgeScenario(def, { snapshot: s, start, year, interventions, history, civHistory, areaScale });
         if (verdict.status !== 'running') {
           verdict = { ...verdict, stats: { interventions, powerSpent, landRatio: landRatio(s), totals: { ...s.totals } } };
