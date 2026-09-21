@@ -390,6 +390,16 @@ hud.showCell(cellIndex: number | null): void
 - **ScenarioRunner**(`ScenarioRunner.ts`): 年次評価で `snapshot.civ?.faith` を見て、前年の値(定義されているとき)との差の絶対値が `FAITH_TIMELINE_THRESHOLD = 0.1` 以上なら `TimelineEvent { kind: 'civ_faith', from, to }` を年表に積む。誕生年(前年の値が無い)は積まない。
 - **表示**: `Tablet.describeEvent` が `civ_faith` を「信仰が 0.62 → 0.48 に下がった」の形(小数 2 桁)で整形する(`civ_stage` の隣の書式に合わせた)。`Hud.formatCiv` が文明の行の末尾に ` · 信仰 0.62`(小数 2 桁)を足す。faith が undefined(stage 0 など)なら出さない。
 
+### 4.17 実装時の差分(M9-00: 文明の自然発生を地域で測る)
+
+レベルデザイン `docs/design/2026-09-21-level-design-faith.md` §1、§8。M8-02 で「既定の島(seed 42、size 64、全種)では鹿の文明が 400 年たっても発生しない」と記録した件。閾値(`EMERGE_VEGETATION` 0.4、`EMERGE_AMPLITUDE` 0.15)は据え置き、**測り方** を島全体から集落候補の地域に変えた。
+
+- **実測(変更前、150 年放置)**: 島全体の鹿は 9 年周期で振動し続け振幅比 0.42〜0.53。集落候補(密度最大の陸セル)は年 2 から 2635 に固定され、その半径 3 の植生平均は 0.24〜0.26、半径 8 は 0.18 で頭打ち(密度最大点 = 採食圧最大点)。一方、候補の支え半径 8 の地域人口(3.8〜4.3)は振幅比 0.08〜0.11 で安定していた。条件は構造的に満たせないと分かった。
+- **`checkEmergence(history, { candidateVegetation, islandVegetation, hasCrystal })`**: `history` は候補の支え半径 `SUPPORT_RADIUS`(8)内の年次総量。植生は候補の半径 8 の平均が `EMERGE_VEGETATION × 島の陸の植生平均` を超えること(相対値)。さらに候補の採掘半径 `MINE_RADIUS[1]`(2)以内に輝石があること(掘るものが無ければ知性は生まれない。世界観 §1.5)。
+- **候補の追い方 `trackHomeCandidate`**: 密度最大の陸セルは輝石が近くにあるものに限る(`pickHomeCandidate`)。前年の候補があれば、その周り `EMERGE_CANDIDATE_MOVE`(= 8)で追い直した候補の地域人口が島で最大の候補の `EMERGE_STICKY`(0.5)倍以上なら群れに留まる。候補が前年から 8 セルより遠くへ移れば別の群れとして履歴を捨てる。留まりを入れる前の size 128 では密度最大セルが複数の群れの間を数年ごとに飛び(80 年で 32 回)、履歴が 10 年たまらなかった。
+- **結果**: seed 42 / size 64 / 全種で鹿の文明が **22 年目** に集落 2635(地域人口 4.1)で発生する。草だけの世界(size 32)の既存テスト(10 年目に発生)は変わらない。既存の通し実行 20 件は段階を指定して始めるので影響なし(通過)。
+- **既知の制約**: size 128(`world.default.json` の既定)では地域の群れ自体が振幅比 0.8〜0.9 で波打つ(3 → 19 → 3)ためどの地域も安定せず、80 年で発生しない。シナリオはすべて size 64 か段階指定で始めるので M9 では扱わず、通しの年表(M18)で size 128 の自然発生が要るときに戻る。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -402,6 +412,15 @@ hud.showCell(cellIndex: number | null): void
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
+
+### M9-00: 文明の自然発生を地域で測る
+
+| 受入項目 | 証跡 |
+|---|---|
+| checkEmergence が地域の履歴・輝石の有無・相対植生で判定する(境界値つき)、pickHomeCandidate / trackHomeCandidate / cellDistance | `tests/unit/civilization.test.ts` · 2a35b32 |
+| seed 42 / size 64 / 全種で鹿の文明が 60 年以内に発生する(実測 22 年目、集落 2635) | `tests/unit/world.civilization.test.ts` · 2a35b32 |
+| 草だけの世界の既存テストが変わらない | `tests/unit/world.civilization.test.ts` · 2a35b32 |
+| 既存の通し実行 20 件が通る(塔 v2 5 件 / 放置・台本 11 件 / 素朴・罠 7 件の 3 分割) | `tests/slow/scenarios.playthrough.test.ts` · 8ac0fa6 |
 
 ### M9-01: 信仰の値
 
