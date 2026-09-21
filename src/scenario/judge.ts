@@ -1,6 +1,7 @@
 import type { WorldSnapshot } from '../simulation/types';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { meanAround, SUPPORT_RADIUS } from '../simulation/civilization';
+import { formatFaith } from '../simulation/faith';
 import type { Condition, ScenarioDef, StartStats, Verdict } from './types';
 
 export type JudgeInput = {
@@ -125,7 +126,7 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
     case 'faith': {
       const faith = s.civ?.faith ?? 0;
       const ok = inRange(faith, c.min, c.max);
-      return { ok, why: `信仰 ${faith.toFixed(2)}` };
+      return { ok, why: `信仰 ${formatFaith(faith)}` };
     }
     case 'prayers_answered': {
       const n = s.civ?.prayersAnswered ?? 0;

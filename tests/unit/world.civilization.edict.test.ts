@@ -157,3 +157,17 @@ describe('World の内乱の配線 (M9-03)', () => {
     expect(r.snapshot().civ?.stage).toBe(3);
   });
 });
+
+describe('集落の生気 civ.vitality (M9-05)', () => {
+  it('年をまたぐと集落の支え半径の生気平均が civ.vitality に入り、serialize → restore で一致する', () => {
+    const home = bestCrystalCell();
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 3, home } } }), { log: createMemorySink() });
+    expect(w.snapshot().civ?.vitality).toBeUndefined();
+    w.step(360);
+    const v = w.snapshot().civ?.vitality;
+    expect(v).toBeTypeOf('number');
+    expect(v).toBeGreaterThan(0);
+    expect(v).toBeLessThanOrEqual(1);
+    expect(World.restore(w.serialize(), { log: createMemorySink() }).snapshot().civ?.vitality).toBe(v);
+  });
+});

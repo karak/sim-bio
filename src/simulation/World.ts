@@ -537,6 +537,7 @@ export class World {
         }
       });
       const vitalityMean = vitCount ? vitSum / vitCount : 0;
+      civ.vitality = vitalityMean;
       const { decline, reason } = checkDecline(civ.stage, civ.population, vitalityMean);
       // 衰退条件が DECLINE_YEARS 年続いたときだけ段階を下げる (M8-06)。途切れれば数え直す
       this.civDeclineStreak = decline ? this.civDeclineStreak + 1 : 0;

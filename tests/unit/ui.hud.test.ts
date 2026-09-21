@@ -37,3 +37,13 @@ describe('formatCiv の採掘の停止 (M9-03)', () => {
     expect(formatCiv({ ...civ, miningStopped: false })).toBe('文明 歌(3) · 進み 0% · 民 100 · 信仰 0.70');
   });
 });
+
+describe('formatCiv の集落の生気 (M9-05)', () => {
+  it('vitality があれば「· 生気 NN%」を信仰の後・採掘の前に足す。無ければ出さない', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 10, population: 1, faith: 0.5, vitality: 0.574, miningStopped: true };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 0% · 民 100 · 信仰 0.50 · 生気 57% · 採掘 止');
+    const noVit: CivState = { ...civ };
+    delete noVit.vitality;
+    expect(formatCiv(noVit)).toBe('文明 石(4) · 進み 0% · 民 100 · 信仰 0.50 · 採掘 止');
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { commandKey, updateFaith, FAITH_UP, FAITH_DOWN, FAITH_DISASTER, FAITH_DECAY, FAITH_ANSWER, FAITH_IGNORE } from '../../src/simulation/faith';
+import { commandKey, updateFaith, FAITH_UP, FAITH_DOWN, FAITH_DISASTER, FAITH_DECAY, FAITH_ANSWER, FAITH_IGNORE, formatFaith } from '../../src/simulation/faith';
 import type { Command } from '../../src/simulation/types';
 
 describe('commandKey (M9-01)', () => {
@@ -117,3 +117,13 @@ describe('updateFaith の answered/ignored (M9-02, 境界値)', () => {
 // 型チェック用: Command のすべての type を commandKey が扱えることを確認する
 const _allCommandTypes: Command['type'][] = ['spawn_species', 'set_climate', 'disaster', 'sink'];
 void _allCommandTypes;
+
+describe('formatFaith (M9-05)', () => {
+  it('小数 2 桁の切り捨て。0.597 は 0.59 (0.60 と出ると勅令の門 0.6 に足りない理由が読めない)', () => {
+    expect(formatFaith(0.597)).toBe('0.59');
+    expect(formatFaith(0.6)).toBe('0.60');
+    expect(formatFaith(0.57)).toBe('0.57');
+    expect(formatFaith(1)).toBe('1.00');
+    expect(formatFaith(0)).toBe('0.00');
+  });
+});

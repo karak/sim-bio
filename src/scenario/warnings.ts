@@ -2,9 +2,10 @@ import type { WorldSnapshot } from '../simulation/types';
 import { landRatio } from './judge';
 import { FUEL_YEARS } from '../simulation/civilizationFuel';
 import { UNREST_FAITH, UNREST_YEARS } from '../simulation/unrest';
+import { formatFaith } from '../simulation/faith';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low';
+export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low';
 
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
 export type Warning = {
@@ -27,6 +28,8 @@ export const SPECIES_LOW_RATIO = 0.25;
 export const LAND_LOW_RATIO = 0.5;
 /** 信仰がこれを下回ると警告 (M9-03)。内乱の閾値 UNREST_FAITH (0.3) より手前で知らせる */
 export const FAITH_LOW = 0.4;
+/** 集落の生気がこれを下回ると警告 (M9-05)。霊脈枯れの alive (3 割) より手前で知らせる。衰退の VITALITY_FLOOR (0.1) はさらに下 */
+export const CIV_VITALITY_LOW = 0.5;
 
 /** alive 条件が参照している種の id を集める。警告はこの種だけに出す (勝敗に関わらない種は騒がない) */
 export function speciesInCondition(c: Condition): string[] {
@@ -88,7 +91,11 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
   }
   // 信仰 (M9-03): 文明があり信仰が生まれていて、FAITH_LOW を下回った年に出す
   if (s.civ?.faith !== undefined && s.civ.faith < FAITH_LOW) {
-    out.push({ kind: 'faith_low', key: 'faith_low', text: `民の信仰が揺らいでいる(${s.civ.faith.toFixed(2)}。${UNREST_FAITH} を ${UNREST_YEARS} 年割れば内乱)` });
+    out.push({ kind: 'faith_low', key: 'faith_low', text: `民の信仰が揺らいでいる(${formatFaith(s.civ.faith)}。${UNREST_FAITH} を ${UNREST_YEARS} 年割れば内乱)` });
+  }
+  // 集落の生気 (M9-05): 霊脈が細ると苔を放っても戻らないので、早めに知らせる
+  if (s.civ?.vitality !== undefined && s.civ.stage >= 1 && s.civ.vitality < CIV_VITALITY_LOW) {
+    out.push({ kind: 'civ_vitality_low', key: 'civ_vitality_low', text: `集落の生気が痩せている(${Math.round(s.civ.vitality * 100)}%。霊脈が細ると苔を放っても戻らない)` });
   }
   if (def.budget && power) {
     const cheapest = Math.min(def.budget.costs.spawn, def.budget.costs.disaster, def.budget.costs.climate);

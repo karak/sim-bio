@@ -41,6 +41,8 @@ export type CivState = {
    * 記録し、以後は変えない。「星の砂を」の判定 (crystalRatio) の分母。既存のテスト・セーブとの互換を保つため省略可
    */
   crystalStart?: number;
+  /** 集落の支え半径内の生気の平均 (M9-05)。年に 1 回 stepCivYearly が更新する。HUD の「生気 NN%」と警告 civ_vitality_low に使う */
+  vitality?: number;
   /** 勅令で採掘が止まっているか (M9-03)。省略時 false。止まっている間は stepMining を呼ばない */
   miningStopped?: boolean;
   /** 最後の勅令とその結果 (M9-03)。石板が「民は聞かなかった」を出すために残す */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FAITH_LOW, scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
+import { CIV_VITALITY_LOW, FAITH_LOW, scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
 import type { ScenarioDef, StartStats } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
@@ -105,5 +105,17 @@ describe('faith_low (M9-03)', () => {
     expect(scenarioWarnings(def, edge, start, null)).toEqual([]);
     expect(scenarioWarnings(def, snap({ civ: { stage: 3 } }), start, null)).toEqual([]);
     expect(scenarioWarnings(def, snap({ civ: null }), start, null)).toEqual([]);
+  });
+});
+
+describe('civ_vitality_low (M9-05)', () => {
+  it('集落の生気が CIV_VITALITY_LOW 未満なら出す。ちょうど、未設定、stage 0 では出さない', () => {
+    const low = snap({ civ: { stage: 4 } });
+    low.civ!.vitality = 0.29;
+    expect(scenarioWarnings(def, low, start, null).map((w) => [w.kind, w.text])).toEqual([['civ_vitality_low', '集落の生気が痩せている(29%。霊脈が細ると苔を放っても戻らない)']]);
+    const edge = snap({ civ: { stage: 4 } });
+    edge.civ!.vitality = CIV_VITALITY_LOW;
+    expect(scenarioWarnings(def, edge, start, null)).toEqual([]);
+    expect(scenarioWarnings(def, snap({ civ: { stage: 4 } }), start, null)).toEqual([]);
   });
 });

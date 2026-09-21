@@ -90,3 +90,11 @@ export function disasterHitsHome(cmd: Command, home: number, size: number): bool
   if (cmd.type !== 'disaster' || home < 0) return false;
   return cellDistance(cmd.cell, home, size) <= cmd.radius + HOME_RADIUS;
 }
+
+/**
+ * 信仰の表示 (M9-05)。小数 2 桁の切り捨て。四捨五入だと 0.597 が「0.60」と出て、勅令の門 (0.6) に足りないのに
+ * 「民は聞かなかった(信仰 0.60 < 0.6)」と読める。HUD・石板・判定の文言はすべてこれで揃える
+ */
+export function formatFaith(faith: number): string {
+  return (Math.floor(faith * 100 + 1e-9) / 100).toFixed(2);
+}

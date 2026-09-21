@@ -7,6 +7,7 @@ import { TimeSeries } from './timeSeries';
 import { drawGraph, type GraphLine, type GraphMarker } from './graph';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { EDICT_FAITH } from '../simulation/edict';
+import { formatFaith } from '../simulation/faith';
 import './hud.css';
 
 /** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
@@ -20,10 +21,12 @@ export function formatCiv(civ: CivState | null): string | null {
   // 蓄え (M8-05 v2): 「燃料 蓄え / 年に必要」。蓄えが必要量を割ると足りない年になる
   const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.stock)} / ${Math.round(civ.fuel.need)}年` : '';
   // 信仰 (M9-01): 発生済みでもまだ年をまたいでいなければ undefined なので、そのときは出さない
-  const faithText = civ.faith !== undefined ? ` · 信仰 ${civ.faith.toFixed(2)}` : '';
+  const faithText = civ.faith !== undefined ? ` · 信仰 ${formatFaith(civ.faith)}` : '';
   // 勅令 (M9-03): 民が採掘を止めている間は「採掘 止」を足す (止めるまでは出さない)
   const miningText = civ.miningStopped ? ' · 採掘 止' : '';
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${miningText}`;
+  // 集落の生気 (M9-05): 霊脈枯れの判定 (集落の生気 3 割) が HUD で読めるように。年をまたぐ前は無い
+  const vitalityText = civ.vitality !== undefined ? ` · 生気 ${Math.round(civ.vitality * 100)}%` : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${vitalityText}${miningText}`;
 }
 
 export type HudHandlers = {
