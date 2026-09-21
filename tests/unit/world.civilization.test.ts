@@ -4,6 +4,12 @@ import { createMemorySink } from '../../src/core/log/memorySink';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { MINE_RADIUS, NEED, MINE_RATE } from '../../src/simulation/civilization';
 import { testConfig, grass, moss } from './helpers';
+import { readFileSync } from 'node:fs';
+import { forEachInRadius } from '../../src/simulation/disaster';
+import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
+
+const allSpecies = JSON.parse(readFileSync('assets/data/species.json', 'utf8')) as SpeciesDef[];
+const base = JSON.parse(readFileSync('assets/data/world.default.json', 'utf8')) as Omit<WorldConfig, 'species'>;
 
 /** testConfig() の地形 (seed 42, size 32) の陸で最も輝石が多いセルを探す。地形は決定論なので毎回同じ */
 function bestCrystalCell(): number {
@@ -30,6 +36,25 @@ describe('World civilization wiring (M8-02)', () => {
     const summary = log.find('sim.tick.summary');
     expect(summary).toHaveLength(1);
     expect(summary[0].civStage).toBeUndefined();
+  });
+
+  it('既定の島 (seed 42, size 64, 全種) で鹿の文明が 60 年以内に発生する (M9-00: 地域の安定・輝石・相対植生)', { timeout: 300_000 }, () => {
+    const log = createMemorySink();
+    const cfg: WorldConfig = { ...base, size: 64, species: allSpecies, civilization: { speciesId: 'deer' } };
+    const w = World.create(cfg, { log });
+    let emergedYear = -1;
+    for (let y = 1; y <= 60 && emergedYear < 0; y++) {
+      w.step(360);
+      if (log.find('sim.civ.emerged').length > 0) emergedYear = y;
+    }
+    expect(emergedYear).toBeGreaterThan(0);
+    expect(emergedYear).toBeLessThanOrEqual(60);
+    const snap = w.snapshot();
+    expect(snap.civ?.stage).toBe(1);
+    // 集落は採掘半径 MINE_RADIUS[1] 以内に輝石がある場所
+    let crystalNear = 0;
+    forEachInRadius(snap.civ!.home, MINE_RADIUS[1], 64, (i) => { crystalNear += snap.layers.crystal[i]; });
+    expect(crystalNear).toBeGreaterThan(0);
   });
 
   it('発生条件を満たすと stage 0 → 1 になり sim.civ.emerged を出す (振動しない草だけの世界)', () => {

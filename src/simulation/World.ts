@@ -6,7 +6,7 @@ import { stepVegetation, sumVegetation } from './vegetation';
 import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
-import { checkEmergence, HOME_RADIUS, MAX_STAGE, SUPPORT_RADIUS, populationAround, stepMining, type CivState } from './civilization';
+import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 
@@ -61,6 +61,9 @@ export class World {
   private civDeclineStreak = 0;
   /** 文明の種の年次総量、直近 EMERGE_HISTORY_YEARS 年分 (発生判定用)。古い順 */
   private civHistory: number[] = [];
+  // M9-00: 島全体の総量ではなく、集落候補の支え半径内の総量 (地域の群れ) を積む
+  /** 前年の集落候補セル (M9-00)。候補が EMERGE_CANDIDATE_MOVE より遠くへ移れば civHistory を捨てる。未発生で候補が無い間は -1 */
+  private civCandidate = -1;
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
   private readonly zeroForest: Float32Array;
   /**
@@ -289,32 +292,28 @@ export class World {
    */
   private stepCivYearly(): void {
     const civ = this.civ as CivState;
-    const total = this.totals[civ.speciesId] ?? 0;
-    this.civHistory.push(total);
-    if (this.civHistory.length > 10) this.civHistory.shift();
+    const size = this.config.size;
     if (civ.stage === 0) {
-      // 集落候補: その種の密度が最大の陸セル
+      // 集落候補: その種の密度が最大の陸セル (M9-00: 採掘半径内に輝石があるものに限る)
       const pop = this.populations[civ.speciesId];
-      let candidate = -1;
-      let best = 0;
-      for (let i = 0; i < this.n; i++) {
-        if (this.elevation[i] < SEA_LEVEL) continue;
-        if (pop[i] > best) {
-          best = pop[i];
-          candidate = i;
-        }
-      }
+      const candidate = trackHomeCandidate(pop, this.crystal, this.elevation, size, this.civCandidate);
       if (candidate >= 0) {
+        // 候補が前年から大きく動いたら別の群れなので履歴を捨てる。同じ群れの内なら地域の総量を積む (M9-00)
+        if (this.civCandidate < 0 || cellDistance(candidate, this.civCandidate, size) > EMERGE_CANDIDATE_MOVE) this.civHistory = [];
+        this.civCandidate = candidate;
+        this.civHistory.push(populationAround(pop, candidate, this.elevation, size));
+        if (this.civHistory.length > EMERGE_HISTORY_YEARS) this.civHistory.shift();
+        const candidateVegetation = meanAround(this.vegetation, candidate, SUPPORT_RADIUS, this.elevation, size);
         let vegSum = 0;
         let vegCount = 0;
-        forEachInRadius(candidate, HOME_RADIUS, this.config.size, (i) => {
+        for (let i = 0; i < this.n; i++) {
           if (this.elevation[i] >= SEA_LEVEL) {
             vegSum += this.vegetation[i];
             vegCount++;
           }
-        });
-        const candidateVegetation = vegCount ? vegSum / vegCount : 0;
-        if (checkEmergence(this.civHistory, candidateVegetation)) {
+        }
+        const islandVegetation = vegCount ? vegSum / vegCount : 0;
+        if (checkEmergence(this.civHistory, { candidateVegetation, islandVegetation, hasCrystal: true })) {
           civ.stage = 1;
           civ.home = candidate;
           civ.progress = 0;

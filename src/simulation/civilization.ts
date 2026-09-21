@@ -43,10 +43,40 @@ export const HOME_RADIUS = 3;
 export const SUPPORT_RADIUS = 8;
 /** 発生条件: 集落候補セル周辺の植生 (森+草の合計) 平均がこれを超える */
 export const EMERGE_VEGETATION = 0.4;
+// M9-00: 絶対値ではなく「島の陸の植生平均に対する倍率」として読む (候補の支え半径 8 の平均 > EMERGE_VEGETATION × 島の平均)。
+// 実測 (seed 42, size 64, 全種, 150 年放置) で候補の半径 3 の植生は 0.25、半径 8 は 0.18 で頭打ちになり、
+// 密度最大点 = 採食圧最大点という構造上、絶対値 0.4 には届かなかった (LD 2026-09-21 §1, §8)
 /** 発生条件: 直近 10 年の振幅比 (amplitudeRatio) がこれ未満 (振動していない) */
 export const EMERGE_AMPLITUDE = 0.15;
+// M9-00: 振幅比は島全体の総量ではなく、候補セルの支え半径 (SUPPORT_RADIUS) 内の総量で測る。
+// 島全体の鹿は 9 年周期で振動し続ける (振幅比 0.42〜0.53) が、地域の群れは 0.08〜0.11 で安定していた
 /** 発生に必要な年次履歴の年数 */
 export const EMERGE_HISTORY_YEARS = 10;
+/**
+ * 集落候補が前年の候補からこの距離 (セル) 以内なら、地域の履歴を引き継ぐ (M9-00)。
+ * 候補は密度最大セルなので年ごとに数セル揺れる。支え半径と同じ広さまでは「同じ群れ」とみなす
+ */
+export const EMERGE_CANDIDATE_MOVE = SUPPORT_RADIUS;
+/**
+ * 群れへの留まり (M9-00)。前年の候補の周り (EMERGE_CANDIDATE_MOVE) で追い直した候補の地域人口が、
+ * 島で最大の候補の地域人口のこの倍率以上なら、最大の方へ飛ばずに同じ群れを見続ける。
+ * size 128 の既定島では密度最大セルが複数の群れの間を数年ごとに飛び (80 年で 32 回)、履歴が 10 年たまらなかった
+ */
+export const EMERGE_STICKY = 0.5;
+
+/**
+ * 今年の集落候補を決める (M9-00)。島で密度最大の候補を取り、前年の候補があればその群れの中で追い直した候補が
+ * 最大の EMERGE_STICKY 倍以上の人口なら群れに留まる。返り値が前年から EMERGE_CANDIDATE_MOVE より遠ければ別の群れ
+ */
+export function trackHomeCandidate(pops: Float32Array, crystal: Float32Array, elevation: Float32Array, size: number, prev: number): number {
+  const best = pickHomeCandidate(pops, crystal, elevation, size);
+  if (prev < 0 || best < 0) return best;
+  const local = pickHomeCandidate(pops, crystal, elevation, size, { center: prev, radius: EMERGE_CANDIDATE_MOVE });
+  if (local < 0) return best;
+  const localPop = populationAround(pops, local, elevation, size);
+  const bestPop = populationAround(pops, best, elevation, size);
+  return localPop >= EMERGE_STICKY * bestPop ? local : best;
+}
 
 /**
  * 段階ごとの採掘半径 (セル)。index = stage。index 0 (なし) は未使用 (0 を入れておく)。
@@ -68,14 +98,79 @@ export const MINE_RATE: readonly number[] = [0, 0.0004, 0.0005, 0.0006, 0.0007, 
  */
 export const NEED: readonly number[] = [Infinity, 0.6, 1.0, 1.4, 1.8, 2.4, 3.2, Infinity];
 
+/** 発生判定の入力 (M9-00)。すべて候補セルの周りで測った値 */
+export type EmergenceInput = {
+  /** 候補の支え半径内の植生 (森+草) 平均 */
+  candidateVegetation: number;
+  /** 島の陸セル全体の植生平均。候補の植生はこれに対する倍率で判定する */
+  islandVegetation: number;
+  /** 候補の採掘半径 MINE_RADIUS[1] 以内に輝石があるか (掘るものが無ければ知性は生まれない。世界観 §1.5) */
+  hasCrystal: boolean;
+};
+
 /**
  * 発生判定。stage 0 のとき年に 1 回呼ぶ。
  * history はその種の年次総量 (直近 10 年、古い順)。振動していない (振幅比が小さい) かつ
  * 集落候補地の植生が十分あれば true。
+ * M9-00: history は島全体ではなく候補の支え半径内の総量、植生は島の平均に対する倍率、
+ * さらに候補の近くに輝石があることを条件に足した (LD 2026-09-21 §8)。
  */
-export function checkEmergence(history: number[], candidateVegetation: number): boolean {
+export function checkEmergence(history: number[], input: EmergenceInput): boolean {
   if (history.length < EMERGE_HISTORY_YEARS) return false;
-  return amplitudeRatio(history) < EMERGE_AMPLITUDE && candidateVegetation > EMERGE_VEGETATION;
+  if (!input.hasCrystal) return false;
+  if (amplitudeRatio(history) >= EMERGE_AMPLITUDE) return false;
+  return input.candidateVegetation > EMERGE_VEGETATION * input.islandVegetation;
+}
+
+/** 2 セル間の距離 (セル単位のユークリッド距離) */
+export function cellDistance(a: number, b: number, size: number): number {
+  const ax = a % size;
+  const ay = (a - ax) / size;
+  const bx = b % size;
+  const by = (b - bx) / size;
+  return Math.hypot(ax - bx, ay - by);
+}
+
+/**
+ * 集落候補 (M9-00): その種の密度が最大の陸セルのうち、採掘半径 MINE_RADIUS[1] 以内に輝石があるもの。
+ * 民は遺産のそばに集まる (世界観 §1.5)。該当が無ければ -1
+ */
+export function pickHomeCandidate(
+  pops: Float32Array,
+  crystal: Float32Array,
+  elevation: Float32Array,
+  size: number,
+  /** 指定があれば center の半径 radius 以内だけから選ぶ (前年の群れの中で候補を追い直す) */
+  within?: { center: number; radius: number },
+): number {
+  let candidate = -1;
+  let best = 0;
+  const radius = MINE_RADIUS[1];
+  for (let i = 0; i < pops.length; i++) {
+    if (elevation[i] < SEA_LEVEL || pops[i] <= best) continue;
+    if (within && cellDistance(i, within.center, size) > within.radius) continue;
+    let has = false;
+    forEachInRadius(i, radius, size, (j) => {
+      if (!has && elevation[j] >= SEA_LEVEL && crystal[j] > 0) has = true;
+    });
+    if (!has) continue;
+    best = pops[i];
+    candidate = i;
+  }
+  return candidate;
+}
+
+/** cell の半径 radius 以内の陸セルの arr の平均 (陸が無ければ 0) */
+export function meanAround(arr: Float32Array, cell: number, radius: number, elevation: Float32Array, size: number): number {
+  let sum = 0;
+  let count = 0;
+  forEachInRadius(cell, radius, size, (i) => {
+    if (elevation[i] >= SEA_LEVEL) {
+      sum += arr[i];
+      count++;
+    }
+  });
+  return count ? sum / count : 0;
 }
 
 /**
