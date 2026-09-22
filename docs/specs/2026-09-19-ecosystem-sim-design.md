@@ -544,6 +544,20 @@ LD §8.3。`SHIP_NEED` 10 → 120。シナリオ「空の舟」(`sky-ship`): 帆
 | 鐘樹を 2 年ごとに植えながら着工 | 鐘樹 10〜20 | 25 | escaped |
 | 鐘樹を 30 年育ててから着工 | 鐘樹 45 | 43 | escaped |
 
+### 4.25 実装時の差分(M10 レビューの修正、2026-09-22)
+
+code-review の指摘 10 件を直した。
+
+- `World.dispatch` が validate の結果 `{ ok } | { ok: false, reason }` を返す。ScenarioRunner は World の門(気象塔の段階・信仰・輝石、舟の材、海への放流)で
+  弾かれたら力を引かず、介入に数えず、年表にも積まない(`rejected`)。それまでは気象塔・舟が門で弾かれても力 12 が消え、年表に偽の行が残っていた。
+- 迎撃の連打: まだ World に適用されていない迎撃(`pendingIntercepts`)の分を備蓄から引いて判定する。停止中に 3 回押しても 1 回分の備蓄で 3 つ取り消せない。
+- 舟の警告: 成った舟が信仰不足で飛ばないときは `ship_waiting`(「材が無い」と言わない)。`ship_late` の経過は世界の年(snapshot.year)で測り、石板の年と混ぜない。
+- 判定 `escaped` の理由: 飛んだが種が足りないときは「舟は飛んだが、乗せた種は N」。
+- 気象塔の維持費を石板の「維持」(upkeepLastYear)と upkeep_over_income に含める。
+- restore はセーブに舟が無ければ舟を持たない(start.shipProgress から作った舟が崩壊後のセーブで蘇らない)。
+- 脈の辿り方と比例除去を一本化: `towerCrystalPool` は `miningPool` の薄い包み、`stepWorks` は `takeCrystal` を使う。
+- HUD の文明行に、塔以上では星の門と星の衰退が見る半径 12 の民「星の民 N」を出す。
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。

@@ -146,7 +146,7 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
       const n = aliveSpeciesCount(s);
       const min = c.minSpecies ?? 1;
       const ok = launched && n >= min;
-      return { ok, why: ok ? `${n} 種と民を次の島へ逃がした` : '舟はまだ飛んでいない' };
+      return { ok, why: ok ? `${n} 種と民を次の島へ逃がした` : launched ? `舟は飛んだが、乗せた種は ${n}(${min} に足りない)` : '舟はまだ飛んでいない' };
     }
     case 'civ_vitality': {
       const now = civVitality(s);

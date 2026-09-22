@@ -13,7 +13,7 @@ const fakeWorld = (totals: Record<string, number>) => {
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null, totals,
     layers: { elevation: new Float32Array(n).fill(0.5), temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
   });
-  return { dispatch: (c: Command) => cmds.push(c), snapshot, step: (t: number) => { tick += t; }, cmds };
+  return { dispatch: (c: Command) => { cmds.push(c); }, snapshot, step: (t: number) => { tick += t; }, cmds };
 };
 const def: ScenarioDef = {
   id: 't', title: 't', prophecy: 'p', kind: 'endure', years: 5, referenceSize: 4,

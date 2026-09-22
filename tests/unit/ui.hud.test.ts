@@ -79,3 +79,12 @@ describe('formatShipHint: #hud-ship の説明文 (M10-03)', () => {
     expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED, launchedYear: 12 })).toBe('舟は飛び立った');
   });
 });
+
+describe('formatCiv: 星の民 (M10 レビュー)', () => {
+  it('塔以上で populationStar があれば「民」の直後に「· 星の民 N」を足す。帆以下や無いときは出さない', () => {
+    const civ = { speciesId: 'deer', stage: 6, progress: 3.2, home: 0, population: 3.2, populationStar: 3.7 };
+    expect(formatCiv(civ)).toBe('文明 塔(6) · 進み 100% · 民 320 · 星の民 370');
+    expect(formatCiv({ ...civ, stage: 5 })).toBe('文明 帆(5) · 進み 100% · 民 320');
+    expect(formatCiv({ ...civ, populationStar: undefined })).toBe('文明 塔(6) · 進み 100% · 民 320');
+  });
+});

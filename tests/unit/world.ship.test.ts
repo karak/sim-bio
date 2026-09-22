@@ -200,3 +200,14 @@ describe('空の舟 (M10-03、World): 保存・復元、shipProgress の開始�
     expect(r.snapshot().ship).toBeNull();
   });
 });
+
+describe('舟の保存 (M10 レビュー): セーブに舟が無ければ復元後も無い', () => {
+  it('start.shipProgress のある設定でも、舟の無いセーブを読めば舟は無い (崩壊で失った舟が戻らない)', () => {
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 5, home: 16 * 32 + 16, fuelStock: 100, shipProgress: 9 } } }), { log: createMemorySink() });
+    expect(w.snapshot().ship?.progress).toBe(9);
+    const save = w.serialize();
+    delete save.ship;
+    const r = World.restore(save, { log: createMemorySink() });
+    expect(r.snapshot().ship).toBeNull();
+  });
+});

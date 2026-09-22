@@ -250,7 +250,8 @@ export class World {
       w.recomputeTowerFactors();
     }
     // 空の舟 (M10-03): 古いセーブには無いので、その場合は constructor の既定 (null、start.shipProgress があればそれ) のまま
-    if (save.ship) w.ship = { ...save.ship };
+    // 空の舟 (M10 レビュー): セーブに舟が無ければ無い (constructor が start.shipProgress から作った舟を残さない。崩壊で失った舟が戻らないように)
+    w.ship = save.ship ? { ...save.ship } : null;
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -264,12 +265,17 @@ export class World {
     return w;
   }
 
-  dispatch(cmd: Command, opts: { fromStar?: boolean } = {}): void {
+  /**
+   * コマンドを積む。次の step で適用する。戻り値はその時点の validate の結果 (M10 レビュー: ScenarioRunner が力を引く・年表に積む前に
+   * 門 (段階・信仰・輝石・材) を確かめられるように)。apply でももう一度 validate するので、積んでから状態が変わっても壊れない
+   */
+  dispatch(cmd: Command, opts: { fromStar?: boolean } = {}): { ok: true } | { ok: false; reason: string } {
     this.queue.push(cmd);
+    const reason = this.validate(cmd);
     // M9 レビュー: apply で弾かれるコマンド (海への放流など) は信仰・祈りにも数えない。
     // fromStar が false (予定コマンド、力切れの気候の戻し) は星の行為ではないので、儀式にも応えにも数えない (災害だけは民の目の前なら数える)
     const fromStar = opts.fromStar ?? true;
-    if (this.civ && this.validate(cmd) === null) {
+    if (this.civ && reason === null) {
       const key = fromStar ? commandKey(cmd) : null;
       if (key !== null) this.civYearKeys.push(key);
       // 祈り (M9-02): 有効な祈りがあり、この介入が応えなら即座に解決する (応えた)。
@@ -288,6 +294,7 @@ export class World {
         this.log('info', 'sim.civ.prayer', { year: Math.floor(this.tick / this.config.ticksPerYear), phase: 'answered', kind });
       }
     }
+    return reason === null ? { ok: true } : { ok: false, reason };
   }
 
   /** 火山セル (config.volcanoCell、無ければ標高最大の陸セル)。HUD が火山チップの誘導先として使う (M8-08) */

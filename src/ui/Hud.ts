@@ -32,7 +32,9 @@ export function formatCiv(civ: CivState | null): string | null {
   const vitalityText = civ.vitality !== undefined ? ` · 生気 ${Math.round(civ.vitality * 100)}%` : '';
   // 星の工事 (M10-02): 星になって年をまたぐと works が付く。「工事 備蓄 / 必要」、止まっていれば「止」を足す
   const worksText = civ.works ? ` · 工事 ${civ.works.stock.toFixed(1)} / ${INTERCEPT_NEED}${civ.works.stopped ? ' 止' : ''}` : '';
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${vitalityText}${miningText}${worksText}`;
+  // 星の門 (M10 レビュー): 塔以上では星の門と星の衰退が見る半径 12 の民も出す (支え半径 8 の「民」だけでは、なぜ星に上がれないか読めない)
+  const starText = civ.stage >= 6 && civ.populationStar !== undefined ? ` · 星の民 ${Math.round(civ.populationStar * 100)}` : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${starText}${fuelText}${faithText}${vitalityText}${miningText}${worksText}`;
 }
 
 /**

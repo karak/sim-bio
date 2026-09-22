@@ -1,4 +1,5 @@
 import { MAX_STAGE, MINE_RADIUS, miningPool, type CivState } from './civilization';
+import { takeCrystal } from './weatherTower';
 
 /**
  * 星の工事と迎撃 (M10-02)。設計: docs/design/2026-09-22-level-design-devices.md §3.2。
@@ -36,10 +37,8 @@ export function stepWorks(
   let total = 0;
   for (const i of pool) total += crystal[i];
   const mined = Math.max(0, Math.min(WORKS_RATE, total, INTERCEPT_NEED - works.stock));
-  if (mined > 0) {
-    const k = mined / total;
-    for (const i of pool) if (crystal[i] > 0) crystal[i] -= crystal[i] * k;
-  }
+  // 残量に比例して取り除く (気象塔の takeCrystal と同じ。M10 レビューで一本化)
+  if (mined > 0) takeCrystal(pool, crystal, mined);
   return { civ: { ...civ, works: { stock: works.stock + mined, stopped: false } }, mined };
 }
 

@@ -543,3 +543,18 @@ describe('気象塔 (M10-01)', () => {
     expect(r.timeline().filter((e) => e.kind === 'tower_resumed' || e.kind === 'tower_stopped')).toEqual([]);
   });
 });
+
+describe('World の門で弾かれた介入 (M10 レビュー)', () => {
+  it('dispatch が ok:false を返せば rejected: 力を引かず、介入に数えず、年表にも積まない (気象塔・舟・海への放流)', () => {
+    const w = fakeWorld({ civStage: 5, civFaith: 0.55 });
+    const w2 = { ...w, dispatch: (c: Command) => { w.cmds.push(c); return { ok: false as const, reason: '段階が塔に満たない' }; } };
+    const r = createScenarioRunner(withBudget({ start: 40, incomePerYear: 4 }), w2);
+    r.update(w2.snapshot());
+    expect(r.intervene({ type: 'build_tower', cell: 0 })).toEqual({ ok: false, reason: 'rejected' });
+    expect(r.power()).toBe(40);
+    expect(r.interventions()).toBe(0);
+    expect(r.timeline().filter((e) => e.kind === 'tower' || e.kind === 'intervene')).toHaveLength(0);
+    expect(r.intervene({ type: 'launch_ship' })).toEqual({ ok: false, reason: 'rejected' });
+    expect(r.timeline().filter((e) => e.kind === 'intervene')).toHaveLength(0);
+  });
+});

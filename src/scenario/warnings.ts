@@ -3,10 +3,10 @@ import { landRatio } from './judge';
 import { FUEL_YEARS } from '../simulation/civilizationFuel';
 import { UNREST_FAITH, UNREST_YEARS } from '../simulation/unrest';
 import { formatFaith } from '../simulation/faith';
-import { SHIP_NEED } from '../simulation/ship';
+import { SHIP_FAITH, SHIP_NEED } from '../simulation/ship';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low' | 'ship_stalled' | 'ship_late';
+export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low' | 'ship_stalled' | 'ship_late' | 'ship_waiting';
 
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
 export type Warning = {
@@ -105,10 +105,14 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
   // 2 回目のプレイで 100 年目に進み 30 / 120 でも警告が無く、160 年目からは進みが止まっているのも分からなかった
   if (def.escape && ship && s.ship && s.ship.launchedYear === undefined) {
     const p = s.ship.progress;
-    if (ship.prevProgress !== null && p <= ship.prevProgress) {
+    if (p >= SHIP_NEED) {
+      // 成ったのに飛ばないのは材ではなく信仰 (M10 レビュー: 止まっている扱いにしない)
+      if ((s.civ?.faith ?? 0) < SHIP_FAITH) out.push({ kind: 'ship_waiting', key: 'ship_waiting', text: `舟は成ったが民が乗らない(信仰 ${formatFaith(s.civ?.faith ?? 0)}。${SHIP_FAITH} に足りない)` });
+    } else if (ship.prevProgress !== null && p <= ship.prevProgress) {
       out.push({ kind: 'ship_stalled', key: 'ship_stalled', text: `舟の進みが止まっている(材が無い。進み ${p.toFixed(1)} / ${SHIP_NEED})` });
     } else {
-      const elapsed = ship.year - s.ship.startedYear;
+      // startedYear は世界の年 (snapshot.year と同じ時計)、残り年数は石板の年 (ship.year) で数える (M10 レビュー: 時計を混ぜない)
+      const elapsed = s.year - s.ship.startedYear;
       const rate = elapsed > 0 ? p / elapsed : 0;
       const yearsLeft = def.years - ship.year;
       if (elapsed >= 5 && rate * yearsLeft < SHIP_NEED - p) {

@@ -243,3 +243,14 @@ describe('judgeScenario: escape は dead より先に評価する (M10-03)', () 
     expect(judgeScenario(plain, input(snap(), 5)).status).toBe('alive');
   });
 });
+
+describe('escaped の理由 (M10 レビュー)', () => {
+  it('飛んだが種が足りないときは「舟は飛んだが、乗せた種は N」、飛んでいなければ「舟はまだ飛んでいない」', () => {
+    const s = snap({ totals: { grass: 1, deer: 0, wolf: 0 }, civ: { stage: 5 } });
+    expect(evaluate({ type: 'escaped', minSpecies: 5 }, input(s)).why).toBe('舟はまだ飛んでいない');
+    s.ship = { startedYear: 0, progress: 120, launchedYear: 90 };
+    const r = evaluate({ type: 'escaped', minSpecies: 5 }, input(s));
+    expect(r.ok).toBe(false);
+    expect(r.why).toBe('舟は飛んだが、乗せた種は 1(5 に足りない)');
+  });
+});

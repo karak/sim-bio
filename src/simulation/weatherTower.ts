@@ -6,7 +6,7 @@
  */
 import { forEachInRadius } from './disaster';
 import { SEA_LEVEL } from './terrain';
-import { MINE_RADIUS, type CivState } from './civilization';
+import { miningPool, MINE_RADIUS, type CivState } from './civilization';
 import { formatFaith } from './faith';
 
 /** 塔を建てられる最低段階 (塔、6) */
@@ -73,16 +73,8 @@ export function towerCrystalPool(
   size: number,
   veins: { ids: Int32Array; cells: number[][] },
 ): number[] {
-  const radius = MINE_RADIUS[stage] ?? 0;
-  const pool: number[] = [];
-  const touched = new Set<number>();
-  forEachInRadius(home, radius, size, (i) => {
-    if (elevation[i] < SEA_LEVEL) return;
-    if (veins.ids[i] >= 0) touched.add(veins.ids[i]);
-    else pool.push(i);
-  });
-  for (const v of touched) for (const i of veins.cells[v]) if (elevation[i] >= SEA_LEVEL) pool.push(i);
-  return pool;
+  // M10 レビュー: stepMining から切り出した miningPool (civilization.ts) に一本化する (脈の辿り方を 3 か所で持たない)
+  return miningPool(home, MINE_RADIUS[stage] ?? 0, elevation, size, veins);
 }
 
 /**

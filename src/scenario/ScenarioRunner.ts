@@ -3,7 +3,7 @@ import { civVitality, judgeScenario, landRatio, startStats, vitalityRatio } from
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type CivContext, type Warning } from './warnings';
 import type { PrayerKind } from '../simulation/prayer';
-import { canIntercept } from '../simulation/works';
+import { canIntercept, INTERCEPT_NEED } from '../simulation/works';
 import { TOWER_COST, TOWER_RAIN_SCALE_DEFAULT, TOWER_TEMP_OFFSET_DEFAULT, TOWER_UPKEEP } from '../simulation/weatherTower';
 
 /** 年表の 1 行。石板が種名などに整形して出す */
@@ -30,7 +30,8 @@ export type TimelineEvent =
   /** 迎撃 (M10-02): atYear 年目に予定されていた隕石を取り消した */
   | { year: number; kind: 'intercepted'; atYear: number };
 
-type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void; snapshot(): WorldSnapshot };
+/** dispatch の戻り値は World の validate の結果 (M10 レビュー)。偽の world (テスト) は void でよく、その場合は受理とみなす */
+type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void | { ok: true } | { ok: false; reason: string }; snapshot(): WorldSnapshot };
 
 /** 信仰の年表イベント (civ_faith) を積む閾値。前年との差の絶対値がこれ以上のときだけ積む (M9-01) */
 const FAITH_TIMELINE_THRESHOLD = 0.1;
@@ -117,6 +118,9 @@ export function createScenarioRunner(
   const civVitalityHistory: number[] = [];
   /** 最後に年表に積んだ勅令の通し番号 (M9-03)。新しい勅令が記録されていれば年表に積む (同じ年の 2 つ目も) */
   let lastEdictN: number | null = first.civ?.edict?.n ?? null;
+  /** 撃ったがまだ World に適用されていない迎撃の数 (M10 レビュー)。snapshot の intercepted が増えたぶん減らす */
+  let pendingIntercepts = 0;
+  let lastIntercepted = first.civ?.intercepted ?? 0;
   /** 前年の舟の進み (M10-04、ship_stalled の判定)。前年に建造中の舟が無ければ null */
   let prevShipProgress: number | null = null;
   /** 前年の文明の段階。civ_declining の判定に使う。最初の年はまだ「前年」が無いので null */
@@ -237,6 +241,8 @@ export function createScenarioRunner(
       const towersActive = towers.some((t) => t.active);
       if (power >= towerUpkeep) {
         power -= towerUpkeep;
+        // M10 レビュー: 石板の「維持」と upkeep_over_income に塔の分も入れる
+        upkeepLastYear += towerUpkeep;
         if (!towersActive) {
           world.dispatch({ type: 'tower_power', active: true }, { fromStar: false });
           timeline.push({ year: currentYear, kind: 'tower_resumed' });
@@ -270,28 +276,36 @@ export function createScenarioRunner(
       if (cmd.type === 'intercept') {
         const target = nextMeteor();
         if (!target) return { ok: false, reason: 'no_target' };
-        if (!canIntercept(world.snapshot().civ).ok) return { ok: false, reason: 'rejected' };
+        // M10 レビュー: 同じ step 内 (停止中の連打) に 2 回目を撃つと snapshot の備蓄はまだ減っていないので、
+        // まだ適用されていない迎撃の分 (pendingIntercepts) を備蓄から引いて判定する
+        const civ = world.snapshot().civ;
+        const stock = (civ?.works?.stock ?? 0) - pendingIntercepts * INTERCEPT_NEED;
+        if (!civ || !canIntercept({ ...civ, works: { stock, stopped: civ.works?.stopped ?? false } }).ok) return { ok: false, reason: 'rejected' };
+        const res = world.dispatch(cmd);
+        if (res && res.ok === false) return { ok: false, reason: 'rejected' };
+        pendingIntercepts++;
         cancelled.add(target.idx);
         interventions++;
-        world.dispatch(cmd);
         timeline.push({ year: currentYear, kind: 'intercepted', atYear: target.atYear });
         return { ok: true };
       }
       const cost = costOf(cmd);
       if (budgetDef && power < cost) return { ok: false, reason: 'budget' };
-      if (budgetDef) {
-        power -= cost;
-        powerSpent += cost;
-      }
       // 勅令 (M9-03) は言葉であって行為ではないので介入回数に数えない (no_intervention の条件や内訳を変えない。M9 レビュー)。
       // tower_power (M10-01) も星の行為ではなく力の増減の自動処理なので同じく数えない (通常は intervene() 経由で呼ばない)。
       // launch_ship (M10-03) も civ_edict と同じく言葉なので数えない
-      if (cmd.type !== 'civ_edict' && cmd.type !== 'tower_power' && cmd.type !== 'launch_ship') interventions++;
       // 予定コマンド (fireDue) と同じく cell = -1 (島の中心) と半径の縮尺を解決してから流す。
       // 以前は resolve を通さず生の cmd を dispatch していたため、プレイヤー操作由来の介入で
       // cell: -1 を使うと (-1, 0) 相当の意図しない位置に適用されていた (M8-05 で発覚)
       const resolved = resolve(cmd);
-      world.dispatch(resolved);
+      // M10 レビュー: World の門 (気象塔の段階・信仰・輝石、舟の材、海への放流など) で弾かれたら、力を引かず年表にも積まない
+      const res = world.dispatch(resolved);
+      if (res && res.ok === false) return { ok: false, reason: 'rejected' };
+      if (budgetDef) {
+        power -= cost;
+        powerSpent += cost;
+      }
+      if (cmd.type !== 'civ_edict' && cmd.type !== 'tower_power' && cmd.type !== 'launch_ship') interventions++;
       // 気象塔を建てた (M10-01) は専用の 'tower' kind で積む (他は汎用の 'intervene')。
       // describeEvent が「星が気象塔を建てた(雨 N×)」を組み立てやすいよう、既定値を補ってから積む
       if (resolved.type === 'build_tower') {
@@ -313,6 +327,12 @@ export function createScenarioRunner(
       currentYear = year;
       // 祈り (M9-02): 石板が毎フレーム読めるように、年次評価を待たず最新の値に更新しておく
       currentPrayer = s.civ?.prayer ?? null;
+      // 迎撃 (M10 レビュー): World が適用した分だけ pending を減らす
+      const intercepted = s.civ?.intercepted ?? 0;
+      if (intercepted !== lastIntercepted) {
+        pendingIntercepts = Math.max(0, pendingIntercepts - (intercepted - lastIntercepted));
+        lastIntercepted = intercepted;
+      }
       fireDue(year);
       if (year !== lastYear) {
         // 最初の呼び出し (lastYear === -1) はまだ 1 年も経っていないので力は動かさない

@@ -89,3 +89,33 @@ describe('迎撃 (M10-02、ScenarioRunner)', () => {
     expect(r.intervene({ type: 'intercept' })).toEqual({ ok: false, reason: 'finished' });
   });
 });
+
+describe('迎撃 (M10 レビュー): 同じ step 内の連打', () => {
+  it('備蓄 3.0 で停止中に 2 回撃っても、2 回目は rejected (まだ適用されていない 1 回目の分を備蓄から引いて判定)。World が適用して備蓄が戻れば撃てる', () => {
+    const w = fakeWorld({ works: { stock: INTERCEPT_NEED * 2 - 0.5, stopped: false } });
+    const r = createScenarioRunner(def, w);
+    r.update(w.snapshot());
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: true });
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: false, reason: 'rejected' });
+    expect(r.milestones().map((m) => m.atYear)).toEqual([8, 10]);
+    expect(w.cmds.filter((c) => c.type === 'intercept')).toHaveLength(1);
+    // World が 1 回目を適用 (intercepted 1、備蓄 2.5 → 2.5) → pending が消え、備蓄が足りないので撃てない。積み増して 3.0 になれば撃てる
+    w.setCiv({ intercepted: 1, works: { stock: INTERCEPT_NEED - 0.5, stopped: false } });
+    r.update(w.snapshot());
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: false, reason: 'rejected' });
+    w.setCiv({ intercepted: 1, works: { stock: INTERCEPT_NEED, stopped: false } });
+    r.update(w.snapshot());
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: true });
+    expect(r.milestones().map((m) => m.atYear)).toEqual([10]);
+  });
+  it('World の dispatch が拒否 (ok:false) を返せば、予定は取り消さず年表にも積まない', () => {
+    const w = fakeWorld({ works: { stock: INTERCEPT_NEED, stopped: false } });
+    const w2 = { ...w, dispatch: (cmd: Command) => { w.cmds.push(cmd); return { ok: false as const, reason: '段階が星に満たない' }; } };
+    const r = createScenarioRunner(def, w2);
+    r.update(w2.snapshot());
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: false, reason: 'rejected' });
+    expect(r.milestones().map((m) => m.atYear)).toEqual([6, 8, 10]);
+    expect(r.timeline().filter((e) => e.kind === 'intercepted')).toHaveLength(0);
+    expect(r.interventions()).toBe(0);
+  });
+});
