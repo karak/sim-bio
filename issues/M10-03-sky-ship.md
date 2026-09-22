@@ -5,7 +5,7 @@ status: in_progress
 milestone: M10
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M10-01, M10-05]
-evidence: []
+evidence: ["3ad6a98 tests/unit/ship.test.ts", "3ad6a98 tests/unit/world.ship.test.ts", "3ad6a98 tests/unit/scenario.judge.test.ts tests/unit/ui.tablet.test.ts tests/e2e/smoke.spec.ts", "3ad6a98 npm run check (437 tests) / npx playwright test (21 tests)"]
 ---
 
 # 空の舟(持ち出し)

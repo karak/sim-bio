@@ -524,10 +524,10 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| コマンド launch_ship: 段階 < 帆 または 信仰 < 0.5 または 材不足なら拒否(単体テスト、cmd.rejected の理由つき)。持ち出し JSON の形を固定 | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` |
-| 舟の建造中は森(+鐘樹)が徴収半径内だけ減る(単体テスト)。材が 0 の年は進まない | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` |
-| Verdict に escaped が増え、escape が dead より先に評価される。石板のオーバーレイが「次の島へ」を出し、持ち出しデータをダウンロードできる(E2E) | `tests/unit/scenario.judge.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/e2e/smoke.spec.ts` |
-| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(437 テスト通過)、`npx playwright test`(21 テスト通過) |
+| コマンド launch_ship: 段階 < 帆 または 信仰 < 0.5 または 材不足なら拒否(単体テスト、cmd.rejected の理由つき)。持ち出し JSON の形を固定 | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` · 3ad6a98 |
+| 舟の建造中は森(+鐘樹)が徴収半径内だけ減る(単体テスト)。材が 0 の年は進まない | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` · 3ad6a98 |
+| Verdict に escaped が増え、escape が dead より先に評価される。石板のオーバーレイが「次の島へ」を出し、持ち出しデータをダウンロードできる(E2E) | `tests/unit/scenario.judge.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/e2e/smoke.spec.ts` · 3ad6a98 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(437 テスト通過)、`npx playwright test`(21 テスト通過) · 3ad6a98 |
 | 「空の舟」シナリオの校正(tests/slow: 放置 dead、舟だけ急ぐ dead、想定解 2 つ escaped) | 校正は別途(このコミットには含まない) |
 
 ### M9-00: 文明の自然発生を地域で測る
