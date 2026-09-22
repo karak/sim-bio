@@ -162,6 +162,9 @@ export function createScenarioRunner(
         return 0;
       case 'sink':
         return 0;
+      // 迎撃 (M10-02) は民の備蓄 (輝石) で払う。力は要らない
+      case 'intercept':
+        return 0;
     }
   };
 

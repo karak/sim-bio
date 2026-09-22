@@ -86,7 +86,9 @@ export type Command =
   /** 島全体の標高を amount 下げる (沈降)。シナリオの「滅びの進行」用 */
   | { type: 'sink'; amount: number }
   /** 石板の勅令 (M9-03)。信仰が EDICT_FAITH 以上のときだけ民が従う。力は消費しない */
-  | { type: 'civ_edict'; edict: 'stop_mining' | 'resume_mining' };
+  | { type: 'civ_edict'; edict: 'stop_mining' | 'resume_mining' }
+  /** 迎撃 (M10-02)。星の文明の備蓄が INTERCEPT_NEED 以上なら消費して 1 回数える。予定隕石の取り消しは ScenarioRunner が行う */
+  | { type: 'intercept' };
 
 /** 読み取り専用ビュー。layers は内部バッファそのもの (コピーしない)。 */
 export type WorldSnapshot = {

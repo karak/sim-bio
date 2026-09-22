@@ -13,6 +13,7 @@ import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
+import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
 
 export type WorldDeps = {
@@ -396,7 +397,7 @@ export class World {
    * stage 0 (未発生) なら発生判定をし、発生していれば集落半径内の人口を更新する。
    */
   private stepCivYearly(): void {
-    const civ = this.civ as CivState;
+    let civ = this.civ as CivState;
     const size = this.config.size;
     if (civ.stage === 0) {
       // 集落候補: その種の密度が最大の陸セル (M9-00: 採掘半径内に輝石があるものに限る)
@@ -564,6 +565,13 @@ export class World {
       }
       this.log('info', 'sim.civ.fuel', { fuel: civ.fuel.last, need: civ.fuel.need, shortYears: civ.fuel.shortYears, stock: civ.fuel.stock });
     }
+    // 星の工事 (M10-02): 星なら年に一度、脈から備蓄に積む (信仰が足りなければ止まる)
+    if (civ.stage >= MAX_STAGE) {
+      const r = stepWorks(civ, this.crystal, this.elevation, this.config.size, { ids: this.veins, cells: this.veinCells });
+      this.civ = civ = r.civ;
+      this.log('info', 'sim.civ.works', { year, stock: civ.works?.stock ?? 0, stopped: civ.works?.stopped ?? false, mined: r.mined });
+      if (r.mined > 0) computeVeinLoss(this.crystal, this.crystal0, this.elevation, this.config.size, this.veinLoss, this.veins);
+    }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
     if (civ.stage >= 1) {
       let vitSum = 0;
@@ -640,11 +648,22 @@ export class World {
         this.log('info', 'sim.civ.edict', { year, edict: cmd.edict, obeyed, faith: civ.faith ?? 0, miningStopped: civ.miningStopped ?? false });
         break;
       }
+      case 'intercept': {
+        // 迎撃 (M10-02): validate で canIntercept を通っている。備蓄を消費して回数を増やす
+        if (!this.civ) break;
+        this.civ = applyIntercept(this.civ);
+        this.log('info', 'sim.civ.intercept', { year: Math.floor(this.tick / this.config.ticksPerYear), n: this.civ.intercepted ?? 0, stock: this.civ.works?.stock ?? 0 });
+        break;
+      }
     }
   }
 
   private validate(cmd: Command): string | null {
     if ('cell' in cmd && (!Number.isInteger(cmd.cell) || cmd.cell < 0 || cmd.cell >= this.n)) return 'cell out of range';
+    if (cmd.type === 'intercept') {
+      const r = canIntercept(this.civ);
+      return r.ok ? null : r.reason;
+    }
     if (cmd.type === 'spawn_species') {
       if (!this.byId.has(cmd.speciesId)) return 'unknown species';
       if (!(cmd.amount > 0)) return 'amount must be > 0';

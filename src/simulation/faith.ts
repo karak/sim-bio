@@ -48,6 +48,9 @@ export function commandKey(cmd: Command): string | null {
     // 勅令 (M9-03) は言葉であって行為ではないので、儀式にも気まぐれにも数えない
     case 'civ_edict':
       return null;
+    // 迎撃 (M10-02) は星の行為だが 1 回きりなので儀式にはならない。気まぐれ (種類の入れ替わり) に数えないよう null
+    case 'intercept':
+      return null;
   }
 }
 

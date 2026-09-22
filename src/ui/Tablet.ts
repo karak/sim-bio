@@ -46,6 +46,8 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
         return '海が上がった';
       case 'civ_edict':
         return c.edict === 'stop_mining' ? '石板が告げた: 採掘を止めよ' : '石板が告げた: 採掘を再開せよ';
+      case 'intercept':
+        return '星が砕けた';
     }
   };
   switch (e.kind) {
