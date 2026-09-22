@@ -593,6 +593,20 @@ code-review の指摘 10 件を直した。
 - **SceneView**: `src/render/dreamEaterShade.ts`(`settlementInstances` と同じ流儀の純粋関数)が home・支え半径・表示の有無を返し、`SceneView.ts` は暗い半透明の円 (`CircleGeometry`) を集落の上に置く/隠すだけ(塔・集落の箱と同じ、tick/civ が変わった時だけ置き直す)。
 - **ファイル**: `src/simulation/dreamEater.ts`(新規)・`civilization.ts` の型注釈なし(`CivState` は変えていない)・`World.ts`、`src/scenario/types.ts`・`judge.ts`・`ScenarioRunner.ts`、`src/ui/Tablet.ts`・`Hud.ts`、`src/render/dreamEaterShade.ts`(新規)・`SceneView.ts`、`assets/data/scenarios.json`。
 
+### 4.29 実装時の差分(M10R-05: 校正で足した仕組み)
+
+レベルデザイン `docs/design/2026-09-22-level-design-faith-economy.md` §8 の計測から足した。
+
+- **勅令「採掘を止めよ」は星の工事の採掘も止める**(`works.ts` の `stepWorks` が `civ.miningStopped` を見る)。備蓄は残り、迎撃はできる。
+  `works.stopped` は信仰不足の印なので立てない。信仰の上限が入ると、脈が 10% を切ったあとの「星の砂を」の無視で上限が削れて工事が止まり、
+  星が掘り続ける限りどの手も滅びたため。
+- **帆を失えば舟は止まる**(`World.stepCivYearly`): 段階 < 帆の年は伐らず進まず、完成していても飛ばない。ログ `sim.ship.halted { year, stage, progress }`、
+  警告 `ship_stalled` の文言「帆を失い、舟は止まっている(段階 4 < 5。進み …)」。進みは残り、帆に戻れば再開する。
+- **シナリオ**: 迎撃の塔は脈 1.0 に戻し、予言と節目に「掘り尽くせば祈り、失望が積もれば工事が止まる。止めよで蓄えは残る」を足した。
+  空の舟は薪の蓄え 0、予言と節目を「舟か塔か」「陰で群れが痩せる」に書き換えた。
+- **ファイル**: `src/simulation/works.ts`、`src/simulation/World.ts`、`src/scenario/warnings.ts`、`assets/data/scenarios.json`、
+  `tests/unit/works.test.ts`、`tests/unit/world.ship.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/slow/scenarios.playthrough.test.ts`。
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
