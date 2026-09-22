@@ -31,6 +31,10 @@ const SETTLEMENT_BOX = { width: 0.5, height: 0.4, depth: 0.5 };
 const SETTLEMENT_MAX_STAGE = 8;
 /** 火山セルの誘導マーカー (円錐) の寸法 (M8-08) */
 const VOLCANO_MARKER = { radius: 0.7, height: 1.6 };
+/** 気象塔の目印 (円錐) の寸法 (M10-01)。集落の箱より少し高い程度の小さな塔 */
+const TOWER_MARKER = { radius: 0.3, height: 1.1 };
+/** 同時に描ける気象塔の目印の上限 */
+const TOWER_MARKER_MAX = 32;
 
 export type SceneView = {
   /** 毎フレーム呼ぶ。tick かレイヤーが変わった時だけ頂点色とインスタンスを更新する */
@@ -115,6 +119,13 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   volcanoMarker.visible = false;
   scene.add(volcanoMarker);
 
+  // 気象塔の目印: 塔ごとに 1 つの小さな円錐。settlementMesh と同じ流儀でセル位置に置く (M10-01)
+  const towerMarkerGeo = new ConeGeometry(TOWER_MARKER.radius, TOWER_MARKER.height, 8);
+  const towerMarkerMesh = new InstancedMesh(towerMarkerGeo, new MeshLambertMaterial({ color: '#7FB3E0' }), TOWER_MARKER_MAX);
+  towerMarkerMesh.count = 0;
+  towerMarkerMesh.frustumCulled = false;
+  scene.add(towerMarkerMesh);
+
   let layer: LayerKind = 'terrain';
   let lastTick = -1;
   let lastLayer: LayerKind | null = null;
@@ -180,6 +191,19 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       const vx = s.volcanoCell % size;
       const vy = (s.volcanoCell - vx) / size;
       volcanoMarker.position.set(vx - size / 2 + 0.5, s.layers.elevation[s.volcanoCell] * hs + VOLCANO_MARKER.height / 2, vy - size / 2 + 0.5);
+      // 気象塔の目印: 塔ごとに 1 つ、セルの標高の上に立てる (M10-01)
+      const towerCount = Math.min(s.towers.length, TOWER_MARKER_MAX);
+      for (let k = 0; k < towerCount; k++) {
+        const t = s.towers[k];
+        const tx = t.cell % size;
+        const ty = (t.cell - tx) / size;
+        dummy.position.set(tx - size / 2 + 0.5, s.layers.elevation[t.cell] * hs + TOWER_MARKER.height / 2, ty - size / 2 + 0.5);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        towerMarkerMesh.setMatrixAt(k, dummy.matrix);
+      }
+      towerMarkerMesh.count = towerCount;
+      towerMarkerMesh.instanceMatrix.needsUpdate = true;
       lastTick = s.tick;
       lastLayer = layer;
     }
@@ -220,6 +244,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       geo.dispose();
       settlementGeo.dispose();
       volcanoMarkerGeo.dispose();
+      towerMarkerGeo.dispose();
     },
   };
 }

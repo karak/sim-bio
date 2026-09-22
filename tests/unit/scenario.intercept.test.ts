@@ -21,6 +21,7 @@ const fakeWorld = (civ: Partial<CivState> | null) => {
     layers: { elevation: new Float32Array(n).fill(0.5), temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
     civ: c ? { ...c } : null,
     volcanoCell: 0,
+    towers: [],
   });
   return { dispatch: (cmd: Command) => { cmds.push(cmd); }, snapshot, step: (t: number) => { tick += t; }, cmds, setCiv: (v: Partial<CivState>) => { c = { ...c!, ...v }; } };
 };

@@ -10,7 +10,7 @@ const fakeWorld = (totals: Record<string, number>) => {
   const size = 4;
   const n = size * size;
   const snapshot = (): WorldSnapshot => ({
-    tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, totals,
+    tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], totals,
     layers: { elevation: new Float32Array(n).fill(0.5), temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
   });
   return { dispatch: (c: Command) => cmds.push(c), snapshot, step: (t: number) => { tick += t; }, cmds };

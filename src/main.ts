@@ -10,6 +10,7 @@ import { createScenarioRunner, type ScenarioRunner } from './scenario/ScenarioRu
 import type { ScenarioDef } from './scenario/types';
 import type { Command } from './simulation/types';
 import { resolveCivilizationStart } from './simulation/civilization';
+import { TOWER_COST } from './simulation/weatherTower';
 
 /** 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる */
 const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, wildfire: 0, plague: 4 };
@@ -54,6 +55,8 @@ async function boot(): Promise<void> {
   let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(species), size: config.size });
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
+  /** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
+  let towerArmed = false;
   let selected: number | null = null;
 
   let runner: ScenarioRunner | null = null;
@@ -93,6 +96,9 @@ async function boot(): Promise<void> {
     onSpawnArm: (id) => {
       spawnArmed = id;
     },
+    onTowerArm: (v) => {
+      towerArmed = v;
+    },
   });
 
   const tablet = createTablet(app, scenarios, scenario, selectScenario, Object.fromEntries(species.map((d) => [d.id, d.name])));
@@ -110,11 +116,16 @@ async function boot(): Promise<void> {
           const costs = scenario?.budget?.costs;
           hud.setAffordable(
             budgetInfo && costs
-              ? { spawn: budgetInfo.power >= costs.spawn, disaster: budgetInfo.power >= costs.disaster, climate: budgetInfo.power >= costs.climate }
-              : { spawn: true, disaster: true, climate: true },
+              ? {
+                  spawn: budgetInfo.power >= costs.spawn,
+                  disaster: budgetInfo.power >= costs.disaster,
+                  climate: budgetInfo.power >= costs.climate,
+                  tower: budgetInfo.power >= (costs.tower ?? TOWER_COST),
+                }
+              : { spawn: true, disaster: true, climate: true, tower: true },
           );
         } else {
-          hud.setAffordable({ spawn: true, disaster: true, climate: true });
+          hud.setAffordable({ spawn: true, disaster: true, climate: true, tower: true });
         }
       },
     },
@@ -164,6 +175,13 @@ async function boot(): Promise<void> {
       const ok = intervene({ type: 'disaster', kind, cell, radius: DISASTER_RADIUS[kind] });
       if (ok) hud.addMarker(s.year, kind, '#E07A55');
       hud.setArmed(null);
+      return;
+    }
+    if (towerArmed) {
+      const s = world.snapshot();
+      const ok = intervene({ type: 'build_tower', cell });
+      if (ok) hud.addMarker(s.year, '気象塔', '#7FB3E0');
+      hud.setTowerArmed(false);
       return;
     }
     selected = cell;

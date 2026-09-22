@@ -48,6 +48,12 @@ export function commandKey(cmd: Command): string | null {
     // 勅令 (M9-03) は言葉であって行為ではないので、儀式にも気まぐれにも数えない
     case 'civ_edict':
       return null;
+    // 気象塔を建てる (M10-01) は星の行為 (輝石と力を払う) なので、儀式にもばらつきにも数える
+    case 'build_tower':
+      return 'build_tower';
+    // 維持費の自動切り替え (M10-01) は sink/civ_edict と同じく予定どおりの進行・言葉なので数えない
+    case 'tower_power':
+      return null;
     // 迎撃 (M10-02) は星の行為だが 1 回きりなので儀式にはならない。気まぐれ (種類の入れ替わり) に数えないよう null
     case 'intercept':
       return null;

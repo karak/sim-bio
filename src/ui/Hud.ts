@@ -1,6 +1,6 @@
 import type { Command, DisasterKind, SaveData, WorldSnapshot } from '../simulation/types';
 import type { CivState } from '../simulation/civilization';
-import { STAGE_NAMES, NEED } from '../simulation/civilization';
+import { STAGE_NAMES, NEED, cellDistance } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
@@ -9,6 +9,7 @@ import { SEA_LEVEL } from '../simulation/terrain';
 import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
 import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
+import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
 import './hud.css';
 
 /** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
@@ -42,6 +43,8 @@ export type HudHandlers = {
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
   onSpawnArm(speciesId: string | null): void;
+  /** 気象塔チップを押した (次に島をクリックした場所に build_tower を送る) / 解除した (M10-01) */
+  onTowerArm(active: boolean): void;
 };
 
 export type Hud = {
@@ -50,8 +53,10 @@ export type Hud = {
   addMarker(x: number, label: string, color: string): void;
   setArmed(kind: DisasterKind | null): void;
   setSpawnArmed(speciesId: string | null): void;
+  /** 気象塔チップの武装状態を外から揃える (M10-01) */
+  setTowerArmed(active: boolean): void;
   /** 星の力で買えるかどうか。false のチップは薄く見せる (押せるが runner が弾く) */
-  setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean }): void;
+  setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean; tower: boolean }): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -102,6 +107,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <span class="sep"></span>
     ${DISASTERS.map((d) => `<button id="disaster-${d.kind}" class="chip">${d.label}</button>`).join('')}
     <span id="volcano-hint" class="dim" hidden>火の山: 島の印(火口)に打てば熱が塔の燃料になる</span>
+    <button id="tower-chip" class="chip">気象塔</button>
+    <span id="tower-hint" class="dim" hidden>塔・信仰 ${TOWER_FAITH}・輝石 ${TOWER_CRYSTAL}</span>
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
@@ -128,6 +135,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   let lastYear = -1;
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
+  /** 気象塔チップを持っているか (M10-01)。災害・種パレットと排他 */
+  let towerArmed = false;
   // 種チップの表示モード: 密度そのまま or 住みやすさ (適合度)。選択中の種があるときだけ layer に効く
   let layerMode: 'density' | 'suit' = 'density';
   let activeSpeciesId: string | null = null;
@@ -176,9 +185,17 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     $('rain-scale-v').textContent = '×' + v.toFixed(2);
     h.onCommand({ type: 'set_climate', rainScale: v });
   });
+  // 気象塔チップ (M10-01): 災害・種パレットと同じ「武装 → 次のクリックで発火」の流儀。三者は排他 (どれか 1 つだけ武装できる)
+  const setTowerArmed = (v: boolean) => {
+    towerArmed = v;
+    $('tower-chip').classList.toggle('armed', v);
+    $('tower-hint').hidden = !v;
+    h.onTowerArm(v);
+  };
   const setSpawnArmed = (id: string | null) => {
     spawnArmed = id;
     for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('armed', b.id === `spawn-${id}`);
+    if (id !== null && towerArmed) setTowerArmed(false);
     h.onSpawnArm(id);
   };
   const setArmed = (k: DisasterKind | null) => {
@@ -187,8 +204,15 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     // 火山チップを持っているときだけ、火山セルへの誘導ヒントを出す (M8-08)
     $('volcano-hint').hidden = k !== 'volcano';
     if (k !== null && spawnArmed !== null) setSpawnArmed(null);
+    if (k !== null && towerArmed) setTowerArmed(false);
     h.onDisasterArm(k);
   };
+  $('tower-chip').addEventListener('click', () => {
+    const next = !towerArmed;
+    if (next && armed !== null) setArmed(null);
+    if (next && spawnArmed !== null) setSpawnArmed(null);
+    setTowerArmed(next);
+  });
   for (const d of DISASTERS) {
     $(`disaster-${d.kind}`).addEventListener('click', () => setArmed(armed === d.kind ? null : d.kind));
   }
@@ -357,12 +381,20 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const L = s.layers;
     const sea = L.elevation[cell] < SEA_LEVEL;
     p.hidden = false;
+    // 気象塔 (M10-01): このセルが効いている塔の半径内なら「気象塔: 雨 N×」を出す。
+    // 複数の塔が重なれば towers 配列の後ろ (= 後で建てたもの) を優先する (World.towerFactors と同じ規約)
+    let tower: WorldSnapshot['towers'][number] | null = null;
+    for (const t of s.towers) if (t.active && cellDistance(cell, t.cell, s.size) <= t.radius) tower = t;
+    const towerText = tower
+      ? `<div><span>気象塔</span><span class="mono">雨 ${tower.rainScale.toFixed(2)}×${tower.tempOffset !== 0 ? `・気温 ${tower.tempOffset >= 0 ? '+' : ''}${tower.tempOffset.toFixed(1)}` : ''}</span></div>`
+      : '';
     $('cell-info').innerHTML =
       `<div class="mono">セル (${x}, ${y})${sea ? ' · 海' : ''}</div>` +
       `<div><span>標高</span><span class="mono">${Math.round(L.elevation[cell] * 1000)} m</span></div>` +
       `<div><span>気温 / 水分</span><span class="mono">${L.temperature[cell].toFixed(1)}℃ / ${L.moisture[cell].toFixed(2)}</span></div>` +
       `<div><span>生気 / 枯死</span><span class="mono">${L.vitality[cell].toFixed(2)} / ${L.litter[cell].toFixed(2)}</span></div>` +
       `<div><span>輝石</span><span class="mono">${L.crystal[cell].toFixed(2)}</span></div>` +
+      towerText +
       s.species.map((d) => `<div><span>${d.name}</span><span class="mono">${L.populations[d.id][cell].toFixed(2)}</span></div>`).join('');
   };
 
@@ -375,11 +407,13 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     },
     setArmed,
     setSpawnArmed,
+    setTowerArmed,
     setAffordable: (a) => {
       for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('unaffordable', !a.spawn);
       for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('unaffordable', !a.disaster);
       tempEl.classList.toggle('unaffordable', !a.climate);
       rainEl.classList.toggle('unaffordable', !a.climate);
+      $('tower-chip').classList.toggle('unaffordable', !a.tower);
     },
   };
 }
