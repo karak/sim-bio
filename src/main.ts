@@ -11,6 +11,7 @@ import type { ScenarioDef } from './scenario/types';
 import type { Command } from './simulation/types';
 import { resolveCivilizationStart } from './simulation/civilization';
 import { TOWER_COST } from './simulation/weatherTower';
+import { exportCargo } from './simulation/ship';
 
 /** 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる */
 const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, wildfire: 0, plague: 4 };
@@ -137,7 +138,8 @@ async function boot(): Promise<void> {
       ticksPerYear: config.ticksPerYear,
       onVerdict: (v) => {
         loop.setSpeed(0);
-        tablet.showVerdict(v);
+        // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
+        tablet.showVerdict(v, v.status === 'escaped' ? exportCargo(world.snapshot()) : undefined);
         log.write({ ts: new Date().toISOString(), tick: world.snapshot().tick, year: world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
       },
       onWarning: (w) => {

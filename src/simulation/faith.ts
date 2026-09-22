@@ -57,6 +57,9 @@ export function commandKey(cmd: Command): string | null {
     // 迎撃 (M10-02) は星の行為だが 1 回きりなので儀式にはならない。気まぐれ (種類の入れ替わり) に数えないよう null
     case 'intercept':
       return null;
+    // 舟を作れ (M10-03) は civ_edict と同じく言葉 (石板が民に告げる) であって行為ではないので、儀式にも気まぐれにも数えない
+    case 'launch_ship':
+      return null;
   }
 }
 

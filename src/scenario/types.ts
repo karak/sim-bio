@@ -27,6 +27,8 @@ export type Condition =
   | { type: 'civ_vitality'; min?: number; max?: number; years?: number }
   /** 迎撃した回数 (M10-02)。「迎撃の塔」は min: 1 を alive に使う。文明が無ければ 0 */
   | { type: 'intercepted'; min?: number; max?: number }
+  /** 舟が飛び立ち、生きている種が minSpecies (省略時 1) 以上か (M10-03)。「空の舟」の escape / alive に使う */
+  | { type: 'escaped'; minSpecies?: number }
   | { type: 'year_reached'; year: number }
   | { type: 'no_intervention' }
   | { type: 'all'; of: Condition[] }
@@ -56,7 +58,18 @@ export type ScenarioDef = {
      * 文明の初期状態の上書き (M8-02)。stage/home 省略時は stage 0 / home -1 (未発生)。
      * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため)
      */
-    civilization?: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number; /** 星の工事の備蓄の開始値 (M10-02) */ worksStock?: number };
+    civilization?: {
+      speciesId: string;
+      stage?: number;
+      home?: number;
+      fuelStock?: number;
+      prayer?: PrayerKind;
+      faith?: number;
+      /** 星の工事の備蓄の開始値 (M10-02) */
+      worksStock?: number;
+      /** 空の舟の進みの開始値 (M10-03、E2E の決定論のため) */
+      shipProgress?: number;
+    };
     /** 輝石の倍率 (M10-02)。脈を薄くする舞台装置。省略時 1 */
     crystalScale?: number;
     /**
@@ -79,6 +92,8 @@ export type ScenarioDef = {
   alive: Condition;
   /** 毎年評価し、満たした瞬間に負け。省略時は years 到達時の alive 判定だけで決まる */
   dead?: Condition;
+  /** 毎年、dead より先に評価し、満たした瞬間に部分勝利 (escaped) になる (M10-03)。省略時は escaped を評価しない */
+  escape?: Condition;
   /** 出さない警告の種類。予言どおりの進行 (沈む欠片の陸の減少など) を警告にしないため */
   ignoreWarnings?: WarningKind[];
   /** 予言の節目。未到達のものを石板に先に見せ、到達したら消す */
@@ -101,7 +116,7 @@ export type ScenarioDef = {
   };
 };
 
-export type ScenarioStatus = 'running' | 'alive' | 'dead';
+export type ScenarioStatus = 'running' | 'alive' | 'dead' | 'escaped';
 /** 勝敗が確定したときの内訳。オーバーレイに出す */
 export type VerdictStats = { interventions: number; powerSpent: number; landRatio: number; totals: Record<string, number> };
 export type Verdict = { status: ScenarioStatus; reason: string; stats?: VerdictStats };

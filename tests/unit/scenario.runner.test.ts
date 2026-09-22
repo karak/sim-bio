@@ -10,7 +10,7 @@ const fakeWorld = (totals: Record<string, number>) => {
   const size = 4;
   const n = size * size;
   const snapshot = (): WorldSnapshot => ({
-    tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], totals,
+    tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null, totals,
     layers: { elevation: new Float32Array(n).fill(0.5), temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
   });
   return { dispatch: (c: Command) => cmds.push(c), snapshot, step: (t: number) => { tick += t; }, cmds };
@@ -62,6 +62,19 @@ describe('createScenarioRunner', () => {
     expect(r2.update(w2.snapshot()).status).toBe('dead');
     r2.intervene({ type: 'set_climate', tempOffset: 1 });
     expect(r2.interventions()).toBe(0);
+  });
+});
+
+describe('launch_ship (M10-03、ScenarioRunner)', () => {
+  it('civ_edict と同じく力を消費せず (cost 0)、介入回数にも数えない', () => {
+    const w = fakeWorld({ deer: 1 });
+    const withBudget: ScenarioDef = { ...def, budget: { start: 10, incomePerYear: 0, costs: { spawn: 3, disaster: 5, climate: 1 }, upkeepPerYear: { rainScale: 0, tempOffset: 0 } } };
+    const r = createScenarioRunner(withBudget, w);
+    r.update(w.snapshot());
+    expect(r.intervene({ type: 'launch_ship' })).toEqual({ ok: true });
+    expect(r.power()).toBe(10); // 値段 0 なので力は減らない
+    expect(r.interventions()).toBe(0); // 言葉であって行為ではないので数えない
+    expect(w.cmds).toEqual([{ type: 'launch_ship' }]);
   });
 });
 

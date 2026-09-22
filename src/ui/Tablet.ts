@@ -7,6 +7,7 @@ import { formatFaith } from '../simulation/faith';
 import { STAGE_NAMES } from '../simulation/civilization';
 import type { PrayerKind } from '../simulation/prayer';
 import { TOWER_RAIN_SCALE_DEFAULT } from '../simulation/weatherTower';
+import type { Cargo } from '../simulation/ship';
 
 export type Tablet = {
   /** 開始からの年・判定・星の力 (budget が無いシナリオでは null)・現在の祈り (M9-02) を表示する */
@@ -20,8 +21,8 @@ export type Tablet = {
     /** 出す節目 (M10-02)。省略時は def.milestones。迎撃で取り消した隕石の節目を外して渡す */
     milestones?: { atYear: number; text: string }[],
   ): void;
-  /** 勝敗が確定したときの大きな表示 */
-  showVerdict(verdict: Verdict): void;
+  /** 勝敗が確定したときの大きな表示。escaped なら cargo があれば「持ち出しを保存」を出す (M10-03) */
+  showVerdict(verdict: Verdict, cargo?: Cargo): void;
   /** 介入が弾かれた・力が尽きたときに石板を短く揺らして知らせる */
   flash(): void;
 };
@@ -57,6 +58,8 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
         return `気象塔を建てた(雨 ${(c.rainScale ?? TOWER_RAIN_SCALE_DEFAULT).toFixed(2)}×)`;
       case 'tower_power':
         return c.active ? '気象塔が動き出した' : '気象塔が止まった';
+      case 'launch_ship':
+        return '石板が告げた: 舟を作れ';
     }
   };
   switch (e.kind) {
@@ -69,7 +72,9 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
     case 'warning':
       return `⚠ ${e.warning.text}`;
     case 'verdict':
-      return e.verdict.status === 'alive' ? '島は生き延びた' : '島は滅びた';
+      if (e.verdict.status === 'alive') return '島は生き延びた';
+      if (e.verdict.status === 'escaped') return '次の島へ逃れた';
+      return '島は滅びた';
     case 'civ_stage':
       if (e.to === 0) return '文明が崩壊した';
       return `文明が ${STAGE_NAMES[e.from]} → ${STAGE_NAMES[e.to]} に${e.to > e.from ? '上がった' : '下がった'}`;
@@ -132,7 +137,7 @@ export function createTablet(
       <div class="verdict-title" id="verdict-title"></div>
       <div class="verdict-reason" id="verdict-reason"></div>
       <div class="verdict-stats mono" id="verdict-stats"></div>
-      <div class="row"><button id="verdict-retry" class="chip">もう一度</button><button id="verdict-free" class="chip">自由モードへ</button></div>
+      <div class="row"><button id="verdict-retry" class="chip">もう一度</button><button id="verdict-free" class="chip">自由モードへ</button><a id="verdict-download" class="chip" href="#" download="cargo.json" hidden>持ち出しを保存</a></div>
     </div>
   </div>`,
   );
@@ -147,6 +152,8 @@ export function createTablet(
   });
   $('verdict-retry').addEventListener('click', () => onSelect(def?.id ?? null));
   $('verdict-free').addEventListener('click', () => onSelect(null));
+  // 持ち出しの Blob URL (M10-03)。showVerdict のたびに前回分を捨てる (retry で作り直すため)
+  let cargoUrl: string | null = null;
 
   return {
     update(year, verdict, budget, warnings = [], timeline = [], prayer = null, milestones = def?.milestones ?? []) {
@@ -188,13 +195,27 @@ export function createTablet(
       el.classList.add('shake');
       setTimeout(() => el.classList.remove('shake'), 300);
     },
-    showVerdict(verdict) {
+    showVerdict(verdict, cargo) {
       const box = $('verdict');
       box.hidden = false;
       box.classList.toggle('alive', verdict.status === 'alive');
       box.classList.toggle('dead', verdict.status === 'dead');
-      $('verdict-title').textContent = verdict.status === 'alive' ? '島は生き延びた' : '島は滅びた';
+      box.classList.toggle('escaped', verdict.status === 'escaped');
+      $('verdict-title').textContent = verdict.status === 'alive' ? '島は生き延びた' : verdict.status === 'escaped' ? '次の島へ' : '島は滅びた';
       $('verdict-reason').textContent = verdict.reason;
+      // 持ち出し (M10-03): escaped で cargo があれば「持ち出しを保存」を出す。Blob + <a download> でその場で持てるようにする
+      const dl = $<HTMLAnchorElement>('verdict-download');
+      if (cargoUrl) {
+        URL.revokeObjectURL(cargoUrl);
+        cargoUrl = null;
+      }
+      if (verdict.status === 'escaped' && cargo) {
+        cargoUrl = URL.createObjectURL(new Blob([JSON.stringify(cargo)], { type: 'application/json' }));
+        dl.href = cargoUrl;
+        dl.hidden = false;
+      } else {
+        dl.hidden = true;
+      }
       const st = verdict.stats;
       $('verdict-stats').innerHTML = st
         ? [

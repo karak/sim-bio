@@ -3,6 +3,7 @@ import { describeEvent } from '../../src/ui/Tablet';
 
 const names = { deer: '鹿' };
 const alive = { status: 'alive', reason: 'x' } as const;
+const escaped = { status: 'escaped', reason: 'x' } as const;
 
 describe('describeEvent (年表の文)', () => {
   it('介入・予定イベント・力切れ・警告・勝敗をそれぞれ人が読める文にする', () => {
@@ -14,6 +15,7 @@ describe('describeEvent (年表の文)', () => {
     expect(describeEvent({ year: 3, kind: 'power_exhausted' }, names)).toBe('力が尽き、気候が元に戻った');
     expect(describeEvent({ year: 3, kind: 'warning', warning: { kind: 'power_low', key: 'power_low', text: '力が足りない(残り 0)' } }, names)).toBe('⚠ 力が足りない(残り 0)');
     expect(describeEvent({ year: 3, kind: 'verdict', verdict: alive }, names)).toBe('島は生き延びた');
+    expect(describeEvent({ year: 3, kind: 'verdict', verdict: escaped }, names)).toBe('次の島へ逃れた');
     expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'spawn_species', speciesId: 'unknown', cell: 0, amount: 0.5 } }, names)).toBe('unknownを放った');
   });
   it('文明の段階の上下・崩壊を人が読める文にする (M8-04)', () => {
@@ -51,5 +53,12 @@ describe('describeEvent: 迎撃 (M10-02)', () => {
   it('intercept の介入と、取り消しの年表を人が読める文にする', () => {
     expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'intercept' } }, {})).toBe('星が砕けた');
     expect(describeEvent({ year: 3, kind: 'intercepted', atYear: 150 }, {})).toBe('星が砕けた(150 年目の星は落ちない)');
+  });
+});
+
+describe('describeEvent: 空の舟 (M10-03)', () => {
+  it('launch_ship の介入と escaped の勝敗を人が読める文にする', () => {
+    expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'launch_ship' } }, {})).toBe('石板が告げた: 舟を作れ');
+    expect(describeEvent({ year: 3, kind: 'verdict', verdict: escaped }, {})).toBe('次の島へ逃れた');
   });
 });

@@ -10,6 +10,8 @@ import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
 import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
+import { canLaunchShip, shipDone, timberAround, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState } from '../simulation/ship';
+import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import './hud.css';
 
 /** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
@@ -31,6 +33,18 @@ export function formatCiv(civ: CivState | null): string | null {
   // 星の工事 (M10-02): 星になって年をまたぐと works が付く。「工事 備蓄 / 必要」、止まっていれば「止」を足す
   const worksText = civ.works ? ` · 工事 ${civ.works.stock.toFixed(1)} / ${INTERCEPT_NEED}${civ.works.stopped ? ' 止' : ''}` : '';
   return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${vitalityText}${miningText}${worksText}`;
+}
+
+/**
+ * #hud-ship の説明文 (M10-03)。formatCiv とは別の行に出す (formatCiv の既存の文字列はテストが留め金にしているので変えない)。
+ * 未着工なら門の説明、建造中なら進み、完成したが信仰不足なら「民は乗らない」を添え、飛び立てば専用の文を返す。
+ */
+export function formatShipHint(civ: CivState | null, ship: ShipState | null): string {
+  if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。材を伐って ${SHIP_NEED} まで進む`;
+  if (ship.launchedYear !== undefined) return '舟は飛び立った';
+  const faith = civ?.faith ?? 0;
+  const waiting = shipDone(ship) && faith < SHIP_FAITH;
+  return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED}` + (waiting ? ` · 民は乗らない(信仰 ${formatFaith(faith)})` : '');
 }
 
 export type HudHandlers = {
@@ -90,6 +104,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <div id="hud-civ" class="mono" hidden></div>
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
     <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span></div>
+    <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
@@ -220,6 +235,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   $('edict-stop').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'stop_mining' }));
   $('edict-resume').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'resume_mining' }));
   $('intercept-btn').addEventListener('click', () => h.onCommand({ type: 'intercept' }));
+  $('ship-btn').addEventListener('click', () => h.onCommand({ type: 'launch_ship' }));
   $('save-btn').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(h.onSave())], { type: 'application/json' });
     const a = document.createElement('a');
@@ -352,6 +368,16 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const worksEl = $('hud-works');
     worksEl.hidden = !s.civ?.works;
     if (s.civ?.works) $('intercept-btn').classList.toggle('unaffordable', !canIntercept(s.civ).ok);
+    // 空の舟 (M10-03): 文明が発生していれば行を出す (帆に満たない間は門の説明だけ)。formatCiv は変えず、この行にだけ進みを出す
+    const shipEl = $('hud-ship');
+    shipEl.hidden = civText === null;
+    if (civText !== null && s.civ) {
+      const civ = s.civ;
+      $('ship-hint').textContent = formatShipHint(civ, s.ship);
+      const radius = LOAD_RADIUS[civ.stage] ?? 0;
+      const timber = timberAround({ forest: s.layers.populations['forest'], belltree: s.layers.populations['belltree'] }, civ.home, radius, s.layers.elevation, s.size);
+      $('ship-btn').classList.toggle('unaffordable', !canLaunchShip(civ, timber, s.ship).ok);
+    }
     if (s.year !== lastYear) {
       lastYear = s.year;
       ts.push(s.year, { ...s.totals, temp: s.meanTemperature });

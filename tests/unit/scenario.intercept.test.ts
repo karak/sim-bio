@@ -22,6 +22,7 @@ const fakeWorld = (civ: Partial<CivState> | null) => {
     civ: c ? { ...c } : null,
     volcanoCell: 0,
     towers: [],
+    ship: null,
   });
   return { dispatch: (cmd: Command) => { cmds.push(cmd); }, snapshot, step: (t: number) => { tick += t; }, cmds, setCiv: (v: Partial<CivState>) => { c = { ...c!, ...v }; } };
 };
