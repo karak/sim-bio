@@ -39,6 +39,15 @@ describe('星の工事 (M10-02): stepWorks', () => {
     expect(r3.civ.works!.stopped).toBe(false);
     expect(r3.civ.works!.stock).toBeCloseTo(1 + WORKS_RATE, 6);
   });
+  it('勅令「採掘を止めよ」の間は工事も掘らない (M10R-05: 備蓄と輝石は変わらず、stopped は立たない。再開すれば積む)', () => {
+    const c = mkCrystal();
+    const r = stepWorks(mkCiv({ miningStopped: true, works: { stock: 1, stopped: false } }), c, land, SIZE);
+    expect(r.mined).toBe(0);
+    expect(r.civ.works).toEqual({ stock: 1, stopped: false });
+    expect(sum(c)).toBeCloseTo(0.1 * N, 6);
+    const r2 = stepWorks({ ...r.civ, miningStopped: false }, c, land, SIZE);
+    expect(r2.civ.works!.stock).toBeCloseTo(1 + WORKS_RATE, 6);
+  });
   it('備蓄が INTERCEPT_NEED に達しても掘り続ける (星は掘るのをやめない。M10 の通し実行で、止めると霊脈枯れの勅令の意味が消えた)', () => {
     const c = mkCrystal();
     const r = stepWorks(mkCiv({ works: { stock: INTERCEPT_NEED - 0.05, stopped: false } }), c, land, SIZE);

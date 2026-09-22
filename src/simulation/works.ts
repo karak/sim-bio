@@ -25,6 +25,8 @@ export type WorksState = NonNullable<CivState['works']>;
  * 備蓄が INTERCEPT_NEED に達しても掘り続ける (M10 の通し実行で発覚: 備蓄で止めると「星になれば掘らなくなる」ので、
  * 霊脈枯れで苔を放ち続けるだけ (儀式) の民が星に上がって脈が残り、勅令の意味が消えた。民は勝手に掘る、が M9 の前提)。
  * crystal は呼び出し元の配列をその場で書き換える (stepMining と同じ流儀)。
+ * 勅令「採掘を止めよ」(miningStopped) は工事の採掘も止める (M10R-05: 信仰の上限が入ると、脈が 10% を切ったあとの「星の砂を」の
+ * 無視で上限が削れて工事が止まり、星が掘り続ける限りどの手も滅びた。民が掘るのをやめれば備蓄は残り、迎撃はできる)。
  */
 export function stepWorks(
   civ: CivState,
@@ -36,6 +38,8 @@ export function stepWorks(
   if (civ.stage < MAX_STAGE || civ.home < 0) return { civ, mined: 0 };
   const works: WorksState = civ.works ?? { stock: 0, stopped: false };
   if ((civ.faith ?? 0) < WORKS_FAITH) return { civ: { ...civ, works: { ...works, stopped: true } }, mined: 0 };
+  // 勅令で止まっている間は掘らない (M10R-05)。stopped は「信仰不足で民が働かない」の印なので立てない
+  if (civ.miningStopped) return { civ: { ...civ, works: { ...works, stopped: false } }, mined: 0 };
   const pool = miningPool(civ.home, MINE_RADIUS[MAX_STAGE], elevation, size, veins);
   let total = 0;
   for (const i of pool) total += crystal[i];
