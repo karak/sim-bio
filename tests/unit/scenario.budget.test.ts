@@ -5,6 +5,7 @@ import type { Command, WorldSnapshot } from '../../src/simulation/types';
 import type { PrayerKind } from '../../src/simulation/prayer';
 import type { WeatherTower } from '../../src/simulation/weatherTower';
 import { TOWER_COST, TOWER_UPKEEP } from '../../src/simulation/weatherTower';
+import type { DreamEaterState } from '../../src/simulation/dreamEater';
 import { grass } from './helpers';
 
 /**
@@ -24,6 +25,7 @@ const fakeWorld = (
     civPrayersAnswered?: number;
     civPrayersIgnored?: number;
     towers?: WeatherTower[];
+    dreamEater?: DreamEaterState | null;
   } = {},
 ) => {
   let tick = 0;
@@ -48,6 +50,8 @@ const fakeWorld = (
   let civEdict: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; n: number } | undefined;
   // 気象塔 (M10-01)。テストから setTowers/dispatch(tower_power) で active を変えて維持費の timeline を確かめる
   let towers: WeatherTower[] = opts.towers ?? [];
+  // 夢喰い (M10R-03)。テストから setDreamEater で年をまたいで変えて dream_eater の timeline を確かめる
+  let dreamEater: DreamEaterState | null = opts.dreamEater ?? null;
   const snapshot = (): WorldSnapshot => ({
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
@@ -65,6 +69,7 @@ const fakeWorld = (
     volcanoCell: 0,
     towers: towers.map((t) => ({ ...t })),
     ship: null,
+    dreamEater,
   });
   const dispatch = (c: Command) => {
     cmds.push(c);
@@ -86,6 +91,7 @@ const fakeWorld = (
     setCivPrayersIgnored: (n: number) => { civPrayersIgnored = n; },
     setCivEdict: (e: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; n: number } | undefined) => { civEdict = e; },
     setTowers: (t: WeatherTower[]) => { towers = t; },
+    setDreamEater: (d: DreamEaterState | null) => { dreamEater = d; },
   };
 };
 
@@ -376,6 +382,35 @@ describe('文明の年表 (civ_faith_cap = 民の記憶, M10R-02)', () => {
     w.setCivFaithCap(1); // 誕生年相当。前年の値が無いので積まない
     r.update(w.snapshot());
     expect(r.timeline().filter((e) => e.kind === 'civ_faith_cap')).toEqual([]);
+  });
+});
+
+describe('文明の年表 (dream_eater, M10R-03)', () => {
+  it('snapshot.dreamEater の有無が前年から変われば timeline に dream_eater (appeared/left) を積む', () => {
+    const w = fakeWorld({ civStage: 3, civFaithCap: 0.9 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setDreamEater({ since: 1 });
+    w.setCivFaithCap(0.2);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setDreamEater(null);
+    w.setCivFaithCap(0.6);
+    r.update(w.snapshot());
+    const events = r.timeline().filter((e) => e.kind === 'dream_eater');
+    expect(events).toEqual([
+      { year: 1, kind: 'dream_eater', phase: 'appeared', faithCap: 0.2 },
+      { year: 2, kind: 'dream_eater', phase: 'left', faithCap: 0.6 },
+    ]);
+  });
+  it('有無が変わらなければ積まない', () => {
+    const w = fakeWorld({ civStage: 3, civFaithCap: 0.9, dreamEater: { since: 0 } });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'dream_eater')).toEqual([]);
   });
 });
 

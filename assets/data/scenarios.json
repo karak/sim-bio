@@ -470,6 +470,9 @@
         {
           "type": "prayers_answered",
           "min": 1
+        },
+        {
+          "type": "dream_eater"
         }
       ]
     },

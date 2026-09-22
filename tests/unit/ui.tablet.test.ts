@@ -66,3 +66,10 @@ describe('describeEvent: 空の舟 (M10-03)', () => {
     expect(describeEvent({ year: 3, kind: 'verdict', verdict: escaped }, {})).toBe('次の島へ逃れた');
   });
 });
+
+describe('describeEvent: 夢喰い (M10R-03)', () => {
+  it('現れた・去ったを信仰の上限つきで人が読める文にする', () => {
+    expect(describeEvent({ year: 40, kind: 'dream_eater', phase: 'appeared', faithCap: 0.28 }, {})).toBe('夢喰いが集落に現れた(信仰の上限 0.28)');
+    expect(describeEvent({ year: 60, kind: 'dream_eater', phase: 'left', faithCap: 0.5 }, {})).toBe('夢喰いが去った(信仰の上限 0.50)');
+  });
+});

@@ -40,6 +40,19 @@ describe('formatCiv (HUD の文明の 1 行)', () => {
   });
 });
 
+describe('formatCiv: 夢喰い (M10R-03)', () => {
+  it('dreamEater 引数が true なら信仰の直後に「· 夢喰い」を足す。省略時・false では出さない', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 10, population: 3.6, faith: 0.2, faithCap: 0.25 };
+    expect(formatCiv(civ, true)).toBe('文明 石(4) · 進み 0% · 民 360 · 信仰 0.20 / 上限 0.25 · 夢喰い');
+    expect(formatCiv(civ, false)).toBe('文明 石(4) · 進み 0% · 民 360 · 信仰 0.20 / 上限 0.25');
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 0% · 民 360 · 信仰 0.20 / 上限 0.25');
+  });
+  it('信仰の後・生気/採掘の前に入る (M9-05 の vitality と併用)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 10, population: 1, faith: 0.2, vitality: 0.5, miningStopped: true };
+    expect(formatCiv(civ, true)).toBe('文明 石(4) · 進み 0% · 民 100 · 信仰 0.20 · 夢喰い · 生気 50% · 採掘 止');
+  });
+});
+
 describe('formatCiv の採掘の停止 (M9-03)', () => {
   it('miningStopped なら末尾に「· 採掘 止」を足し、そうでなければ出さない', () => {
     const civ: CivState = { speciesId: 'deer', stage: 3, progress: 0, home: 10, population: 1, faith: 0.7, miningStopped: true };
