@@ -1,7 +1,7 @@
 ---
 id: M10R-04
 title: 舟か塔か(材の天秤)と乗せる民
-status: todo
+status: in_progress
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md#34-舟か塔か舞台装置の改訂m10r-04
 depends_on: [M10R-01]

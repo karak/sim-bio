@@ -1,7 +1,7 @@
 ---
 id: M10R-02
 title: 民の記憶(信仰の上限)と絶え間ない祈り
-status: todo
+status: in_progress
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md#31-民の記憶--信仰の上限民の特性m10r-02
 depends_on: [M10R-01]

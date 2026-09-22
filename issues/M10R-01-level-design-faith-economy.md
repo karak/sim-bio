@@ -1,11 +1,11 @@
 ---
 id: M10R-01
 title: レベルデザイン: 信仰の経済の立て直し(民の記憶・絶え間ない祈り・夢喰い・舟か塔か)
-status: in_progress
+status: done
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md
 depends_on: [M10-05]
-evidence: []
+evidence: ["9f07330 docs/design/2026-09-22-level-design-faith-economy.md"]
 ---
 
 # レベルデザイン: 信仰の経済の立て直し
@@ -21,10 +21,11 @@ M10-05(M10 の LD。星の門・工事・舟の建造を引き継ぐ)
 
 ## Acceptance criteria
 
-- [ ] docs/design/2026-09-22-level-design-faith-economy.md に §1 前提(実測つき)、§2 芯、§3 キーアイテム、§4 ループ、§5 判定行列、§6 必要システム、§7 捨てた案、§9 承認事項
-- [ ] §9 の承認事項をユーザーが承認(日付と変更点を作業ログに記す)
-- [ ] M10R-02〜06 のチケットが LD の §6 と対応している
+- [x] docs/design/2026-09-22-level-design-faith-economy.md に §1 前提(実測つき)、§2 芯、§3 キーアイテム、§4 ループ、§5 判定行列、§6 必要システム、§7 捨てた案、§9 承認事項
+- [x] §9 の承認事項をユーザーが承認(日付と変更点を作業ログに記す)
+- [x] M10R-02〜06 のチケットが LD の §6 と対応している
 
 ## 作業ログ
 
 - 2026-09-22: 草稿。§9 の承認待ち。
+- 2026-09-23 00:07: ユーザーが §9 の 6 点をそのまま承認(変更点なし)。M10R-02・04 に着手。
