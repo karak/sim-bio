@@ -75,8 +75,8 @@ describe('judgeScenario', () => {
 
 describe('assets/data/scenarios.json', () => {
   const defs = JSON.parse(readFileSync('assets/data/scenarios.json', 'utf8')) as ScenarioDef[];
-  it('contains the eight scenarios (six first + M9 の 2 本) with prophecy and conditions', () => {
-    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine', 'tower', 'no-answer', 'vein-drain']);
+  it('contains the nine scenarios (six first + M9 の 2 本 + M10 の迎撃の塔) with prophecy and conditions', () => {
+    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine', 'tower', 'no-answer', 'vein-drain', 'intercept-tower']);
     for (const d of defs.filter((x) => !x.hidden)) {
       expect(d.prophecy.length).toBeGreaterThan(10);
       expect(d.years).toBeGreaterThan(0);
@@ -180,5 +180,17 @@ describe('prayers_answered (M9-03)', () => {
     expect(evaluate(c, input(s0))).toEqual({ ok: false, why: '祈りに 1 回応えた' });
     expect(evaluate(c, input(snap({ civ: null }))).ok).toBe(true);
     expect(evaluate({ type: 'prayers_answered', min: 1 }, input(s0)).ok).toBe(true);
+  });
+});
+
+describe('intercepted (M10-02)', () => {
+  it('迎撃した回数を min/max で判定。文明が無い・数が無ければ 0', () => {
+    const c = { type: 'intercepted', min: 1 } as const;
+    const s0 = snap({ civ: { stage: 7 } });
+    expect(evaluate(c, input(s0))).toEqual({ ok: false, why: '星は砕けなかった' });
+    s0.civ!.intercepted = 1;
+    expect(evaluate(c, input(s0))).toEqual({ ok: true, why: '星を 1 回砕いた' });
+    expect(evaluate(c, input(snap({ civ: null }))).ok).toBe(false);
+    expect(evaluate({ type: 'intercepted', max: 0 }, input(s0)).ok).toBe(false);
   });
 });

@@ -25,6 +25,8 @@ export type Condition =
   | { type: 'prayers_answered'; min?: number; max?: number }
   /** 集落の支え半径内の生気の平均 (M9-03)。years があれば直近 years 年の平均で判定する。文明が無ければ 0 扱い */
   | { type: 'civ_vitality'; min?: number; max?: number; years?: number }
+  /** 迎撃した回数 (M10-02)。「迎撃の塔」は min: 1 を alive に使う。文明が無ければ 0 */
+  | { type: 'intercepted'; min?: number; max?: number }
   | { type: 'year_reached'; year: number }
   | { type: 'no_intervention' }
   | { type: 'all'; of: Condition[] }

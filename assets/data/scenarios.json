@@ -532,5 +532,96 @@
     "ignoreWarnings": [
       "land_low"
     ]
+  },
+  {
+    "id": "intercept-tower",
+    "title": "迎撃の塔",
+    "prophecy": "百五十年目、島を砕く星が落ちる。民が「星」に届き、脈から輝石を蓄えて工事を終えれば、星は砕ける。だが星に届くには群れが要り、群れを育てる間も民は脈を掘り続ける。掘り尽くせば土地が枯れ、工事に回す輝石も無い。民に掘るのを止めさせるにも、工事を進めさせるにも、信仰が要る。百五十年目、星が砕けていて塔が立っていれば、島は生き延びたと言える。",
+    "kind": "prevent",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 4,
+        "home": 1770,
+        "fuelStock": 1400,
+        "faith": 0.5
+      }
+    },
+    "referenceSize": 64,
+    "years": 150,
+    "schedule": [
+      {
+        "atYear": 150,
+        "command": {
+          "type": "disaster",
+          "kind": "meteor",
+          "cell": -1,
+          "radius": 48
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 16,
+        "text": "民は塔に届く。ここから先は群れが要る"
+      },
+      {
+        "atYear": 60,
+        "text": "止めなければ脈は半ば。土地が痩せ始める"
+      },
+      {
+        "atYear": 140,
+        "text": "星が見える。工事が終わっていなければ間に合わない"
+      },
+      {
+        "atYear": 150,
+        "text": "星が落ちる"
+      }
+    ],
+    "alive": {
+      "type": "all",
+      "of": [
+        {
+          "type": "intercepted",
+          "min": 1
+        },
+        {
+          "type": "civ_stage",
+          "min": 6,
+          "years": 5
+        }
+      ]
+    },
+    "dead": {
+      "type": "any",
+      "of": [
+        {
+          "type": "civ_stage",
+          "max": 0
+        },
+        {
+          "type": "species_extinct",
+          "ids": [
+            "deer"
+          ]
+        }
+      ]
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 12,
+      "costs": {
+        "spawn": 4,
+        "disaster": 24,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 80,
+        "tempOffset": 16
+      },
+      "max": 120
+    }
   }
 ]

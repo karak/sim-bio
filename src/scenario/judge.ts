@@ -135,6 +135,11 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
       const ok = inRange(n, c.min, c.max);
       return { ok, why: n === 0 ? '祈りに一度も応えなかった' : `祈りに ${n} 回応えた` };
     }
+    case 'intercepted': {
+      const n = s.civ?.intercepted ?? 0;
+      const ok = inRange(n, c.min, c.max);
+      return { ok, why: n === 0 ? '星は砕けなかった' : `星を ${n} 回砕いた` };
+    }
     case 'civ_vitality': {
       const now = civVitality(s);
       const hist = c.years !== undefined ? (input.civVitalityHistory ?? [now]).slice(-c.years) : [now];
