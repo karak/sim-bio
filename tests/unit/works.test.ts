@@ -39,14 +39,14 @@ describe('星の工事 (M10-02): stepWorks', () => {
     expect(r3.civ.works!.stopped).toBe(false);
     expect(r3.civ.works!.stock).toBeCloseTo(1 + WORKS_RATE, 6);
   });
-  it('備蓄が INTERCEPT_NEED に達したら掘らない (脈を無駄に減らさない)。手前なら残りだけ積む', () => {
+  it('備蓄が INTERCEPT_NEED に達しても掘り続ける (星は掘るのをやめない。M10 の通し実行で、止めると霊脈枯れの勅令の意味が消えた)', () => {
     const c = mkCrystal();
     const r = stepWorks(mkCiv({ works: { stock: INTERCEPT_NEED - 0.05, stopped: false } }), c, land, SIZE);
-    expect(r.mined).toBeCloseTo(0.05, 6);
-    expect(r.civ.works!.stock).toBeCloseTo(INTERCEPT_NEED, 6);
+    expect(r.mined).toBeCloseTo(WORKS_RATE, 6);
+    expect(r.civ.works!.stock).toBeCloseTo(INTERCEPT_NEED - 0.05 + WORKS_RATE, 6);
     const r2 = stepWorks(r.civ, c, land, SIZE);
-    expect(r2.mined).toBe(0);
-    expect(r2.civ.works!.stock).toBeCloseTo(INTERCEPT_NEED, 6);
+    expect(r2.mined).toBeCloseTo(WORKS_RATE, 6);
+    expect(r2.civ.works!.stock).toBeCloseTo(INTERCEPT_NEED - 0.05 + 2 * WORKS_RATE, 6);
   });
   it('輝石が尽きていれば残量までしか積めない', () => {
     const c = mkCrystal(0);

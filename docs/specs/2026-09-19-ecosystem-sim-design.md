@@ -512,8 +512,8 @@ LD: docs/design/2026-09-22-level-design-devices.md §3.2・§8.1・§8.2。
 
 - **星の門**(`civilizationLoad.ts` `canAscend` / `populationFor`): 塔 → 星は半径 `STAR_RADIUS` = LOAD_RADIUS[7] = 12 の民 ≥ POP_NEED[7](4.0)
   かつ信仰 ≥ `STAR_FAITH` 0.8。星の衰退も半径 12 の民で見る。塔以下は支え半径 8 のまま。`CivState.populationStar` を年 1 回更新。
-- **星の工事**(`works.ts`): 星は年に `WORKS_RATE` 0.2 を脈(採掘半径 5 に掛かる脈全体)から備蓄に積む。信仰 < `WORKS_FAITH` 0.6 の年は止まる。
-  備蓄が `INTERCEPT_NEED` 3.0 に達したら掘らない。`CivState.works { stock, stopped }`、`intercepted`。開始指定 `start.civilization.worksStock`。
+- **星の工事**(`works.ts`): 星は年に `WORKS_RATE`(= MINE_RATE[6] × 360 = 0.36、塔の採掘量)を脈(採掘半径 5 に掛かる脈全体)から備蓄に積む。信仰 < `WORKS_FAITH` 0.6 の年は止まる。
+  備蓄が `INTERCEPT_NEED` 3.0 に達しても掘り続ける(星になっても民は掘るのをやめない。LD §8.2)。`CivState.works { stock, stopped }`、`intercepted`。開始指定 `start.civilization.worksStock`。
 - **迎撃**: コマンド `intercept`(World は `canIntercept` で拒否理由を出す。備蓄を 3.0 消費、`intercepted` +1)。ScenarioRunner は最新の snapshot で
   同じ条件を確かめ、次の単発の予定隕石を取り消す(`cancelled`)。`InterveneResult.reason` に `no_target` / `rejected`。年表 `intercepted`、
   `milestones()` は取り消した年の節目を外す、`nextMeteorYear()`。判定条件 `intercepted { min, max }`。力は要らない(民の備蓄で払う)。
