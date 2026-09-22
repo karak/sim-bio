@@ -467,6 +467,18 @@ hud.showCell(cellIndex: number | null): void
 - **判定**: `civVitality` は World が年に 1 回記録した `civ.vitality` を使う(100 倍速では年の境界から最大 100 tick 後に判定するので、測り直すと HUD と食い違う)。
 - **採掘の走査**: 脈ごとのセル一覧(`veinCellLists`)を前計算し、`stepMining` は全セルを走査しない。
 
+### 4.22 実装時の差分(M10-01: 気象塔)
+
+レベルデザイン `docs/design/2026-09-22-level-design-devices.md` §3.1 の気象塔を実装した。新規モジュール `src/simulation/weatherTower.ts` に係数と純粋関数をまとめる(edict.ts / faith.ts と同じ流儀)。
+
+- **係数**: `TOWER_STAGE` 6(塔)、`TOWER_FAITH` 0.6、`TOWER_CRYSTAL` 1.0、`TOWER_RADIUS` 6、`rainScale` 省略時 1.5・`tempOffset` 省略時 0、`TOWER_COST` 12(星の力)、`TOWER_UPKEEP` 4/年(塔 1 つあたり)。
+- **門** (`canBuildTower`): 文明がない → 段階が塔に満たない → 信仰が足りない(値つき)→ セルは海 → そのセルには既に塔がある → 輝石が足りない、の順に確かめ、`{ ok: false; reason }` を返す。輝石の合計 (`crystalAvailable`) は呼び出し元 (`World.validate`) が `towerCrystalPool`(`stepMining` と同じ採掘半径 + 脈全体のプール)で先に計算し、副作用のない validate と、実際に取り除く `takeCrystal`(apply 側)を分けた。
+- **局所気候**: `towerFactors` が塔ごとの半径内に rainScale/tempOffset を書く per-cell 配列 (`World.rainFactor`/`tempFactor`) を作る。重なるセルは後で建てた塔が勝つ(配列の後ろが上書き)。`climate.ts` の `stepClimate` は `ClimateState.rainFactor`/`tempFactor` が省略ならこれまでと同じ挙動(倍率 1・オフセット 0)。
+- **維持費と停止**: `ScenarioRunner` が年ごとに `TOWER_UPKEEP × 塔の数` を通常の気候維持費と別に引く。払えなければ `tower_power { active: false }` を `fromStar: false` で dispatch して年表に `tower_stopped`、力が戻れば `tower_power { active: true }` で `tower_resumed`。`tower_power` は全ての塔の `active` を一括で切り替える(個々の塔ではなく星の力の増減という 1 つの事象として扱う)。
+- **信仰の儀式**: `commandKey` で `build_tower` は星の行為として数え(儀式・ばらつきの対象)、`tower_power` は勅令や沈降と同じ「言葉・自動処理」として数えない (null)。
+- **UI**: HUD の災害列に「気象塔」チップ(武装 → 次の島クリックで `build_tower`、信仰・輝石の下限をヒント表示、力が足りなければ薄く見せる)。セル詳細に半径内なら「気象塔: 雨 N×」。SceneView に塔ごとの小さな目印。石板の年表は専用の `tower`/`tower_stopped`/`tower_resumed` kind(汎用の `intervene` とは分け、二重に出さない)。
+- **ファイル**: `src/simulation/weatherTower.ts`(新規)、`src/simulation/types.ts`・`World.ts`・`climate.ts`・`faith.ts`、`src/scenario/ScenarioRunner.ts`・`types.ts`、`src/ui/Hud.ts`・`Tablet.ts`、`src/render/SceneView.ts`、`src/main.ts`、`assets/data/scenarios.json`(`test-tower` を追加)。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -479,6 +491,16 @@ hud.showCell(cellIndex: number | null): void
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
+
+### M10-01: 気象塔
+
+| 受入項目 | 証跡 |
+|---|---|
+| コマンド build_tower { cell, rainScale?, tempOffset? }。段階 < 塔 または 信仰 < 0.6 または 輝石不足なら拒否(単体テスト、cmd.rejected の理由つき) | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · (SHA 後続コミットで追記) |
+| 塔の半径内だけ気候が変わり、外は変わらない(単体テスト)。塔は snapshot・保存に含まれる | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · (SHA 後続コミットで追記) |
+| 塔の維持費が星の力から毎年引かれ、尽きたら塔が止まる(単体テスト) | `tests/unit/scenario.budget.test.ts`、`tests/unit/world.tower.test.ts` · (SHA 後続コミットで追記) |
+| SceneView に塔が立ち、HUD の災害列に「気象塔」チップ、セル詳細に塔の効果(E2E: 建てると年表に出る) | `src/render/SceneView.ts`、`src/ui/Hud.ts`、`tests/e2e/smoke.spec.ts` · (SHA 後続コミットで追記) |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(373 テスト通過)、`npx playwright test`(19 テスト通過) · (SHA 後続コミットで追記) |
 
 ### M9-00: 文明の自然発生を地域で測る
 

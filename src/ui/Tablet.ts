@@ -6,6 +6,7 @@ import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
 import { STAGE_NAMES } from '../simulation/civilization';
 import type { PrayerKind } from '../simulation/prayer';
+import { TOWER_RAIN_SCALE_DEFAULT } from '../simulation/weatherTower';
 
 export type Tablet = {
   /** 開始からの年・判定・星の力 (budget が無いシナリオでは null)・現在の祈り (M9-02) を表示する */
@@ -46,6 +47,12 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
         return '海が上がった';
       case 'civ_edict':
         return c.edict === 'stop_mining' ? '石板が告げた: 採掘を止めよ' : '石板が告げた: 採掘を再開せよ';
+      // 気象塔を建てる (M10-01) は intervene() が専用の 'tower' kind で積むので、この分岐は実際には通らないが
+      // Command の網羅性のために用意しておく
+      case 'build_tower':
+        return `気象塔を建てた(雨 ${(c.rainScale ?? TOWER_RAIN_SCALE_DEFAULT).toFixed(2)}×)`;
+      case 'tower_power':
+        return c.active ? '気象塔が動き出した' : '気象塔が止まった';
     }
   };
   switch (e.kind) {
@@ -75,6 +82,13 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       if (e.phase === 'withdrawn') return `困りごとが消え、民は祈るのをやめた: ${label}`;
       return `祈りを無視した: ${label}`;
     }
+    // 気象塔 (M10-01)
+    case 'tower':
+      return `星が気象塔を建てた(雨 ${e.rainScale.toFixed(2)}×)`;
+    case 'tower_stopped':
+      return '力が尽き、気象塔が止まった';
+    case 'tower_resumed':
+      return '気象塔が動き出した';
   }
 }
 

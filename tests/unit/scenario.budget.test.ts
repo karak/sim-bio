@@ -3,6 +3,8 @@ import { createScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
 import type { PrayerKind } from '../../src/simulation/prayer';
+import type { WeatherTower } from '../../src/simulation/weatherTower';
+import { TOWER_COST, TOWER_UPKEEP } from '../../src/simulation/weatherTower';
 import { grass } from './helpers';
 
 /**
@@ -20,6 +22,7 @@ const fakeWorld = (
     civPrayer?: { kind: PrayerKind; issuedYear: number; deadlineYear: number };
     civPrayersAnswered?: number;
     civPrayersIgnored?: number;
+    towers?: WeatherTower[];
   } = {},
 ) => {
   let tick = 0;
@@ -40,6 +43,8 @@ const fakeWorld = (
   let civPrayersIgnored = opts.civPrayersIgnored;
   // 勅令 (M9-03)。テストから setCivEdict で変えて civ_edict の timeline を確かめる
   let civEdict: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; n: number } | undefined;
+  // 気象塔 (M10-01)。テストから setTowers/dispatch(tower_power) で active を変えて維持費の timeline を確かめる
+  let towers: WeatherTower[] = opts.towers ?? [];
   const snapshot = (): WorldSnapshot => ({
     tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { ...climate }, totals: { grass: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n).fill(opts.vitality ?? 1), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
@@ -54,6 +59,7 @@ const fakeWorld = (
         }
       : null,
     volcanoCell: 0,
+    towers: towers.map((t) => ({ ...t })),
   });
   const dispatch = (c: Command) => {
     cmds.push(c);
@@ -61,6 +67,9 @@ const fakeWorld = (
       if (c.rainScale !== undefined) climate.rainScale = c.rainScale;
       if (c.tempOffset !== undefined) climate.tempOffset = c.tempOffset;
     }
+    // 維持費の自動切り替え (M10-01): ScenarioRunner が dispatch する tower_power を、実際の World と同じく
+    // 全ての塔の active に反映する (でなければ翌年また同じ dispatch が繰り返されてしまう)
+    if (c.type === 'tower_power') towers = towers.map((t) => ({ ...t, active: c.active }));
   };
   return {
     dispatch, snapshot, step: (t: number) => { tick += t; }, cmds,
@@ -70,6 +79,7 @@ const fakeWorld = (
     setCivPrayersAnswered: (n: number) => { civPrayersAnswered = n; },
     setCivPrayersIgnored: (n: number) => { civPrayersIgnored = n; },
     setCivEdict: (e: { kind: 'stop_mining' | 'resume_mining'; year: number; obeyed: boolean; faith: number; n: number } | undefined) => { civEdict = e; },
+    setTowers: (t: WeatherTower[]) => { towers = t; },
   };
 };
 
@@ -429,5 +439,106 @@ describe('勅令の年表と力 (civ_edict, M9-03)', () => {
     expect(r.power()).toBe(5);
     expect(r.interventions()).toBe(0); // 言葉なので介入回数にも数えない
     expect(w.cmds).toEqual([{ type: 'civ_edict', edict: 'stop_mining' }]);
+  });
+});
+
+describe('気象塔 (M10-01)', () => {
+  const buildTower: Command = { type: 'build_tower', cell: 0 };
+
+  it('costOf(build_tower) は budget.costs.tower。省略時は TOWER_COST', () => {
+    const w = fakeWorld();
+    const withCost = createScenarioRunner(withBudget({ start: 20, costs: { spawn: 3, disaster: 5, climate: 1, tower: 15 } }), w);
+    withCost.update(w.snapshot());
+    withCost.intervene(buildTower);
+    expect(withCost.power()).toBe(5);
+    const w2 = fakeWorld();
+    const withDefault = createScenarioRunner(withBudget({ start: 20 }), w2);
+    withDefault.update(w2.snapshot());
+    withDefault.intervene(buildTower);
+    expect(withDefault.power()).toBe(20 - TOWER_COST);
+  });
+
+  it('build_tower は介入回数に数え、年表に専用の tower kind を積む (既定値を補って)', () => {
+    const w = fakeWorld();
+    const r = createScenarioRunner(withBudget({ start: 40 }), w);
+    r.update(w.snapshot());
+    expect(r.intervene({ type: 'build_tower', cell: 3 })).toEqual({ ok: true });
+    expect(r.interventions()).toBe(1);
+    expect(r.timeline()).toContainEqual({ year: 0, kind: 'tower', cell: 3, rainScale: 1.5, tempOffset: 0 });
+    // 汎用の 'intervene' kind は積まない (二重に出さない)
+    expect(r.timeline().some((e) => e.kind === 'intervene')).toBe(false);
+    // 指定した値も反映する
+    r.intervene({ type: 'build_tower', cell: 1, rainScale: 2, tempOffset: -1 });
+    expect(r.timeline()).toContainEqual({ year: 0, kind: 'tower', cell: 1, rainScale: 2, tempOffset: -1 });
+  });
+
+  it('tower_power は値段が無く (0)、介入回数にも数えない', () => {
+    const w = fakeWorld();
+    const r = createScenarioRunner(withBudget({ start: 20 }), w);
+    r.update(w.snapshot());
+    expect(r.intervene({ type: 'tower_power', active: false })).toEqual({ ok: true });
+    expect(r.power()).toBe(20);
+    expect(r.interventions()).toBe(0);
+  });
+
+  it('塔が無ければ維持費は引かれない (既存の挙動のまま)', () => {
+    const w = fakeWorld({ towers: [] });
+    const r = createScenarioRunner(withBudget({ start: 20, incomePerYear: 0 }), w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    expect(r.power()).toBe(20);
+    expect(r.budget()).toMatchObject({ upkeepLastYear: 0 });
+  });
+
+  it('毎年 TOWER_UPKEEP × 塔の数を、既存の気候の維持費と合わせて引く。省略時 TOWER_UPKEEP', () => {
+    const towers: WeatherTower[] = [
+      { cell: 0, radius: 6, rainScale: 1.5, tempOffset: 0, active: true, year: 0 },
+      { cell: 1, radius: 6, rainScale: 1.5, tempOffset: 0, active: true, year: 0 },
+    ];
+    const w = fakeWorld({ towers });
+    const r = createScenarioRunner(withBudget({ start: 100, incomePerYear: 0 }), w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    // 気候の維持費は無い (rainScale 1・tempOffset 0)。塔 2 つ × TOWER_UPKEEP を引くだけ
+    expect(r.power()).toBe(100 - 2 * TOWER_UPKEEP);
+  });
+
+  it('力が塔の維持費を下回ると tower_power {active:false} を dispatch し、年表に tower_stopped を積む', () => {
+    const towers: WeatherTower[] = [{ cell: 0, radius: 6, rainScale: 1.5, tempOffset: 0, active: true, year: 0 }];
+    const w = fakeWorld({ towers });
+    const r = createScenarioRunner(withBudget({ start: 3, incomePerYear: 0, upkeepPerYear: { rainScale: 10, tempOffset: 2, tower: 4 } }), w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    expect(w.cmds).toContainEqual({ type: 'tower_power', active: false });
+    expect(r.timeline()).toContainEqual({ year: 1, kind: 'tower_stopped' });
+    // 払えないので力は引かれない (0 のまま、既存の power_exhausted と違い塔の維持費はマイナスにしない)
+    expect(r.power()).toBe(3);
+  });
+
+  it('翌年に力が維持費以上へ戻れば tower_power {active:true} を dispatch し、年表に tower_resumed を積む', () => {
+    const towers: WeatherTower[] = [{ cell: 0, radius: 6, rainScale: 1.5, tempOffset: 0, active: false, year: 0 }];
+    const w = fakeWorld({ towers });
+    // max を広く取り、力の上限クランプが計算に混ざらないようにする
+    const r = createScenarioRunner(withBudget({ start: 3, incomePerYear: 10, max: 50, upkeepPerYear: { rainScale: 10, tempOffset: 2, tower: 4 } }), w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    expect(w.cmds).toContainEqual({ type: 'tower_power', active: true });
+    expect(r.timeline()).toContainEqual({ year: 1, kind: 'tower_resumed' });
+    expect(r.power()).toBe(3 + 10 - TOWER_UPKEEP);
+  });
+
+  it('既に動いている塔は毎年 tower_power を dispatch し直さない (無駄な dispatch を出さない)', () => {
+    const towers: WeatherTower[] = [{ cell: 0, radius: 6, rainScale: 1.5, tempOffset: 0, active: true, year: 0 }];
+    const w = fakeWorld({ towers });
+    const r = createScenarioRunner(withBudget({ start: 100, incomePerYear: 100 }), w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    expect(w.cmds.filter((c) => c.type === 'tower_power')).toEqual([]);
+    expect(r.timeline().filter((e) => e.kind === 'tower_resumed' || e.kind === 'tower_stopped')).toEqual([]);
   });
 });

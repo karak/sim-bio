@@ -241,3 +241,30 @@ test('stone tablet: milestone disappears when reached, power warning appears, ve
   await expect(page.locator('#verdict-stats')).toContainText(/陸地率 \d+%/);
   await expect(page.locator('#verdict-stats')).toContainText('草 ');
 });
+
+test('weather tower: ?scenario=test-tower で気象塔チップを武装して島をクリックすると建ち、セル詳細と年表に出る (M10-01)', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/?scenario=test-tower');
+  await expect(page.locator('#hud-civ')).toContainText('文明 塔(6)');
+  await expect(page.locator('#tower-chip')).toBeVisible();
+  await page.click('#tower-chip');
+  await expect(page.locator('#tower-chip')).toHaveClass(/armed/);
+  await expect(page.locator('#tower-hint')).toBeVisible();
+  await expect(page.locator('#tower-hint')).toContainText('塔・信仰 0.6・輝石 1');
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#tower-chip')).not.toHaveClass(/armed/);
+  // 建てた直後にログが出る (World 側の受理)
+  await expect
+    .poll(() => logs.filter((l) => l.includes('"event":"sim.tower.built"')).length)
+    .toBeGreaterThanOrEqual(1);
+  // セル詳細: 同じ場所をもう一度クリックすると「気象塔: 雨 1.50×」が出る
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#cell-info')).toContainText('気象塔');
+  await expect(page.locator('#cell-info')).toContainText('雨 1.50×');
+  // 年表の tower イベントは年次評価 (年をまたぐタイミング) でしか積まれないので、1 年進める
+  await page.click('#speed-100');
+  await expect(page.locator('#tablet-timeline')).toContainText('気象塔を建てた', { timeout: 20_000 });
+});

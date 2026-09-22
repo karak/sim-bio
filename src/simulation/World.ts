@@ -14,6 +14,17 @@ import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_B
 import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
 import { applyEdict } from './edict';
+import {
+  canBuildTower,
+  takeCrystal,
+  towerCrystalPool,
+  towerFactors,
+  TOWER_CRYSTAL,
+  TOWER_RADIUS,
+  TOWER_RAIN_SCALE_DEFAULT,
+  TOWER_TEMP_OFFSET_DEFAULT,
+  type WeatherTower,
+} from './weatherTower';
 
 export type WorldDeps = {
   log: LogSink;
@@ -101,6 +112,14 @@ export class World {
   private readonly carnivores: SpeciesDef[];
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
   private readonly zeroForest: Float32Array;
+  /** 気象塔の一覧 (M10-01)。文明が無くても常に配列 (空配列もありうる) */
+  towers: WeatherTower[] = [];
+  /**
+   * 塔の効果の per-cell 倍率・オフセット (M10-01)。towers が変わるたび recomputeTowerFactors で更新し、
+   * stepClimate に ClimateState の rainFactor/tempFactor として渡す (塔が無ければ既定 1/0 のまま、既存の挙動と同じ)
+   */
+  readonly rainFactor: Float32Array;
+  readonly tempFactor: Float32Array;
   /**
    * 火山セル: config.volcanoCell があればそれ、無ければ標高最大の陸セル。create 時に 1 度だけ決める (M8-08)。
    * HUD が火山チップの誘導先として使う
@@ -138,6 +157,9 @@ export class World {
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
     this.zeroForest = new Float32Array(this.n);
+    // 気象塔 (M10-01): 既定は倍率 1・オフセット 0 (効果なし)。塔を建てるまでは既存の気候と同じ挙動になる
+    this.rainFactor = new Float32Array(this.n).fill(1);
+    this.tempFactor = new Float32Array(this.n);
     // 火山セルは config.volcanoCell があればそれを使う。無ければ標高最大の陸セルを既定にする (M8-08)。
     // 標高最大セルは冷えすぎて炎蜥蜴が湧かない (M8-09 の校正) ことがあるので、シナリオ側で暖かい
     // 低地セルを指定できるようにしてある
@@ -212,6 +234,11 @@ export class World {
     computeVeinLoss(w.crystal, w.crystal0, w.elevation, w.config.size, w.veinLoss, w.veins);
     // save.civ が無ければ constructor で config.civilization.start から作った初期状態のまま (M8-02)
     if (save.civ) w.civ = { ...save.civ };
+    // 気象塔 (M10-01): 古いセーブには無いので、その場合は constructor の既定 (空配列・倍率 1/オフセット 0) のまま
+    if (save.towers) {
+      w.towers = save.towers.map((t) => ({ ...t }));
+      w.recomputeTowerFactors();
+    }
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -284,6 +311,7 @@ export class World {
       climate: { tempOffset: this.config.climate.tempOffset, rainScale: this.config.climate.rainScale },
       civ: this.civ ? { ...this.civ } : null,
       volcanoCell: this._volcanoCell,
+      towers: this.towers.map((t) => ({ ...t })),
     };
   }
 
@@ -304,6 +332,7 @@ export class World {
       crystal0: Array.from(this.crystal0),
       populations,
       ...(this.civ ? { civ: { ...this.civ } } : {}),
+      towers: this.towers.map((t) => ({ ...t })),
     };
   }
 
@@ -637,7 +666,38 @@ export class World {
         this.log('info', 'sim.civ.edict', { year, edict: cmd.edict, obeyed, faith: civ.faith ?? 0, miningStopped: civ.miningStopped ?? false });
         break;
       }
+      case 'build_tower': {
+        // 気象塔 (M10-01): validate で門 (段階・信仰・セル・輝石) を確かめてあるので、ここでは civ は必ずある
+        const civ = this.civ as CivState;
+        const pool = towerCrystalPool(civ.home, civ.stage, this.elevation, this.config.size, { ids: this.veins, cells: this.veinCells });
+        takeCrystal(pool, this.crystal, TOWER_CRYSTAL);
+        const year = Math.floor(this.tick / this.config.ticksPerYear);
+        const tower: WeatherTower = {
+          cell: cmd.cell,
+          radius: TOWER_RADIUS,
+          rainScale: cmd.rainScale ?? TOWER_RAIN_SCALE_DEFAULT,
+          tempOffset: cmd.tempOffset ?? TOWER_TEMP_OFFSET_DEFAULT,
+          active: true,
+          year,
+        };
+        this.towers.push(tower);
+        this.recomputeTowerFactors();
+        this.log('info', 'sim.tower.built', { cell: tower.cell, radius: tower.radius, rainScale: tower.rainScale, tempOffset: tower.tempOffset, year });
+        break;
+      }
+      case 'tower_power': {
+        // 維持費の自動切り替え (M10-01): 全ての塔の active を一括で切り替える (ScenarioRunner が力の増減から dispatch する)
+        for (const t of this.towers) t.active = cmd.active;
+        this.recomputeTowerFactors();
+        this.log('info', 'sim.tower.power', { active: cmd.active, count: this.towers.length });
+        break;
+      }
     }
+  }
+
+  /** towers が変わるたび (建てた・維持費で切り替わった) に per-cell の倍率・オフセットを作り直す (M10-01) */
+  private recomputeTowerFactors(): void {
+    towerFactors(this.towers, this.config.size, { rain: this.rainFactor, temp: this.tempFactor });
   }
 
   private validate(cmd: Command): string | null {
@@ -649,6 +709,17 @@ export class World {
     }
     if (cmd.type === 'disaster' && !(cmd.radius >= 0)) return 'radius must be >= 0';
     if (cmd.type === 'sink' && !(cmd.amount > 0)) return 'amount must be > 0';
+    if (cmd.type === 'build_tower') {
+      // 気象塔 (M10-01): 輝石の合計は canBuildTower の crystalAvailable として先に計算しておく
+      // (実際に取り除く takeCrystal は apply 側。validate は副作用を持たない)
+      let crystalAvailable = 0;
+      if (this.civ && this.civ.stage >= 1) {
+        const pool = towerCrystalPool(this.civ.home, this.civ.stage, this.elevation, this.config.size, { ids: this.veins, cells: this.veinCells });
+        for (const i of pool) crystalAvailable += this.crystal[i];
+      }
+      const r = canBuildTower(this.civ, cmd.cell, crystalAvailable, { elevation: this.elevation, towers: this.towers });
+      if (!r.ok) return r.reason;
+    }
     return null;
   }
 

@@ -1,4 +1,5 @@
 import type { CivState, CivilizationConfig } from './civilization';
+import type { WeatherTower } from './weatherTower';
 
 /** decomposer は枯死 (litter) を餌にし、いる場所の分解を速める第 4 の階層 */
 export type Trophic = 'plant' | 'herbivore' | 'carnivore' | 'decomposer';
@@ -86,7 +87,11 @@ export type Command =
   /** 島全体の標高を amount 下げる (沈降)。シナリオの「滅びの進行」用 */
   | { type: 'sink'; amount: number }
   /** 石板の勅令 (M9-03)。信仰が EDICT_FAITH 以上のときだけ民が従う。力は消費しない */
-  | { type: 'civ_edict'; edict: 'stop_mining' | 'resume_mining' };
+  | { type: 'civ_edict'; edict: 'stop_mining' | 'resume_mining' }
+  /** 気象塔を建てる (M10-01)。段階・信仰・輝石の門は World.dispatch が canBuildTower で確かめる。省略時は既定値 (雨 1.5 倍・気温オフセットなし) */
+  | { type: 'build_tower'; cell: number; rainScale?: number; tempOffset?: number }
+  /** 星の力の維持費が尽きた/戻ったとき ScenarioRunner が dispatch する (fromStar: false)。全ての塔の active を一括で切り替える */
+  | { type: 'tower_power'; active: boolean };
 
 /** 読み取り専用ビュー。layers は内部バッファそのもの (コピーしない)。 */
 export type WorldSnapshot = {
@@ -118,6 +123,8 @@ export type WorldSnapshot = {
   civ: CivState | null;
   /** 火山セル。config.volcanoCell があればそれ、無ければ標高最大の陸セル (M8-08) */
   volcanoCell: number;
+  /** 気象塔の一覧のコピー (M10-01)。文明が無くても常に配列 (空配列もありうる) */
+  towers: WeatherTower[];
 };
 
 export type SaveData = {
@@ -139,4 +146,6 @@ export type SaveData = {
   populations: Record<string, number[]>;
   /** M8-02 で追加。config.civilization が無ければ無い */
   civ?: CivState;
+  /** M10-01 で追加。気象塔の一覧。古いセーブには無く、その場合は空配列として復元する */
+  towers?: WeatherTower[];
 };

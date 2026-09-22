@@ -16,6 +16,14 @@ describe('commandKey (M9-01)', () => {
   it('sink は数えない (null)', () => {
     expect(commandKey({ type: 'sink', amount: 0.1 })).toBeNull();
   });
+  it('build_tower は星の行為として build_tower を数える (M10-01)', () => {
+    expect(commandKey({ type: 'build_tower', cell: 0 })).toBe('build_tower');
+    expect(commandKey({ type: 'build_tower', cell: 0, rainScale: 2, tempOffset: 1 })).toBe('build_tower');
+  });
+  it('tower_power は勅令と同じく言葉/自動処理なので数えない (null、M10-01)', () => {
+    expect(commandKey({ type: 'tower_power', active: false })).toBeNull();
+    expect(commandKey({ type: 'tower_power', active: true })).toBeNull();
+  });
 });
 
 describe('updateFaith (M9-01, 境界値)', () => {
@@ -115,7 +123,7 @@ describe('updateFaith の answered/ignored (M9-02, 境界値)', () => {
 });
 
 // 型チェック用: Command のすべての type を commandKey が扱えることを確認する
-const _allCommandTypes: Command['type'][] = ['spawn_species', 'set_climate', 'disaster', 'sink'];
+const _allCommandTypes: Command['type'][] = ['spawn_species', 'set_climate', 'disaster', 'sink', 'build_tower', 'tower_power'];
 void _allCommandTypes;
 
 describe('formatFaith (M9-05)', () => {

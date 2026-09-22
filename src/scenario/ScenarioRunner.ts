@@ -3,6 +3,7 @@ import { civVitality, judgeScenario, landRatio, startStats, vitalityRatio } from
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type CivContext, type Warning } from './warnings';
 import type { PrayerKind } from '../simulation/prayer';
+import { TOWER_COST, TOWER_RAIN_SCALE_DEFAULT, TOWER_TEMP_OFFSET_DEFAULT, TOWER_UPKEEP } from '../simulation/weatherTower';
 
 /** 年表の 1 行。石板が種名などに整形して出す */
 export type TimelineEvent =
@@ -18,7 +19,13 @@ export type TimelineEvent =
   /** 勅令の結果 (M9-03)。obeyed なら民が採掘を止めた/再開した、でなければ聞かなかった (faith はそのときの信仰) */
   | { year: number; kind: 'civ_edict'; edict: 'stop_mining' | 'resume_mining'; obeyed: boolean; faith: number }
   /** 文明の祈りが出た・応えられた・無視された (M9-02) */
-  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored' | 'withdrawn'; prayer: PrayerKind };
+  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored' | 'withdrawn'; prayer: PrayerKind }
+  /** 気象塔を建てた (M10-01)。build_tower の intervene はこれを積む (汎用の intervene とは分ける) */
+  | { year: number; kind: 'tower'; cell: number; rainScale: number; tempOffset: number }
+  /** 気象塔の維持費が力を上回り、全ての塔が止まった (M10-01) */
+  | { year: number; kind: 'tower_stopped' }
+  /** 力が戻り、止まっていた気象塔が動き出した (M10-01) */
+  | { year: number; kind: 'tower_resumed' };
 
 type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void; snapshot(): WorldSnapshot };
 
@@ -162,6 +169,12 @@ export function createScenarioRunner(
         return 0;
       case 'sink':
         return 0;
+      // 気象塔 (M10-01) を建てる値段。省略時は TOWER_COST
+      case 'build_tower':
+        return budgetDef.costs.tower ?? TOWER_COST;
+      // 維持費の自動切り替え (M10-01) は言葉ではなく力の増減そのものなので、ここでは値段を持たない (0)
+      case 'tower_power':
+        return 0;
     }
   };
 
@@ -181,6 +194,24 @@ export function createScenarioRunner(
       opts.onPowerExhausted?.();
     } else {
       power = Math.min(power, budgetMax);
+    }
+    // 気象塔の維持費 (M10-01): 建てた塔があるあいだだけ、上の気候の維持費とは別に毎年 TOWER_UPKEEP × 塔の数を引く。
+    // 払えなければ全ての塔を止め (tower_power active:false)、力が戻れば動かす (active:true)。塔は星の行為ではない
+    // 自動処理 (fromStar: false) で切り替える。towers は最新の snapshot から読む (力切れの気候の戻しと同じ流儀)
+    const towers = s.towers;
+    if (towers.length > 0) {
+      const towerUpkeep = (budgetDef.upkeepPerYear.tower ?? TOWER_UPKEEP) * towers.length;
+      const towersActive = towers.some((t) => t.active);
+      if (power >= towerUpkeep) {
+        power -= towerUpkeep;
+        if (!towersActive) {
+          world.dispatch({ type: 'tower_power', active: true }, { fromStar: false });
+          timeline.push({ year: currentYear, kind: 'tower_resumed' });
+        }
+      } else if (towersActive) {
+        world.dispatch({ type: 'tower_power', active: false }, { fromStar: false });
+        timeline.push({ year: currentYear, kind: 'tower_stopped' });
+      }
     }
   };
 
@@ -202,13 +233,27 @@ export function createScenarioRunner(
         power -= cost;
         powerSpent += cost;
       }
-      // 勅令 (M9-03) は言葉であって行為ではないので介入回数に数えない (no_intervention の条件や内訳を変えない。M9 レビュー)
-      if (cmd.type !== 'civ_edict') interventions++;
+      // 勅令 (M9-03) は言葉であって行為ではないので介入回数に数えない (no_intervention の条件や内訳を変えない。M9 レビュー)。
+      // tower_power (M10-01) も星の行為ではなく力の増減の自動処理なので同じく数えない (通常は intervene() 経由で呼ばない)
+      if (cmd.type !== 'civ_edict' && cmd.type !== 'tower_power') interventions++;
       // 予定コマンド (fireDue) と同じく cell = -1 (島の中心) と半径の縮尺を解決してから流す。
       // 以前は resolve を通さず生の cmd を dispatch していたため、プレイヤー操作由来の介入で
       // cell: -1 を使うと (-1, 0) 相当の意図しない位置に適用されていた (M8-05 で発覚)
-      world.dispatch(resolve(cmd));
-      timeline.push({ year: currentYear, kind: 'intervene', command: cmd });
+      const resolved = resolve(cmd);
+      world.dispatch(resolved);
+      // 気象塔を建てた (M10-01) は専用の 'tower' kind で積む (他は汎用の 'intervene')。
+      // describeEvent が「星が気象塔を建てた(雨 N×)」を組み立てやすいよう、既定値を補ってから積む
+      if (resolved.type === 'build_tower') {
+        timeline.push({
+          year: currentYear,
+          kind: 'tower',
+          cell: resolved.cell,
+          rainScale: resolved.rainScale ?? TOWER_RAIN_SCALE_DEFAULT,
+          tempOffset: resolved.tempOffset ?? TOWER_TEMP_OFFSET_DEFAULT,
+        });
+      } else {
+        timeline.push({ year: currentYear, kind: 'intervene', command: cmd });
+      }
       return { ok: true };
     },
     update(s) {

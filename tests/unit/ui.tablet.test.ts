@@ -39,4 +39,10 @@ describe('describeEvent (年表の文)', () => {
     expect(describeEvent({ year: 3, kind: 'prayer', phase: 'issued', prayer: 'wolves' }, names)).toBe('民が祈った: 狼を減らして');
     expect(describeEvent({ year: 3, kind: 'prayer', phase: 'issued', prayer: 'crystal' }, names)).toBe('民が祈った: 星の砂を');
   });
+  it('気象塔の建設・停止・再開を人が読める文にする (M10-01)', () => {
+    expect(describeEvent({ year: 3, kind: 'tower', cell: 10, rainScale: 1.5, tempOffset: 0 }, names)).toBe('星が気象塔を建てた(雨 1.50×)');
+    expect(describeEvent({ year: 3, kind: 'tower', cell: 10, rainScale: 2, tempOffset: -1 }, names)).toBe('星が気象塔を建てた(雨 2.00×)');
+    expect(describeEvent({ year: 3, kind: 'tower_stopped' }, names)).toBe('力が尽き、気象塔が止まった');
+    expect(describeEvent({ year: 3, kind: 'tower_resumed' }, names)).toBe('気象塔が動き出した');
+  });
 });

@@ -279,6 +279,46 @@
     }
   },
   {
+    "id": "test-tower",
+    "title": "気象塔の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。塔の文明を最初から据え、気象塔を建てられるか確かめる。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 6,
+        "home": 1770,
+        "fuelStock": 600,
+        "faith": 0.7
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [],
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 10,
+      "costs": {
+        "spawn": 3,
+        "disaster": 5,
+        "climate": 1,
+        "tower": 12
+      },
+      "upkeepPerYear": {
+        "rainScale": 4,
+        "tempOffset": 1,
+        "tower": 4
+      }
+    }
+  },
+  {
     "id": "tower",
     "title": "塔の重さ",
     "prophecy": "この島の民は塔を建てた。塔は燃料で立つ。蓄えは七年で尽き、燃料の無い年が三年続けば塔は一段低くなり、巣まで落ちれば民ごと崩れる。燃料の取り方は二つ。火の山を目覚めさせれば熱が塔を動かすが、火は草木を焼き、熱の中に炎蜥蜴が湧いて民を食う。鐘樹を植えれば材が塔を動かすが、育つのに二十年かかり、陰で草が痩せて民の餌が細る。今の十年を火で凌ぐか、五十年後のために樹を植えるか。百年目、塔が立ち、鹿の群れが半ば残っていれば、島は生き延びたと言える。",

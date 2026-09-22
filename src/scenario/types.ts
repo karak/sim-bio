@@ -85,10 +85,13 @@ export type ScenarioDef = {
     start: number;
     /** 年収の上限。実際は × 陸地率 × 生気の平均 (島が痩せると減る) */
     incomePerYear: number;
-    /** コマンド 1 回の値段 */
-    costs: { spawn: number; disaster: number; climate: number };
-    /** |rainScale−1|·rainScale + |tempOffset|·tempOffset を毎年引く (気候を変え続けている分の維持費) */
-    upkeepPerYear: { rainScale: number; tempOffset: number };
+    /** コマンド 1 回の値段。tower (M10-01) は省略可 (省略時は weatherTower.ts の TOWER_COST) */
+    costs: { spawn: number; disaster: number; climate: number; tower?: number };
+    /**
+     * |rainScale−1|·rainScale + |tempOffset|·tempOffset を毎年引く (気候を変え続けている分の維持費)。
+     * tower (M10-01) は建てた塔 1 つにつき毎年引く額。省略時は weatherTower.ts の TOWER_UPKEEP
+     */
+    upkeepPerYear: { rainScale: number; tempOffset: number; tower?: number };
     /** 貯められる上限 (省略時 start × 3) */
     max?: number;
   };
