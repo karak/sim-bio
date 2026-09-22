@@ -57,6 +57,8 @@ export type ScenarioDef = {
      * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため)
      */
     civilization?: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number; /** 星の工事の備蓄の開始値 (M10-02) */ worksStock?: number };
+    /** 輝石の倍率 (M10-02)。脈を薄くする舞台装置。省略時 1 */
+    crystalScale?: number;
     /**
      * 火山セルの上書き (M8-08)。省略時は World が標高最大の陸セルを既定にする。
      * -1 は他のセル指定と同じ規約で島の中心。M8-09 の校正で標高最大セルは寒すぎ

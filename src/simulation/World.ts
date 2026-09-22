@@ -150,6 +150,8 @@ export class World {
     this.litter = new Float32Array(this.n);
     // seed から決定論で生成しておく。create はそのまま使い、restore は save.crystal があればそれで上書きする
     this.crystal = generateCrystal(config.seed, this.elevation, config.size);
+    // 輝石の倍率 (M10-02): シナリオが脈を薄くする舞台装置。脈の形 (labelVeins) は変わらず、量だけ変わる
+    if (config.crystalScale !== undefined && config.crystalScale !== 1) for (let i = 0; i < this.n; i++) this.crystal[i] *= config.crystalScale;
     this.crystal0 = Float32Array.from(this.crystal);
     this.veinLoss = new Float32Array(this.n);
     this.veins = labelVeins(this.crystal0, this.elevation, config.size);

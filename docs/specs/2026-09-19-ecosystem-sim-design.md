@@ -488,6 +488,32 @@ hud.showCell(cellIndex: number | null): void
 
 種の初期ラインナップと災害の効果値は M1 実装中にデータで調整する。設計書では固定しない。
 
+### 4.23 実装時の差分(M10-02: 迎撃 — 星の門・工事・迎撃・薄い脈)
+
+LD: docs/design/2026-09-22-level-design-devices.md §3.2・§8.1・§8.2。
+
+- **星の門**(`civilizationLoad.ts` `canAscend` / `populationFor`): 塔 → 星は半径 `STAR_RADIUS` = LOAD_RADIUS[7] = 12 の民 ≥ POP_NEED[7](4.0)
+  かつ信仰 ≥ `STAR_FAITH` 0.8。星の衰退も半径 12 の民で見る。塔以下は支え半径 8 のまま。`CivState.populationStar` を年 1 回更新。
+- **星の工事**(`works.ts`): 星は年に `WORKS_RATE` 0.2 を脈(採掘半径 5 に掛かる脈全体)から備蓄に積む。信仰 < `WORKS_FAITH` 0.6 の年は止まる。
+  備蓄が `INTERCEPT_NEED` 3.0 に達したら掘らない。`CivState.works { stock, stopped }`、`intercepted`。開始指定 `start.civilization.worksStock`。
+- **迎撃**: コマンド `intercept`(World は `canIntercept` で拒否理由を出す。備蓄を 3.0 消費、`intercepted` +1)。ScenarioRunner は最新の snapshot で
+  同じ条件を確かめ、次の単発の予定隕石を取り消す(`cancelled`)。`InterveneResult.reason` に `no_target` / `rejected`。年表 `intercepted`、
+  `milestones()` は取り消した年の節目を外す、`nextMeteorYear()`。判定条件 `intercepted { min, max }`。力は要らない(民の備蓄で払う)。
+- **薄い脈**: `WorldConfig.crystalScale`(`start.crystalScale`)。seed から生成した輝石に掛ける。脈の形は変わらない。restore でも config から再生成。
+- UI: HUD の文明行に「工事 備蓄 / 3」(止まっていれば「止」)、`#hud-works` の「星を砕け」(備蓄不足は unaffordable)。石板は取り消した節目を消し、
+  年表に「星が砕けた(N 年目の星は落ちない)」。
+- シナリオ「迎撃の塔」(`intercept-tower`): 石@1770、薪 1400、信仰 0.5、crystalScale 0.62、隕石 60/100/140 年目(半径 48)、
+  alive = 三度砕く かつ 段階 ≥ 塔 5 年、dead = 崩壊 か 鹿の絶滅。tests/slow: 放置 dead、応えるだけ dead、儀式後回し+勅令なし dead、
+  儀式後回し+勅令 alive、儀式を最初から alive。校正の表:
+
+| 手 | 星に上がる年 | 三度目の備蓄 | 結果 |
+|---|---|---|---|
+| 放置 | — | — | dead(60 年目) |
+| 儀式なし、祈りに応えるだけ | —(信仰 0.6〜0.7) | — | dead(60 年目) |
+| 儀式を 20 年目から、止めよ無し | 34 | 2.15 / 3.0 | dead(140 年目) |
+| 儀式を 20 年目から、塔で止めよ | 38 | 3.0 | alive |
+| 儀式を最初から | 25 | 3.0 | alive |
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
@@ -501,6 +527,18 @@ hud.showCell(cellIndex: number | null): void
 | 塔の維持費が星の力から毎年引かれ、尽きたら塔が止まる(単体テスト) | `tests/unit/scenario.budget.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
 | SceneView に塔が立ち、HUD の災害列に「気象塔」チップ、セル詳細に塔の効果(E2E: 建てると年表に出る) | `src/render/SceneView.ts`、`src/ui/Hud.ts`、`tests/e2e/smoke.spec.ts` · e7e2a39 |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(373 テスト通過)、`npx playwright test`(19 テスト通過) · e7e2a39 |
+
+### M10-02: 迎撃
+
+| 受入項目 | 証跡 |
+|---|---|
+| 校正の前にレベルデザイン文書を書き、ユーザーの承認を得る | `docs/design/2026-09-22-level-design-devices.md` §9(2026-09-22 承認)· 00d1dd0 / ddda979 |
+| レバー感度・定着・副作用の確認がヘッドレスで通っている(通らなければ係数ではなく仕組みに戻る) | 群れの感度が通らず、星の門を半径 12 + 信仰 0.8 に(LD §8.1)· 3ce0429。`tests/unit/civilizationLoad.test.ts`、`tests/unit/world.civilization.star.test.ts`、`tests/unit/world.vein.test.ts` |
+| コマンド intercept: 段階 星 かつ 輝石 ≥ 必要量で、次に予定された隕石の予定コマンドを取り消す。条件を満たさなければ拒否(単体テスト) | `tests/unit/works.test.ts`、`tests/unit/world.civilization.works.test.ts`、`tests/unit/scenario.intercept.test.ts` · 9076a1e / 50968ac |
+| 取り消した予定は石板の節目から消え、年表に「星が砕けた」が並ぶ(E2E) | `tests/e2e/smoke.spec.ts`(intercept: test-intercept)、`tests/unit/ui.tablet.test.ts`、`tests/unit/ui.hud.test.ts` · 50968ac |
+| 「迎撃の塔」: 放置 dead・素朴戦略 dead・想定解 2 つ alive(tests/slow) | `tests/slow/scenarios.playthrough.test.ts`(intercept-tower 5 件)、`tests/unit/world.crystalScale.test.ts` · SHA_M10_02 |
+| 設計書に校正の表と証跡 | §4.23 · SHA_M10_02 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test`(20 件)· SHA_M10_02 |
 
 ### M9-00: 文明の自然発生を地域で測る
 

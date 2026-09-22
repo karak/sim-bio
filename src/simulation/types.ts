@@ -74,6 +74,11 @@ export type WorldConfig = {
    * (main.ts が scenario.start.volcanoCell を解決してここに入れる)
    */
   volcanoCell?: number;
+  /**
+   * 輝石の倍率 (M10-02)。seed から生成した輝石に掛ける (省略時 1)。「迎撃の塔」の脈を薄くして、掘り尽くしが効くようにする
+   * 舞台装置 (main.ts が scenario.start.crystalScale を解決してここに入れる)。restore でも config から同じ値で再生成される
+   */
+  crystalScale?: number;
 };
 
 export type DisasterKind = 'meteor' | 'volcano' | 'wildfire' | 'plague';
