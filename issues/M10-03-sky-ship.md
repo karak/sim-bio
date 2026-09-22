@@ -1,7 +1,7 @@
 ---
 id: M10-03
 title: 空の舟(持ち出し)
-status: todo
+status: in_progress
 milestone: M10
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M10-01, M10-05]
@@ -20,13 +20,14 @@ M10-01, M10-05
 
 ## Acceptance criteria
 
-- [ ] 校正の前にレベルデザイン文書(体験の芯・キーアイテム・ループ・判定行列)を書き、ユーザーの承認を得る(M10-05 に集約)
+- [x] 校正の前にレベルデザイン文書(体験の芯・キーアイテム・ループ・判定行列)を書き、ユーザーの承認を得る(M10-05 に集約。2026-09-22 13:52 承認)
 - [ ] レバー感度・定着・副作用の確認がヘッドレスで通っている(通らなければ係数ではなく仕組みに戻る)
-- [ ] コマンド launch_ship: 段階 ≥ 帆、信仰 ≥ 0.5、周囲の森 ≥ 必要量で、種の密度と文明の状態を持ち出しデータに書き出す(単体テスト、JSON の形を固定)
-- [ ] 舟の建造中は森が減る(単体テスト)。信仰不足・森不足なら拒否
-- [ ] Verdict に escaped が増え、石板のオーバーレイが「次の島へ」を出す。持ち出しデータをダウンロードできる(E2E)
+- [x] コマンド launch_ship: 段階 ≥ 帆、信仰 ≥ 0.5、周囲の森 ≥ 必要量で、種の密度と文明の状態を持ち出しデータに書き出す(単体テスト、JSON の形を固定)
+- [x] 舟の建造中は森が減る(単体テスト)。信仰不足・森不足なら拒否
+- [x] Verdict に escaped が増え、石板のオーバーレイが「次の島へ」を出す。持ち出しデータをダウンロードできる(E2E)
 - [ ] 「空の舟」: 回避不能の沈没(200 年)。tests/slow で放置 dead、舟だけ急ぐ(森切れ)dead、想定解 2 つ escaped
-- [ ] npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す
+- [x] npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す(機構の部分。校正は tests/slow で別途)
 
 ## 作業ログ
 
+- 2026-09-22: 機構の実装(worktree)。`src/simulation/ship.ts` を新設し、launch_ship コマンド、舟の建造(材の伐採・進み)、完成時の信仰判定、崩壊時の破棄、持ち出し JSON (`exportCargo`)、Verdict `escaped`(`escape` 条件を dead より先に評価)、HUD `#hud-ship` 行、石板のオーバーレイ(「次の島へ」・持ち出しのダウンロード)を配線。シナリオ `sky-ship`・`test-ship` を追加。npm run check(437 テスト)・E2E(21 テスト)通過。tests/slow の校正(想定解・放置 dead・急ぎ dead)は未着手で、別セッションで行う。

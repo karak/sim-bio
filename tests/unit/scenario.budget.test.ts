@@ -60,6 +60,7 @@ const fakeWorld = (
       : null,
     volcanoCell: 0,
     towers: towers.map((t) => ({ ...t })),
+    ship: null,
   });
   const dispatch = (c: Command) => {
     cmds.push(c);

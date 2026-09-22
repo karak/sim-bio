@@ -479,6 +479,24 @@ hud.showCell(cellIndex: number | null): void
 - **UI**: HUD の災害列に「気象塔」チップ(武装 → 次の島クリックで `build_tower`、信仰・輝石の下限をヒント表示、力が足りなければ薄く見せる)。セル詳細に半径内なら「気象塔: 雨 N×」。SceneView に塔ごとの小さな目印。石板の年表は専用の `tower`/`tower_stopped`/`tower_resumed` kind(汎用の `intervene` とは分け、二重に出さない)。
 - **ファイル**: `src/simulation/weatherTower.ts`(新規)、`src/simulation/types.ts`・`World.ts`・`climate.ts`・`faith.ts`、`src/scenario/ScenarioRunner.ts`・`types.ts`、`src/ui/Hud.ts`・`Tablet.ts`、`src/render/SceneView.ts`、`src/main.ts`、`assets/data/scenarios.json`(`test-tower` を追加)。
 
+### 4.24 実装時の差分(M10-03: 空の舟)
+
+(§4.23 は M10-02「迎撃の塔」用に予約。この節を書いた時点ではまだ書かれていない)
+
+レベルデザイン `docs/design/2026-09-22-level-design-devices.md` §3.3 の舟の建造を実装した。新規モジュール `src/simulation/ship.ts` に係数と純粋関数をまとめる(works.ts / weatherTower.ts と同じ流儀)。この節は**機構の実装のみ**を記す。「空の舟」シナリオの校正(想定解が通るか)は tests/slow で別途行う(このコミットの時点では未着手)。
+
+- **係数**: `SHIP_STAGE` 5(帆)、`SHIP_FAITH` 0.5、`SHIP_FOREST_MIN` 6、`SHIP_CUT` 0.3/年、`SHIP_NEED` 10。
+- **材**: `timberAround` が徴収半径 (`LOAD_RADIUS[civ.stage]`、既存の M8-03 文明の負荷と同じ半径) 内・陸セルの森 + 鐘樹の密度和を返す。
+- **門** (`canLaunchShip`): 文明がない → 段階が帆に満たない → 信仰が足りない(値つき)→ 舟は既に建造中/既に飛び立った → 材が足りない(値つき)、の順に確かめる(`canBuildTower` と同じ「門 → 状態の重複チェック → 資源」の流儀)。
+- **建造** (`stepShip`): 年に一度、材 × `SHIP_CUT` を伐って進みに積む。合計の伐採量が残りの必要量 (`SHIP_NEED − progress`) を超えるなら割合を落として頭打ちにする(`works.ts` の按分と同じ考え方)。材が 0 の年は進まない。既に飛び立っていれば何もしない。
+- **完成と信仰**: `World.stepCivYearly` が works ブロックの後・衰退判定の前で年に一度 `stepShip` を呼ぶ。`shipDone` で完成を判定し、信仰 ≥ `SHIP_FAITH` なら `launchedYear` を立てて `sim.ship.launched`、足りなければ `sim.ship.waiting` を出して毎年再判定する。崩壊(段階 0)で未発進の舟は `collapseCiv` が捨て `sim.ship.lost` を出す(既に飛び立った舟は残す)。
+- **持ち出し** (`exportCargo`/`aliveSpeciesCount`): 生きている種(総量 > 0)だけを `{ id, total, density }` の配列にし、`CivState` のコピーと合わせて `{ version: 1, year, size, species, civ }` の JSON にする。
+- **判定**: `ScenarioDef.escape?: Condition` を追加し、`judgeScenario` は年ごとに escape → dead → (years 到達時の) alive の順で評価する(escape が dead より先: 舟が飛び立った瞬間は他の dead 条件より優先する部分勝利)。新しい条件 `{ type: 'escaped'; minSpecies? }` は `s.ship?.launchedYear !== undefined && aliveSpeciesCount(s) >= (minSpecies ?? 1)` を見る。`ScenarioStatus` に `'escaped'` を追加。
+- **信仰の儀式**: `commandKey` で `launch_ship` は `civ_edict` と同じ「言葉」として数えない(null)。`ScenarioRunner.costOf` は 0、`intervene` の介入回数にも数えない。
+- **開始オプション**: `start.civilization.shipProgress`(E2E の決定論のため。指定があれば年 0 に着工した舟をその進みで持つ)を `CivilizationConfig.start` / `resolveCivilizationStart` / `ScenarioDef.start.civilization` に通した。
+- **UI**: HUD に `#hud-ship` 行(文明が発生していれば表示。ボタン `#ship-btn`「舟を作れ」、`formatShipHint` が門の説明・進み・「民は乗らない」・「舟は飛び立った」を出し分ける。`formatCiv` の既存の文字列は変えていない)。石板のオーバーレイは escaped で見出し「次の島へ」を出し、`showVerdict(verdict, cargo?)` が Blob + `<a download="cargo.json">` の「持ち出しを保存」ボタンを出す(`main.ts` が `verdict.status === 'escaped'` のときだけ `exportCargo(world.snapshot())` を渡す)。年表は `describeEvent` に `launch_ship`(「石板が告げた: 舟を作れ」)と `verdict` の escaped 分岐(「次の島へ逃れた」)を足した。
+- **ファイル**: `src/simulation/ship.ts`(新規)、`src/simulation/types.ts`・`World.ts`・`civilization.ts`・`faith.ts`、`src/scenario/types.ts`・`judge.ts`・`ScenarioRunner.ts`、`src/ui/Hud.ts`・`Tablet.ts`・`hud.css`、`src/main.ts`、`assets/data/scenarios.json`(`sky-ship`・`test-ship` を追加)。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -501,6 +519,16 @@ hud.showCell(cellIndex: number | null): void
 | 塔の維持費が星の力から毎年引かれ、尽きたら塔が止まる(単体テスト) | `tests/unit/scenario.budget.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
 | SceneView に塔が立ち、HUD の災害列に「気象塔」チップ、セル詳細に塔の効果(E2E: 建てると年表に出る) | `src/render/SceneView.ts`、`src/ui/Hud.ts`、`tests/e2e/smoke.spec.ts` · e7e2a39 |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(373 テスト通過)、`npx playwright test`(19 テスト通過) · e7e2a39 |
+
+### M10-03: 空の舟(機構のみ。校正は別途)
+
+| 受入項目 | 証跡 |
+|---|---|
+| コマンド launch_ship: 段階 < 帆 または 信仰 < 0.5 または 材不足なら拒否(単体テスト、cmd.rejected の理由つき)。持ち出し JSON の形を固定 | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` |
+| 舟の建造中は森(+鐘樹)が徴収半径内だけ減る(単体テスト)。材が 0 の年は進まない | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` |
+| Verdict に escaped が増え、escape が dead より先に評価される。石板のオーバーレイが「次の島へ」を出し、持ち出しデータをダウンロードできる(E2E) | `tests/unit/scenario.judge.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/e2e/smoke.spec.ts` |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(437 テスト通過)、`npx playwright test`(21 テスト通過) |
+| 「空の舟」シナリオの校正(tests/slow: 放置 dead、舟だけ急ぐ dead、想定解 2 つ escaped) | 校正は別途(このコミットには含まない) |
 
 ### M9-00: 文明の自然発生を地域で測る
 

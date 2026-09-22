@@ -7,7 +7,7 @@ import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
-import { applyLoad, canAscend, checkDecline, DECLINE_YEARS, populationFor } from './civilizationLoad';
+import { applyLoad, canAscend, checkDecline, DECLINE_YEARS, LOAD_RADIUS, populationFor } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
@@ -15,6 +15,7 @@ import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
 import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
+import { aliveSpeciesCount, canLaunchShip, shipDone, stepShip, timberAround, SHIP_FAITH, type ShipState } from './ship';
 import {
   canBuildTower,
   takeCrystal,
@@ -115,6 +116,8 @@ export class World {
   private readonly zeroForest: Float32Array;
   /** 気象塔の一覧 (M10-01)。文明が無くても常に配列 (空配列もありうる) */
   towers: WeatherTower[] = [];
+  /** 空の舟の状態 (M10-03)。着工していなければ null */
+  private ship: ShipState | null = null;
   /**
    * 塔の効果の per-cell 倍率・オフセット (M10-01)。towers が変わるたび recomputeTowerFactors で更新し、
    * stepClimate に ClimateState の rainFactor/tempFactor として渡す (塔が無ければ既定 1/0 のまま、既存の挙動と同じ)
@@ -189,6 +192,8 @@ export class World {
       if (start?.faith !== undefined) this.civ.faith = start.faith;
       // 工事の備蓄の開始指定 (M10-02): E2E で迎撃を最初から撃てるようにする
       if (start?.worksStock !== undefined) this.civ.works = { stock: start.worksStock, stopped: false };
+      // 舟の進みの開始指定 (M10-03): E2E の決定論のため、指定があれば年 0 に着工した舟をこの進みで持つ
+      if (start?.shipProgress !== undefined) this.ship = { startedYear: 0, progress: start.shipProgress };
     }
     for (const d of config.species) {
       this.populations[d.id] = new Float32Array(this.n);
@@ -242,6 +247,8 @@ export class World {
       w.towers = save.towers.map((t) => ({ ...t }));
       w.recomputeTowerFactors();
     }
+    // 空の舟 (M10-03): 古いセーブには無いので、その場合は constructor の既定 (null、start.shipProgress があればそれ) のまま
+    if (save.ship) w.ship = { ...save.ship };
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -315,6 +322,7 @@ export class World {
       civ: this.civ ? { ...this.civ } : null,
       volcanoCell: this._volcanoCell,
       towers: this.towers.map((t) => ({ ...t })),
+      ship: this.ship ? { ...this.ship } : null,
     };
   }
 
@@ -336,6 +344,7 @@ export class World {
       populations,
       ...(this.civ ? { civ: { ...this.civ } } : {}),
       towers: this.towers.map((t) => ({ ...t })),
+      ...(this.ship ? { ship: { ...this.ship } } : {}),
     };
   }
 
@@ -421,6 +430,11 @@ export class World {
     this.civUnrestStreak = 0;
     this.civDeclineStreak = 0;
     this.civPrayerCooldownUntil = -Infinity;
+    // 舟 (M10-03): 崩壊すれば作りかけの舟は失われる。既に飛び立っていれば (民はもう乗った) 残す
+    if (this.ship && this.ship.launchedYear === undefined) {
+      this.ship = null;
+      this.log('info', 'sim.ship.lost', {});
+    }
   }
 
   /**
@@ -603,6 +617,24 @@ export class World {
       this.log('info', 'sim.civ.works', { year, stock: civ.works?.stock ?? 0, stopped: civ.works?.stopped ?? false, mined: r.mined });
       if (r.mined > 0) computeVeinLoss(this.crystal, this.crystal0, this.elevation, this.config.size, this.veinLoss, this.veins);
     }
+    // 空の舟 (M10-03): 着工していて、まだ飛び立っていなければ年に一度、材を伐って進みに積む。
+    // 完成すれば信仰の門を再判定する (足りなければ「民は乗らない」で毎年待つ)
+    if (civ.stage >= 1 && this.ship && this.ship.launchedYear === undefined) {
+      const forestPop = this.populations['forest'] ?? this.zeroForest;
+      const belltreePop = this.populations['belltree'];
+      const radius = LOAD_RADIUS[civ.stage] ?? 0;
+      const r = stepShip(this.ship, { forest: forestPop, belltree: belltreePop }, civ.home, radius, this.elevation, size);
+      this.ship = r.ship;
+      this.log('info', 'sim.ship.progress', { year, progress: this.ship.progress, cut: r.cut });
+      if (shipDone(this.ship)) {
+        if ((civ.faith ?? 0) >= SHIP_FAITH) {
+          this.ship = { ...this.ship, launchedYear: year };
+          this.log('info', 'sim.ship.launched', { year, species: aliveSpeciesCount(this.snapshot()) });
+        } else {
+          this.log('info', 'sim.ship.waiting', { year, faith: civ.faith ?? 0 });
+        }
+      }
+    }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
     if (civ.stage >= 1) {
       let vitSum = 0;
@@ -686,6 +718,14 @@ export class World {
         this.log('info', 'sim.civ.intercept', { year: Math.floor(this.tick / this.config.ticksPerYear), n: this.civ.intercepted ?? 0, stock: this.civ.works?.stock ?? 0 });
         break;
       }
+      case 'launch_ship': {
+        // 空の舟 (M10-03): validate で canLaunchShip を通っている。着工する (進み 0 から)
+        const year = Math.floor(this.tick / this.config.ticksPerYear);
+        const timber = this.civ ? timberAround({ forest: this.populations['forest'], belltree: this.populations['belltree'] }, this.civ.home, LOAD_RADIUS[this.civ.stage] ?? 0, this.elevation, this.config.size) : 0;
+        this.ship = { startedYear: year, progress: 0 };
+        this.log('info', 'sim.ship.started', { year, timber });
+        break;
+      }
       case 'build_tower': {
         // 気象塔 (M10-01): validate で門 (段階・信仰・セル・輝石) を確かめてあるので、ここでは civ は必ずある
         const civ = this.civ as CivState;
@@ -742,6 +782,11 @@ export class World {
         for (const i of pool) crystalAvailable += this.crystal[i];
       }
       const r = canBuildTower(this.civ, cmd.cell, crystalAvailable, { elevation: this.elevation, towers: this.towers });
+      if (!r.ok) return r.reason;
+    }
+    if (cmd.type === 'launch_ship') {
+      const timber = this.civ ? timberAround({ forest: this.populations['forest'], belltree: this.populations['belltree'] }, this.civ.home, LOAD_RADIUS[this.civ.stage] ?? 0, this.elevation, this.config.size) : 0;
+      const r = canLaunchShip(this.civ, timber, this.ship);
       if (!r.ok) return r.reason;
     }
     return null;

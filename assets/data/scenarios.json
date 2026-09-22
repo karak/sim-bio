@@ -705,5 +705,119 @@
       "type": "year_reached",
       "year": 5
     }
+  },
+  {
+    "id": "sky-ship",
+    "title": "空の舟",
+    "prophecy": "この島は沈む。誰にも止められない。二百年のうちに、陸は三分の一まで減る。帆に届いた民は空の舟を作れる。種と民を乗せ、次の島へ逃がせる舟を。だが舟は材を食う。材は森と鐘樹。森は鹿が食み、鐘樹が育つには二十年がかかる。舟が仕上がっても、信仰が低ければ民は乗らない。二百年目、舟が飛び立っていなければ、島は民もろとも沈む。",
+    "kind": "escape",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 5,
+        "home": 2787,
+        "fuelStock": 800,
+        "faith": 0.5
+      }
+    },
+    "referenceSize": 64,
+    "years": 200,
+    "schedule": [
+      {
+        "atYear": 1,
+        "everyYears": 1,
+        "untilYear": 200,
+        "command": {
+          "type": "sink",
+          "amount": 0.0006
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 10,
+        "text": "森は消える。材を作れ"
+      },
+      {
+        "atYear": 100,
+        "text": "陸は半ば"
+      },
+      {
+        "atYear": 175,
+        "text": "集落が沈む"
+      }
+    ],
+    "escape": {
+      "type": "escaped",
+      "minSpecies": 5
+    },
+    "alive": {
+      "type": "escaped",
+      "minSpecies": 5
+    },
+    "dead": {
+      "type": "any",
+      "of": [
+        {
+          "type": "civ_stage",
+          "max": 0
+        },
+        {
+          "type": "species_extinct",
+          "ids": [
+            "deer"
+          ]
+        }
+      ]
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 12,
+      "costs": {
+        "spawn": 4,
+        "disaster": 24,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 80,
+        "tempOffset": 16
+      },
+      "max": 120
+    },
+    "ignoreWarnings": [
+      "land_low"
+    ]
+  },
+  {
+    "id": "test-ship",
+    "title": "帆の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。帆の文明を最初から据え、舟の進み 9.9 を添えて、表示と escaped の判定だけを確かめる。",
+    "kind": "escape",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 5,
+        "home": 2787,
+        "fuelStock": 600,
+        "faith": 0.7,
+        "shipProgress": 9.9
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [],
+    "escape": {
+      "type": "escaped",
+      "minSpecies": 1
+    },
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
   }
 ]

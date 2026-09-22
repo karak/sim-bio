@@ -203,6 +203,9 @@ export function createScenarioRunner(
       // 迎撃 (M10-02) は民の備蓄 (輝石) で払う。力は要らない
       case 'intercept':
         return 0;
+      // 舟を作れ (M10-03) は civ_edict と同じく言葉なので力は要らない (信仰・材の門が代わり)
+      case 'launch_ship':
+        return 0;
     }
   };
 
@@ -279,8 +282,9 @@ export function createScenarioRunner(
         powerSpent += cost;
       }
       // 勅令 (M9-03) は言葉であって行為ではないので介入回数に数えない (no_intervention の条件や内訳を変えない。M9 レビュー)。
-      // tower_power (M10-01) も星の行為ではなく力の増減の自動処理なので同じく数えない (通常は intervene() 経由で呼ばない)
-      if (cmd.type !== 'civ_edict' && cmd.type !== 'tower_power') interventions++;
+      // tower_power (M10-01) も星の行為ではなく力の増減の自動処理なので同じく数えない (通常は intervene() 経由で呼ばない)。
+      // launch_ship (M10-03) も civ_edict と同じく言葉なので数えない
+      if (cmd.type !== 'civ_edict' && cmd.type !== 'tower_power' && cmd.type !== 'launch_ship') interventions++;
       // 予定コマンド (fireDue) と同じく cell = -1 (島の中心) と半径の縮尺を解決してから流す。
       // 以前は resolve を通さず生の cmd を dispatch していたため、プレイヤー操作由来の介入で
       // cell: -1 を使うと (-1, 0) 相当の意図しない位置に適用されていた (M8-05 で発覚)
