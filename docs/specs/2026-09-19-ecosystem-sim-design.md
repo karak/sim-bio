@@ -661,10 +661,10 @@ code-review の指摘 10 件を直した。
 
 | 受入項目 | 証跡 |
 |---|---|
-| 純粋関数(出現/捕食/退去)が単体テストで確かめられる。World で出現中は民が減り progress が進まない。save/restore で往復 | `tests/unit/dreamEater.test.ts`、`tests/unit/world.dreamEater.test.ts` · (このコミット) |
-| 判定条件 dream_eater が judge で使え、dead の理由文に「夢喰い」が出る | `tests/unit/scenario.judge.test.ts`(dream_eater)、`assets/data/scenarios.json`(no-answer の dead) · (このコミット) |
-| HUD・石板・SceneView に出る(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`(dream_eater の年表)、`tests/unit/render.dreamEaterShade.test.ts`、`npx playwright test` · (このコミット) |
-| npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(502 テスト通過)、`npx playwright test`(21 テスト通過) · (このコミット) |
+| 純粋関数(出現/捕食/退去)が単体テストで確かめられる。World で出現中は民が減り progress が進まない。save/restore で往復 | `tests/unit/dreamEater.test.ts`、`tests/unit/world.dreamEater.test.ts` · 5ee76c1 |
+| 判定条件 dream_eater が judge で使え、dead の理由文に「夢喰い」が出る | `tests/unit/scenario.judge.test.ts`(dream_eater)、`assets/data/scenarios.json`(no-answer の dead) · 5ee76c1 |
+| HUD・石板・SceneView に出る(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`(dream_eater の年表)、`tests/unit/render.dreamEaterShade.test.ts`、`npx playwright test` · 5ee76c1 |
+| npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(502 テスト通過)、`npx playwright test`(21 テスト通過) · 5ee76c1 |
 
 ### M9-00: 文明の自然発生を地域で測る
 

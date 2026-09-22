@@ -1,7 +1,7 @@
 ---
 id: M10R-05
 title: 校正: 祈りに応えるな・空の舟・迎撃の塔(判定行列 → 3 本の書き換え → slow の固定)
-status: todo
+status: in_progress
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md#5-判定行列校正の前にヘッドレスでレバーが効くことを確かめる
 depends_on: [M10R-02, M10R-03, M10R-04]

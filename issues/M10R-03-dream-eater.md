@@ -1,11 +1,11 @@
 ---
 id: M10R-03
 title: 夢喰い(M17-02 の前倒し、状態機械の影)
-status: in_progress
+status: done
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md#33-夢喰い生物m17-02-の前倒しm10r-03
 depends_on: [M10R-02]
-evidence: []
+evidence: ["5ee76c1 tests/unit/dreamEater.test.ts", "5ee76c1 tests/unit/world.dreamEater.test.ts", "5ee76c1 tests/unit/render.dreamEaterShade.test.ts", "5ee76c1 tests/unit/scenario.judge.test.ts", "5ee76c1 tests/unit/ui.hud.test.ts"]
 ---
 
 # 夢喰い(M17-02 の前倒し、状態機械の影)
@@ -21,9 +21,11 @@ M10R-02
 
 ## Acceptance criteria
 
-- [ ] 純粋関数(出現/捕食/退去)が単体テストで確かめられる。World で出現中は民が減り progress が進まない。save/restore で往復
-- [ ] 判定条件 dream_eater が judge で使え、dead の理由文に「夢喰い」が出る
-- [ ] HUD・石板・SceneView に出る(内容検証のテスト)。E2E が通る
-- [ ] npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す
+- [x] 純粋関数(出現/捕食/退去)が単体テストで確かめられる。World で出現中は民が減り progress が進まない。save/restore で往復
+- [x] 判定条件 dream_eater が judge で使え、dead の理由文に「夢喰い」が出る
+- [x] HUD・石板・SceneView に出る(内容検証のテスト)。E2E が通る
+- [x] npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す
 
 ## 作業ログ
+
+- 2026-09-23 00:59: sonnet の worktree で実装(5ee76c1)。影は World の別状態(ship/towers と同じ)。出現した年は進みが乗り翌年から凍結。単体 502・E2E 21 通過。
