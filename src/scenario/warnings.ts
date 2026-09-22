@@ -3,9 +3,10 @@ import { landRatio } from './judge';
 import { FUEL_YEARS } from '../simulation/civilizationFuel';
 import { UNREST_FAITH, UNREST_YEARS } from '../simulation/unrest';
 import { formatFaith } from '../simulation/faith';
+import { SHIP_FAITH, SHIP_NEED } from '../simulation/ship';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low';
+export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low' | 'ship_stalled' | 'ship_late' | 'ship_waiting';
 
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
 export type Warning = {
@@ -21,6 +22,9 @@ export type PowerInfo = { power: number; max: number; incomeLastYear: number; up
 
 /** civ_declining の材料。前年の文明の段階。文明が無い/前年が無い (最初の年) なら null */
 export type CivContext = { prevStage: number } | null;
+
+/** ship_stalled / ship_late の材料 (M10-04)。開始からの年と、前年の舟の進み (前年に舟が無ければ null) */
+export type ShipContext = { year: number; prevProgress: number | null };
 
 /** 種の総量がこの割合を下回ると警告 */
 export const SPECIES_LOW_RATIO = 0.25;
@@ -56,7 +60,7 @@ export function speciesInCondition(c: Condition): string[] {
  * def.ignoreWarnings にある種類は出さない (予言どおりの進行を警告にしないため)。
  * civ_declining: 文明の段階が前年より下がった年に出す (civ 引数を渡したときだけ。省略時は評価しない)。陸のあとに置く。
  */
-export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: StartStats, power: PowerInfo | null, civ: CivContext = null): Warning[] {
+export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: StartStats, power: PowerInfo | null, civ: CivContext = null, ship: ShipContext | null = null): Warning[] {
   const out: Warning[] = [];
   const ids = [...new Set(speciesInCondition(def.alive))];
   for (const id of ids) {
@@ -96,6 +100,25 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
   // 集落の生気 (M9-05): 霊脈が細ると苔を放っても戻らないので、早めに知らせる
   if (s.civ?.vitality !== undefined && s.civ.stage >= 1 && s.civ.vitality < CIV_VITALITY_LOW) {
     out.push({ kind: 'civ_vitality_low', key: 'civ_vitality_low', text: `集落の生気が痩せている(${Math.round(s.civ.vitality * 100)}%。霊脈が細ると苔を放っても戻らない)` });
+  }
+  // 空の舟 (M10-04 のプレイテスト): 逃がす石板 (escape) で、建造中の舟が止まっている・間に合わないことを告げる。
+  // 2 回目のプレイで 100 年目に進み 30 / 120 でも警告が無く、160 年目からは進みが止まっているのも分からなかった
+  if (def.escape && ship && s.ship && s.ship.launchedYear === undefined) {
+    const p = s.ship.progress;
+    if (p >= SHIP_NEED) {
+      // 成ったのに飛ばないのは材ではなく信仰 (M10 レビュー: 止まっている扱いにしない)
+      if ((s.civ?.faith ?? 0) < SHIP_FAITH) out.push({ kind: 'ship_waiting', key: 'ship_waiting', text: `舟は成ったが民が乗らない(信仰 ${formatFaith(s.civ?.faith ?? 0)}。${SHIP_FAITH} に足りない)` });
+    } else if (ship.prevProgress !== null && p <= ship.prevProgress) {
+      out.push({ kind: 'ship_stalled', key: 'ship_stalled', text: `舟の進みが止まっている(材が無い。進み ${p.toFixed(1)} / ${SHIP_NEED})` });
+    } else {
+      // startedYear は世界の年 (snapshot.year と同じ時計)、残り年数は石板の年 (ship.year) で数える (M10 レビュー: 時計を混ぜない)
+      const elapsed = s.year - s.ship.startedYear;
+      const rate = elapsed > 0 ? p / elapsed : 0;
+      const yearsLeft = def.years - ship.year;
+      if (elapsed >= 5 && rate * yearsLeft < SHIP_NEED - p) {
+        out.push({ kind: 'ship_late', key: 'ship_late', text: `このままでは舟が間に合わない(進み ${p.toFixed(1)} / ${SHIP_NEED}、年に ${rate.toFixed(1)}。残り ${yearsLeft} 年)` });
+      }
+    }
   }
   if (def.budget && power) {
     const cheapest = Math.min(def.budget.costs.spawn, def.budget.costs.disaster, def.budget.costs.climate);

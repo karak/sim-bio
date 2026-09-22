@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CIV_VITALITY_LOW, FAITH_LOW, scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
+import { SHIP_NEED } from '../../src/simulation/ship';
 import type { ScenarioDef, StartStats } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
@@ -13,7 +14,7 @@ const snap = (over: { totals?: Record<string, number>; land?: number[]; civ?: { 
     ? { speciesId: 'deer', stage: over.civ.stage, progress: 0, home: -1, population: 0, ...(over.civ.fuel ? { fuel: { last: 0, shortYears: 0, ...over.civ.fuel } } : {}) }
     : null;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0,
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0, towers: [], ship: null,
     totals: over.totals ?? { grass: 10, deer: 4, wolf: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n), deer: new Float32Array(n) } },
   };
@@ -117,5 +118,49 @@ describe('civ_vitality_low (M9-05)', () => {
     edge.civ!.vitality = CIV_VITALITY_LOW;
     expect(scenarioWarnings(def, edge, start, null)).toEqual([]);
     expect(scenarioWarnings(def, snap({ civ: { stage: 4 } }), start, null)).toEqual([]);
+  });
+});
+
+describe('空の舟の警告 (M10-04): ship_stalled / ship_late', () => {
+  const escDef: ScenarioDef = { ...def, kind: 'escape', years: 200, escape: { type: 'escaped', minSpecies: 5 } };
+  /** 世界の年 (snapshot.year) は石板の年と同じ時計で始めた前提 (startedYear 0)。faith は民が乗る判定 (ship_waiting) 用 */
+  const withShip = (progress: number, launchedYear?: number, year = 0, faith = 1) => ({ ...snap({ civ: { stage: 5 } }), year, ship: { startedYear: 0, progress, ...(launchedYear !== undefined ? { launchedYear } : {}) }, civ: { speciesId: 'deer', stage: 5, progress: 0, home: -1, population: 0, faith } });
+  it('進みが前年から増えていなければ ship_stalled (進みと必要量つき)', () => {
+    const w = scenarioWarnings(escDef, withShip(36.8), start, null, null, { year: 160, prevProgress: 36.8 });
+    expect(w.map((x) => x.kind)).toContain('ship_stalled');
+    expect(w.find((x) => x.kind === 'ship_stalled')!.text).toBe(`舟の進みが止まっている(材が無い。進み 36.8 / ${SHIP_NEED})`);
+    expect(w.map((x) => x.kind)).not.toContain('ship_late');
+  });
+  it('進んでいても、今の速さでは残り年数で足りなければ ship_late。足りれば出ない。5 年未満は判定しない', () => {
+    // 100 年で 30: 年 0.3、残り 100 年で 30 → 90 に足りない
+    const late = scenarioWarnings(escDef, withShip(30, undefined, 100), start, null, null, { year: 100, prevProgress: 29.7 });
+    expect(late.find((x) => x.kind === 'ship_late')!.text).toBe(`このままでは舟が間に合わない(進み 30.0 / ${SHIP_NEED}、年に 0.3。残り 100 年)`);
+    // 20 年で 98: 年 4.9、残り 180 年 → 足りる
+    expect(scenarioWarnings(escDef, withShip(98, undefined, 20), start, null, null, { year: 20, prevProgress: 93 }).map((x) => x.kind)).not.toContain('ship_late');
+    expect(scenarioWarnings(escDef, withShip(0.5, undefined, 2), start, null, null, { year: 2, prevProgress: 0.2 }).map((x) => x.kind)).not.toContain('ship_late');
+  });
+  it('飛び立った舟・逃がす条件の無い石板・ship の材料が無いときは出さない', () => {
+    expect(scenarioWarnings(escDef, withShip(SHIP_NEED, 30), start, null, null, { year: 40, prevProgress: SHIP_NEED }).map((x) => x.kind)).not.toContain('ship_stalled');
+    expect(scenarioWarnings(def, withShip(10), start, null, null, { year: 50, prevProgress: 10 }).map((x) => x.kind)).not.toContain('ship_stalled');
+    expect(scenarioWarnings(escDef, withShip(10), start, null, null).map((x) => x.kind)).not.toContain('ship_stalled');
+  });
+});
+
+describe('空の舟の警告 (M10 レビュー): 成ったのに飛ばない舟は ship_waiting、止まった扱いにしない', () => {
+  const escDef: ScenarioDef = { ...def, kind: 'escape', years: 200, escape: { type: 'escaped', minSpecies: 5 } };
+  const done = (faith: number) => ({ ...snap({ civ: { stage: 5 } }), year: 61, ship: { startedYear: 0, progress: SHIP_NEED }, civ: { speciesId: 'deer', stage: 5, progress: 0, home: -1, population: 0, faith } });
+  it('進みが満ちて信仰が SHIP_FAITH 未満なら ship_waiting (信仰つき)。ship_stalled は出ない', () => {
+    const w = scenarioWarnings(escDef, done(0.42), start, null, null, { year: 61, prevProgress: SHIP_NEED });
+    expect(w.map((x) => x.kind)).not.toContain('ship_stalled');
+    expect(w.find((x) => x.kind === 'ship_waiting')!.text).toBe('舟は成ったが民が乗らない(信仰 0.42。0.5 に足りない)');
+  });
+  it('進みが満ちて信仰も足りていれば何も出ない (その年のうちに飛ぶ)', () => {
+    expect(scenarioWarnings(escDef, done(0.7), start, null, null, { year: 61, prevProgress: SHIP_NEED }).map((x) => x.kind)).not.toContain('ship_waiting');
+  });
+  it('ship_late は世界の年 (snapshot.year) で経過を測る: 石板の年と世界の年がずれていても速さが狂わない', () => {
+    // 世界は 10 年目に始まり (startTick > 0)、舟は世界 12 年目に着工、今は世界 22 年目 (石板の 12 年目)。10 年で 3 → 年 0.3、残り 188 年で 56 → 117 に足りない
+    const s = { ...snap({ civ: { stage: 5 } }), year: 22, ship: { startedYear: 12, progress: 3 }, civ: { speciesId: 'deer', stage: 5, progress: 0, home: -1, population: 0, faith: 1 } };
+    const w = scenarioWarnings(escDef, s, start, null, null, { year: 12, prevProgress: 2.7 });
+    expect(w.find((x) => x.kind === 'ship_late')!.text).toBe(`このままでは舟が間に合わない(進み 3.0 / ${SHIP_NEED}、年に 0.3。残り 188 年)`);
   });
 });

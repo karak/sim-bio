@@ -1,6 +1,6 @@
 import type { Command, DisasterKind, SaveData, WorldSnapshot } from '../simulation/types';
 import type { CivState } from '../simulation/civilization';
-import { STAGE_NAMES, NEED } from '../simulation/civilization';
+import { STAGE_NAMES, NEED, cellDistance } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
@@ -8,6 +8,10 @@ import { drawGraph, type GraphLine, type GraphMarker } from './graph';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
+import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
+import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
+import { canLaunchShip, shipDone, timberAround, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState } from '../simulation/ship';
+import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import './hud.css';
 
 /** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
@@ -26,7 +30,23 @@ export function formatCiv(civ: CivState | null): string | null {
   const miningText = civ.miningStopped ? ' · 採掘 止' : '';
   // 集落の生気 (M9-05): 霊脈枯れの判定 (集落の生気 3 割) が HUD で読めるように。年をまたぐ前は無い
   const vitalityText = civ.vitality !== undefined ? ` · 生気 ${Math.round(civ.vitality * 100)}%` : '';
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${vitalityText}${miningText}`;
+  // 星の工事 (M10-02): 星になって年をまたぐと works が付く。「工事 備蓄 / 必要」、止まっていれば「止」を足す
+  const worksText = civ.works ? ` · 工事 ${civ.works.stock.toFixed(1)} / ${INTERCEPT_NEED}${civ.works.stopped ? ' 止' : ''}` : '';
+  // 星の門 (M10 レビュー): 塔以上では星の門と星の衰退が見る半径 12 の民も出す (支え半径 8 の「民」だけでは、なぜ星に上がれないか読めない)
+  const starText = civ.stage >= 6 && civ.populationStar !== undefined ? ` · 星の民 ${Math.round(civ.populationStar * 100)}` : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${starText}${fuelText}${faithText}${vitalityText}${miningText}${worksText}`;
+}
+
+/**
+ * #hud-ship の説明文 (M10-03)。formatCiv とは別の行に出す (formatCiv の既存の文字列はテストが留め金にしているので変えない)。
+ * 未着工なら門の説明、建造中なら進み、完成したが信仰不足なら「民は乗らない」を添え、飛び立てば専用の文を返す。
+ */
+export function formatShipHint(civ: CivState | null, ship: ShipState | null): string {
+  if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。材を伐って ${SHIP_NEED} まで進む`;
+  if (ship.launchedYear !== undefined) return '舟は飛び立った';
+  const faith = civ?.faith ?? 0;
+  const waiting = shipDone(ship) && faith < SHIP_FAITH;
+  return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED}` + (waiting ? ` · 民は乗らない(信仰 ${formatFaith(faith)})` : '');
 }
 
 export type HudHandlers = {
@@ -39,6 +59,8 @@ export type HudHandlers = {
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
   onSpawnArm(speciesId: string | null): void;
+  /** 気象塔チップを押した (次に島をクリックした場所に build_tower を送る) / 解除した (M10-01) */
+  onTowerArm(active: boolean): void;
 };
 
 export type Hud = {
@@ -47,8 +69,12 @@ export type Hud = {
   addMarker(x: number, label: string, color: string): void;
   setArmed(kind: DisasterKind | null): void;
   setSpawnArmed(speciesId: string | null): void;
+  /** 気象塔チップの武装状態を外から揃える (M10-01) */
+  setTowerArmed(active: boolean): void;
   /** 星の力で買えるかどうか。false のチップは薄く見せる (押せるが runner が弾く) */
-  setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean }): void;
+  setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean; tower: boolean }): void;
+  /** 舟の行を出すか (M10-04)。逃がす条件 (escape) の無い石板では「舟を作れ」が気を散らすので隠す。自由モードでは出す */
+  setShipEnabled(on: boolean): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -81,6 +107,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
     <div id="hud-civ" class="mono" hidden></div>
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
+    <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span></div>
+    <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
@@ -98,6 +126,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <span class="sep"></span>
     ${DISASTERS.map((d) => `<button id="disaster-${d.kind}" class="chip">${d.label}</button>`).join('')}
     <span id="volcano-hint" class="dim" hidden>火の山: 島の印(火口)に打てば熱が塔の燃料になる</span>
+    <button id="tower-chip" class="chip">気象塔</button>
+    <span id="tower-hint" class="dim" hidden>塔・信仰 ${TOWER_FAITH}・輝石 ${TOWER_CRYSTAL}</span>
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
@@ -118,12 +148,15 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   const ts = new TimeSeries(500);
   const local = new TimeSeries((LOCAL_YEARS * 360) / LOCAL_SAMPLE_TICKS);
   let localCell: number | null = null;
+  let shipEnabled = true;
   let localLastTick = -1;
   const markers: GraphMarker[] = [];
   let lines: GraphLine[] = [];
   let lastYear = -1;
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
+  /** 気象塔チップを持っているか (M10-01)。災害・種パレットと排他 */
+  let towerArmed = false;
   // 種チップの表示モード: 密度そのまま or 住みやすさ (適合度)。選択中の種があるときだけ layer に効く
   let layerMode: 'density' | 'suit' = 'density';
   let activeSpeciesId: string | null = null;
@@ -172,9 +205,17 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     $('rain-scale-v').textContent = '×' + v.toFixed(2);
     h.onCommand({ type: 'set_climate', rainScale: v });
   });
+  // 気象塔チップ (M10-01): 災害・種パレットと同じ「武装 → 次のクリックで発火」の流儀。三者は排他 (どれか 1 つだけ武装できる)
+  const setTowerArmed = (v: boolean) => {
+    towerArmed = v;
+    $('tower-chip').classList.toggle('armed', v);
+    $('tower-hint').hidden = !v;
+    h.onTowerArm(v);
+  };
   const setSpawnArmed = (id: string | null) => {
     spawnArmed = id;
     for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('armed', b.id === `spawn-${id}`);
+    if (id !== null && towerArmed) setTowerArmed(false);
     h.onSpawnArm(id);
   };
   const setArmed = (k: DisasterKind | null) => {
@@ -183,14 +224,23 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     // 火山チップを持っているときだけ、火山セルへの誘導ヒントを出す (M8-08)
     $('volcano-hint').hidden = k !== 'volcano';
     if (k !== null && spawnArmed !== null) setSpawnArmed(null);
+    if (k !== null && towerArmed) setTowerArmed(false);
     h.onDisasterArm(k);
   };
+  $('tower-chip').addEventListener('click', () => {
+    const next = !towerArmed;
+    if (next && armed !== null) setArmed(null);
+    if (next && spawnArmed !== null) setSpawnArmed(null);
+    setTowerArmed(next);
+  });
   for (const d of DISASTERS) {
     $(`disaster-${d.kind}`).addEventListener('click', () => setArmed(armed === d.kind ? null : d.kind));
   }
   // 勅令 (M9-03): 石板の言葉として dispatch する (力は要らない。信仰の門は World 側)
   $('edict-stop').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'stop_mining' }));
   $('edict-resume').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'resume_mining' }));
+  $('intercept-btn').addEventListener('click', () => h.onCommand({ type: 'intercept' }));
+  $('ship-btn').addEventListener('click', () => h.onCommand({ type: 'launch_ship' }));
   $('save-btn').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(h.onSave())], { type: 'application/json' });
     const a = document.createElement('a');
@@ -319,6 +369,21 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $('edict-stop').classList.toggle('on', stopped);
       $('edict-resume').classList.toggle('on', !stopped);
     }
+    // 迎撃 (M10-02): 星になって工事が始まったら行を出す。備蓄が足りるまでは沈める (unaffordable)
+    const worksEl = $('hud-works');
+    worksEl.hidden = !s.civ?.works;
+    if (s.civ?.works) $('intercept-btn').classList.toggle('unaffordable', !canIntercept(s.civ).ok);
+    // 空の舟 (M10-03): 文明が発生していれば行を出す (帆に満たない間は門の説明だけ)。formatCiv は変えず、この行にだけ進みを出す
+    // M10-04 のプレイテスト: 「迎撃の塔」で「舟を作れ」が並ぶと気が散るので、石板に逃がす条件が無ければ行ごと隠す (setShipEnabled)
+    const shipEl = $('hud-ship');
+    shipEl.hidden = civText === null || !shipEnabled;
+    if (civText !== null && s.civ && shipEnabled) {
+      const civ = s.civ;
+      $('ship-hint').textContent = formatShipHint(civ, s.ship);
+      const radius = LOAD_RADIUS[civ.stage] ?? 0;
+      const timber = timberAround({ forest: s.layers.populations['forest'], belltree: s.layers.populations['belltree'] }, civ.home, radius, s.layers.elevation, s.size);
+      $('ship-btn').classList.toggle('unaffordable', !canLaunchShip(civ, timber, s.ship).ok);
+    }
     if (s.year !== lastYear) {
       lastYear = s.year;
       ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
@@ -348,12 +413,20 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const L = s.layers;
     const sea = L.elevation[cell] < SEA_LEVEL;
     p.hidden = false;
+    // 気象塔 (M10-01): このセルが効いている塔の半径内なら「気象塔: 雨 N×」を出す。
+    // 複数の塔が重なれば towers 配列の後ろ (= 後で建てたもの) を優先する (World.towerFactors と同じ規約)
+    let tower: WorldSnapshot['towers'][number] | null = null;
+    for (const t of s.towers) if (t.active && cellDistance(cell, t.cell, s.size) <= t.radius) tower = t;
+    const towerText = tower
+      ? `<div><span>気象塔</span><span class="mono">雨 ${tower.rainScale.toFixed(2)}×${tower.tempOffset !== 0 ? `・気温 ${tower.tempOffset >= 0 ? '+' : ''}${tower.tempOffset.toFixed(1)}` : ''}</span></div>`
+      : '';
     $('cell-info').innerHTML =
       `<div class="mono">セル (${x}, ${y})${sea ? ' · 海' : ''}</div>` +
       `<div><span>標高</span><span class="mono">${Math.round(L.elevation[cell] * 1000)} m</span></div>` +
       `<div><span>気温 / 水分</span><span class="mono">${L.temperature[cell].toFixed(1)}℃ / ${L.moisture[cell].toFixed(2)}</span></div>` +
       `<div><span>生気 / 枯死</span><span class="mono">${L.vitality[cell].toFixed(2)} / ${L.litter[cell].toFixed(2)}</span></div>` +
       `<div><span>輝石</span><span class="mono">${L.crystal[cell].toFixed(2)}</span></div>` +
+      towerText +
       s.species.map((d) => `<div><span>${d.name}</span><span class="mono">${L.populations[d.id][cell].toFixed(2)}</span></div>`).join('');
   };
 
@@ -366,11 +439,17 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     },
     setArmed,
     setSpawnArmed,
+    setTowerArmed,
+    setShipEnabled: (on) => {
+      shipEnabled = on;
+      if (!on) $('hud-ship').hidden = true;
+    },
     setAffordable: (a) => {
       for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('unaffordable', !a.spawn);
       for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('unaffordable', !a.disaster);
       tempEl.classList.toggle('unaffordable', !a.climate);
       rainEl.classList.toggle('unaffordable', !a.climate);
+      $('tower-chip').classList.toggle('unaffordable', !a.tower);
     },
   };
 }

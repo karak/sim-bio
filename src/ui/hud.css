@@ -49,8 +49,15 @@
 .verdict { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 26, 36, 0.6); z-index: 10; }
 .verdict-box { background: rgba(15, 26, 36, 0.95); border: 2px solid #3c7a4e; border-radius: 12px; padding: 24px 32px; text-align: center; max-width: 460px; }
 .verdict.dead .verdict-box { border-color: #b5502f; }
+/* 空の舟 (M10-03): escaped (部分勝利) は生き延びた/滅びたのどちらでもない色 (輝石・鐘樹と同じ系統の青) */
+.verdict.escaped .verdict-box { border-color: #7fb3e0; }
 .verdict-title { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
 .verdict.alive .verdict-title { color: #6fbf7c; }
 .verdict.dead .verdict-title { color: #e07a55; }
+.verdict.escaped .verdict-title { color: #7fb3e0; }
 .verdict-reason { color: #c9d6cd; margin-bottom: 14px; line-height: 1.6; }
 .verdict .row { justify-content: center; }
+.verdict-box a.chip { text-decoration: none; display: inline-block; }
+
+/* hidden 属性を .row などの display 指定より優先する (M10-04 のプレイテストで、hidden の勅令・迎撃・舟の行が display:flex で見えたままだった) */
+[hidden] { display: none !important; }

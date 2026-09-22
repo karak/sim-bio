@@ -7,9 +7,14 @@ import {
   VITALITY_DRAIN,
   POP_NEED,
   VITALITY_FLOOR,
+  STAR_RADIUS,
+  STAR_FAITH,
+  populationFor,
+  canAscend,
   type LoadLayers,
 } from '../../src/simulation/civilizationLoad';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
+import { populationAround } from '../../src/simulation/civilization';
 
 const SIZE = 9;
 const N = SIZE * SIZE;
@@ -158,5 +163,51 @@ describe('checkDecline', () => {
     const r = checkDecline(stage, POP_NEED[stage] + 10, 0.9);
     expect(r.decline).toBe(false);
     expect(r.reason).toBeUndefined();
+  });
+});
+
+describe('星の門 (M10-02): populationFor / canAscend', () => {
+  // 半径 8 と 12 の差が出るように、このブロックだけ 32×32 の格子 (中心 (16,16)) を使う
+  const S2 = 32;
+  const N2 = S2 * S2;
+  const C2 = 16 * S2 + 16;
+  const mkPops = () => {
+    const pops = new Float32Array(N2).fill(0);
+    // 中心から距離 8 以内は 0.01、それより外 (9〜12) は 1.0: 半径 8 と 12 で数が大きく変わるようにする
+    for (let y = 0; y < S2; y++) for (let x = 0; x < S2; x++) {
+      const d = Math.max(Math.abs(x - 16), Math.abs(y - 16));
+      pops[y * S2 + x] = d <= 8 ? 0.01 : 1.0;
+    }
+    return pops;
+  };
+  it('populationFor は星 (7) だけ STAR_RADIUS (= LOAD_RADIUS[7] = 12) で数え、塔以下は SUPPORT_RADIUS で数える', () => {
+    expect(STAR_RADIUS).toBe(LOAD_RADIUS[7]);
+    const elev = new Float32Array(N2).fill(0.5);
+    const pops = mkPops();
+    const tower = populationFor(6, pops, C2, elev, S2);
+    const star = populationFor(7, pops, C2, elev, S2);
+    expect(tower).toBeCloseTo(populationAround(pops, C2, elev, S2), 6);
+    expect(tower).toBeLessThan(5);
+    expect(star).toBeGreaterThan(50);
+    expect(populationFor(7, pops, -1, elev, S2)).toBe(0);
+  });
+  it('populationFor は海のセルを数えない', () => {
+    const elev = new Float32Array(N2).fill(SEA_LEVEL - 0.01);
+    expect(populationFor(7, mkPops(), C2, elev, S2)).toBe(0);
+  });
+  it('canAscend: 塔以下は支え半径の民だけを見る (信仰は要らない)', () => {
+    expect(canAscend({ stage: 5, population: POP_NEED[6], faith: 0 })).toBe(true);
+    expect(canAscend({ stage: 5, population: POP_NEED[6] - 0.01, faith: 1, populationStar: 100 })).toBe(false);
+  });
+  it('canAscend: 塔 → 星は半径 12 の民 ≥ POP_NEED[7] かつ信仰 ≥ STAR_FAITH (0.8)。支え半径の民が足りなくてもよい', () => {
+    expect(STAR_FAITH).toBe(0.8);
+    expect(canAscend({ stage: 6, population: 0, populationStar: POP_NEED[7], faith: STAR_FAITH })).toBe(true);
+    expect(canAscend({ stage: 6, population: 100, populationStar: POP_NEED[7], faith: STAR_FAITH - 0.01 })).toBe(false);
+    expect(canAscend({ stage: 6, population: 100, populationStar: POP_NEED[7] - 0.01, faith: 1 })).toBe(false);
+    // populationStar / faith が無い (古いセーブ) なら 0 扱いで上がらない
+    expect(canAscend({ stage: 6, population: 100 })).toBe(false);
+  });
+  it('canAscend: 最大段階ならこれ以上は無いので true', () => {
+    expect(canAscend({ stage: 7, population: 0 })).toBe(true);
   });
 });

@@ -279,6 +279,46 @@
     }
   },
   {
+    "id": "test-tower",
+    "title": "気象塔の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。塔の文明を最初から据え、気象塔を建てられるか確かめる。",
+    "kind": "endure",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 6,
+        "home": 1770,
+        "fuelStock": 600,
+        "faith": 0.7
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [],
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 10,
+      "costs": {
+        "spawn": 3,
+        "disaster": 5,
+        "climate": 1,
+        "tower": 12
+      },
+      "upkeepPerYear": {
+        "rainScale": 4,
+        "tempOffset": 1,
+        "tower": 4
+      }
+    }
+  },
+  {
     "id": "tower",
     "title": "塔の重さ",
     "prophecy": "この島の民は塔を建てた。塔は燃料で立つ。蓄えは七年で尽き、燃料の無い年が三年続けば塔は一段低くなり、巣まで落ちれば民ごと崩れる。燃料の取り方は二つ。火の山を目覚めさせれば熱が塔を動かすが、火は草木を焼き、熱の中に炎蜥蜴が湧いて民を食う。鐘樹を植えれば材が塔を動かすが、育つのに二十年かかり、陰で草が痩せて民の餌が細る。今の十年を火で凌ぐか、五十年後のために樹を植えるか。百年目、塔が立ち、鹿の群れが半ば残っていれば、島は生き延びたと言える。",
@@ -532,5 +572,275 @@
     "ignoreWarnings": [
       "land_low"
     ]
+  },
+  {
+    "id": "intercept-tower",
+    "title": "迎撃の塔",
+    "prophecy": "星は三度落ちる。六十年目、百年目、百四十年目。民が「星」に届き、脈から輝石を蓄えて工事を終えれば、一度ごとに砕ける。だが星に届くには群れと信仰が要り、待つ間も民は脈を掘り続ける。この島の脈は薄い。掘り尽くせば土地が枯れ、三度目に回す輝石が無い。民に掘るのを止めさせるにも、工事を進めさせるにも、信仰が要る。百五十年目、三つの星が砕けていて塔が立っていれば、島は生き延びたと言える。",
+    "kind": "prevent",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 4,
+        "home": 1770,
+        "fuelStock": 1400,
+        "faith": 0.5
+      },
+      "crystalScale": 0.62
+    },
+    "referenceSize": 64,
+    "years": 150,
+    "schedule": [
+      {
+        "atYear": 60,
+        "command": {
+          "type": "disaster",
+          "kind": "meteor",
+          "cell": -1,
+          "radius": 48
+        }
+      },
+      {
+        "atYear": 100,
+        "command": {
+          "type": "disaster",
+          "kind": "meteor",
+          "cell": -1,
+          "radius": 48
+        }
+      },
+      {
+        "atYear": 140,
+        "command": {
+          "type": "disaster",
+          "kind": "meteor",
+          "cell": -1,
+          "radius": 48
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 16,
+        "text": "民は塔に届く。星には群れ(半径十二)と信仰 0.8 が要る"
+      },
+      {
+        "atYear": 45,
+        "text": "一度目の工事はこの頃までに終えたい(九年かかる)"
+      },
+      {
+        "atYear": 60,
+        "text": "一つ目の星が落ちる"
+      },
+      {
+        "atYear": 100,
+        "text": "二つ目の星が落ちる"
+      },
+      {
+        "atYear": 140,
+        "text": "三つ目の星が落ちる"
+      }
+    ],
+    "alive": {
+      "type": "all",
+      "of": [
+        {
+          "type": "intercepted",
+          "min": 3
+        },
+        {
+          "type": "civ_stage",
+          "min": 6,
+          "years": 5
+        }
+      ]
+    },
+    "dead": {
+      "type": "any",
+      "of": [
+        {
+          "type": "civ_stage",
+          "max": 0
+        },
+        {
+          "type": "species_extinct",
+          "ids": [
+            "deer"
+          ]
+        }
+      ]
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 12,
+      "costs": {
+        "spawn": 4,
+        "disaster": 24,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 80,
+        "tempOffset": 16
+      },
+      "max": 120
+    }
+  },
+  {
+    "id": "test-intercept",
+    "title": "迎撃の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。星の文明を最初から据え、備蓄 3 を添えて、三年目の星を砕けるかだけを確かめる。",
+    "kind": "prevent",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 7,
+        "home": 1770,
+        "fuelStock": 600,
+        "faith": 0.9,
+        "worksStock": 3
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [
+      {
+        "atYear": 3,
+        "command": {
+          "type": "disaster",
+          "kind": "meteor",
+          "cell": -1,
+          "radius": 48
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 3,
+        "text": "星が落ちる"
+      }
+    ],
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
+  },
+  {
+    "id": "sky-ship",
+    "title": "空の舟",
+    "prophecy": "島は沈む。二百年で陸は三分の一になり、百七十五年目には集落も沈む。帆の民は舟を作れるが、舟は材を大量に食う。森は鹿が食い尽くし、放ってもすぐ消える。鐘樹は鹿に食われず材になるが、遅い。舟が成っても信仰が低ければ民は乗らない。五つの種と民を次の島へ逃がせたなら、それを生き延びたと呼ぼう。",
+    "kind": "escape",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 5,
+        "home": 2787,
+        "fuelStock": 800,
+        "faith": 0.5
+      }
+    },
+    "referenceSize": 64,
+    "years": 200,
+    "schedule": [
+      {
+        "atYear": 1,
+        "everyYears": 1,
+        "untilYear": 200,
+        "command": {
+          "type": "sink",
+          "amount": 0.0006
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 10,
+        "text": "森は消える。材を作れ(鐘樹は鹿に食われない)"
+      },
+      {
+        "atYear": 100,
+        "text": "陸は半ば。群れが痩せ始める"
+      },
+      {
+        "atYear": 175,
+        "text": "集落が沈む"
+      }
+    ],
+    "escape": {
+      "type": "escaped",
+      "minSpecies": 5
+    },
+    "alive": {
+      "type": "escaped",
+      "minSpecies": 5
+    },
+    "dead": {
+      "type": "any",
+      "of": [
+        {
+          "type": "civ_stage",
+          "max": 0
+        },
+        {
+          "type": "species_extinct",
+          "ids": [
+            "deer"
+          ]
+        }
+      ]
+    },
+    "budget": {
+      "start": 40,
+      "incomePerYear": 12,
+      "costs": {
+        "spawn": 4,
+        "disaster": 24,
+        "climate": 2
+      },
+      "upkeepPerYear": {
+        "rainScale": 80,
+        "tempOffset": 16
+      },
+      "max": 120
+    },
+    "ignoreWarnings": [
+      "land_low"
+    ]
+  },
+  {
+    "id": "test-ship",
+    "title": "帆の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。帆の文明を最初から据え、舟の進み 119.9 を添えて、表示と escaped の判定だけを確かめる。",
+    "kind": "escape",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 5,
+        "home": 2787,
+        "fuelStock": 600,
+        "faith": 0.7,
+        "shipProgress": 119.9
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [],
+    "escape": {
+      "type": "escaped",
+      "minSpecies": 1
+    },
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
   }
 ]

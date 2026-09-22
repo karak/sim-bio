@@ -467,6 +467,36 @@ hud.showCell(cellIndex: number | null): void
 - **判定**: `civVitality` は World が年に 1 回記録した `civ.vitality` を使う(100 倍速では年の境界から最大 100 tick 後に判定するので、測り直すと HUD と食い違う)。
 - **採掘の走査**: 脈ごとのセル一覧(`veinCellLists`)を前計算し、`stepMining` は全セルを走査しない。
 
+### 4.22 実装時の差分(M10-01: 気象塔)
+
+レベルデザイン `docs/design/2026-09-22-level-design-devices.md` §3.1 の気象塔を実装した。新規モジュール `src/simulation/weatherTower.ts` に係数と純粋関数をまとめる(edict.ts / faith.ts と同じ流儀)。
+
+- **係数**: `TOWER_STAGE` 6(塔)、`TOWER_FAITH` 0.6、`TOWER_CRYSTAL` 1.0、`TOWER_RADIUS` 6、`rainScale` 省略時 1.5・`tempOffset` 省略時 0、`TOWER_COST` 12(星の力)、`TOWER_UPKEEP` 4/年(塔 1 つあたり)。
+- **門** (`canBuildTower`): 文明がない → 段階が塔に満たない → 信仰が足りない(値つき)→ セルは海 → そのセルには既に塔がある → 輝石が足りない、の順に確かめ、`{ ok: false; reason }` を返す。輝石の合計 (`crystalAvailable`) は呼び出し元 (`World.validate`) が `towerCrystalPool`(`stepMining` と同じ採掘半径 + 脈全体のプール)で先に計算し、副作用のない validate と、実際に取り除く `takeCrystal`(apply 側)を分けた。
+- **局所気候**: `towerFactors` が塔ごとの半径内に rainScale/tempOffset を書く per-cell 配列 (`World.rainFactor`/`tempFactor`) を作る。重なるセルは後で建てた塔が勝つ(配列の後ろが上書き)。`climate.ts` の `stepClimate` は `ClimateState.rainFactor`/`tempFactor` が省略ならこれまでと同じ挙動(倍率 1・オフセット 0)。
+- **維持費と停止**: `ScenarioRunner` が年ごとに `TOWER_UPKEEP × 塔の数` を通常の気候維持費と別に引く。払えなければ `tower_power { active: false }` を `fromStar: false` で dispatch して年表に `tower_stopped`、力が戻れば `tower_power { active: true }` で `tower_resumed`。`tower_power` は全ての塔の `active` を一括で切り替える(個々の塔ではなく星の力の増減という 1 つの事象として扱う)。
+- **信仰の儀式**: `commandKey` で `build_tower` は星の行為として数え(儀式・ばらつきの対象)、`tower_power` は勅令や沈降と同じ「言葉・自動処理」として数えない (null)。
+- **UI**: HUD の災害列に「気象塔」チップ(武装 → 次の島クリックで `build_tower`、信仰・輝石の下限をヒント表示、力が足りなければ薄く見せる)。セル詳細に半径内なら「気象塔: 雨 N×」。SceneView に塔ごとの小さな目印。石板の年表は専用の `tower`/`tower_stopped`/`tower_resumed` kind(汎用の `intervene` とは分け、二重に出さない)。
+- **ファイル**: `src/simulation/weatherTower.ts`(新規)、`src/simulation/types.ts`・`World.ts`・`climate.ts`・`faith.ts`、`src/scenario/ScenarioRunner.ts`・`types.ts`、`src/ui/Hud.ts`・`Tablet.ts`、`src/render/SceneView.ts`、`src/main.ts`、`assets/data/scenarios.json`(`test-tower` を追加)。
+
+### 4.24 実装時の差分(M10-03: 空の舟)
+
+(§4.23 は M10-02「迎撃の塔」用に予約。この節を書いた時点ではまだ書かれていない)
+
+レベルデザイン `docs/design/2026-09-22-level-design-devices.md` §3.3 の舟の建造を実装した。新規モジュール `src/simulation/ship.ts` に係数と純粋関数をまとめる(works.ts / weatherTower.ts と同じ流儀)。この節は**機構の実装のみ**を記す。「空の舟」シナリオの校正(想定解が通るか)は tests/slow で別途行う(このコミットの時点では未着手)。
+
+- **係数**: `SHIP_STAGE` 5(帆)、`SHIP_FAITH` 0.5、`SHIP_FOREST_MIN` 6、`SHIP_CUT` 0.3/年、`SHIP_NEED` 10。
+- **材**: `timberAround` が徴収半径 (`LOAD_RADIUS[civ.stage]`、既存の M8-03 文明の負荷と同じ半径) 内・陸セルの森 + 鐘樹の密度和を返す。
+- **門** (`canLaunchShip`): 文明がない → 段階が帆に満たない → 信仰が足りない(値つき)→ 舟は既に建造中/既に飛び立った → 材が足りない(値つき)、の順に確かめる(`canBuildTower` と同じ「門 → 状態の重複チェック → 資源」の流儀)。
+- **建造** (`stepShip`): 年に一度、材 × `SHIP_CUT` を伐って進みに積む。合計の伐採量が残りの必要量 (`SHIP_NEED − progress`) を超えるなら割合を落として頭打ちにする(`works.ts` の按分と同じ考え方)。材が 0 の年は進まない。既に飛び立っていれば何もしない。
+- **完成と信仰**: `World.stepCivYearly` が works ブロックの後・衰退判定の前で年に一度 `stepShip` を呼ぶ。`shipDone` で完成を判定し、信仰 ≥ `SHIP_FAITH` なら `launchedYear` を立てて `sim.ship.launched`、足りなければ `sim.ship.waiting` を出して毎年再判定する。崩壊(段階 0)で未発進の舟は `collapseCiv` が捨て `sim.ship.lost` を出す(既に飛び立った舟は残す)。
+- **持ち出し** (`exportCargo`/`aliveSpeciesCount`): 生きている種(総量 > 0)だけを `{ id, total, density }` の配列にし、`CivState` のコピーと合わせて `{ version: 1, year, size, species, civ }` の JSON にする。
+- **判定**: `ScenarioDef.escape?: Condition` を追加し、`judgeScenario` は年ごとに escape → dead → (years 到達時の) alive の順で評価する(escape が dead より先: 舟が飛び立った瞬間は他の dead 条件より優先する部分勝利)。新しい条件 `{ type: 'escaped'; minSpecies? }` は `s.ship?.launchedYear !== undefined && aliveSpeciesCount(s) >= (minSpecies ?? 1)` を見る。`ScenarioStatus` に `'escaped'` を追加。
+- **信仰の儀式**: `commandKey` で `launch_ship` は `civ_edict` と同じ「言葉」として数えない(null)。`ScenarioRunner.costOf` は 0、`intervene` の介入回数にも数えない。
+- **開始オプション**: `start.civilization.shipProgress`(E2E の決定論のため。指定があれば年 0 に着工した舟をその進みで持つ)を `CivilizationConfig.start` / `resolveCivilizationStart` / `ScenarioDef.start.civilization` に通した。
+- **UI**: HUD に `#hud-ship` 行(文明が発生していれば表示。ボタン `#ship-btn`「舟を作れ」、`formatShipHint` が門の説明・進み・「民は乗らない」・「舟は飛び立った」を出し分ける。`formatCiv` の既存の文字列は変えていない)。石板のオーバーレイは escaped で見出し「次の島へ」を出し、`showVerdict(verdict, cargo?)` が Blob + `<a download="cargo.json">` の「持ち出しを保存」ボタンを出す(`main.ts` が `verdict.status === 'escaped'` のときだけ `exportCargo(world.snapshot())` を渡す)。年表は `describeEvent` に `launch_ship`(「石板が告げた: 舟を作れ」)と `verdict` の escaped 分岐(「次の島へ逃れた」)を足した。
+- **ファイル**: `src/simulation/ship.ts`(新規)、`src/simulation/types.ts`・`World.ts`・`civilization.ts`・`faith.ts`、`src/scenario/types.ts`・`judge.ts`・`ScenarioRunner.ts`、`src/ui/Hud.ts`・`Tablet.ts`・`hud.css`、`src/main.ts`、`assets/data/scenarios.json`(`sky-ship`・`test-ship` を追加)。
+
 ## 5. データ
 
 | ファイル | 内容 |
@@ -476,9 +506,102 @@ hud.showCell(cellIndex: number | null): void
 
 種の初期ラインナップと災害の効果値は M1 実装中にデータで調整する。設計書では固定しない。
 
+### 4.23 実装時の差分(M10-02: 迎撃 — 星の門・工事・迎撃・薄い脈)
+
+LD: docs/design/2026-09-22-level-design-devices.md §3.2・§8.1・§8.2。
+
+- **星の門**(`civilizationLoad.ts` `canAscend` / `populationFor`): 塔 → 星は半径 `STAR_RADIUS` = LOAD_RADIUS[7] = 12 の民 ≥ POP_NEED[7](4.0)
+  かつ信仰 ≥ `STAR_FAITH` 0.8。星の衰退も半径 12 の民で見る。塔以下は支え半径 8 のまま。`CivState.populationStar` を年 1 回更新。
+- **星の工事**(`works.ts`): 星は年に `WORKS_RATE`(= MINE_RATE[6] × 360 = 0.36、塔の採掘量)を脈(採掘半径 5 に掛かる脈全体)から備蓄に積む。信仰 < `WORKS_FAITH` 0.6 の年は止まる。
+  備蓄が `INTERCEPT_NEED` 3.0 に達しても掘り続ける(星になっても民は掘るのをやめない。LD §8.2)。`CivState.works { stock, stopped }`、`intercepted`。開始指定 `start.civilization.worksStock`。
+- **迎撃**: コマンド `intercept`(World は `canIntercept` で拒否理由を出す。備蓄を 3.0 消費、`intercepted` +1)。ScenarioRunner は最新の snapshot で
+  同じ条件を確かめ、次の単発の予定隕石を取り消す(`cancelled`)。`InterveneResult.reason` に `no_target` / `rejected`。年表 `intercepted`、
+  `milestones()` は取り消した年の節目を外す、`nextMeteorYear()`。判定条件 `intercepted { min, max }`。力は要らない(民の備蓄で払う)。
+- **薄い脈**: `WorldConfig.crystalScale`(`start.crystalScale`)。seed から生成した輝石に掛ける。脈の形は変わらない。restore でも config から再生成。
+- UI: HUD の文明行に「工事 備蓄 / 3」(止まっていれば「止」)、`#hud-works` の「星を砕け」(備蓄不足は unaffordable)。石板は取り消した節目を消し、
+  年表に「星が砕けた(N 年目の星は落ちない)」。
+- シナリオ「迎撃の塔」(`intercept-tower`): 石@1770、薪 1400、信仰 0.5、crystalScale 0.62、隕石 60/100/140 年目(半径 48)、
+  alive = 三度砕く かつ 段階 ≥ 塔 5 年、dead = 崩壊 か 鹿の絶滅。tests/slow: 放置 dead、応えるだけ dead、儀式後回し+勅令なし dead、
+  儀式後回し+勅令 alive、儀式を最初から alive。校正の表:
+
+| 手 | 星に上がる年 | 三度目の備蓄 | 結果 |
+|---|---|---|---|
+| 放置 | — | — | dead(60 年目) |
+| 儀式なし、祈りに応えるだけ | —(信仰 0.6〜0.7) | — | dead(60 年目) |
+| 儀式を 20 年目から、止めよ無し | 34 | 2.15 / 3.0 | dead(140 年目) |
+| 儀式を 20 年目から、塔で止めよ | 38 | 3.0 | alive |
+| 儀式を最初から | 25 | 3.0 | alive |
+
+#### 4.24.1 校正(M10-03、2026-09-22)
+
+LD §8.3。`SHIP_NEED` 10 → 120。シナリオ「空の舟」(`sky-ship`): 帆@2787、薪 800、信仰 0.5、沈没 0.0006/年、escape = 逃がした種 ≥ 5。
+
+| 手 | 材の出所 | 飛ぶ年 | 結果 |
+|---|---|---|---|
+| 放置 | — | — | dead(177 年、崩壊) |
+| 開始時の森で着工、苔の儀式だけ | 最初の森 22 | —(進み 10 で止まる) | dead |
+| 森を 2 年ごとに放ち続ける | 鹿に食われ 1〜2 | —(200 年で 104) | dead |
+| 鐘樹を 2 年ごとに植えながら着工 | 鐘樹 10〜20 | 25 | escaped |
+| 鐘樹を 30 年育ててから着工 | 鐘樹 45 | 43 | escaped |
+
+### 4.25 実装時の差分(M10 レビューの修正、2026-09-22)
+
+code-review の指摘 10 件を直した。
+
+- `World.dispatch` が validate の結果 `{ ok } | { ok: false, reason }` を返す。ScenarioRunner は World の門(気象塔の段階・信仰・輝石、舟の材、海への放流)で
+  弾かれたら力を引かず、介入に数えず、年表にも積まない(`rejected`)。それまでは気象塔・舟が門で弾かれても力 12 が消え、年表に偽の行が残っていた。
+- 迎撃の連打: まだ World に適用されていない迎撃(`pendingIntercepts`)の分を備蓄から引いて判定する。停止中に 3 回押しても 1 回分の備蓄で 3 つ取り消せない。
+- 舟の警告: 成った舟が信仰不足で飛ばないときは `ship_waiting`(「材が無い」と言わない)。`ship_late` の経過は世界の年(snapshot.year)で測り、石板の年と混ぜない。
+- 判定 `escaped` の理由: 飛んだが種が足りないときは「舟は飛んだが、乗せた種は N」。
+- 気象塔の維持費を石板の「維持」(upkeepLastYear)と upkeep_over_income に含める。
+- restore はセーブに舟が無ければ舟を持たない(start.shipProgress から作った舟が崩壊後のセーブで蘇らない)。
+- 脈の辿り方と比例除去を一本化: `towerCrystalPool` は `miningPool` の薄い包み、`stepWorks` は `takeCrystal` を使う。
+- HUD の文明行に、塔以上では星の門と星の衰退が見る半径 12 の民「星の民 N」を出す。
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
+
+### M10-01: 気象塔
+
+| 受入項目 | 証跡 |
+|---|---|
+| コマンド build_tower { cell, rainScale?, tempOffset? }。段階 < 塔 または 信仰 < 0.6 または 輝石不足なら拒否(単体テスト、cmd.rejected の理由つき) | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
+| 塔の半径内だけ気候が変わり、外は変わらない(単体テスト)。塔は snapshot・保存に含まれる | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
+| 塔の維持費が星の力から毎年引かれ、尽きたら塔が止まる(単体テスト) | `tests/unit/scenario.budget.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
+| SceneView に塔が立ち、HUD の災害列に「気象塔」チップ、セル詳細に塔の効果(E2E: 建てると年表に出る) | `src/render/SceneView.ts`、`src/ui/Hud.ts`、`tests/e2e/smoke.spec.ts` · e7e2a39 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(373 テスト通過)、`npx playwright test`(19 テスト通過) · e7e2a39 |
+
+### M10-02: 迎撃
+
+| 受入項目 | 証跡 |
+|---|---|
+| 校正の前にレベルデザイン文書を書き、ユーザーの承認を得る | `docs/design/2026-09-22-level-design-devices.md` §9(2026-09-22 承認)· 00d1dd0 / ddda979 |
+| レバー感度・定着・副作用の確認がヘッドレスで通っている(通らなければ係数ではなく仕組みに戻る) | 群れの感度が通らず、星の門を半径 12 + 信仰 0.8 に(LD §8.1)· 3ce0429。`tests/unit/civilizationLoad.test.ts`、`tests/unit/world.civilization.star.test.ts`、`tests/unit/world.vein.test.ts` |
+| コマンド intercept: 段階 星 かつ 輝石 ≥ 必要量で、次に予定された隕石の予定コマンドを取り消す。条件を満たさなければ拒否(単体テスト) | `tests/unit/works.test.ts`、`tests/unit/world.civilization.works.test.ts`、`tests/unit/scenario.intercept.test.ts` · 9076a1e / 50968ac |
+| 取り消した予定は石板の節目から消え、年表に「星が砕けた」が並ぶ(E2E) | `tests/e2e/smoke.spec.ts`(intercept: test-intercept)、`tests/unit/ui.tablet.test.ts`、`tests/unit/ui.hud.test.ts` · 50968ac |
+| 「迎撃の塔」: 放置 dead・素朴戦略 dead・想定解 2 つ alive(tests/slow) | `tests/slow/scenarios.playthrough.test.ts`(intercept-tower 5 件)、`tests/unit/world.crystalScale.test.ts` · 9a30d6e |
+| 設計書に校正の表と証跡 | §4.23 · 9a30d6e |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test`(20 件)· 9a30d6e |
+
+### M10-04: 手動受入プレイテスト(M10)
+
+| 受入項目 | 証跡 |
+|---|---|
+| プレイ記録 3 回分(うち 1 回以上 dead) | `docs/specs/plans/2026-09-22-m10-playtest.md`(迎撃の塔 alive、空の舟 dead、空の舟 escaped)· 2e22bc7 |
+| 表示の問題を直し E2E が通る | 舟の行を逃がす石板だけに(`Hud.setShipEnabled`)、`[hidden]` を display より優先(hud.css)、舟の警告 ship_stalled / ship_late(`warnings.ts`)。`tests/unit/scenario.warnings.test.ts`、`tests/e2e/smoke.spec.ts` · 2e22bc7 |
+| 設計書 §6 と企画書に反映 | この表、`docs/design/2026-09-19-proposal.html` の M10 段落 · 2e22bc7 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(442 件)、`npx playwright test`(21 件)· 2e22bc7 |
+
+### M10-03: 空の舟
+
+| 受入項目 | 証跡 |
+|---|---|
+| コマンド launch_ship: 段階 < 帆 または 信仰 < 0.5 または 材不足なら拒否(単体テスト、cmd.rejected の理由つき)。持ち出し JSON の形を固定 | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` · 3ad6a98 |
+| 舟の建造中は森(+鐘樹)が徴収半径内だけ減る(単体テスト)。材が 0 の年は進まない | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` · 3ad6a98 |
+| Verdict に escaped が増え、escape が dead より先に評価される。石板のオーバーレイが「次の島へ」を出し、持ち出しデータをダウンロードできる(E2E) | `tests/unit/scenario.judge.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/e2e/smoke.spec.ts` · 3ad6a98 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(437 テスト通過)、`npx playwright test`(21 テスト通過) · 3ad6a98 |
+| 「空の舟」シナリオの校正(tests/slow: 放置 dead、舟だけ急ぐ dead、想定解 2 つ escaped) | `tests/slow/scenarios.playthrough.test.ts`(sky-ship 5 件)、§4.24.1 · 5969f4e |
 
 ### M9-00: 文明の自然発生を地域で測る
 

@@ -241,3 +241,58 @@ test('stone tablet: milestone disappears when reached, power warning appears, ve
   await expect(page.locator('#verdict-stats')).toContainText(/陸地率 \d+%/);
   await expect(page.locator('#verdict-stats')).toContainText('草 ');
 });
+
+test('intercept: ?scenario=test-intercept の星の民は「星を砕け」で三年目の隕石を取り消し、節目が消えて年表に「星が砕けた」が出る (M10-02)', async ({ page }) => {
+  await page.goto('/?scenario=test-intercept');
+  await expect(page.locator('#hud-works')).toBeVisible();
+  // 逃がす条件の無い石板では舟の行を出さない (M10-04 のプレイテストで「舟を作れ」が気を散らした)
+  await expect(page.locator('#hud-ship')).toBeHidden();
+  await expect(page.locator('#hud-civ')).toContainText('工事 3.0 / 3');
+  await expect(page.locator('#tablet-milestones')).toContainText('3 年目: 星が落ちる');
+  await expect(page.locator('#intercept-btn')).not.toHaveClass(/unaffordable/);
+  await page.click('#intercept-btn');
+  await expect(page.locator('#tablet-timeline')).toContainText('星が砕けた(3 年目の星は落ちない)');
+  await expect(page.locator('#tablet-milestones')).not.toContainText('星が落ちる');
+  // 備蓄が消費され、二度目は撃てない
+  await expect(page.locator('#hud-civ')).toContainText('工事 0.0 / 3');
+  await expect(page.locator('#intercept-btn')).toHaveClass(/unaffordable/);
+});
+
+test('weather tower: ?scenario=test-tower で気象塔チップを武装して島をクリックすると建ち、セル詳細と年表に出る (M10-01)', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto('/?scenario=test-tower');
+  await expect(page.locator('#hud-civ')).toContainText('文明 塔(6)');
+  await expect(page.locator('#tower-chip')).toBeVisible();
+  await page.click('#tower-chip');
+  await expect(page.locator('#tower-chip')).toHaveClass(/armed/);
+  await expect(page.locator('#tower-hint')).toBeVisible();
+  await expect(page.locator('#tower-hint')).toContainText('塔・信仰 0.6・輝石 1');
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#tower-chip')).not.toHaveClass(/armed/);
+  // 建てた直後にログが出る (World 側の受理)
+  await expect
+    .poll(() => logs.filter((l) => l.includes('"event":"sim.tower.built"')).length)
+    .toBeGreaterThanOrEqual(1);
+  // セル詳細: 同じ場所をもう一度クリックすると「気象塔: 雨 1.50×」が出る
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#cell-info')).toContainText('気象塔');
+  await expect(page.locator('#cell-info')).toContainText('雨 1.50×');
+  // 年表の tower イベントは年次評価 (年をまたぐタイミング) でしか積まれないので、1 年進める
+  await page.click('#speed-100');
+  await expect(page.locator('#tablet-timeline')).toContainText('気象塔を建てた', { timeout: 20_000 });
+});
+
+test('sky ship: ?scenario=test-ship shows the ship progress in the HUD and escapes to a 次の島へ verdict with a downloadable cargo (M10-03)', async ({ page }) => {
+  await page.goto('/?scenario=test-ship');
+  await expect(page.locator('#hud-ship')).toBeVisible();
+  await expect(page.locator('#ship-hint')).toContainText('舟 進み 119.9 / 120');
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#verdict-title')).toHaveText('次の島へ');
+  // ダウンロードの中身は確かめない (実際にダウンロードはしない)。ボタンが出て download 属性を持つことだけ確かめる
+  await expect(page.locator('#verdict-download')).toBeVisible();
+  await expect(page.locator('#verdict-download')).toHaveAttribute('download', 'cargo.json');
+});

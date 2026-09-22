@@ -25,6 +25,10 @@ export type Condition =
   | { type: 'prayers_answered'; min?: number; max?: number }
   /** 集落の支え半径内の生気の平均 (M9-03)。years があれば直近 years 年の平均で判定する。文明が無ければ 0 扱い */
   | { type: 'civ_vitality'; min?: number; max?: number; years?: number }
+  /** 迎撃した回数 (M10-02)。「迎撃の塔」は min: 1 を alive に使う。文明が無ければ 0 */
+  | { type: 'intercepted'; min?: number; max?: number }
+  /** 舟が飛び立ち、生きている種が minSpecies (省略時 1) 以上か (M10-03)。「空の舟」の escape / alive に使う */
+  | { type: 'escaped'; minSpecies?: number }
   | { type: 'year_reached'; year: number }
   | { type: 'no_intervention' }
   | { type: 'all'; of: Condition[] }
@@ -54,7 +58,20 @@ export type ScenarioDef = {
      * 文明の初期状態の上書き (M8-02)。stage/home 省略時は stage 0 / home -1 (未発生)。
      * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため)
      */
-    civilization?: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number };
+    civilization?: {
+      speciesId: string;
+      stage?: number;
+      home?: number;
+      fuelStock?: number;
+      prayer?: PrayerKind;
+      faith?: number;
+      /** 星の工事の備蓄の開始値 (M10-02) */
+      worksStock?: number;
+      /** 空の舟の進みの開始値 (M10-03、E2E の決定論のため) */
+      shipProgress?: number;
+    };
+    /** 輝石の倍率 (M10-02)。脈を薄くする舞台装置。省略時 1 */
+    crystalScale?: number;
     /**
      * 火山セルの上書き (M8-08)。省略時は World が標高最大の陸セルを既定にする。
      * -1 は他のセル指定と同じ規約で島の中心。M8-09 の校正で標高最大セルは寒すぎ
@@ -75,6 +92,8 @@ export type ScenarioDef = {
   alive: Condition;
   /** 毎年評価し、満たした瞬間に負け。省略時は years 到達時の alive 判定だけで決まる */
   dead?: Condition;
+  /** 毎年、dead より先に評価し、満たした瞬間に部分勝利 (escaped) になる (M10-03)。省略時は escaped を評価しない */
+  escape?: Condition;
   /** 出さない警告の種類。予言どおりの進行 (沈む欠片の陸の減少など) を警告にしないため */
   ignoreWarnings?: WarningKind[];
   /** 予言の節目。未到達のものを石板に先に見せ、到達したら消す */
@@ -85,16 +104,19 @@ export type ScenarioDef = {
     start: number;
     /** 年収の上限。実際は × 陸地率 × 生気の平均 (島が痩せると減る) */
     incomePerYear: number;
-    /** コマンド 1 回の値段 */
-    costs: { spawn: number; disaster: number; climate: number };
-    /** |rainScale−1|·rainScale + |tempOffset|·tempOffset を毎年引く (気候を変え続けている分の維持費) */
-    upkeepPerYear: { rainScale: number; tempOffset: number };
+    /** コマンド 1 回の値段。tower (M10-01) は省略可 (省略時は weatherTower.ts の TOWER_COST) */
+    costs: { spawn: number; disaster: number; climate: number; tower?: number };
+    /**
+     * |rainScale−1|·rainScale + |tempOffset|·tempOffset を毎年引く (気候を変え続けている分の維持費)。
+     * tower (M10-01) は建てた塔 1 つにつき毎年引く額。省略時は weatherTower.ts の TOWER_UPKEEP
+     */
+    upkeepPerYear: { rainScale: number; tempOffset: number; tower?: number };
     /** 貯められる上限 (省略時 start × 3) */
     max?: number;
   };
 };
 
-export type ScenarioStatus = 'running' | 'alive' | 'dead';
+export type ScenarioStatus = 'running' | 'alive' | 'dead' | 'escaped';
 /** 勝敗が確定したときの内訳。オーバーレイに出す */
 export type VerdictStats = { interventions: number; powerSpent: number; landRatio: number; totals: Record<string, number> };
 export type Verdict = { status: ScenarioStatus; reason: string; stats?: VerdictStats };

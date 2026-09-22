@@ -12,7 +12,7 @@ const snap = (over: Partial<{ totals: Record<string, number>; elevation: number[
   // civ_stage のテスト用に、段階だけ指定できる簡易な CivState を組み立てる (他のフィールドは評価に使わないので既定値)
   const civ = over.civ ? { speciesId: 'deer', stage: over.civ.stage, progress: 0, home: -1, population: 0 } : null;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0,
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0, towers: [], ship: null,
     totals: over.totals ?? { grass: 10, deer: 5, wolf: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation, vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: vegetation } },
   };
@@ -75,8 +75,8 @@ describe('judgeScenario', () => {
 
 describe('assets/data/scenarios.json', () => {
   const defs = JSON.parse(readFileSync('assets/data/scenarios.json', 'utf8')) as ScenarioDef[];
-  it('contains the eight scenarios (six first + M9 の 2 本) with prophecy and conditions', () => {
-    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine', 'tower', 'no-answer', 'vein-drain']);
+  it('contains the ten scenarios (六 first + M9 の 2 本 + M10 の迎撃の塔・空の舟) with prophecy and conditions', () => {
+    expect(defs.filter((d) => !d.hidden).map((d) => d.id)).toEqual(['sinking', 'falling-star', 'volcano', 'enrichment', 'vitality-famine', 'tower', 'no-answer', 'vein-drain', 'intercept-tower', 'sky-ship']);
     for (const d of defs.filter((x) => !x.hidden)) {
       expect(d.prophecy.length).toBeGreaterThan(10);
       expect(d.years).toBeGreaterThan(0);
@@ -180,5 +180,77 @@ describe('prayers_answered (M9-03)', () => {
     expect(evaluate(c, input(s0))).toEqual({ ok: false, why: '祈りに 1 回応えた' });
     expect(evaluate(c, input(snap({ civ: null }))).ok).toBe(true);
     expect(evaluate({ type: 'prayers_answered', min: 1 }, input(s0)).ok).toBe(true);
+  });
+});
+
+describe('intercepted (M10-02)', () => {
+  it('迎撃した回数を min/max で判定。文明が無い・数が無ければ 0', () => {
+    const c = { type: 'intercepted', min: 1 } as const;
+    const s0 = snap({ civ: { stage: 7 } });
+    expect(evaluate(c, input(s0))).toEqual({ ok: false, why: '星は砕けなかった' });
+    s0.civ!.intercepted = 1;
+    expect(evaluate(c, input(s0))).toEqual({ ok: true, why: '星を 1 回砕いた' });
+    expect(evaluate(c, input(snap({ civ: null }))).ok).toBe(false);
+    expect(evaluate({ type: 'intercepted', max: 0 }, input(s0)).ok).toBe(false);
+  });
+});
+
+describe('escaped (M10-03)', () => {
+  it('舟がまだ飛んでいなければ不合格', () => {
+    const c = { type: 'escaped', minSpecies: 2 } as const;
+    expect(evaluate(c, input(snap()))).toEqual({ ok: false, why: '舟はまだ飛んでいない' });
+  });
+  it('飛び立っていても、生きている種 (s.species のうち総量 > 0) が minSpecies に届かなければ不合格', () => {
+    const c = { type: 'escaped', minSpecies: 2 } as const;
+    const s0 = snap({ totals: { grass: 10 } });
+    s0.ship = { startedYear: 0, progress: 10, launchedYear: 5 };
+    // s0.species は [grass] だけ (snap() の既定) なので生きている種は 1
+    expect(evaluate(c, input(s0)).ok).toBe(false);
+  });
+  it('飛び立っていて、生きている種が minSpecies 以上なら合格。件数を文にする', () => {
+    const c = { type: 'escaped', minSpecies: 2 } as const;
+    const s0 = snap({ totals: { grass: 10, deer: 3 } });
+    s0.ship = { startedYear: 0, progress: 10, launchedYear: 5 };
+    s0.species = [grass, { ...grass, id: 'deer', name: '鹿' }];
+    expect(evaluate(c, input(s0))).toEqual({ ok: true, why: '2 種と民を次の島へ逃がした' });
+  });
+  it('minSpecies 省略時は 1', () => {
+    const c = { type: 'escaped' } as const;
+    const s0 = snap({ totals: { grass: 10 } });
+    s0.ship = { startedYear: 0, progress: 10, launchedYear: 1 };
+    expect(evaluate(c, input(s0)).ok).toBe(true);
+  });
+});
+
+describe('judgeScenario: escape は dead より先に評価する (M10-03)', () => {
+  const def: ScenarioDef = {
+    id: 'e', title: 'e', prophecy: '', kind: 'escape', years: 10, schedule: [],
+    escape: { type: 'escaped', minSpecies: 1 },
+    alive: { type: 'escaped', minSpecies: 1 },
+    dead: { type: 'civ_stage', max: 0 },
+  };
+  it('escape と dead が同時に成り立つ年でも escaped が勝つ (部分勝利を dead で潰さない)', () => {
+    const s = snap({ civ: { stage: 0 } }); // dead 条件 (civ_stage max 0) も同時に成り立つ
+    s.ship = { startedYear: 0, progress: 10, launchedYear: 2 };
+    expect(judgeScenario(def, input(s, 3)).status).toBe('escaped');
+  });
+  it('escape が成り立たなければ従来どおり dead を評価する', () => {
+    const s = snap({ civ: { stage: 0 } });
+    expect(judgeScenario(def, input(s, 3)).status).toBe('dead');
+  });
+  it('def.escape を省略したシナリオは従来どおり (escaped にはならない)', () => {
+    const plain: ScenarioDef = { id: 'p', title: 'p', prophecy: '', kind: 'endure', years: 5, schedule: [], alive: { type: 'year_reached', year: 5 } };
+    expect(judgeScenario(plain, input(snap(), 5)).status).toBe('alive');
+  });
+});
+
+describe('escaped の理由 (M10 レビュー)', () => {
+  it('飛んだが種が足りないときは「舟は飛んだが、乗せた種は N」、飛んでいなければ「舟はまだ飛んでいない」', () => {
+    const s = snap({ totals: { grass: 1, deer: 0, wolf: 0 }, civ: { stage: 5 } });
+    expect(evaluate({ type: 'escaped', minSpecies: 5 }, input(s)).why).toBe('舟はまだ飛んでいない');
+    s.ship = { startedYear: 0, progress: 120, launchedYear: 90 };
+    const r = evaluate({ type: 'escaped', minSpecies: 5 }, input(s));
+    expect(r.ok).toBe(false);
+    expect(r.why).toBe('舟は飛んだが、乗せた種は 1(5 に足りない)');
   });
 });

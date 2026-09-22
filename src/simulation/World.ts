@@ -7,13 +7,26 @@ import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
-import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
+import { applyLoad, canAscend, checkDecline, DECLINE_YEARS, LOAD_RADIUS, populationFor } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
+import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
+import { aliveSpeciesCount, canLaunchShip, shipDone, stepShip, timberAround, SHIP_FAITH, type ShipState } from './ship';
+import {
+  canBuildTower,
+  takeCrystal,
+  towerCrystalPool,
+  towerFactors,
+  TOWER_CRYSTAL,
+  TOWER_RADIUS,
+  TOWER_RAIN_SCALE_DEFAULT,
+  TOWER_TEMP_OFFSET_DEFAULT,
+  type WeatherTower,
+} from './weatherTower';
 
 export type WorldDeps = {
   log: LogSink;
@@ -101,6 +114,16 @@ export class World {
   private readonly carnivores: SpeciesDef[];
   /** forest 種が config.species に無い世界で applyLoad の forest 引数を埋めるための捨て配列。常に 0 のまま (M8-03) */
   private readonly zeroForest: Float32Array;
+  /** 気象塔の一覧 (M10-01)。文明が無くても常に配列 (空配列もありうる) */
+  towers: WeatherTower[] = [];
+  /** 空の舟の状態 (M10-03)。着工していなければ null */
+  private ship: ShipState | null = null;
+  /**
+   * 塔の効果の per-cell 倍率・オフセット (M10-01)。towers が変わるたび recomputeTowerFactors で更新し、
+   * stepClimate に ClimateState の rainFactor/tempFactor として渡す (塔が無ければ既定 1/0 のまま、既存の挙動と同じ)
+   */
+  readonly rainFactor: Float32Array;
+  readonly tempFactor: Float32Array;
   /**
    * 火山セル: config.volcanoCell があればそれ、無ければ標高最大の陸セル。create 時に 1 度だけ決める (M8-08)。
    * HUD が火山チップの誘導先として使う
@@ -130,6 +153,8 @@ export class World {
     this.litter = new Float32Array(this.n);
     // seed から決定論で生成しておく。create はそのまま使い、restore は save.crystal があればそれで上書きする
     this.crystal = generateCrystal(config.seed, this.elevation, config.size);
+    // 輝石の倍率 (M10-02): シナリオが脈を薄くする舞台装置。脈の形 (labelVeins) は変わらず、量だけ変わる
+    if (config.crystalScale !== undefined && config.crystalScale !== 1) for (let i = 0; i < this.n; i++) this.crystal[i] *= config.crystalScale;
     this.crystal0 = Float32Array.from(this.crystal);
     this.veinLoss = new Float32Array(this.n);
     this.veins = labelVeins(this.crystal0, this.elevation, config.size);
@@ -138,6 +163,9 @@ export class World {
     this.burnt = new Uint16Array(this.n);
     this.scratch = new Float32Array(this.n);
     this.zeroForest = new Float32Array(this.n);
+    // 気象塔 (M10-01): 既定は倍率 1・オフセット 0 (効果なし)。塔を建てるまでは既存の気候と同じ挙動になる
+    this.rainFactor = new Float32Array(this.n).fill(1);
+    this.tempFactor = new Float32Array(this.n);
     // 火山セルは config.volcanoCell があればそれを使う。無ければ標高最大の陸セルを既定にする (M8-08)。
     // 標高最大セルは冷えすぎて炎蜥蜴が湧かない (M8-09 の校正) ことがあるので、シナリオ側で暖かい
     // 低地セルを指定できるようにしてある
@@ -164,6 +192,10 @@ export class World {
       }
       // 信仰の開始指定 (M9-03): 指定があれば FAITH_INITIAL の代わりにこの値で生まれる (E2E の決定論と、シナリオの開始状態のため)
       if (start?.faith !== undefined) this.civ.faith = start.faith;
+      // 工事の備蓄の開始指定 (M10-02): E2E で迎撃を最初から撃てるようにする
+      if (start?.worksStock !== undefined) this.civ.works = { stock: start.worksStock, stopped: false };
+      // 舟の進みの開始指定 (M10-03): E2E の決定論のため、指定があれば年 0 に着工した舟をこの進みで持つ
+      if (start?.shipProgress !== undefined) this.ship = { startedYear: 0, progress: start.shipProgress };
     }
     for (const d of config.species) {
       this.populations[d.id] = new Float32Array(this.n);
@@ -212,6 +244,14 @@ export class World {
     computeVeinLoss(w.crystal, w.crystal0, w.elevation, w.config.size, w.veinLoss, w.veins);
     // save.civ が無ければ constructor で config.civilization.start から作った初期状態のまま (M8-02)
     if (save.civ) w.civ = { ...save.civ };
+    // 気象塔 (M10-01): 古いセーブには無いので、その場合は constructor の既定 (空配列・倍率 1/オフセット 0) のまま
+    if (save.towers) {
+      w.towers = save.towers.map((t) => ({ ...t }));
+      w.recomputeTowerFactors();
+    }
+    // 空の舟 (M10-03): 古いセーブには無いので、その場合は constructor の既定 (null、start.shipProgress があればそれ) のまま
+    // 空の舟 (M10 レビュー): セーブに舟が無ければ無い (constructor が start.shipProgress から作った舟を残さない。崩壊で失った舟が戻らないように)
+    w.ship = save.ship ? { ...save.ship } : null;
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -225,12 +265,17 @@ export class World {
     return w;
   }
 
-  dispatch(cmd: Command, opts: { fromStar?: boolean } = {}): void {
+  /**
+   * コマンドを積む。次の step で適用する。戻り値はその時点の validate の結果 (M10 レビュー: ScenarioRunner が力を引く・年表に積む前に
+   * 門 (段階・信仰・輝石・材) を確かめられるように)。apply でももう一度 validate するので、積んでから状態が変わっても壊れない
+   */
+  dispatch(cmd: Command, opts: { fromStar?: boolean } = {}): { ok: true } | { ok: false; reason: string } {
     this.queue.push(cmd);
+    const reason = this.validate(cmd);
     // M9 レビュー: apply で弾かれるコマンド (海への放流など) は信仰・祈りにも数えない。
     // fromStar が false (予定コマンド、力切れの気候の戻し) は星の行為ではないので、儀式にも応えにも数えない (災害だけは民の目の前なら数える)
     const fromStar = opts.fromStar ?? true;
-    if (this.civ && this.validate(cmd) === null) {
+    if (this.civ && reason === null) {
       const key = fromStar ? commandKey(cmd) : null;
       if (key !== null) this.civYearKeys.push(key);
       // 祈り (M9-02): 有効な祈りがあり、この介入が応えなら即座に解決する (応えた)。
@@ -249,6 +294,7 @@ export class World {
         this.log('info', 'sim.civ.prayer', { year: Math.floor(this.tick / this.config.ticksPerYear), phase: 'answered', kind });
       }
     }
+    return reason === null ? { ok: true } : { ok: false, reason };
   }
 
   /** 火山セル (config.volcanoCell、無ければ標高最大の陸セル)。HUD が火山チップの誘導先として使う (M8-08) */
@@ -284,6 +330,8 @@ export class World {
       climate: { tempOffset: this.config.climate.tempOffset, rainScale: this.config.climate.rainScale },
       civ: this.civ ? { ...this.civ } : null,
       volcanoCell: this._volcanoCell,
+      towers: this.towers.map((t) => ({ ...t })),
+      ship: this.ship ? { ...this.ship } : null,
     };
   }
 
@@ -304,6 +352,8 @@ export class World {
       crystal0: Array.from(this.crystal0),
       populations,
       ...(this.civ ? { civ: { ...this.civ } } : {}),
+      towers: this.towers.map((t) => ({ ...t })),
+      ...(this.ship ? { ship: { ...this.ship } } : {}),
     };
   }
 
@@ -331,7 +381,8 @@ export class World {
     if (this.civ && this.civ.stage >= 1 && !this.civ.miningStopped) {
       const before = this.civ.stage;
       // 次の段階に必要な民がいなければ掘っても上がらない (M8-06)。民は年 1 回更新される
-      const canAdvance = this.civ.stage >= MAX_STAGE || this.civ.population >= POP_NEED[this.civ.stage + 1];
+      // 星 (7) へは半径 12 の民と信仰 0.8 が要る (M10-02、civilizationLoad.ts canAscend)
+      const canAdvance = canAscend(this.civ);
       const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance, { ids: this.veins, cells: this.veinCells });
       this.civ = state;
       if (this.civ.stage !== before) {
@@ -388,6 +439,11 @@ export class World {
     this.civUnrestStreak = 0;
     this.civDeclineStreak = 0;
     this.civPrayerCooldownUntil = -Infinity;
+    // 舟 (M10-03): 崩壊すれば作りかけの舟は失われる。既に飛び立っていれば (民はもう乗った) 残す
+    if (this.ship && this.ship.launchedYear === undefined) {
+      this.ship = null;
+      this.log('info', 'sim.ship.lost', {});
+    }
   }
 
   /**
@@ -395,7 +451,7 @@ export class World {
    * stage 0 (未発生) なら発生判定をし、発生していれば集落半径内の人口を更新する。
    */
   private stepCivYearly(): void {
-    const civ = this.civ as CivState;
+    let civ = this.civ as CivState;
     const size = this.config.size;
     if (civ.stage === 0) {
       // 集落候補: その種の密度が最大の陸セル (M9-00: 採掘半径内に輝石があるものに限る)
@@ -426,6 +482,7 @@ export class World {
       }
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    civ.populationStar = populationFor(MAX_STAGE, this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     const year = Math.floor(this.tick / this.config.ticksPerYear);
     // 祈り (M9-02): 発生済み (stage >= 1、この年に発生した場合も含む) のときだけ扱う
     if (civ.stage >= 1) {
@@ -562,6 +619,31 @@ export class World {
       }
       this.log('info', 'sim.civ.fuel', { fuel: civ.fuel.last, need: civ.fuel.need, shortYears: civ.fuel.shortYears, stock: civ.fuel.stock });
     }
+    // 星の工事 (M10-02): 星なら年に一度、脈から備蓄に積む (信仰が足りなければ止まる)
+    if (civ.stage >= MAX_STAGE) {
+      const r = stepWorks(civ, this.crystal, this.elevation, this.config.size, { ids: this.veins, cells: this.veinCells });
+      this.civ = civ = r.civ;
+      this.log('info', 'sim.civ.works', { year, stock: civ.works?.stock ?? 0, stopped: civ.works?.stopped ?? false, mined: r.mined });
+      if (r.mined > 0) computeVeinLoss(this.crystal, this.crystal0, this.elevation, this.config.size, this.veinLoss, this.veins);
+    }
+    // 空の舟 (M10-03): 着工していて、まだ飛び立っていなければ年に一度、材を伐って進みに積む。
+    // 完成すれば信仰の門を再判定する (足りなければ「民は乗らない」で毎年待つ)
+    if (civ.stage >= 1 && this.ship && this.ship.launchedYear === undefined) {
+      const forestPop = this.populations['forest'] ?? this.zeroForest;
+      const belltreePop = this.populations['belltree'];
+      const radius = LOAD_RADIUS[civ.stage] ?? 0;
+      const r = stepShip(this.ship, { forest: forestPop, belltree: belltreePop }, civ.home, radius, this.elevation, size);
+      this.ship = r.ship;
+      this.log('info', 'sim.ship.progress', { year, progress: this.ship.progress, cut: r.cut });
+      if (shipDone(this.ship)) {
+        if ((civ.faith ?? 0) >= SHIP_FAITH) {
+          this.ship = { ...this.ship, launchedYear: year };
+          this.log('info', 'sim.ship.launched', { year, species: aliveSpeciesCount(this.snapshot()) });
+        } else {
+          this.log('info', 'sim.ship.waiting', { year, faith: civ.faith ?? 0 });
+        }
+      }
+    }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
     if (civ.stage >= 1) {
       let vitSum = 0;
@@ -574,7 +656,8 @@ export class World {
       });
       const vitalityMean = vitCount ? vitSum / vitCount : 0;
       civ.vitality = vitalityMean;
-      const { decline, reason } = checkDecline(civ.stage, civ.population, vitalityMean);
+      // 星は半径 12 の民で衰退を見る (M10-02)。塔以下は支え半径 8 のまま
+      const { decline, reason } = checkDecline(civ.stage, civ.stage >= MAX_STAGE ? (civ.populationStar ?? 0) : civ.population, vitalityMean);
       // 衰退条件が DECLINE_YEARS 年続いたときだけ段階を下げる (M8-06)。途切れれば数え直す
       this.civDeclineStreak = decline ? this.civDeclineStreak + 1 : 0;
       if (decline && this.civDeclineStreak >= DECLINE_YEARS) {
@@ -637,11 +720,61 @@ export class World {
         this.log('info', 'sim.civ.edict', { year, edict: cmd.edict, obeyed, faith: civ.faith ?? 0, miningStopped: civ.miningStopped ?? false });
         break;
       }
+      case 'intercept': {
+        // 迎撃 (M10-02): validate で canIntercept を通っている。備蓄を消費して回数を増やす
+        if (!this.civ) break;
+        this.civ = applyIntercept(this.civ);
+        this.log('info', 'sim.civ.intercept', { year: Math.floor(this.tick / this.config.ticksPerYear), n: this.civ.intercepted ?? 0, stock: this.civ.works?.stock ?? 0 });
+        break;
+      }
+      case 'launch_ship': {
+        // 空の舟 (M10-03): validate で canLaunchShip を通っている。着工する (進み 0 から)
+        const year = Math.floor(this.tick / this.config.ticksPerYear);
+        const timber = this.civ ? timberAround({ forest: this.populations['forest'], belltree: this.populations['belltree'] }, this.civ.home, LOAD_RADIUS[this.civ.stage] ?? 0, this.elevation, this.config.size) : 0;
+        this.ship = { startedYear: year, progress: 0 };
+        this.log('info', 'sim.ship.started', { year, timber });
+        break;
+      }
+      case 'build_tower': {
+        // 気象塔 (M10-01): validate で門 (段階・信仰・セル・輝石) を確かめてあるので、ここでは civ は必ずある
+        const civ = this.civ as CivState;
+        const pool = towerCrystalPool(civ.home, civ.stage, this.elevation, this.config.size, { ids: this.veins, cells: this.veinCells });
+        takeCrystal(pool, this.crystal, TOWER_CRYSTAL);
+        const year = Math.floor(this.tick / this.config.ticksPerYear);
+        const tower: WeatherTower = {
+          cell: cmd.cell,
+          radius: TOWER_RADIUS,
+          rainScale: cmd.rainScale ?? TOWER_RAIN_SCALE_DEFAULT,
+          tempOffset: cmd.tempOffset ?? TOWER_TEMP_OFFSET_DEFAULT,
+          active: true,
+          year,
+        };
+        this.towers.push(tower);
+        this.recomputeTowerFactors();
+        this.log('info', 'sim.tower.built', { cell: tower.cell, radius: tower.radius, rainScale: tower.rainScale, tempOffset: tower.tempOffset, year });
+        break;
+      }
+      case 'tower_power': {
+        // 維持費の自動切り替え (M10-01): 全ての塔の active を一括で切り替える (ScenarioRunner が力の増減から dispatch する)
+        for (const t of this.towers) t.active = cmd.active;
+        this.recomputeTowerFactors();
+        this.log('info', 'sim.tower.power', { active: cmd.active, count: this.towers.length });
+        break;
+      }
     }
+  }
+
+  /** towers が変わるたび (建てた・維持費で切り替わった) に per-cell の倍率・オフセットを作り直す (M10-01) */
+  private recomputeTowerFactors(): void {
+    towerFactors(this.towers, this.config.size, { rain: this.rainFactor, temp: this.tempFactor });
   }
 
   private validate(cmd: Command): string | null {
     if ('cell' in cmd && (!Number.isInteger(cmd.cell) || cmd.cell < 0 || cmd.cell >= this.n)) return 'cell out of range';
+    if (cmd.type === 'intercept') {
+      const r = canIntercept(this.civ);
+      return r.ok ? null : r.reason;
+    }
     if (cmd.type === 'spawn_species') {
       if (!this.byId.has(cmd.speciesId)) return 'unknown species';
       if (!(cmd.amount > 0)) return 'amount must be > 0';
@@ -649,6 +782,22 @@ export class World {
     }
     if (cmd.type === 'disaster' && !(cmd.radius >= 0)) return 'radius must be >= 0';
     if (cmd.type === 'sink' && !(cmd.amount > 0)) return 'amount must be > 0';
+    if (cmd.type === 'build_tower') {
+      // 気象塔 (M10-01): 輝石の合計は canBuildTower の crystalAvailable として先に計算しておく
+      // (実際に取り除く takeCrystal は apply 側。validate は副作用を持たない)
+      let crystalAvailable = 0;
+      if (this.civ && this.civ.stage >= 1) {
+        const pool = towerCrystalPool(this.civ.home, this.civ.stage, this.elevation, this.config.size, { ids: this.veins, cells: this.veinCells });
+        for (const i of pool) crystalAvailable += this.crystal[i];
+      }
+      const r = canBuildTower(this.civ, cmd.cell, crystalAvailable, { elevation: this.elevation, towers: this.towers });
+      if (!r.ok) return r.reason;
+    }
+    if (cmd.type === 'launch_ship') {
+      const timber = this.civ ? timberAround({ forest: this.populations['forest'], belltree: this.populations['belltree'] }, this.civ.home, LOAD_RADIUS[this.civ.stage] ?? 0, this.elevation, this.config.size) : 0;
+      const r = canLaunchShip(this.civ, timber, this.ship);
+      if (!r.ok) return r.reason;
+    }
     return null;
   }
 

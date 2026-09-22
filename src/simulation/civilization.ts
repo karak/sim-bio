@@ -18,6 +18,8 @@ export type CivState = {
   home: number;
   /** 集落半径内のその種の総量 */
   population: number;
+  /** 星の半径 (civilizationLoad.ts STAR_RADIUS = 12) 内のその種の総量 (M10-02)。星の門と星の衰退に使う。年 1 回更新。既存テスト・セーブとの互換のため省略可 */
+  populationStar?: number;
   /**
    * 塔の燃料の直近の年次実績 (M8-08)。stepCivYearly が年に一度更新するので、発生直後・年をまたぐ前は
    * まだ無い (undefined)。既存のテスト・セーブとの互換を保つため省略可にしてある。
@@ -43,6 +45,10 @@ export type CivState = {
   crystalStart?: number;
   /** 集落の支え半径内の生気の平均 (M9-05)。年に 1 回 stepCivYearly が更新する。HUD の「生気 NN%」と警告 civ_vitality_low に使う */
   vitality?: number;
+  /** 星の工事 (M10-02、works.ts)。星 (7) に達した年から stepWorks が年 1 回更新する。星でない・古いセーブでは無い */
+  works?: { stock: number; stopped: boolean };
+  /** 迎撃した回数 (M10-02)。判定条件 intercepted が読む。省略時 0 */
+  intercepted?: number;
   /** 勅令で採掘が止まっているか (M9-03)。省略時 false。止まっている間は stepMining を呼ばない */
   miningStopped?: boolean;
   /** 最後の勅令とその結果 (M9-03)。石板が「民は聞かなかった」を出すために残す */
@@ -205,6 +211,23 @@ export function meanAround(arr: Float32Array, cell: number, radius: number, elev
  * progress が NEED[stage] 以上になり、かつ最大段階でなければ stage を 1 つ上げ、progress は 0 に戻す。
  * crystal は呼び出し元の配列をその場で書き換える (他の step 関数と同じ流儀)。
  */
+/**
+ * 掘る対象のセル (M10-02 で stepMining から切り出し。星の工事 works.ts と気象塔の輝石も同じ範囲から取る):
+ * 採掘半径内の陸セル。脈 (veins) があれば、半径に掛かる脈を辿ってその脈のセル全体
+ */
+export function miningPool(home: number, radius: number, elevation: Float32Array, size: number, veins?: { ids: Int32Array; cells: number[][] }): number[] {
+  const pool: number[] = [];
+  const touched = new Set<number>();
+  forEachInRadius(home, radius, size, (i) => {
+    if (elevation[i] < SEA_LEVEL) return;
+    if (veins && veins.ids[i] >= 0) touched.add(veins.ids[i]);
+    else pool.push(i);
+  });
+  // 脈のセルは前計算の一覧から (全セルの走査をしない。M9 レビュー)
+  if (veins) for (const v of touched) for (const i of veins.cells[v]) if (elevation[i] >= SEA_LEVEL) pool.push(i);
+  return pool;
+}
+
 export function stepMining(
   state: CivState,
   crystal: Float32Array,
@@ -221,16 +244,7 @@ export function stepMining(
   if (state.home < 0 || state.stage < 1 || state.stage > MAX_STAGE) return { state, mined: 0 };
   const radius = MINE_RADIUS[state.stage];
   const rate = MINE_RATE[state.stage];
-  // 掘る対象のセル: 採掘半径内の陸セル。脈があれば、半径に掛かる脈を辿ってその脈のセル全体
-  const pool: number[] = [];
-  const touched = new Set<number>();
-  forEachInRadius(state.home, radius, size, (i) => {
-    if (elevation[i] < SEA_LEVEL) return;
-    if (veins && veins.ids[i] >= 0) touched.add(veins.ids[i]);
-    else pool.push(i);
-  });
-  // 脈のセルは前計算の一覧から (全セルの走査をしない。M9 レビュー)
-  if (veins) for (const v of touched) for (const i of veins.cells[v]) if (elevation[i] >= SEA_LEVEL) pool.push(i);
+  const pool = miningPool(state.home, radius, elevation, size, veins);
   let total = 0;
   for (const i of pool) total += crystal[i];
   if (total <= 0 || rate <= 0) return { state, mined: 0 };
@@ -262,7 +276,20 @@ export function populationAround(pops: Float32Array, home: number, elevation: Fl
 }
 
 /** WorldConfig.civilization の形 (main.ts がシナリオの start.civilization をこの形へ解決する) */
-export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } };
+export type CivilizationConfig = {
+  speciesId: string;
+  start?: {
+    stage: number;
+    home: number;
+    fuelStock?: number;
+    prayer?: PrayerKind;
+    faith?: number;
+    /** 星の工事の備蓄の開始値 (M10-02、E2E の決定論のため) */
+    worksStock?: number;
+    /** 空の舟の進みの開始値 (M10-03、E2E の決定論のため)。指定があれば年 0 に着工した舟をこの進みで持つ */
+    shipProgress?: number;
+  };
+};
 
 /**
  * シナリオの start.civilization を WorldConfig.civilization へ解決する。
@@ -270,10 +297,13 @@ export type CivilizationConfig = { speciesId: string; start?: { stage: number; h
  * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため。期限は World 側で開始年 + PRAYER_YEARS にする)。
  */
 export function resolveCivilizationStart(
-  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } | undefined,
+  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number; worksStock?: number; shipProgress?: number } | undefined,
   size: number,
 ): CivilizationConfig | undefined {
   if (!start) return undefined;
   const home = start.home === undefined || start.home === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : start.home;
-  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer, faith: start.faith } };
+  return {
+    speciesId: start.speciesId,
+    start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer, faith: start.faith, worksStock: start.worksStock, shipProgress: start.shipProgress },
+  };
 }

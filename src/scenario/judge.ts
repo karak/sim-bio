@@ -2,6 +2,7 @@ import type { WorldSnapshot } from '../simulation/types';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { meanAround, SUPPORT_RADIUS } from '../simulation/civilization';
 import { formatFaith } from '../simulation/faith';
+import { aliveSpeciesCount } from '../simulation/ship';
 import type { Condition, ScenarioDef, StartStats, Verdict } from './types';
 
 export type JudgeInput = {
@@ -135,6 +136,18 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
       const ok = inRange(n, c.min, c.max);
       return { ok, why: n === 0 ? '祈りに一度も応えなかった' : `祈りに ${n} 回応えた` };
     }
+    case 'intercepted': {
+      const n = s.civ?.intercepted ?? 0;
+      const ok = inRange(n, c.min, c.max);
+      return { ok, why: n === 0 ? '星は砕けなかった' : `星を ${n} 回砕いた` };
+    }
+    case 'escaped': {
+      const launched = s.ship?.launchedYear !== undefined;
+      const n = aliveSpeciesCount(s);
+      const min = c.minSpecies ?? 1;
+      const ok = launched && n >= min;
+      return { ok, why: ok ? `${n} 種と民を次の島へ逃がした` : launched ? `舟は飛んだが、乗せた種は ${n}(${min} に足りない)` : '舟はまだ飛んでいない' };
+    }
     case 'civ_vitality': {
       const now = civVitality(s);
       const hist = c.years !== undefined ? (input.civVitalityHistory ?? [now]).slice(-c.years) : [now];
@@ -160,10 +173,15 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
 }
 
 /**
- * 年次判定。dead を先に評価し、次に years 到達時の alive を評価する。
- * どちらでもなければ running。
+ * 年次判定。escape → dead の順に評価してから、years 到達時の alive を評価する。
+ * escape (M10-03) は dead より先に見る: 「舟が飛び立った瞬間」は他の dead 条件 (文明の崩壊など) より優先する部分勝利。
+ * どれでもなければ running。
  */
 export function judgeScenario(def: ScenarioDef, input: JudgeInput): Verdict {
+  if (def.escape) {
+    const e = evaluate(def.escape, input);
+    if (e.ok) return { status: 'escaped', reason: e.why };
+  }
   if (def.dead) {
     const d = evaluate(def.dead, input);
     if (d.ok) return { status: 'dead', reason: d.why };
