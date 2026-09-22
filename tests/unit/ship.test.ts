@@ -3,16 +3,20 @@ import {
   timberAround,
   canLaunchShip,
   stepShip,
+  shipCrew,
   shipDone,
   aliveSpeciesCount,
   exportCargo,
   SHIP_STAGE,
+  SHIP_CREW,
   SHIP_FAITH,
   SHIP_FOREST_MIN,
   SHIP_CUT,
   SHIP_NEED,
   type ShipState,
 } from '../../src/simulation/ship';
+import { POP_NEED } from '../../src/simulation/civilizationLoad';
+import { populationAround } from '../../src/simulation/civilization';
 import type { CivState } from '../../src/simulation/civilization';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass, forest } from './helpers';
@@ -98,6 +102,20 @@ describe('空の舟 (M10-03): stepShip', () => {
     expect(r.cut).toBe(0);
     expect(r.ship).toEqual(ship);
     expect(sum(forestPop)).toBeCloseTo(N, 4);
+  });
+});
+
+describe('乗せる民 (M10R-04): SHIP_CREW / shipCrew', () => {
+  it('SHIP_CREW は POP_NEED[SHIP_STAGE] (帆) と同値', () => {
+    expect(SHIP_CREW).toBe(POP_NEED[SHIP_STAGE]);
+  });
+  it('shipCrew は populationAround (SUPPORT_RADIUS) と同じ値を返す (populationFor が段階 帆 では populationAround に委ねるため)', () => {
+    const pops = new Float32Array(N).fill(0.2);
+    expect(shipCrew(pops, HOME, land, SIZE)).toBeCloseTo(populationAround(pops, HOME, land, SIZE), 6);
+    expect(shipCrew(pops, HOME, land, SIZE)).toBeGreaterThan(0);
+  });
+  it('home が未設定 (-1) なら 0', () => {
+    expect(shipCrew(new Float32Array(N).fill(0.2), -1, land, SIZE)).toBe(0);
   });
 });
 

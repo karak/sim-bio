@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { formatCiv, formatShipHint } from '../../src/ui/Hud';
 import type { CivState } from '../../src/simulation/civilization';
-import { SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
+import { SHIP_CREW, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
 
 describe('formatCiv (HUD の文明の 1 行)', () => {
   it('civ が null なら null (行を出さない)', () => {
@@ -70,9 +70,13 @@ describe('formatShipHint: #hud-ship の説明文 (M10-03)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.3 };
     expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED} · 民は乗らない(信仰 0.30)`);
   });
-  it('完成し信仰も足りていれば「民は乗らない」は付かない', () => {
-    const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: SHIP_FAITH };
+  it('完成し信仰・民も足りていれば「民は乗らない」は付かない (M10R-04: populationShip も SHIP_CREW 以上)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: SHIP_FAITH, populationShip: SHIP_CREW };
     expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED}`);
+  });
+  it('完成し信仰は足りているが民 (populationShip) が SHIP_CREW 未満なら「· 民が乗るには足りない(民 0.42 / 0.6)」を添える (M10R-04)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: SHIP_FAITH, populationShip: 0.42 };
+    expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED} · 民が乗るには足りない(民 0.42 / ${SHIP_CREW})`);
   });
   it('飛び立っていれば「舟は飛び立った」', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.9 };

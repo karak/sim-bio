@@ -15,7 +15,7 @@ import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
 import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
-import { aliveSpeciesCount, canLaunchShip, shipDone, stepShip, timberAround, SHIP_FAITH, type ShipState } from './ship';
+import { aliveSpeciesCount, canLaunchShip, shipCrew, shipDone, stepShip, timberAround, SHIP_CREW, SHIP_FAITH, type ShipState } from './ship';
 import {
   canBuildTower,
   takeCrystal,
@@ -483,6 +483,9 @@ export class World {
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     civ.populationStar = populationFor(MAX_STAGE, this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    // 乗せる民 (M10R-04): 舟に乗る民の量。populationFor は段階 帆 (< MAX_STAGE) では populationAround と同じ
+    // (SUPPORT_RADIUS) を返すので civ.population と同値になるが、SHIP_CREW の門は「舟の語彙」で読めるよう別名で持つ
+    civ.populationShip = shipCrew(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     const year = Math.floor(this.tick / this.config.ticksPerYear);
     // 祈り (M9-02): 発生済み (stage >= 1、この年に発生した場合も含む) のときだけ扱う
     if (civ.stage >= 1) {
@@ -583,6 +586,32 @@ export class World {
     this.civYearDisasters = 0;
     this.civYearAnswered = 0;
     this.civYearIgnored = 0;
+    // 空の舟 (M10R-04): 民は舟を優先する。塔の燃料の徴収より先に置く。同じ徴収半径 (LOAD_RADIUS[civ.stage]) の
+    // 森・鐘樹をまず舟が SHIP_CUT だけ伐り、塔の燃料 (collectFuel、鐘樹の材が対象) はその残りから取る。
+    // 順序をここで固定する以外の依存は無い (fuel 側の計算は舟の有無を見ない) ので、ブロックを丸ごと前に動かすだけで済む
+    // 空の舟 (M10-03): 着工していて、まだ飛び立っていなければ年に一度、材を伐って進みに積む。
+    // 完成すれば信仰の門を再判定する (足りなければ「民は乗らない」で毎年待つ)
+    if (civ.stage >= 1 && this.ship && this.ship.launchedYear === undefined) {
+      const forestPop = this.populations['forest'] ?? this.zeroForest;
+      const belltreePop = this.populations['belltree'];
+      const radius = LOAD_RADIUS[civ.stage] ?? 0;
+      const r = stepShip(this.ship, { forest: forestPop, belltree: belltreePop }, civ.home, radius, this.elevation, size);
+      this.ship = r.ship;
+      this.log('info', 'sim.ship.progress', { year, progress: this.ship.progress, cut: r.cut });
+      if (shipDone(this.ship)) {
+        // 乗せる民 (M10R-04): 完成しても信仰と SHIP_CREW の両方の門が要る。信仰を先に見る (canLaunchShip と同じ順)。
+        // 信仰は足りていて民だけ足りなければ reason: 'crew' (足りなければ毎年再判定するのは信仰の待ちと同じ)
+        const faith = civ.faith ?? 0;
+        const crew = civ.populationShip ?? 0;
+        if (faith >= SHIP_FAITH && crew >= SHIP_CREW) {
+          this.ship = { ...this.ship, launchedYear: year };
+          this.log('info', 'sim.ship.launched', { year, species: aliveSpeciesCount(this.snapshot()), crew });
+        } else {
+          const reason = faith < SHIP_FAITH ? 'faith' : 'crew';
+          this.log('info', 'sim.ship.waiting', { year, faith, crew, reason });
+        }
+      }
+    }
     // 塔の燃料 (M8-08): 決定判定より前に、毎年 1 度だけ集落半径内の熱・鐘樹の材から燃料を徴収する。
     // 足りない年が FUEL_YEARS 続いたら段階を 1 下げる (reason: 'fuel')。belltree レイヤーは M8-10 が
     // 追加するまで存在しないので、無い世界では熱だけが燃料源になる (collectFuel が省略時ガード)
@@ -625,24 +654,6 @@ export class World {
       this.civ = civ = r.civ;
       this.log('info', 'sim.civ.works', { year, stock: civ.works?.stock ?? 0, stopped: civ.works?.stopped ?? false, mined: r.mined });
       if (r.mined > 0) computeVeinLoss(this.crystal, this.crystal0, this.elevation, this.config.size, this.veinLoss, this.veins);
-    }
-    // 空の舟 (M10-03): 着工していて、まだ飛び立っていなければ年に一度、材を伐って進みに積む。
-    // 完成すれば信仰の門を再判定する (足りなければ「民は乗らない」で毎年待つ)
-    if (civ.stage >= 1 && this.ship && this.ship.launchedYear === undefined) {
-      const forestPop = this.populations['forest'] ?? this.zeroForest;
-      const belltreePop = this.populations['belltree'];
-      const radius = LOAD_RADIUS[civ.stage] ?? 0;
-      const r = stepShip(this.ship, { forest: forestPop, belltree: belltreePop }, civ.home, radius, this.elevation, size);
-      this.ship = r.ship;
-      this.log('info', 'sim.ship.progress', { year, progress: this.ship.progress, cut: r.cut });
-      if (shipDone(this.ship)) {
-        if ((civ.faith ?? 0) >= SHIP_FAITH) {
-          this.ship = { ...this.ship, launchedYear: year };
-          this.log('info', 'sim.ship.launched', { year, species: aliveSpeciesCount(this.snapshot()) });
-        } else {
-          this.log('info', 'sim.ship.waiting', { year, faith: civ.faith ?? 0 });
-        }
-      }
     }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
     if (civ.stage >= 1) {

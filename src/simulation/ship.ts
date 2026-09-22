@@ -9,12 +9,18 @@ import { forEachInRadius } from './disaster';
 import { SEA_LEVEL } from './terrain';
 import type { CivState } from './civilization';
 import { formatFaith } from './faith';
+import { populationFor, POP_NEED } from './civilizationLoad';
 import type { WorldSnapshot } from './types';
 
 /** 舟を作れる最低段階 (帆、5) */
 export const SHIP_STAGE = 5;
 /** 舟に乗るのに要る信仰の下限 (着工にも要る) */
 export const SHIP_FAITH = 0.5;
+/**
+ * 完成時に乗せる民の下限 (M10R-04)。徴収半径内の民 (populationFor、段階 帆 は SUPPORT_RADIUS の平均) が
+ * これを割れば、舟が成っても飛ばない (民が足りない)。LD §3.4: 初期値は POP_NEED[帆] (0.6)、校正対象
+ */
+export const SHIP_CREW = POP_NEED[SHIP_STAGE];
 /** 着工に要る材 (徴収半径内の森+鐘樹の密度和) の下限 */
 export const SHIP_FOREST_MIN = 6;
 /** 建造 1 年で材 (森+鐘樹の立木) に掛ける伐採の割合。合計の伐採量は材 × SHIP_CUT */
@@ -54,6 +60,14 @@ export function timberAround(
     if (pops.belltree) sum += pops.belltree[i];
   });
   return sum;
+}
+
+/**
+ * 乗せる民 (M10R-04)。civilizationLoad.populationFor をそのまま呼ぶだけの薄い包み
+ * (SHIP_CREW と対にして「舟の門の readable な語彙」を ship.ts 側に置く)。
+ */
+export function shipCrew(pops: Float32Array, home: number, elevation: Float32Array, size: number): number {
+  return populationFor(SHIP_STAGE, pops, home, elevation, size);
 }
 
 /**

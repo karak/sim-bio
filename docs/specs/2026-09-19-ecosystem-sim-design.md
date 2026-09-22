@@ -558,9 +558,30 @@ code-review の指摘 10 件を直した。
 - 脈の辿り方と比例除去を一本化: `towerCrystalPool` は `miningPool` の薄い包み、`stepWorks` は `takeCrystal` を使う。
 - HUD の文明行に、塔以上では星の門と星の衰退が見る半径 12 の民「星の民 N」を出す。
 
+### 4.27 実装時の差分(M10R-04: 舟か塔か(舟が先に伐る)と乗せる民)
+
+(§4.26 は他の M10R チケット用に予約。この節を書いた時点ではまだ書かれていない)
+
+レベルデザイン `docs/design/2026-09-22-level-design-faith-economy.md` §3.4 を実装した。既存の `src/simulation/ship.ts` に係数と関数を足す(新規モジュールは無い)。
+
+- **順序**: `World.stepCivYearly` の年次ブロックの並びを「舟 → 塔の燃料 → 星の工事」に変えた(以前は「塔の燃料 → 星の工事 → 舟」)。舟の `stepShip` が徴収半径 `LOAD_RADIUS[civ.stage]` 内の森+鐘樹を `SHIP_CUT` だけ先に伐り、塔の燃料 (`collectFuel`、同じ半径の鐘樹が対象) はその残りから取る(民は舟を優先する。LD §3.4)。fuel 側の計算そのものは舟の有無を見ないので、ブロックを丸ごと入れ替えるだけで済んだ(依存の再構成は不要)。
+- **乗せる民**: `SHIP_CREW = POP_NEED[SHIP_STAGE]`(初期値 0.6)を `ship.ts` に追加。`shipCrew(pops, home, elevation, size)` は `civilizationLoad.populationFor(SHIP_STAGE, ...)` の薄い包み(段階 帆 は MAX_STAGE 未満なので中身は `populationAround`、SUPPORT_RADIUS)。`CivState.populationShip`(`populationStar` と同じ流儀で年 1 回更新)を追加し、舟の門・警告・HUD はこの値を読む。
+- **完成の門**: 舟が完成 (`shipDone`) した年、信仰 ≥ `SHIP_FAITH` **かつ** `populationShip` ≥ `SHIP_CREW` の両方を満たさなければ飛ばない。信仰を先に見る(`canLaunchShip` と同じ門の順)。信仰は足りて民だけ足りなければ `sim.ship.waiting` の `reason` が `'crew'`(信仰が足りなければ `'faith'`)。どちらも毎年再判定する。`sim.ship.launched` に `crew` を足した。
+- **警告・HUD**: `warnings.ts` の `ship_waiting` は信仰不足のときの文言(既存)に加え、民不足のとき「舟は成ったが民が足りない(民 0.42。0.6 に足りない)」を出す(`s.civ.populationShip` を直接読み、`ShipContext` の拡張は不要だった)。`Hud.ts` の `formatShipHint` は同様に「· 民が乗るには足りない(民 0.42 / 0.6)」を追加(信仰不足の文言が優先)。石板の年表は汎用の `warning` kind (`⚠ ${warning.text}`) がそのまま理由つきの文言を出すので、`Tablet.ts`/`ScenarioRunner.ts` の `TimelineEvent` に変更は無い。
+- **ファイル**: `src/simulation/ship.ts`・`civilization.ts`(`CivState.populationShip`)・`World.ts`、`src/scenario/warnings.ts`、`src/ui/Hud.ts`。
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
+
+### M10R-04: 舟か塔か(材の天秤)と乗せる民
+
+| 受入項目 | 証跡 |
+|---|---|
+| 舟の伐採の後に燃料を取ることが単体テストで確かめられる(同じ木で舟が進むと塔の燃料が減る) | `tests/unit/world.ship.test.ts`(民は舟を優先する) · (このコミット) |
+| 民が足りない完成済みの舟は飛ばず、ログと警告に「民が足りない」が出る。増えれば飛ぶ | `tests/unit/world.ship.test.ts`(乗せる民)、`tests/unit/ship.test.ts`、`tests/unit/scenario.warnings.test.ts` · (このコミット) |
+| HUD・石板の文言(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`npx playwright test` · (このコミット) |
+| npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test` · (このコミット) |
 
 ### M10-01: 気象塔
 

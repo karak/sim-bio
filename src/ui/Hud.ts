@@ -10,7 +10,7 @@ import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
 import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
-import { canLaunchShip, shipDone, timberAround, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState } from '../simulation/ship';
+import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import './hud.css';
 
@@ -45,8 +45,13 @@ export function formatShipHint(civ: CivState | null, ship: ShipState | null): st
   if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。材を伐って ${SHIP_NEED} まで進む`;
   if (ship.launchedYear !== undefined) return '舟は飛び立った';
   const faith = civ?.faith ?? 0;
-  const waiting = shipDone(ship) && faith < SHIP_FAITH;
-  return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED}` + (waiting ? ` · 民は乗らない(信仰 ${formatFaith(faith)})` : '');
+  const done = shipDone(ship);
+  const faithWaiting = done && faith < SHIP_FAITH;
+  // 乗せる民 (M10R-04): 信仰は足りているが、SHIP_CREW (徴収半径の民の平均) に足りない年の文言
+  const crew = civ?.populationShip ?? 0;
+  const crewWaiting = done && !faithWaiting && crew < SHIP_CREW;
+  const waitingText = faithWaiting ? ` · 民は乗らない(信仰 ${formatFaith(faith)})` : crewWaiting ? ` · 民が乗るには足りない(民 ${crew.toFixed(2)} / ${SHIP_CREW})` : '';
+  return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED}` + waitingText;
 }
 
 export type HudHandlers = {

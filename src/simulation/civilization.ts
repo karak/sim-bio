@@ -20,6 +20,8 @@ export type CivState = {
   population: number;
   /** 星の半径 (civilizationLoad.ts STAR_RADIUS = 12) 内のその種の総量 (M10-02)。星の門と星の衰退に使う。年 1 回更新。既存テスト・セーブとの互換のため省略可 */
   populationStar?: number;
+  /** 舟に乗る民の量 (ship.ts SHIP_CREW の門、M10R-04)。populationFor(SHIP_STAGE, ...) を年 1 回更新。既存テスト・セーブとの互換のため省略可 */
+  populationShip?: number;
   /**
    * 塔の燃料の直近の年次実績 (M8-08)。stepCivYearly が年に一度更新するので、発生直後・年をまたぐ前は
    * まだ無い (undefined)。既存のテスト・セーブとの互換を保つため省略可にしてある。
