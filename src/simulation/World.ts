@@ -13,6 +13,7 @@ import { commandKey, disasterHitsHome, updateFaith, updateFaithCap, FAITH_INITIA
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
+import { applyDreamEater, stepDreamEater, type DreamEaterState } from './dreamEater';
 import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
 import { aliveSpeciesCount, canLaunchShip, shipCrew, shipDone, stepShip, timberAround, SHIP_CREW, SHIP_FAITH, type ShipState } from './ship';
@@ -120,6 +121,8 @@ export class World {
   towers: WeatherTower[] = [];
   /** 空の舟の状態 (M10-03)。着工していなければ null */
   private ship: ShipState | null = null;
+  /** 夢喰いの状態 (M10R-03)。現れていなければ null。ship/towers と同じく舞台装置として World が持つ (CivState には持たせない) */
+  private dreamEater: DreamEaterState | null = null;
   /**
    * 塔の効果の per-cell 倍率・オフセット (M10-01)。towers が変わるたび recomputeTowerFactors で更新し、
    * stepClimate に ClimateState の rainFactor/tempFactor として渡す (塔が無ければ既定 1/0 のまま、既存の挙動と同じ)
@@ -254,6 +257,8 @@ export class World {
     // 空の舟 (M10-03): 古いセーブには無いので、その場合は constructor の既定 (null、start.shipProgress があればそれ) のまま
     // 空の舟 (M10 レビュー): セーブに舟が無ければ無い (constructor が start.shipProgress から作った舟を残さない。崩壊で失った舟が戻らないように)
     w.ship = save.ship ? { ...save.ship } : null;
+    // 夢喰い (M10R-03): 古いセーブには無いので、その場合は constructor の既定 (null、未出現) のまま
+    w.dreamEater = save.dreamEater ? { ...save.dreamEater } : null;
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -335,6 +340,7 @@ export class World {
       volcanoCell: this._volcanoCell,
       towers: this.towers.map((t) => ({ ...t })),
       ship: this.ship ? { ...this.ship } : null,
+      dreamEater: this.dreamEater ? { ...this.dreamEater } : null,
     };
   }
 
@@ -357,6 +363,7 @@ export class World {
       ...(this.civ ? { civ: { ...this.civ } } : {}),
       towers: this.towers.map((t) => ({ ...t })),
       ...(this.ship ? { ship: { ...this.ship } } : {}),
+      ...(this.dreamEater ? { dreamEater: { ...this.dreamEater } } : {}),
     };
   }
 
@@ -387,7 +394,9 @@ export class World {
       // 星 (7) へは半径 12 の民と信仰 0.8 が要る (M10-02、civilizationLoad.ts canAscend)
       const canAdvance = canAscend(this.civ);
       const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance, { ids: this.veins, cells: this.veinCells });
-      this.civ = state;
+      // 夢喰い (M10R-03): 現れている間は掘る (stepMining は必ず呼ぶので輝石は crystal から減る) が、
+      // 進み・段階は足さない (LD §3.3「文明の進みを止める」)。採掘そのものは止めない (miningStopped と違う)
+      this.civ = this.dreamEater ? this.civ : state;
       if (this.civ.stage !== before) {
         this.log('info', 'sim.civ.stage', { from: before, to: this.civ.stage, year: Math.floor(this.tick / ticksPerYear) });
       }
@@ -449,6 +458,8 @@ export class World {
       this.ship = null;
       this.log('info', 'sim.ship.lost', {});
     }
+    // 夢喰い (M10R-03): 崩壊すれば影も消える (次に芽生えた文明に古い夢喰いを持ち越さない。faith/faithCap と同じ扱い)
+    this.dreamEater = null;
   }
 
   /**
@@ -603,6 +614,14 @@ export class World {
           this.log('info', 'sim.civ.collapsed', { reason: 'unrest' });
         }
       }
+      // 夢喰い (M10R-03): 信仰の上限が更新され、内乱の判定 (崩壊すれば dreamEater も消える) を終えた後に判定する (LD §3.3)。
+      // collapseCiv が呼ばれていれば dreamEater は既に null・civ.stage は 0 なので、ここでは出現しない
+      const de = stepDreamEater(this.dreamEater, civ, year);
+      this.dreamEater = de.state;
+      if (de.appeared) this.log('info', 'sim.civ.dream_eater', { year, phase: 'appeared', faithCap: civ.faithCap ?? 0 });
+      if (de.left) this.log('info', 'sim.civ.dream_eater', { year, phase: 'left', faithCap: civ.faithCap ?? 0 });
+      // 出現中は毎年、支え半径内の民を DREAM_EAT だけ減らす (内乱の一度きりの半減と違い、出現している間ずっと続く)
+      if (this.dreamEater) applyDreamEater(this.populations[civ.speciesId], civ.home, this.elevation, size);
     }
     this.civYearKeys = [];
     this.civYearDisasters = 0;

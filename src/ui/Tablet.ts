@@ -103,6 +103,9 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       return '力が尽き、気象塔が止まった';
     case 'tower_resumed':
       return '気象塔が動き出した';
+    // 夢喰い (M10R-03): 現れた・去った。信仰の上限 (faithCap) を添える (LD §3.3)
+    case 'dream_eater':
+      return e.phase === 'appeared' ? `夢喰いが集落に現れた(信仰の上限 ${formatFaith(e.faithCap)})` : `夢喰いが去った(信仰の上限 ${formatFaith(e.faithCap)})`;
   }
 }
 

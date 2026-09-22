@@ -30,7 +30,9 @@ export type TimelineEvent =
   /** 力が戻り、止まっていた気象塔が動き出した (M10-01) */
   | { year: number; kind: 'tower_resumed' }
   /** 迎撃 (M10-02): atYear 年目に予定されていた隕石を取り消した */
-  | { year: number; kind: 'intercepted'; atYear: number };
+  | { year: number; kind: 'intercepted'; atYear: number }
+  /** 夢喰いが集落に現れた・去った (M10R-03)。faithCap はそのときの信仰の上限 (石板の文言に使う) */
+  | { year: number; kind: 'dream_eater'; phase: 'appeared' | 'left'; faithCap: number };
 
 /** dispatch の戻り値は World の validate の結果 (M10 レビュー)。偽の world (テスト) は void でよく、その場合は受理とみなす */
 type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void | { ok: true } | { ok: false; reason: string }; snapshot(): WorldSnapshot };
@@ -137,6 +139,8 @@ export function createScenarioRunner(
   let lastCivFaith: number | null = first.civ?.faith ?? null;
   /** 直近に見た信仰の上限。文明が無い・stage 0 のあいだは null (M10R-02) */
   let lastCivFaithCap: number | null = first.civ?.faithCap ?? null;
+  /** 直近に見た夢喰いの有無 (M10R-03)。snapshot.dreamEater は World が年に一度更新するだけなので、ここでは有無の flip を見るだけでよい */
+  let lastDreamEater = first.dreamEater !== null;
   /** 祈り (M9-02): 直近の年次評価で報告済みの issuedYear。同じ祈りを二重に issued 扱いしないための目印 */
   let lastPrayerIssuedYear: number | null = first.civ?.prayer?.issuedYear ?? null;
   /** 祈り (M9-02): 直近に見た祈りの種類。解決 (answered/ignored) された時点では civ.prayer が消えているので、
@@ -376,6 +380,12 @@ export function createScenarioRunner(
           timeline.push({ year, kind: 'civ_faith_cap', from: lastCivFaithCap, to: civFaithCap });
         }
         if (civFaithCap !== undefined) lastCivFaithCap = civFaithCap;
+        // 夢喰い (M10R-03): snapshot.dreamEater の有無が前年と変わっていれば現れた/去ったを年表に積む
+        const dreamEaterNow = s.dreamEater !== null;
+        if (dreamEaterNow !== lastDreamEater) {
+          timeline.push({ year, kind: 'dream_eater', phase: dreamEaterNow ? 'appeared' : 'left', faithCap: s.civ?.faithCap ?? 0 });
+          lastDreamEater = dreamEaterNow;
+        }
         // 祈り (M9-02): 前年と比べて解決 (無視 → 応えた の順、World の内部順序に合わせる) → 発生の順で積む。
         // 解決の種類は civ.prayer が消えた後には残らないので、直近に見ていた種類 (lastPrayerKind) で補う
         const prayersIgnored = s.civ?.prayersIgnored ?? 0;

@@ -579,6 +579,20 @@ code-review の指摘 10 件を直した。
 - **警告・HUD**: `warnings.ts` の `ship_waiting` は信仰不足のときの文言(既存)に加え、民不足のとき「舟は成ったが民が足りない(民 0.42。0.6 に足りない)」を出す(`s.civ.populationShip` を直接読み、`ShipContext` の拡張は不要だった)。`Hud.ts` の `formatShipHint` は同様に「· 民が乗るには足りない(民 0.42 / 0.6)」を追加(信仰不足の文言が優先)。石板の年表は汎用の `warning` kind (`⚠ ${warning.text}`) がそのまま理由つきの文言を出すので、`Tablet.ts`/`ScenarioRunner.ts` の `TimelineEvent` に変更は無い。
 - **ファイル**: `src/simulation/ship.ts`・`civilization.ts`(`CivState.populationShip`)・`World.ts`、`src/scenario/warnings.ts`、`src/ui/Hud.ts`。
 
+### 4.28 実装時の差分(M10R-03: 夢喰い、状態機械の影)
+
+レベルデザイン `docs/design/2026-09-22-level-design-faith-economy.md` §3.3 を実装した。新規モジュール `src/simulation/dreamEater.ts`(unrest.ts と同じ流儀: 純粋関数 + `applyDreamEater`)。
+
+- **係数**(dreamEater.ts): `DREAM_CAP` 0.3(出現の上限)、`DREAM_STAGE` 3(歌、出現に要る最低段階)、`DREAM_EAT` 0.2(毎年支え半径内の民に掛ける減り)、`DREAM_LEAVE` 0.5(去る上限)。
+- **`DreamEaterState`**: `{ since: number }`(現れた年)。`ship.ts` の `ShipState`・`weatherTower.ts` の `WeatherTower` と同じく、種としての密度を持たない舞台装置の状態として `World` が別に持つ(`CivState` には持たせない。M17 の本体は密度を持つ種として別に残す)。
+- **`stepDreamEater`**(純粋関数): 現れていなければ 段階 ≥ `DREAM_STAGE` かつ `faithCap < DREAM_CAP` で出現、現れていれば `faithCap ≥ DREAM_LEAVE` で退去。`faithCap` が無ければ(発生直後で未計算)1 とみなし出現しない。
+- **`applyDreamEater`**(純粋関数): `applyUnrest` と同じ形。home の支え半径内の陸セルの、その文明種の密度を `(1 − DREAM_EAT)` 倍にする。
+- **`World`**: `this.dreamEater: DreamEaterState | null` を `towers`/`ship` と同じ流儀で snapshot・serialize・restore に持たせる(セーブに無ければ null)。`stepCivYearly` は `faithCap` の更新・内乱の判定(崩壊すれば先に `collapseCiv` が `dreamEater` を消す)の後で `stepDreamEater` を呼び、現れた/去った年にログ `sim.civ.dream_eater { year, phase, faithCap }` を出す。出現中は毎年 `applyDreamEater` を掛ける。文明の進みは、採掘そのもの(`stepMining`、輝石の消費)は止めずに、`this.civ = this.dreamEater ? this.civ : state`(`stepMining` が返す新しい progress/stage を捨てる)で止める。年境界の直後の 1 年は、境界の判定より前に採掘が走るため、進みが止まるのは出現した翌年からになる。
+- **判定**: `judge.ts` に条件 `{ type: 'dream_eater' }`(`s.dreamEater !== null`)を足した。真のとき why は「夢喰いに食われた」(`intercepted`/`escaped` と同じ、型と評価を switch に足すだけ)。`assets/data/scenarios.json` の `no-answer` の `dead`(`any`)にこの条件を追加した。
+- **UI**: `ScenarioRunner` は `snapshot.dreamEater` の有無の flip を前年と比べて `TimelineEvent { kind: 'dream_eater', phase, faithCap }` を積む(`tower_power` のように自分で dispatch する状態ではないので、`civ_faith_cap` と同じ「値の変化を見る」流儀)。`Tablet.ts` の `describeEvent` は「夢喰いが集落に現れた(信仰の上限 0.28)」「夢喰いが去った(信仰の上限 0.50)」(`formatFaith`)。`Hud.ts` の `formatCiv` は第 2 引数 `dreamEater: boolean`(既定 false)を足し、信仰の文言の直後に「· 夢喰い」を出す(`CivState` に無い値なので、呼び出し元が `snapshot.dreamEater !== null` を渡す)。
+- **SceneView**: `src/render/dreamEaterShade.ts`(`settlementInstances` と同じ流儀の純粋関数)が home・支え半径・表示の有無を返し、`SceneView.ts` は暗い半透明の円 (`CircleGeometry`) を集落の上に置く/隠すだけ(塔・集落の箱と同じ、tick/civ が変わった時だけ置き直す)。
+- **ファイル**: `src/simulation/dreamEater.ts`(新規)・`civilization.ts` の型注釈なし(`CivState` は変えていない)・`World.ts`、`src/scenario/types.ts`・`judge.ts`・`ScenarioRunner.ts`、`src/ui/Tablet.ts`・`Hud.ts`、`src/render/dreamEaterShade.ts`(新規)・`SceneView.ts`、`assets/data/scenarios.json`。
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
@@ -642,6 +656,15 @@ code-review の指摘 10 件を直した。
 | 祈りが解決/無視/取り下げになった翌年に、困りごとが続いていれば次の祈りが出る | `tests/unit/world.civilization.prayer.test.ts`(祈りの間隔は 0)、`tests/unit/prayer.test.ts` · a4377b7 |
 | HUD・石板に上限が出る(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`(civ_faith_cap)、`npx playwright test` · a4377b7 |
 | npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test` · a4377b7 |
+
+### M10R-03: 夢喰い(信仰の上限が尽きると集落に影)
+
+| 受入項目 | 証跡 |
+|---|---|
+| 純粋関数(出現/捕食/退去)が単体テストで確かめられる。World で出現中は民が減り progress が進まない。save/restore で往復 | `tests/unit/dreamEater.test.ts`、`tests/unit/world.dreamEater.test.ts` · (このコミット) |
+| 判定条件 dream_eater が judge で使え、dead の理由文に「夢喰い」が出る | `tests/unit/scenario.judge.test.ts`(dream_eater)、`assets/data/scenarios.json`(no-answer の dead) · (このコミット) |
+| HUD・石板・SceneView に出る(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`(dream_eater の年表)、`tests/unit/render.dreamEaterShade.test.ts`、`npx playwright test` · (このコミット) |
+| npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(502 テスト通過)、`npx playwright test`(21 テスト通過) · (このコミット) |
 
 ### M9-00: 文明の自然発生を地域で測る
 

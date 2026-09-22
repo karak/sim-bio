@@ -14,8 +14,12 @@ import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_FORE
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import './hud.css';
 
-/** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
-export function formatCiv(civ: CivState | null): string | null {
+/**
+ * HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない)。
+ * dreamEater (M10R-03): 夢喰いは CivState ではなく World が別に持つ状態 (ship/towers と同じ流儀) なので、
+ * 呼び出し元 (snapshot.dreamEater !== null) から真偽だけ渡す。省略時 false (既存呼び出し・テストは変わらない)
+ */
+export function formatCiv(civ: CivState | null, dreamEater = false): string | null {
   if (!civ || civ.stage < 1) return null;
   const name = STAGE_NAMES[civ.stage] ?? '?';
   // 進みは次の段階に必要な量 (NEED) に対する割合。最終段階では 100%。民は密度の和 (小さい値) なので 100 倍して整数で見せる (M8-06)
@@ -29,6 +33,8 @@ export function formatCiv(civ: CivState | null): string | null {
   const faithText = civ.faith !== undefined
     ? ` · 信仰 ${formatFaith(civ.faith)}${civ.faithCap !== undefined ? ` / 上限 ${formatFaith(civ.faithCap)}` : ''}`
     : '';
+  // 夢喰い (M10R-03): 信仰の文言の直後に足す。現れていなければ出さない
+  const dreamEaterText = dreamEater ? ' · 夢喰い' : '';
   // 勅令 (M9-03): 民が採掘を止めている間は「採掘 止」を足す (止めるまでは出さない)
   const miningText = civ.miningStopped ? ' · 採掘 止' : '';
   // 集落の生気 (M9-05): 霊脈枯れの判定 (集落の生気 3 割) が HUD で読めるように。年をまたぐ前は無い
@@ -37,7 +43,7 @@ export function formatCiv(civ: CivState | null): string | null {
   const worksText = civ.works ? ` · 工事 ${civ.works.stock.toFixed(1)} / ${INTERCEPT_NEED}${civ.works.stopped ? ' 止' : ''}` : '';
   // 星の門 (M10 レビュー): 塔以上では星の門と星の衰退が見る半径 12 の民も出す (支え半径 8 の「民」だけでは、なぜ星に上がれないか読めない)
   const starText = civ.stage >= 6 && civ.populationStar !== undefined ? ` · 星の民 ${Math.round(civ.populationStar * 100)}` : '';
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${starText}${fuelText}${faithText}${vitalityText}${miningText}${worksText}`;
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${starText}${fuelText}${faithText}${dreamEaterText}${vitalityText}${miningText}${worksText}`;
 }
 
 /**
@@ -365,7 +371,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $('temp-offset-v').textContent = (s.climate.tempOffset >= 0 ? '+' : '') + s.climate.tempOffset.toFixed(1);
     }
     $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
-    const civText = formatCiv(s.civ);
+    const civText = formatCiv(s.civ, s.dreamEater !== null);
     const civEl = $('hud-civ');
     civEl.hidden = civText === null;
     if (civText !== null) civEl.textContent = civText;

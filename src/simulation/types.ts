@@ -1,6 +1,7 @@
 import type { CivState, CivilizationConfig } from './civilization';
 import type { WeatherTower } from './weatherTower';
 import type { ShipState } from './ship';
+import type { DreamEaterState } from './dreamEater';
 
 /** decomposer は枯死 (litter) を餌にし、いる場所の分解を速める第 4 の階層 */
 export type Trophic = 'plant' | 'herbivore' | 'carnivore' | 'decomposer';
@@ -96,6 +97,7 @@ export type Command =
   | { type: 'civ_edict'; edict: 'stop_mining' | 'resume_mining' }
   /** 気象塔を建てる (M10-01)。段階・信仰・輝石の門は World.dispatch が canBuildTower で確かめる。省略時は既定値 (雨 1.5 倍・気温オフセットなし) */
   | { type: 'build_tower'; cell: number; rainScale?: number; tempOffset?: number }
+  // (M10R-03) 夢喰い: プレイヤーが直接 dispatch するコマンドは無い (状態機械は World.stepCivYearly が年に一度進める)。ここには足さない
   /** 星の力の維持費が尽きた/戻ったとき ScenarioRunner が dispatch する (fromStar: false)。全ての塔の active を一括で切り替える */
   | { type: 'tower_power'; active: boolean }
   /** 迎撃 (M10-02)。星の文明の備蓄が INTERCEPT_NEED 以上なら消費して 1 回数える。予定隕石の取り消しは ScenarioRunner が行う */
@@ -137,6 +139,8 @@ export type WorldSnapshot = {
   towers: WeatherTower[];
   /** 空の舟の状態のコピー (M10-03)。着工していなければ null */
   ship: ShipState | null;
+  /** 夢喰いの状態のコピー (M10R-03)。現れていなければ null */
+  dreamEater: DreamEaterState | null;
 };
 
 export type SaveData = {
@@ -162,4 +166,6 @@ export type SaveData = {
   towers?: WeatherTower[];
   /** M10-03 で追加。空の舟の状態。古いセーブには無く、その場合は null (未着工) として復元する */
   ship?: ShipState;
+  /** M10R-03 で追加。夢喰いの状態。古いセーブには無く、その場合は null (未出現) として復元する */
+  dreamEater?: DreamEaterState;
 };

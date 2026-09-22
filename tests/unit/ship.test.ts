@@ -133,7 +133,7 @@ const mkSnapshot = (totals: Record<string, number>): WorldSnapshot => {
   const pop = (t: number) => new Float32Array(n).fill(t / n);
   return {
     tick: 0, year: 3, dayOfYear: 0, size: 2, species: [grass, forest], meanTemperature: 10, co2: 280,
-    climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null,
+    climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null, dreamEater: null,
     totals,
     layers: {
       elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n),
