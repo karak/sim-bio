@@ -532,6 +532,18 @@ LD: docs/design/2026-09-22-level-design-devices.md §3.2・§8.1・§8.2。
 | 儀式を 20 年目から、塔で止めよ | 38 | 3.0 | alive |
 | 儀式を最初から | 25 | 3.0 | alive |
 
+#### 4.24.1 校正(M10-03、2026-09-22)
+
+LD §8.3。`SHIP_NEED` 10 → 120。シナリオ「空の舟」(`sky-ship`): 帆@2787、薪 800、信仰 0.5、沈没 0.0006/年、escape = 逃がした種 ≥ 5。
+
+| 手 | 材の出所 | 飛ぶ年 | 結果 |
+|---|---|---|---|
+| 放置 | — | — | dead(177 年、崩壊) |
+| 開始時の森で着工、苔の儀式だけ | 最初の森 22 | —(進み 10 で止まる) | dead |
+| 森を 2 年ごとに放ち続ける | 鹿に食われ 1〜2 | —(200 年で 104) | dead |
+| 鐘樹を 2 年ごとに植えながら着工 | 鐘樹 10〜20 | 25 | escaped |
+| 鐘樹を 30 年育ててから着工 | 鐘樹 45 | 43 | escaped |
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
@@ -558,7 +570,7 @@ LD: docs/design/2026-09-22-level-design-devices.md §3.2・§8.1・§8.2。
 | 設計書に校正の表と証跡 | §4.23 · 9a30d6e |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test`(20 件)· 9a30d6e |
 
-### M10-03: 空の舟(機構のみ。校正は別途)
+### M10-03: 空の舟
 
 | 受入項目 | 証跡 |
 |---|---|
@@ -566,7 +578,7 @@ LD: docs/design/2026-09-22-level-design-devices.md §3.2・§8.1・§8.2。
 | 舟の建造中は森(+鐘樹)が徴収半径内だけ減る(単体テスト)。材が 0 の年は進まない | `tests/unit/ship.test.ts`、`tests/unit/world.ship.test.ts` · 3ad6a98 |
 | Verdict に escaped が増え、escape が dead より先に評価される。石板のオーバーレイが「次の島へ」を出し、持ち出しデータをダウンロードできる(E2E) | `tests/unit/scenario.judge.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/e2e/smoke.spec.ts` · 3ad6a98 |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(437 テスト通過)、`npx playwright test`(21 テスト通過) · 3ad6a98 |
-| 「空の舟」シナリオの校正(tests/slow: 放置 dead、舟だけ急ぐ dead、想定解 2 つ escaped) | 校正は別途(このコミットには含まない) |
+| 「空の舟」シナリオの校正(tests/slow: 放置 dead、舟だけ急ぐ dead、想定解 2 つ escaped) | `tests/slow/scenarios.playthrough.test.ts`(sky-ship 5 件)、§4.24.1 · SHA_M10_03 |
 
 ### M9-00: 文明の自然発生を地域で測る
 

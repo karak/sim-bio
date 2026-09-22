@@ -19,8 +19,12 @@ export const SHIP_FAITH = 0.5;
 export const SHIP_FOREST_MIN = 6;
 /** 建造 1 年で材 (森+鐘樹の立木) に掛ける伐採の割合。合計の伐採量は材 × SHIP_CUT */
 export const SHIP_CUT = 0.3;
-/** 完成に要る進みの累計 */
-export const SHIP_NEED = 10;
+/**
+ * 完成に要る進みの累計。校正 (M10-03): 10 では開始時の森 (集落の徴収半径に 22) だけで 5〜12 年で飛べてしまい、
+ * 森が鹿に食われる圧も沈没も効かなかった。120 なら森を放ち続けても (鹿に食われて年 0.8 しか進まず) 200 年に間に合わず、
+ * 鐘樹 (食われない) を植えれば 25〜45 年で飛べる。LD §8.3
+ */
+export const SHIP_NEED = 120;
 
 /** 舟の状態。着工した年・進み・(あれば) 飛び立った年。launchedYear が無ければまだ飛んでいない */
 export type ShipState = { startedYear: number; progress: number; launchedYear?: number };

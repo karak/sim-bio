@@ -62,17 +62,17 @@ describe('formatShipHint: #hud-ship の説明文 (M10-03)', () => {
   it('未着工なら門の説明 (帆・信仰・材・SHIP_NEED を含む)', () => {
     expect(formatShipHint(null, null)).toBe(`帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。材を伐って ${SHIP_NEED} まで進む`);
   });
-  it('建造中は「舟 進み X.X / 10」を出す (完成していなければ「民は乗らない」は付かない)', () => {
+  it('建造中は「舟 進み X.X / SHIP_NEED」を出す (完成していなければ「民は乗らない」は付かない)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.9 };
-    expect(formatShipHint(civ, { startedYear: 0, progress: 4.25 })).toBe('舟 進み 4.3 / 10');
+    expect(formatShipHint(civ, { startedYear: 0, progress: 4.25 })).toBe(`舟 進み 4.3 / ${SHIP_NEED}`);
   });
   it('完成しても信仰が SHIP_FAITH 未満なら「· 民は乗らない(信仰 0.XX)」を添える。毎年再判定なので進みも出す', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.3 };
-    expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe('舟 進み 10.0 / 10 · 民は乗らない(信仰 0.30)');
+    expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED} · 民は乗らない(信仰 0.30)`);
   });
   it('完成し信仰も足りていれば「民は乗らない」は付かない', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: SHIP_FAITH };
-    expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe('舟 進み 10.0 / 10');
+    expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED}`);
   });
   it('飛び立っていれば「舟は飛び立った」', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.9 };

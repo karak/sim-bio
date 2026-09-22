@@ -286,7 +286,7 @@ test('weather tower: ?scenario=test-tower で気象塔チップを武装して�
 test('sky ship: ?scenario=test-ship shows the ship progress in the HUD and escapes to a 次の島へ verdict with a downloadable cargo (M10-03)', async ({ page }) => {
   await page.goto('/?scenario=test-ship');
   await expect(page.locator('#hud-ship')).toBeVisible();
-  await expect(page.locator('#ship-hint')).toContainText('舟 進み 9.9 / 10');
+  await expect(page.locator('#ship-hint')).toContainText('舟 進み 119.9 / 120');
   await page.click('#speed-100');
   await expect(page.locator('#verdict')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('#verdict-title')).toHaveText('次の島へ');
