@@ -7,7 +7,7 @@ import { stepPopulations } from './populations';
 import { INITIAL_VITALITY, stepVitality } from './vitality';
 import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
-import { applyLoad, checkDecline, DECLINE_YEARS, POP_NEED } from './civilizationLoad';
+import { applyLoad, canAscend, checkDecline, DECLINE_YEARS, populationFor } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
 import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
@@ -331,7 +331,8 @@ export class World {
     if (this.civ && this.civ.stage >= 1 && !this.civ.miningStopped) {
       const before = this.civ.stage;
       // 次の段階に必要な民がいなければ掘っても上がらない (M8-06)。民は年 1 回更新される
-      const canAdvance = this.civ.stage >= MAX_STAGE || this.civ.population >= POP_NEED[this.civ.stage + 1];
+      // 星 (7) へは半径 12 の民と信仰 0.8 が要る (M10-02、civilizationLoad.ts canAscend)
+      const canAdvance = canAscend(this.civ);
       const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance, { ids: this.veins, cells: this.veinCells });
       this.civ = state;
       if (this.civ.stage !== before) {
@@ -426,6 +427,7 @@ export class World {
       }
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    civ.populationStar = populationFor(MAX_STAGE, this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     const year = Math.floor(this.tick / this.config.ticksPerYear);
     // 祈り (M9-02): 発生済み (stage >= 1、この年に発生した場合も含む) のときだけ扱う
     if (civ.stage >= 1) {
@@ -574,7 +576,8 @@ export class World {
       });
       const vitalityMean = vitCount ? vitSum / vitCount : 0;
       civ.vitality = vitalityMean;
-      const { decline, reason } = checkDecline(civ.stage, civ.population, vitalityMean);
+      // 星は半径 12 の民で衰退を見る (M10-02)。塔以下は支え半径 8 のまま
+      const { decline, reason } = checkDecline(civ.stage, civ.stage >= MAX_STAGE ? (civ.populationStar ?? 0) : civ.population, vitalityMean);
       // 衰退条件が DECLINE_YEARS 年続いたときだけ段階を下げる (M8-06)。途切れれば数え直す
       this.civDeclineStreak = decline ? this.civDeclineStreak + 1 : 0;
       if (decline && this.civDeclineStreak >= DECLINE_YEARS) {

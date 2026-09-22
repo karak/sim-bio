@@ -35,11 +35,14 @@ describe('霊脈の感度と定着 (M9-03、size 64)', () => {
     expect(civVitality(w)).toBeLessThan(0.65);
     expect(civVitality(w)).toBeGreaterThan(0.4);
     // 定着: 脈が半分残っているうちに「止めよ」(信仰 0.7) → 10 年後も脈と生気が保たれる。掘り続ければ (苔を放っても) さらに落ちる
-    const save = w.serialize();
+    const save0 = w.serialize();
+    const save = structuredClone(save0);
     save.civ!.faith = 0.7;
     const stopped = World.restore(structuredClone(save), { log: createMemorySink() });
     stopped.dispatch({ type: 'civ_edict', edict: 'stop_mining' });
-    const mossOnly = World.restore(structuredClone(save), { log: createMemorySink() });
+    // 苔だけの世界は放置の信仰 (減衰済み) のまま復元する。0.7 から始めると同じ苔の放流が儀式になって 2 年で 0.8 に達し、
+    // 星の門 (M10-02: 半径 12 の民 4.0 + 信仰 0.8) を越えて星に上がり、星は掘らない (MINE_RATE[7] = 0) ので脈が減らなくなる
+    const mossOnly = World.restore(structuredClone(save0), { log: createMemorySink() });
     const snap = mossOnly.snapshot();
     forEachInRadius(HOME, 6, SIZE, (i) => { if (snap.layers.elevation[i] >= 0.3 && i % 3 === 0) mossOnly.dispatch({ type: 'spawn_species', speciesId: 'moss', cell: i, amount: 0.5, radius: 1 }); });
     const ratioAtStop = veinRatio(stopped);

@@ -1,7 +1,7 @@
 ---
 id: M10-02
 title: 迎撃
-status: todo
+status: in_progress
 milestone: M10
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M10-01, M10-05]
