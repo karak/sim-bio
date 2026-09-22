@@ -1,11 +1,11 @@
 ---
 id: M10-01
 title: 気象塔
-status: in_progress
+status: done
 milestone: M10
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M8-05, M9-03]
-evidence: []
+evidence: ["e7e2a39 tests/unit/weatherTower.test.ts", "e7e2a39 tests/unit/world.tower.test.ts", "e7e2a39 tests/unit/scenario.budget.test.ts", "e7e2a39 src/render/SceneView.ts src/ui/Hud.ts tests/e2e/smoke.spec.ts", "e7e2a39 npm run check (373 tests) / npx playwright test (19 tests)"]
 ---
 
 # 気象塔

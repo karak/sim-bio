@@ -496,11 +496,11 @@ hud.showCell(cellIndex: number | null): void
 
 | 受入項目 | 証跡 |
 |---|---|
-| コマンド build_tower { cell, rainScale?, tempOffset? }。段階 < 塔 または 信仰 < 0.6 または 輝石不足なら拒否(単体テスト、cmd.rejected の理由つき) | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · (SHA 後続コミットで追記) |
-| 塔の半径内だけ気候が変わり、外は変わらない(単体テスト)。塔は snapshot・保存に含まれる | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · (SHA 後続コミットで追記) |
-| 塔の維持費が星の力から毎年引かれ、尽きたら塔が止まる(単体テスト) | `tests/unit/scenario.budget.test.ts`、`tests/unit/world.tower.test.ts` · (SHA 後続コミットで追記) |
-| SceneView に塔が立ち、HUD の災害列に「気象塔」チップ、セル詳細に塔の効果(E2E: 建てると年表に出る) | `src/render/SceneView.ts`、`src/ui/Hud.ts`、`tests/e2e/smoke.spec.ts` · (SHA 後続コミットで追記) |
-| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(373 テスト通過)、`npx playwright test`(19 テスト通過) · (SHA 後続コミットで追記) |
+| コマンド build_tower { cell, rainScale?, tempOffset? }。段階 < 塔 または 信仰 < 0.6 または 輝石不足なら拒否(単体テスト、cmd.rejected の理由つき) | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
+| 塔の半径内だけ気候が変わり、外は変わらない(単体テスト)。塔は snapshot・保存に含まれる | `tests/unit/weatherTower.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
+| 塔の維持費が星の力から毎年引かれ、尽きたら塔が止まる(単体テスト) | `tests/unit/scenario.budget.test.ts`、`tests/unit/world.tower.test.ts` · e7e2a39 |
+| SceneView に塔が立ち、HUD の災害列に「気象塔」チップ、セル詳細に塔の効果(E2E: 建てると年表に出る) | `src/render/SceneView.ts`、`src/ui/Hud.ts`、`tests/e2e/smoke.spec.ts` · e7e2a39 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(373 テスト通過)、`npx playwright test`(19 テスト通過) · e7e2a39 |
 
 ### M9-00: 文明の自然発生を地域で測る
 
