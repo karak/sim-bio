@@ -1,7 +1,7 @@
 ---
 id: M10R-03
 title: 夢喰い(M17-02 の前倒し、状態機械の影)
-status: todo
+status: in_progress
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md#33-夢喰い生物m17-02-の前倒しm10r-03
 depends_on: [M10R-02]

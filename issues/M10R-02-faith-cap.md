@@ -1,11 +1,11 @@
 ---
 id: M10R-02
 title: 民の記憶(信仰の上限)と絶え間ない祈り
-status: in_progress
+status: done
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md#31-民の記憶--信仰の上限民の特性m10r-02
 depends_on: [M10R-01]
-evidence: []
+evidence: ["a4377b7 tests/unit/faith.test.ts", "a4377b7 tests/unit/world.civilization.prayer.test.ts", "a4377b7 tests/unit/ui.hud.test.ts", "a4377b7 tests/unit/ui.tablet.test.ts", "a4377b7 tests/unit/scenario.budget.test.ts", "30e4c91 merge"]
 ---
 
 # 民の記憶(信仰の上限)と絶え間ない祈り
@@ -22,10 +22,12 @@ M10R-01
 
 ## Acceptance criteria
 
-- [ ] faith.ts の純粋関数で上限の更新(無視/応え/回復/クランプ)が単体テストで確かめられる
-- [ ] World で無視 → 上限が下がり、儀式を続けても信仰が上限を超えない。内乱の後の信仰が min(0.4, 上限)。save/restore で往復
-- [ ] 祈りが解決/無視/取り下げになった翌年に、困りごとが続いていれば次の祈りが出る
-- [ ] HUD・石板に上限が出る(内容検証のテスト)。E2E が通る
-- [ ] npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す
+- [x] faith.ts の純粋関数で上限の更新(無視/応え/回復/クランプ)が単体テストで確かめられる
+- [x] World で無視 → 上限が下がり、儀式を続けても信仰が上限を超えない。内乱の後の信仰が min(0.4, 上限)。save/restore で往復
+- [x] 祈りが解決/無視/取り下げになった翌年に、困りごとが続いていれば次の祈りが出る
+- [x] HUD・石板に上限が出る(内容検証のテスト)。E2E が通る
+- [x] npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す
 
 ## 作業ログ
+
+- 2026-09-23 00:34: sonnet の worktree で実装(a4377b7)。同じ年の再発行を防ぐため cooldownUntil = year + 0 + 1(翌年)。M10R-04 と合流(30e4c91)後に単体 477・E2E 21 通過。
