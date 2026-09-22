@@ -150,6 +150,23 @@ describe('空の舟 (M10-03、World): 完成と信仰の門', () => {
   });
 });
 
+describe('空の舟 (M10R-05、World): 帆を失えば舟は止まる', () => {
+  it('段階が帆に満たない年は伐らず進まず、sim.ship.halted が出る。完成していても飛ばない', () => {
+    const { w, log } = mk({ stage: SHIP_STAGE - 1, faith: 1, shipProgress: 10 });
+    w.step(360);
+    expect(w.snapshot().ship).toEqual({ startedYear: 0, progress: 10 });
+    expect(log.find('sim.ship.progress')).toHaveLength(0);
+    const halted = log.find('sim.ship.halted');
+    expect(halted).toHaveLength(1);
+    expect(halted[0]).toMatchObject({ stage: SHIP_STAGE - 1, progress: 10 });
+    const done = mk({ stage: SHIP_STAGE - 1, faith: 1, shipProgress: SHIP_NEED });
+    done.w.step(360);
+    expect(done.w.snapshot().ship!.launchedYear).toBeUndefined();
+    expect(done.log.find('sim.ship.launched')).toHaveLength(0);
+    expect(done.log.find('sim.ship.halted')).toHaveLength(1);
+  });
+});
+
 describe('空の舟 (M10-03、World): 崩壊で失う', () => {
   it('未発進の舟は文明が崩壊 (段階 0) すると失われ、sim.ship.lost が出る', () => {
     const home = Math.floor(32 / 2) * 32 + Math.floor(32 / 2);

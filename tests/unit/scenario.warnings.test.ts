@@ -131,6 +131,12 @@ describe('空の舟の警告 (M10-04): ship_stalled / ship_late', () => {
     expect(w.find((x) => x.kind === 'ship_stalled')!.text).toBe(`舟の進みが止まっている(材が無い。進み 36.8 / ${SHIP_NEED})`);
     expect(w.map((x) => x.kind)).not.toContain('ship_late');
   });
+  it('段階が帆に満たなければ ship_stalled の文言は「帆を失い」になり、材の文言や ship_late は出ない (M10R-05)', () => {
+    const s = { ...withShip(36.8), civ: { speciesId: 'deer', stage: 4, progress: 0, home: -1, population: 0, faith: 1 } };
+    const w = scenarioWarnings(escDef, s, start, null, null, { year: 160, prevProgress: 30 });
+    expect(w.find((x) => x.kind === 'ship_stalled')!.text).toBe(`帆を失い、舟は止まっている(段階 4 < 5。進み 36.8 / ${SHIP_NEED})`);
+    expect(w.map((x) => x.kind)).not.toContain('ship_late');
+  });
   it('進んでいても、今の速さでは残り年数で足りなければ ship_late。足りれば出ない。5 年未満は判定しない', () => {
     // 100 年で 30: 年 0.3、残り 100 年で 30 → 90 に足りない
     const late = scenarioWarnings(escDef, withShip(30, undefined, 100), start, null, null, { year: 100, prevProgress: 29.7 });

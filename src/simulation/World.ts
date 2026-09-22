@@ -16,7 +16,7 @@ import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
 import { applyDreamEater, stepDreamEater, type DreamEaterState } from './dreamEater';
 import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
-import { aliveSpeciesCount, canLaunchShip, shipCrew, shipDone, stepShip, timberAround, SHIP_CREW, SHIP_FAITH, type ShipState } from './ship';
+import { aliveSpeciesCount, canLaunchShip, shipCrew, shipDone, stepShip, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_STAGE, type ShipState } from './ship';
 import {
   canBuildTower,
   takeCrystal,
@@ -632,7 +632,12 @@ export class World {
     // 順序をここで固定する以外の依存は無い (fuel 側の計算は舟の有無を見ない) ので、ブロックを丸ごと前に動かすだけで済む
     // 空の舟 (M10-03): 着工していて、まだ飛び立っていなければ年に一度、材を伐って進みに積む。
     // 完成すれば信仰の門を再判定する (足りなければ「民は乗らない」で毎年待つ)
-    if (civ.stage >= 1 && this.ship && this.ship.launchedYear === undefined) {
+    // 帆を失えば舟は止まる (M10R-05、LD §3.4): 段階 < 帆の年は伐らず、進まず、完成していても飛ばない (sim.ship.halted)。
+    // 舟の伐採で塔の燃料が尽きて帆が落ちる「舟か塔か」の天秤の受け皿。進みは残り、帆に戻れば再開する
+    if (civ.stage >= 1 && civ.stage < SHIP_STAGE && this.ship && this.ship.launchedYear === undefined) {
+      this.log('info', 'sim.ship.halted', { year, stage: civ.stage, progress: this.ship.progress });
+    }
+    if (civ.stage >= SHIP_STAGE && this.ship && this.ship.launchedYear === undefined) {
       const forestPop = this.populations['forest'] ?? this.zeroForest;
       const belltreePop = this.populations['belltree'];
       const radius = LOAD_RADIUS[civ.stage] ?? 0;
