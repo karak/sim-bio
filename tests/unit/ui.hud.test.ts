@@ -47,3 +47,12 @@ describe('formatCiv の集落の生気 (M9-05)', () => {
     expect(formatCiv(noVit)).toBe('文明 石(4) · 進み 0% · 民 100 · 信仰 0.50 · 採掘 止');
   });
 });
+
+describe('formatCiv: 星の工事 (M10-02)', () => {
+  it('works があれば末尾に「· 工事 備蓄 / 必要」を足し、止まっていれば「止」を添える。無ければ出さない', () => {
+    const civ = { speciesId: 'deer', stage: 7, progress: 0, home: 0, population: 1, faith: 0.9, works: { stock: 1.25, stopped: false } };
+    expect(formatCiv(civ)).toBe('文明 星(7) · 進み 100% · 民 100 · 信仰 0.90 · 工事 1.3 / 3');
+    expect(formatCiv({ ...civ, works: { stock: 1.25, stopped: true } })).toBe('文明 星(7) · 進み 100% · 民 100 · 信仰 0.90 · 工事 1.3 / 3 止');
+    expect(formatCiv({ ...civ, works: undefined })).toBe('文明 星(7) · 進み 100% · 民 100 · 信仰 0.90');
+  });
+});

@@ -16,6 +16,8 @@ export type Tablet = {
     warnings?: Warning[],
     timeline?: TimelineEvent[],
     prayer?: { kind: PrayerKind; yearsLeft: number } | null,
+    /** 出す節目 (M10-02)。省略時は def.milestones。迎撃で取り消した隕石の節目を外して渡す */
+    milestones?: { atYear: number; text: string }[],
   ): void;
   /** 勝敗が確定したときの大きな表示 */
   showVerdict(verdict: Verdict): void;
@@ -77,6 +79,8 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       if (e.phase === 'withdrawn') return `困りごとが消え、民は祈るのをやめた: ${label}`;
       return `祈りを無視した: ${label}`;
     }
+    case 'intercepted':
+      return `星が砕けた(${e.atYear} 年目の星は落ちない)`;
   }
 }
 
@@ -131,7 +135,7 @@ export function createTablet(
   $('verdict-free').addEventListener('click', () => onSelect(null));
 
   return {
-    update(year, verdict, budget, warnings = [], timeline = [], prayer = null) {
+    update(year, verdict, budget, warnings = [], timeline = [], prayer = null, milestones = def?.milestones ?? []) {
       if (!def) return;
       $('tablet-year').textContent = `${Math.min(year, def.years)} / ${def.years} 年`;
       $('tablet-status').textContent = verdict.status === 'running' ? `あと ${verdict.reason}` : verdict.reason;
@@ -140,7 +144,7 @@ export function createTablet(
       prayerEl.hidden = !prayer;
       if (prayer) prayerEl.textContent = `祈り: ${PRAYER_LABEL[prayer.kind]}(残り ${prayer.yearsLeft} 年)`;
       // 節目は未到達のものだけ。到達したら消える
-      const pending = (def.milestones ?? []).filter((m) => m.atYear > year);
+      const pending = milestones.filter((m) => m.atYear > year);
       const msHtml = pending.map((m) => `<div class="tablet-milestone">${m.atYear} 年目: ${m.text}</div>`).join('');
       const msEl = $('tablet-milestones');
       if (msEl.innerHTML !== msHtml) msEl.innerHTML = msHtml;

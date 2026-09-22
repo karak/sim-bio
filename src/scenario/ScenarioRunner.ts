@@ -3,6 +3,7 @@ import { civVitality, judgeScenario, landRatio, startStats, vitalityRatio } from
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type CivContext, type Warning } from './warnings';
 import type { PrayerKind } from '../simulation/prayer';
+import { canIntercept } from '../simulation/works';
 
 /** 年表の 1 行。石板が種名などに整形して出す */
 export type TimelineEvent =
@@ -18,15 +19,20 @@ export type TimelineEvent =
   /** 勅令の結果 (M9-03)。obeyed なら民が採掘を止めた/再開した、でなければ聞かなかった (faith はそのときの信仰) */
   | { year: number; kind: 'civ_edict'; edict: 'stop_mining' | 'resume_mining'; obeyed: boolean; faith: number }
   /** 文明の祈りが出た・応えられた・無視された (M9-02) */
-  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored' | 'withdrawn'; prayer: PrayerKind };
+  | { year: number; kind: 'prayer'; phase: 'issued' | 'answered' | 'ignored' | 'withdrawn'; prayer: PrayerKind }
+  /** 迎撃 (M10-02): atYear 年目に予定されていた隕石を取り消した */
+  | { year: number; kind: 'intercepted'; atYear: number };
 
 type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void; snapshot(): WorldSnapshot };
 
 /** 信仰の年表イベント (civ_faith) を積む閾値。前年との差の絶対値がこれ以上のときだけ積む (M9-01) */
 const FAITH_TIMELINE_THRESHOLD = 0.1;
 
-/** intervene が弾いた理由。budget = 力が足りない、finished = 既に判定が確定している */
-export type InterveneResult = { ok: true } | { ok: false; reason: 'budget' | 'finished' };
+/**
+ * intervene が弾いた理由。budget = 力が足りない、finished = 既に判定が確定している、
+ * no_target = 取り消せる予定隕石が無い (M10-02)、rejected = 民の側の条件 (星でない・備蓄不足) で迎撃できない (M10-02)
+ */
+export type InterveneResult = { ok: true } | { ok: false; reason: 'budget' | 'finished' | 'no_target' | 'rejected' };
 
 /** 石板に出す力の残量情報。budget のないシナリオでは null */
 export type BudgetInfo = { power: number; max: number; incomeLastYear: number; upkeepLastYear: number };
@@ -51,6 +57,10 @@ export type ScenarioRunner = {
   warnings(): Warning[];
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
   timeline(): TimelineEvent[];
+  /** 石板に出す予言の節目 (M10-02)。迎撃で取り消した隕石の年の節目は消える */
+  milestones(): { atYear: number; text: string }[];
+  /** 迎撃で取り消せる次の予定隕石の年 (M10-02)。無ければ null。HUD が迎撃の可否に使う */
+  nextMeteorYear(): number | null;
 };
 
 /**
@@ -79,6 +89,8 @@ export function createScenarioRunner(
   /** 総量 (セル密度の和) はセル数に比例するので、species_mean の min は面積比で合わせる */
   const areaScale = scale * scale;
   const fired = new Set<string>();
+  /** 迎撃で取り消した予定の index (M10-02)。fireDue は飛ばす */
+  const cancelled = new Set<number>();
   let lastYear = -1;
   let interventions = 0;
   let verdict: Verdict = { status: 'running', reason: `${def.years} 年` };
@@ -133,6 +145,7 @@ export function createScenarioRunner(
 
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
+      if (cancelled.has(idx)) continue;
       const last = sc.untilYear ?? sc.atYear;
       for (let y = sc.atYear; y <= Math.min(year, last); y += sc.everyYears ?? Number.POSITIVE_INFINITY) {
         const key = `${idx}@${y}`;
@@ -145,6 +158,18 @@ export function createScenarioRunner(
         if (!sc.everyYears) break;
       }
     }
+  };
+
+  /** 迎撃で取り消せる次の予定隕石 (M10-02): 単発 (everyYears 無し) の隕石で、まだ発火も取り消しもされていない最も早いもの */
+  const nextMeteor = (): { idx: number; atYear: number } | null => {
+    let best: { idx: number; atYear: number } | null = null;
+    for (const [idx, sc] of def.schedule.entries()) {
+      if (cancelled.has(idx) || sc.everyYears || fired.has(`${idx}@${sc.atYear}`)) continue;
+      if (sc.command.type !== 'disaster' || sc.command.kind !== 'meteor') continue;
+      if (sc.atYear <= currentYear) continue;
+      if (!best || sc.atYear < best.atYear) best = { idx, atYear: sc.atYear };
+    }
+    return best;
   };
 
   /** コマンド 1 回の値段。budget が無ければ常に 0 (無料) */
@@ -197,8 +222,25 @@ export function createScenarioRunner(
     prayer: () => (currentPrayer ? { kind: currentPrayer.kind, yearsLeft: Math.max(0, currentPrayer.deadlineYear - currentYear) } : null),
     warnings: () => warnings,
     timeline: () => timeline,
+    milestones: () => {
+      const gone = new Set([...cancelled].map((idx) => def.schedule[idx].atYear));
+      return (def.milestones ?? []).filter((m) => !gone.has(m.atYear));
+    },
+    nextMeteorYear: () => nextMeteor()?.atYear ?? null,
     intervene(cmd) {
       if (verdict.status !== 'running') return { ok: false, reason: 'finished' };
+      // 迎撃 (M10-02): 民の条件 (星・備蓄) と取り消せる予定隕石があるときだけ。dispatch は次の step で適用されるので、
+      // 受理の判定は最新の snapshot で先に済ませ、予定の取り消しと年表はここで行う (World 側の validate も同じ条件を見る)
+      if (cmd.type === 'intercept') {
+        const target = nextMeteor();
+        if (!target) return { ok: false, reason: 'no_target' };
+        if (!canIntercept(world.snapshot().civ).ok) return { ok: false, reason: 'rejected' };
+        cancelled.add(target.idx);
+        interventions++;
+        world.dispatch(cmd);
+        timeline.push({ year: currentYear, kind: 'intercepted', atYear: target.atYear });
+        return { ok: true };
+      }
       const cost = costOf(cmd);
       if (budgetDef && power < cost) return { ok: false, reason: 'budget' };
       if (budgetDef) {

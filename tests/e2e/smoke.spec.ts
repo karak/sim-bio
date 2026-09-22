@@ -241,3 +241,17 @@ test('stone tablet: milestone disappears when reached, power warning appears, ve
   await expect(page.locator('#verdict-stats')).toContainText(/陸地率 \d+%/);
   await expect(page.locator('#verdict-stats')).toContainText('草 ');
 });
+
+test('intercept: ?scenario=test-intercept の星の民は「星を砕け」で三年目の隕石を取り消し、節目が消えて年表に「星が砕けた」が出る (M10-02)', async ({ page }) => {
+  await page.goto('/?scenario=test-intercept');
+  await expect(page.locator('#hud-works')).toBeVisible();
+  await expect(page.locator('#hud-civ')).toContainText('工事 3.0 / 3');
+  await expect(page.locator('#tablet-milestones')).toContainText('3 年目: 星が落ちる');
+  await expect(page.locator('#intercept-btn')).not.toHaveClass(/unaffordable/);
+  await page.click('#intercept-btn');
+  await expect(page.locator('#tablet-timeline')).toContainText('星が砕けた(3 年目の星は落ちない)');
+  await expect(page.locator('#tablet-milestones')).not.toContainText('星が落ちる');
+  // 備蓄が消費され、二度目は撃てない
+  await expect(page.locator('#hud-civ')).toContainText('工事 0.0 / 3');
+  await expect(page.locator('#intercept-btn')).toHaveClass(/unaffordable/);
+});

@@ -623,5 +623,47 @@
       },
       "max": 120
     }
+  },
+  {
+    "id": "test-intercept",
+    "title": "迎撃の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。星の文明を最初から据え、備蓄 3 を添えて、三年目の星を砕けるかだけを確かめる。",
+    "kind": "prevent",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 7,
+        "home": 1770,
+        "fuelStock": 600,
+        "faith": 0.9,
+        "worksStock": 3
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [
+      {
+        "atYear": 3,
+        "command": {
+          "type": "disaster",
+          "kind": "meteor",
+          "cell": -1,
+          "radius": 48
+        }
+      }
+    ],
+    "milestones": [
+      {
+        "atYear": 3,
+        "text": "星が落ちる"
+      }
+    ],
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
   }
 ]

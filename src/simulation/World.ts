@@ -165,6 +165,8 @@ export class World {
       }
       // 信仰の開始指定 (M9-03): 指定があれば FAITH_INITIAL の代わりにこの値で生まれる (E2E の決定論と、シナリオの開始状態のため)
       if (start?.faith !== undefined) this.civ.faith = start.faith;
+      // 工事の備蓄の開始指定 (M10-02): E2E で迎撃を最初から撃てるようにする
+      if (start?.worksStock !== undefined) this.civ.works = { stock: start.worksStock, stopped: false };
     }
     for (const d of config.species) {
       this.populations[d.id] = new Float32Array(this.n);

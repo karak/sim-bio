@@ -276,7 +276,7 @@ export function populationAround(pops: Float32Array, home: number, elevation: Fl
 }
 
 /** WorldConfig.civilization の形 (main.ts がシナリオの start.civilization をこの形へ解決する) */
-export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } };
+export type CivilizationConfig = { speciesId: string; start?: { stage: number; home: number; fuelStock?: number; prayer?: PrayerKind; faith?: number; /** 星の工事の備蓄の開始値 (M10-02、E2E の決定論のため) */ worksStock?: number } };
 
 /**
  * シナリオの start.civilization を WorldConfig.civilization へ解決する。
@@ -284,10 +284,10 @@ export type CivilizationConfig = { speciesId: string; start?: { stage: number; h
  * prayer 指定 (M9-02) があれば開始時にその祈りを有効にする (E2E の決定論のため。期限は World 側で開始年 + PRAYER_YEARS にする)。
  */
 export function resolveCivilizationStart(
-  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number } | undefined,
+  start: { speciesId: string; stage?: number; home?: number; fuelStock?: number; prayer?: PrayerKind; faith?: number; worksStock?: number } | undefined,
   size: number,
 ): CivilizationConfig | undefined {
   if (!start) return undefined;
   const home = start.home === undefined || start.home === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : start.home;
-  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer, faith: start.faith } };
+  return { speciesId: start.speciesId, start: { stage: start.stage ?? 0, home, fuelStock: start.fuelStock, prayer: start.prayer, faith: start.faith, worksStock: start.worksStock } };
 }

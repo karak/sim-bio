@@ -40,3 +40,10 @@ describe('describeEvent (年表の文)', () => {
     expect(describeEvent({ year: 3, kind: 'prayer', phase: 'issued', prayer: 'crystal' }, names)).toBe('民が祈った: 星の砂を');
   });
 });
+
+describe('describeEvent: 迎撃 (M10-02)', () => {
+  it('intercept の介入と、取り消しの年表を人が読める文にする', () => {
+    expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'intercept' } }, {})).toBe('星が砕けた');
+    expect(describeEvent({ year: 3, kind: 'intercepted', atYear: 150 }, {})).toBe('星が砕けた(150 年目の星は落ちない)');
+  });
+});

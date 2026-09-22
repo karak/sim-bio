@@ -8,6 +8,7 @@ import { drawGraph, type GraphLine, type GraphMarker } from './graph';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
+import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import './hud.css';
 
 /** HUD 左上に出す文明の 1 行。文明なし・stage 0 では null (行を出さない) */
@@ -26,7 +27,9 @@ export function formatCiv(civ: CivState | null): string | null {
   const miningText = civ.miningStopped ? ' · 採掘 止' : '';
   // 集落の生気 (M9-05): 霊脈枯れの判定 (集落の生気 3 割) が HUD で読めるように。年をまたぐ前は無い
   const vitalityText = civ.vitality !== undefined ? ` · 生気 ${Math.round(civ.vitality * 100)}%` : '';
-  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${vitalityText}${miningText}`;
+  // 星の工事 (M10-02): 星になって年をまたぐと works が付く。「工事 備蓄 / 必要」、止まっていれば「止」を足す
+  const worksText = civ.works ? ` · 工事 ${civ.works.stock.toFixed(1)} / ${INTERCEPT_NEED}${civ.works.stopped ? ' 止' : ''}` : '';
+  return `文明 ${name}(${civ.stage}) · 進み ${pct}% · 民 ${Math.round(civ.population * 100)}${fuelText}${faithText}${vitalityText}${miningText}${worksText}`;
 }
 
 export type HudHandlers = {
@@ -81,6 +84,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
     <div id="hud-civ" class="mono" hidden></div>
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
+    <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
@@ -191,6 +195,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   // 勅令 (M9-03): 石板の言葉として dispatch する (力は要らない。信仰の門は World 側)
   $('edict-stop').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'stop_mining' }));
   $('edict-resume').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'resume_mining' }));
+  $('intercept-btn').addEventListener('click', () => h.onCommand({ type: 'intercept' }));
   $('save-btn').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(h.onSave())], { type: 'application/json' });
     const a = document.createElement('a');
@@ -319,6 +324,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $('edict-stop').classList.toggle('on', stopped);
       $('edict-resume').classList.toggle('on', !stopped);
     }
+    // 迎撃 (M10-02): 星になって工事が始まったら行を出す。備蓄が足りるまでは沈める (unaffordable)
+    const worksEl = $('hud-works');
+    worksEl.hidden = !s.civ?.works;
+    if (s.civ?.works) $('intercept-btn').classList.toggle('unaffordable', !canIntercept(s.civ).ok);
     if (s.year !== lastYear) {
       lastYear = s.year;
       ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
