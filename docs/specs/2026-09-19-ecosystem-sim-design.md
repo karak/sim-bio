@@ -578,10 +578,10 @@ code-review の指摘 10 件を直した。
 
 | 受入項目 | 証跡 |
 |---|---|
-| 舟の伐採の後に燃料を取ることが単体テストで確かめられる(同じ木で舟が進むと塔の燃料が減る) | `tests/unit/world.ship.test.ts`(民は舟を優先する) · (このコミット) |
-| 民が足りない完成済みの舟は飛ばず、ログと警告に「民が足りない」が出る。増えれば飛ぶ | `tests/unit/world.ship.test.ts`(乗せる民)、`tests/unit/ship.test.ts`、`tests/unit/scenario.warnings.test.ts` · (このコミット) |
-| HUD・石板の文言(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`npx playwright test` · (このコミット) |
-| npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test` · (このコミット) |
+| 舟の伐採の後に燃料を取ることが単体テストで確かめられる(同じ木で舟が進むと塔の燃料が減る) | `tests/unit/world.ship.test.ts`(民は舟を優先する) · 6906514 |
+| 民が足りない完成済みの舟は飛ばず、ログと警告に「民が足りない」が出る。増えれば飛ぶ | `tests/unit/world.ship.test.ts`(乗せる民)、`tests/unit/ship.test.ts`、`tests/unit/scenario.warnings.test.ts` · 6906514 |
+| HUD・石板の文言(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`npx playwright test` · 6906514 |
+| npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test` · 6906514 |
 
 ### M10-01: 気象塔
 
