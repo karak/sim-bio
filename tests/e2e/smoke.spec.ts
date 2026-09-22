@@ -245,6 +245,8 @@ test('stone tablet: milestone disappears when reached, power warning appears, ve
 test('intercept: ?scenario=test-intercept の星の民は「星を砕け」で三年目の隕石を取り消し、節目が消えて年表に「星が砕けた」が出る (M10-02)', async ({ page }) => {
   await page.goto('/?scenario=test-intercept');
   await expect(page.locator('#hud-works')).toBeVisible();
+  // 逃がす条件の無い石板では舟の行を出さない (M10-04 のプレイテストで「舟を作れ」が気を散らした)
+  await expect(page.locator('#hud-ship')).toBeHidden();
   await expect(page.locator('#hud-civ')).toContainText('工事 3.0 / 3');
   await expect(page.locator('#tablet-milestones')).toContainText('3 年目: 星が落ちる');
   await expect(page.locator('#intercept-btn')).not.toHaveClass(/unaffordable/);

@@ -58,3 +58,6 @@
 .verdict-reason { color: #c9d6cd; margin-bottom: 14px; line-height: 1.6; }
 .verdict .row { justify-content: center; }
 .verdict-box a.chip { text-decoration: none; display: inline-block; }
+
+/* hidden 属性を .row などの display 指定より優先する (M10-04 のプレイテストで、hidden の勅令・迎撃・舟の行が display:flex で見えたままだった) */
+[hidden] { display: none !important; }

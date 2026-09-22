@@ -1,7 +1,7 @@
 ---
 id: M10-04
 title: 手動受入プレイテスト(M10)
-status: todo
+status: in_progress
 milestone: M10
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M10-01, M10-02, M10-03]

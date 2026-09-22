@@ -71,6 +71,8 @@ export type Hud = {
   setTowerArmed(active: boolean): void;
   /** 星の力で買えるかどうか。false のチップは薄く見せる (押せるが runner が弾く) */
   setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean; tower: boolean }): void;
+  /** 舟の行を出すか (M10-04)。逃がす条件 (escape) の無い石板では「舟を作れ」が気を散らすので隠す。自由モードでは出す */
+  setShipEnabled(on: boolean): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -144,6 +146,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   const ts = new TimeSeries(500);
   const local = new TimeSeries((LOCAL_YEARS * 360) / LOCAL_SAMPLE_TICKS);
   let localCell: number | null = null;
+  let shipEnabled = true;
   let localLastTick = -1;
   const markers: GraphMarker[] = [];
   let lines: GraphLine[] = [];
@@ -369,9 +372,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     worksEl.hidden = !s.civ?.works;
     if (s.civ?.works) $('intercept-btn').classList.toggle('unaffordable', !canIntercept(s.civ).ok);
     // 空の舟 (M10-03): 文明が発生していれば行を出す (帆に満たない間は門の説明だけ)。formatCiv は変えず、この行にだけ進みを出す
+    // M10-04 のプレイテスト: 「迎撃の塔」で「舟を作れ」が並ぶと気が散るので、石板に逃がす条件が無ければ行ごと隠す (setShipEnabled)
     const shipEl = $('hud-ship');
-    shipEl.hidden = civText === null;
-    if (civText !== null && s.civ) {
+    shipEl.hidden = civText === null || !shipEnabled;
+    if (civText !== null && s.civ && shipEnabled) {
       const civ = s.civ;
       $('ship-hint').textContent = formatShipHint(civ, s.ship);
       const radius = LOAD_RADIUS[civ.stage] ?? 0;
@@ -434,6 +438,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     setArmed,
     setSpawnArmed,
     setTowerArmed,
+    setShipEnabled: (on) => {
+      shipEnabled = on;
+      if (!on) $('hud-ship').hidden = true;
+    },
     setAffordable: (a) => {
       for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('unaffordable', !a.spawn);
       for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('unaffordable', !a.disaster);

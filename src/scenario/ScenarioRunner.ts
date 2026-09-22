@@ -117,6 +117,8 @@ export function createScenarioRunner(
   const civVitalityHistory: number[] = [];
   /** 最後に年表に積んだ勅令の通し番号 (M9-03)。新しい勅令が記録されていれば年表に積む (同じ年の 2 つ目も) */
   let lastEdictN: number | null = first.civ?.edict?.n ?? null;
+  /** 前年の舟の進み (M10-04、ship_stalled の判定)。前年に建造中の舟が無ければ null */
+  let prevShipProgress: number | null = null;
   /** 前年の文明の段階。civ_declining の判定に使う。最初の年はまだ「前年」が無いので null */
   let prevCivStage: number | null = null;
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
@@ -319,7 +321,9 @@ export function createScenarioRunner(
         if (year === baselineYear) start = startStats(s);
         if (!isFirstCheck) applyBudgetYearChange(s);
         const civ: CivContext = prevCivStage === null ? null : { prevStage: prevCivStage };
-        warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ);
+        // 舟の警告 (M10-04): 前年の進みと比べる。前年に舟が無ければ null
+        warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ, { year, prevProgress: prevShipProgress });
+        prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;
         for (const w of warnings) {
           if (warned.has(w.key)) continue;
           warned.add(w.key);

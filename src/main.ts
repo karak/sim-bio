@@ -158,6 +158,8 @@ async function boot(): Promise<void> {
     });
   }
 
+  // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す
+  hud.setShipEnabled(!scenario || !!scenario.escape);
   canvas.addEventListener('click', (e) => {
     const cell = view.pickCell(e.clientX, e.clientY);
     if (cell === null) return;

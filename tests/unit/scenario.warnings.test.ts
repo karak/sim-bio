@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CIV_VITALITY_LOW, FAITH_LOW, scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
+import { SHIP_NEED } from '../../src/simulation/ship';
 import type { ScenarioDef, StartStats } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
@@ -117,5 +118,29 @@ describe('civ_vitality_low (M9-05)', () => {
     edge.civ!.vitality = CIV_VITALITY_LOW;
     expect(scenarioWarnings(def, edge, start, null)).toEqual([]);
     expect(scenarioWarnings(def, snap({ civ: { stage: 4 } }), start, null)).toEqual([]);
+  });
+});
+
+describe('空の舟の警告 (M10-04): ship_stalled / ship_late', () => {
+  const escDef: ScenarioDef = { ...def, kind: 'escape', years: 200, escape: { type: 'escaped', minSpecies: 5 } };
+  const withShip = (progress: number, launchedYear?: number) => ({ ...snap({ civ: { stage: 5 } }), ship: { startedYear: 0, progress, ...(launchedYear !== undefined ? { launchedYear } : {}) } });
+  it('進みが前年から増えていなければ ship_stalled (進みと必要量つき)', () => {
+    const w = scenarioWarnings(escDef, withShip(36.8), start, null, null, { year: 160, prevProgress: 36.8 });
+    expect(w.map((x) => x.kind)).toContain('ship_stalled');
+    expect(w.find((x) => x.kind === 'ship_stalled')!.text).toBe(`舟の進みが止まっている(材が無い。進み 36.8 / ${SHIP_NEED})`);
+    expect(w.map((x) => x.kind)).not.toContain('ship_late');
+  });
+  it('進んでいても、今の速さでは残り年数で足りなければ ship_late。足りれば出ない。5 年未満は判定しない', () => {
+    // 100 年で 30: 年 0.3、残り 100 年で 30 → 90 に足りない
+    const late = scenarioWarnings(escDef, withShip(30), start, null, null, { year: 100, prevProgress: 29.7 });
+    expect(late.find((x) => x.kind === 'ship_late')!.text).toBe(`このままでは舟が間に合わない(進み 30.0 / ${SHIP_NEED}、年に 0.3。残り 100 年)`);
+    // 20 年で 98: 年 4.9、残り 180 年 → 足りる
+    expect(scenarioWarnings(escDef, withShip(98), start, null, null, { year: 20, prevProgress: 93 }).map((x) => x.kind)).not.toContain('ship_late');
+    expect(scenarioWarnings(escDef, withShip(0.5), start, null, null, { year: 2, prevProgress: 0.2 }).map((x) => x.kind)).not.toContain('ship_late');
+  });
+  it('飛び立った舟・逃がす条件の無い石板・ship の材料が無いときは出さない', () => {
+    expect(scenarioWarnings(escDef, withShip(SHIP_NEED, 30), start, null, null, { year: 40, prevProgress: SHIP_NEED }).map((x) => x.kind)).not.toContain('ship_stalled');
+    expect(scenarioWarnings(def, withShip(10), start, null, null, { year: 50, prevProgress: 10 }).map((x) => x.kind)).not.toContain('ship_stalled');
+    expect(scenarioWarnings(escDef, withShip(10), start, null, null).map((x) => x.kind)).not.toContain('ship_stalled');
   });
 });

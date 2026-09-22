@@ -570,6 +570,15 @@ LD §8.3。`SHIP_NEED` 10 → 120。シナリオ「空の舟」(`sky-ship`): 帆
 | 設計書に校正の表と証跡 | §4.23 · 9a30d6e |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test`(20 件)· 9a30d6e |
 
+### M10-04: 手動受入プレイテスト(M10)
+
+| 受入項目 | 証跡 |
+|---|---|
+| プレイ記録 3 回分(うち 1 回以上 dead) | `docs/specs/plans/2026-09-22-m10-playtest.md`(迎撃の塔 alive、空の舟 dead、空の舟 escaped)· SHA_M10_04 |
+| 表示の問題を直し E2E が通る | 舟の行を逃がす石板だけに(`Hud.setShipEnabled`)、`[hidden]` を display より優先(hud.css)、舟の警告 ship_stalled / ship_late(`warnings.ts`)。`tests/unit/scenario.warnings.test.ts`、`tests/e2e/smoke.spec.ts` · SHA_M10_04 |
+| 設計書 §6 と企画書に反映 | この表、`docs/design/2026-09-19-proposal.html` の M10 段落 · SHA_M10_04 |
+| npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(442 件)、`npx playwright test`(21 件)· SHA_M10_04 |
+
 ### M10-03: 空の舟
 
 | 受入項目 | 証跡 |
