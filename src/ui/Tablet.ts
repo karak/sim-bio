@@ -80,6 +80,9 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       return `文明が ${STAGE_NAMES[e.from]} → ${STAGE_NAMES[e.to]} に${e.to > e.from ? '上がった' : '下がった'}`;
     case 'civ_faith':
       return `信仰が ${formatFaith(e.from)} → ${formatFaith(e.to)} に${e.to > e.from ? '上がった' : '下がった'}`;
+    // 信仰の上限 (民の記憶、M10R-02): 下がる (無視の記憶) と上がる (応え・祈りの無い年の忘却) で言葉を変える
+    case 'civ_faith_cap':
+      return e.to < e.from ? `民は忘れない: 信仰の上限 ${formatFaith(e.to)}` : `民の記憶が薄れる: 信仰の上限 ${formatFaith(e.to)}`;
     case 'civ_edict': {
       if (!e.obeyed) return `民は聞かなかった(信仰 ${formatFaith(e.faith)}。${EDICT_FAITH} に足りない)`;
       return e.edict === 'stop_mining' ? '民は採掘を止めた' : '民は採掘を再開した';

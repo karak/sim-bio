@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { commandKey, updateFaith, FAITH_UP, FAITH_DOWN, FAITH_DISASTER, FAITH_DECAY, FAITH_ANSWER, FAITH_IGNORE, formatFaith } from '../../src/simulation/faith';
+import {
+  commandKey, updateFaith, FAITH_UP, FAITH_DOWN, FAITH_DISASTER, FAITH_DECAY, FAITH_ANSWER, FAITH_IGNORE, formatFaith,
+  updateFaithCap, FAITH_CAP_INITIAL, FAITH_CAP_IGNORE, FAITH_CAP_ANSWER, FAITH_CAP_RECOVER,
+} from '../../src/simulation/faith';
 import type { Command } from '../../src/simulation/types';
 
 describe('commandKey (M9-01)', () => {
@@ -133,5 +136,42 @@ describe('formatFaith (M9-05)', () => {
     expect(formatFaith(0.57)).toBe('0.57');
     expect(formatFaith(1)).toBe('1.00');
     expect(formatFaith(0)).toBe('0.00');
+  });
+});
+
+describe('updateFaithCap (M10R-02, 境界値)', () => {
+  it('無視で FAITH_CAP_IGNORE だけ下がる', () => {
+    const result = updateFaithCap(FAITH_CAP_INITIAL, { answered: 0, ignored: 1, prayerPending: false });
+    expect(result).toBeCloseTo(FAITH_CAP_INITIAL - FAITH_CAP_IGNORE, 6);
+  });
+  it('応えで FAITH_CAP_ANSWER だけ上がる', () => {
+    const result = updateFaithCap(0.5, { answered: 1, ignored: 0, prayerPending: false });
+    expect(result).toBeCloseTo(0.5 + FAITH_CAP_ANSWER, 6);
+  });
+  it('祈りの無い年 (pending なし・応え/無視とも 0) は FAITH_CAP_RECOVER だけ回復する', () => {
+    const result = updateFaithCap(0.5, { answered: 0, ignored: 0, prayerPending: false });
+    expect(result).toBeCloseTo(0.5 + FAITH_CAP_RECOVER, 6);
+  });
+  it('祈りが有効なまま (pending) の年は、応え/無視が 0 でも回復しない', () => {
+    const result = updateFaithCap(0.5, { answered: 0, ignored: 0, prayerPending: true });
+    expect(result).toBe(0.5);
+  });
+  it('無視した年は pending であっても回復と重ねず、無視の分だけ下がる', () => {
+    const result = updateFaithCap(0.5, { answered: 0, ignored: 1, prayerPending: true });
+    expect(result).toBeCloseTo(0.5 - FAITH_CAP_IGNORE, 6);
+  });
+  it('応えた・無視した回数が複数なら回数分だけ効く', () => {
+    const result = updateFaithCap(0.5, { answered: 2, ignored: 1, prayerPending: false });
+    expect(result).toBeCloseTo(0.5 + 2 * FAITH_CAP_ANSWER - FAITH_CAP_IGNORE, 6);
+  });
+  it('1 を超えない (応え続けても FAITH_CAP_INITIAL = 1 で頭打ち)', () => {
+    let cap = FAITH_CAP_INITIAL;
+    for (let i = 0; i < 10; i++) cap = updateFaithCap(cap, { answered: 1, ignored: 0, prayerPending: false });
+    expect(cap).toBe(1);
+  });
+  it('0 未満にならない (無視し続けても 0 で下げ止まる)', () => {
+    let cap = 0;
+    for (let i = 0; i < 10; i++) cap = updateFaithCap(cap, { answered: 0, ignored: 1, prayerPending: false });
+    expect(cap).toBe(0);
   });
 });

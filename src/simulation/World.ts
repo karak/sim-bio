@@ -9,7 +9,7 @@ import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, canAscend, checkDecline, DECLINE_YEARS, LOAD_RADIUS, populationFor } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
-import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
+import { commandKey, disasterHitsHome, updateFaith, updateFaithCap, FAITH_INITIAL, FAITH_HISTORY_YEARS, FAITH_CAP_INITIAL } from './faith';
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
@@ -104,6 +104,8 @@ export class World {
    * 祈り (M9-02): 次の祈りを出してよい最初の年 (前回解決した年 + PRAYER_COOLDOWN)。
    * -Infinity のままなら (まだ一度も解決していなければ) クールダウンは無いのと同じ。civFaithHistory と同じく
    * セーブには含めない (restore 直後はクールダウン無しから再開する。値そのものの互換は civ.prayer が担う)
+   * M10R-02: PRAYER_COOLDOWN を 0 にしたので、+1 して「解決した年の翌年から」にする。でなければ同じ年の
+   * 無視/取り下げ直後に (year >= 解決した年 + 0 が真のまま) 同じ年のうちに次の祈りが出てしまう
    */
   private civPrayerCooldownUntil = -Infinity;
   /** 祈りの基準 (M9-03): 年ごとの草の密度平均と捕食者比、直近 PRAYER_BASELINE_YEARS 年・古い順。セーブには含めない (restore 後は数え直す) */
@@ -290,7 +292,8 @@ export class World {
         this.civ.prayer = undefined;
         this.civ.prayersAnswered = (this.civ.prayersAnswered ?? 0) + 1;
         this.civYearAnswered++;
-        this.civPrayerCooldownUntil = Math.floor(this.tick / this.config.ticksPerYear) + PRAYER_COOLDOWN;
+        // M10R-02: +1 で「応えた年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
+        this.civPrayerCooldownUntil = Math.floor(this.tick / this.config.ticksPerYear) + PRAYER_COOLDOWN + 1;
         this.log('info', 'sim.civ.prayer', { year: Math.floor(this.tick / this.config.ticksPerYear), phase: 'answered', kind });
       }
     }
@@ -427,6 +430,8 @@ export class World {
     civ.home = -1;
     civ.progress = 0;
     delete civ.faith;
+    // 信仰の上限 (民の記憶、M10R-02) も faith と同じく捨てる。残すと次に芽生えた文明が古い上限から始まる
+    delete civ.faithCap;
     delete civ.prayer;
     delete civ.crystalStart;
     delete civ.miningStopped;
@@ -529,7 +534,8 @@ export class World {
         const kind = civ.prayer.kind;
         civ.prayer = undefined;
         civ.prayersWithdrawn = (civ.prayersWithdrawn ?? 0) + 1;
-        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
+        // M10R-02: +1 で「取り下げた年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
+        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN + 1;
         this.log('info', 'sim.civ.prayer', { year, phase: 'withdrawn', kind });
       }
       if (civ.prayer && year >= civ.prayer.deadlineYear) {
@@ -537,7 +543,8 @@ export class World {
         civ.prayer = undefined;
         civ.prayersIgnored = (civ.prayersIgnored ?? 0) + 1;
         this.civYearIgnored++;
-        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
+        // M10R-02: +1 で「無視した年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
+        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN + 1;
         this.log('info', 'sim.civ.prayer', { year, phase: 'ignored', kind });
       }
       if (!civ.prayer && year >= this.civPrayerCooldownUntil) {
@@ -563,6 +570,20 @@ export class World {
             answered: this.civYearAnswered,
             ignored: this.civYearIgnored,
           });
+      // 信仰の上限 (民の記憶、M10R-02): 無視/応え/祈りの無い年で毎年更新し、信仰はこれで抑える (min)。
+      // civ.faithCap が無ければ (faith と同じく発生した最初の年) FAITH_CAP_INITIAL を前の上限とみなす。
+      // prayerPending は今年の祈りの処理 (上のブロック) を終えた時点の civ.prayer の有無
+      const prevCap = civ.faithCap ?? FAITH_CAP_INITIAL;
+      civ.faithCap = updateFaithCap(prevCap, {
+        answered: this.civYearAnswered,
+        ignored: this.civYearIgnored,
+        prayerPending: !!civ.prayer,
+      });
+      civ.faith = Math.min(civ.faith, civ.faithCap);
+      const capDelta = civ.faithCap - prevCap;
+      if (Math.abs(capDelta) > 1e-9) {
+        this.log('info', 'sim.civ.faith_cap', { year, faithCap: civ.faithCap, delta: capDelta });
+      }
       const delta = civ.faith - (prevFaith ?? civ.faith);
       this.log('info', 'sim.civ.faith', { year, faith: civ.faith, delta });
       // 内乱 (M9-03): 信仰が低い年が UNREST_YEARS 続いたら、集落の民が半減し段階が 1 下がる。信仰は少し上へ戻す (連鎖させない)
@@ -573,7 +594,8 @@ export class World {
         const before = civ.stage;
         civ.stage -= 1;
         civ.progress = 0;
-        civ.faith = UNREST_FAITH_AFTER;
+        // 上限が下がっていれば、内乱の戻り (M10R-02: min(0.4, 上限)。民は上限より上へは戻らない)
+        civ.faith = Math.min(UNREST_FAITH_AFTER, civ.faithCap);
         this.log('info', 'sim.civ.unrest', { year, from: before, to: civ.stage });
         this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'unrest', year });
         if (civ.stage === 0) {

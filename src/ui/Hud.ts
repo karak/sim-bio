@@ -25,7 +25,10 @@ export function formatCiv(civ: CivState | null): string | null {
   // 蓄え (M8-05 v2): 「燃料 蓄え / 年に必要」。蓄えが必要量を割ると足りない年になる
   const fuelText = civ.fuel && civ.stage >= 4 ? ` · 燃料 ${Math.round(civ.fuel.stock)} / ${Math.round(civ.fuel.need)}年` : '';
   // 信仰 (M9-01): 発生済みでもまだ年をまたいでいなければ undefined なので、そのときは出さない
-  const faithText = civ.faith !== undefined ? ` · 信仰 ${formatFaith(civ.faith)}` : '';
+  // 信仰の上限 (民の記憶、M10R-02): faithCap があれば「信仰 0.73 / 上限 0.80」、無ければ (古いセーブ等) 信仰だけ
+  const faithText = civ.faith !== undefined
+    ? ` · 信仰 ${formatFaith(civ.faith)}${civ.faithCap !== undefined ? ` / 上限 ${formatFaith(civ.faithCap)}` : ''}`
+    : '';
   // 勅令 (M9-03): 民が採掘を止めている間は「採掘 止」を足す (止めるまでは出さない)
   const miningText = civ.miningStopped ? ' · 採掘 止' : '';
   // 集落の生気 (M9-05): 霊脈枯れの判定 (集落の生気 3 割) が HUD で読めるように。年をまたぐ前は無い

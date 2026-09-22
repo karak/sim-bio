@@ -32,6 +32,12 @@ export type CivState = {
    * stage 0 や civ が無いあいだは undefined のまま。既存のテスト・セーブとの互換を保つため省略可にしてある。
    */
   faith?: number;
+  /**
+   * 信仰の上限 [0,1] (民の記憶、M10R-02)。faith.ts の FAITH_CAP_INITIAL で、faith と同じ最初の年に生まれる。
+   * 祈りを無視すると下がり、応える・祈りの無い年で戻る。毎年の信仰の更新の後、信仰はこれで抑えられる (min)。
+   * stage 0 や civ が無いあいだは undefined のまま。既存のテスト・セーブとの互換を保つため省略可にしてある
+   */
+  faithCap?: number;
   /** 現在有効な祈り (M9-02)。無ければ undefined。既存のテスト・セーブとの互換を保つため省略可にしてある */
   prayer?: PrayerState;
   /** 応えた祈りの累計 (M9-02, M9-03 の判定条件が読む)。省略時は 0 相当 */

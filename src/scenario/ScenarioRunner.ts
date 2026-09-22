@@ -17,6 +17,8 @@ export type TimelineEvent =
   | { year: number; kind: 'civ_stage'; from: number; to: number }
   /** 文明の信仰が年をまたいで |Δ| >= 0.1 動いた (M9-01) */
   | { year: number; kind: 'civ_faith'; from: number; to: number }
+  /** 信仰の上限 (民の記憶) が年をまたいで |Δ| >= FAITH_TIMELINE_THRESHOLD 動いた (M10R-02) */
+  | { year: number; kind: 'civ_faith_cap'; from: number; to: number }
   /** 勅令の結果 (M9-03)。obeyed なら民が採掘を止めた/再開した、でなければ聞かなかった (faith はそのときの信仰) */
   | { year: number; kind: 'civ_edict'; edict: 'stop_mining' | 'resume_mining'; obeyed: boolean; faith: number }
   /** 文明の祈りが出た・応えられた・無視された (M9-02) */
@@ -133,6 +135,8 @@ export function createScenarioRunner(
   let lastCivStage = first.civ?.stage ?? 0;
   /** 直近に見た信仰の値。文明が無い・stage 0 のあいだは null (M9-01) */
   let lastCivFaith: number | null = first.civ?.faith ?? null;
+  /** 直近に見た信仰の上限。文明が無い・stage 0 のあいだは null (M10R-02) */
+  let lastCivFaithCap: number | null = first.civ?.faithCap ?? null;
   /** 祈り (M9-02): 直近の年次評価で報告済みの issuedYear。同じ祈りを二重に issued 扱いしないための目印 */
   let lastPrayerIssuedYear: number | null = first.civ?.prayer?.issuedYear ?? null;
   /** 祈り (M9-02): 直近に見た祈りの種類。解決 (answered/ignored) された時点では civ.prayer が消えているので、
@@ -366,6 +370,12 @@ export function createScenarioRunner(
           timeline.push({ year, kind: 'civ_faith', from: lastCivFaith, to: civFaith });
         }
         if (civFaith !== undefined) lastCivFaith = civFaith;
+        // 信仰の上限 (民の記憶、M10R-02): civ_faith と同じ閾値・同じ扱い (発生前は積まない)
+        const civFaithCap = s.civ?.faithCap;
+        if (civFaithCap !== undefined && lastCivFaithCap !== null && Math.abs(civFaithCap - lastCivFaithCap) >= FAITH_TIMELINE_THRESHOLD) {
+          timeline.push({ year, kind: 'civ_faith_cap', from: lastCivFaithCap, to: civFaithCap });
+        }
+        if (civFaithCap !== undefined) lastCivFaithCap = civFaithCap;
         // 祈り (M9-02): 前年と比べて解決 (無視 → 応えた の順、World の内部順序に合わせる) → 発生の順で積む。
         // 解決の種類は civ.prayer が消えた後には残らないので、直近に見ていた種類 (lastPrayerKind) で補う
         const prayersIgnored = s.civ?.prayersIgnored ?? 0;
