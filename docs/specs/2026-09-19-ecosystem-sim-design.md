@@ -558,6 +558,17 @@ code-review の指摘 10 件を直した。
 - 脈の辿り方と比例除去を一本化: `towerCrystalPool` は `miningPool` の薄い包み、`stepWorks` は `takeCrystal` を使う。
 - HUD の文明行に、塔以上では星の門と星の衰退が見る半径 12 の民「星の民 N」を出す。
 
+### 4.26 実装時の差分(M10R-02: 民の記憶 = 信仰の上限、祈りの間隔 0)
+
+レベルデザイン `docs/design/2026-09-22-level-design-faith-economy.md` §3.1・§3.2 を実装した。faith.ts に係数と純粋関数を足す(既存の updateFaith と同じファイル)。
+
+- **係数**(faith.ts): `FAITH_CAP_INITIAL` 1.0、`FAITH_CAP_IGNORE` 0.1(無視 1 回)、`FAITH_CAP_ANSWER` 0.1(応え 1 回)、`FAITH_CAP_RECOVER` 0.01(祈りの無い年)。
+- **`updateFaithCap`**(純粋関数): `prev + answered×FAITH_CAP_ANSWER − ignored×FAITH_CAP_IGNORE`、さらに「祈りが無い年」(`prayerPending` が false かつ answered/ignored とも 0、つまり今年は困りごと自体が無かった)だけ `FAITH_CAP_RECOVER` を足し、`[0,1]` にクランプする。
+- **`CivState.faithCap`**: faith と同じ最初の年 (stage ≥ 1) に生まれる。`World.stepCivYearly` が `updateFaith` の直後に毎年更新し(`prevCap = civ.faithCap ?? FAITH_CAP_INITIAL`)、`civ.faith = Math.min(civ.faith, civ.faithCap)` で信仰を抑える。ログ `sim.civ.faith_cap { year, faithCap, delta }` は 1e-9 を超えて動いた年だけ出す。内乱の戻りは `Math.min(UNREST_FAITH_AFTER, civ.faithCap)`(上限より上へは戻らない)。`World.collapseCiv` は faith と同じく `faithCap` も捨てる。
+- **祈りの間隔**(prayer.ts): `PRAYER_COOLDOWN` を 3 → 0 に。ただし「解決した年のうちに同じ年で再発行しない」ため、`World.civPrayerCooldownUntil` の代入 3 箇所 (応えた・取り下げた・無視した) を `年 + PRAYER_COOLDOWN + 1` にした(間隔 0 でも次に出せるのは翌年から)。
+- **UI**: HUD の信仰行は `faithCap` があれば「信仰 0.73 / 上限 0.80」、無ければ (古いセーブ等) 従来どおり「信仰 0.73」。石板の年表に新しい kind `civ_faith_cap`(civ_faith と同じ ±0.1 の閾値)を足し、下がれば「民は忘れない: 信仰の上限 0.90」、上がれば「民の記憶が薄れる: 信仰の上限 0.91」。
+- **ファイル**: `src/simulation/faith.ts`・`civilization.ts`・`World.ts`・`prayer.ts`、`src/scenario/ScenarioRunner.ts`、`src/ui/Hud.ts`・`Tablet.ts`。
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
@@ -602,6 +613,16 @@ code-review の指摘 10 件を直した。
 | Verdict に escaped が増え、escape が dead より先に評価される。石板のオーバーレイが「次の島へ」を出し、持ち出しデータをダウンロードできる(E2E) | `tests/unit/scenario.judge.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/e2e/smoke.spec.ts` · 3ad6a98 |
 | npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`(437 テスト通過)、`npx playwright test`(21 テスト通過) · 3ad6a98 |
 | 「空の舟」シナリオの校正(tests/slow: 放置 dead、舟だけ急ぐ dead、想定解 2 つ escaped) | `tests/slow/scenarios.playthrough.test.ts`(sky-ship 5 件)、§4.24.1 · 5969f4e |
+
+### M10R-02: 民の記憶(信仰の上限)と絶え間ない祈り
+
+| 受入項目 | 証跡 |
+|---|---|
+| faith.ts の純粋関数で上限の更新(無視/応え/回復/クランプ)が単体テストで確かめられる | `tests/unit/faith.test.ts`(updateFaithCap)· (このコミット) |
+| World で無視 → 上限が下がり、儀式を続けても信仰が上限を超えない。内乱の後の信仰が min(0.4, 上限)。save/restore で往復 | `tests/unit/world.civilization.prayer.test.ts`(信仰の上限 = 民の記憶)· (このコミット) |
+| 祈りが解決/無視/取り下げになった翌年に、困りごとが続いていれば次の祈りが出る | `tests/unit/world.civilization.prayer.test.ts`(祈りの間隔は 0)、`tests/unit/prayer.test.ts` · (このコミット) |
+| HUD・石板に上限が出る(内容検証のテスト)。E2E が通る | `tests/unit/ui.hud.test.ts`、`tests/unit/ui.tablet.test.ts`、`tests/unit/scenario.budget.test.ts`(civ_faith_cap)、`npx playwright test` · (このコミット) |
+| npm run check と単体・E2E が通り、evidence に commit SHA とテストファイルを記す | `npm run check`、`npx playwright test` · (このコミット) |
 
 ### M9-00: 文明の自然発生を地域で測る
 

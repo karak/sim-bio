@@ -100,12 +100,16 @@ describe('isAnswer (M9-02)', () => {
   });
 });
 
-// 係数の回帰防止: 期限とクールダウンが正の整数年であること
+// 係数の回帰防止: 期限は正の整数年、クールダウンは 0 以上の整数年であること
 describe('係数 (M9-02)', () => {
-  it('PRAYER_YEARS と PRAYER_COOLDOWN は正の整数', () => {
+  it('PRAYER_YEARS は正の整数', () => {
     expect(Number.isInteger(PRAYER_YEARS)).toBe(true);
     expect(PRAYER_YEARS).toBeGreaterThan(0);
+  });
+  // M10R-02: 「困りごとが続く限り、翌年また祈る」ため間隔を 0 にした (LD §3.1/§3.2)。負けにはならない
+  it('PRAYER_COOLDOWN は 0 (M10R-02)、0 以上の整数', () => {
     expect(Number.isInteger(PRAYER_COOLDOWN)).toBe(true);
-    expect(PRAYER_COOLDOWN).toBeGreaterThan(0);
+    expect(PRAYER_COOLDOWN).toBeGreaterThanOrEqual(0);
+    expect(PRAYER_COOLDOWN).toBe(0);
   });
 });

@@ -19,6 +19,7 @@ const fakeWorld = (
     tempOffset?: number;
     civStage?: number;
     civFaith?: number;
+    civFaithCap?: number;
     civPrayer?: { kind: PrayerKind; issuedYear: number; deadlineYear: number };
     civPrayersAnswered?: number;
     civPrayersIgnored?: number;
@@ -37,6 +38,8 @@ const fakeWorld = (
   let civStage = opts.civStage ?? 0;
   // 信仰 (M9-01)。テストから setCivFaith で年をまたいで変えて civ_faith の timeline を確かめる。省略時は undefined (未設定)
   let civFaith = opts.civFaith;
+  // 信仰の上限 (民の記憶、M10R-02)。テストから setCivFaithCap で年をまたいで変えて civ_faith_cap の timeline を確かめる
+  let civFaithCap = opts.civFaithCap;
   // 祈り (M9-02)。テストから setCivPrayer/setCivPrayersAnswered/setCivPrayersIgnored で年をまたいで変えて prayer の timeline を確かめる
   let civPrayer = opts.civPrayer;
   let civPrayersAnswered = opts.civPrayersAnswered;
@@ -52,6 +55,7 @@ const fakeWorld = (
       ? {
           speciesId: 'deer', stage: civStage, progress: 0, home: 0, population: 0,
           ...(civFaith !== undefined ? { faith: civFaith } : {}),
+          ...(civFaithCap !== undefined ? { faithCap: civFaithCap } : {}),
           ...(civPrayer !== undefined ? { prayer: civPrayer } : {}),
           ...(civPrayersAnswered !== undefined ? { prayersAnswered: civPrayersAnswered } : {}),
           ...(civPrayersIgnored !== undefined ? { prayersIgnored: civPrayersIgnored } : {}),
@@ -76,6 +80,7 @@ const fakeWorld = (
     dispatch, snapshot, step: (t: number) => { tick += t; }, cmds,
     setCivStage: (s: number) => { civStage = s; },
     setCivFaith: (f: number) => { civFaith = f; },
+    setCivFaithCap: (f: number) => { civFaithCap = f; },
     setCivPrayer: (p: { kind: PrayerKind; issuedYear: number; deadlineYear: number } | undefined) => { civPrayer = p; },
     setCivPrayersAnswered: (n: number) => { civPrayersAnswered = n; },
     setCivPrayersIgnored: (n: number) => { civPrayersIgnored = n; },
@@ -332,6 +337,45 @@ describe('文明の年表 (civ_faith, M9-01)', () => {
     w.setCivFaith(0.5); // 誕生年相当。前年の値が無いので積まない
     r.update(w.snapshot());
     expect(r.timeline().filter((e) => e.kind === 'civ_faith')).toEqual([]);
+  });
+});
+
+describe('文明の年表 (civ_faith_cap = 民の記憶, M10R-02)', () => {
+  it('snapshot.civ.faithCap が前年から |Δ| >= 0.1 動いたら timeline に civ_faith_cap を積む', () => {
+    const w = fakeWorld({ civStage: 4, civFaithCap: 1 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaithCap(0.88); // -0.12 (閾値超え、下がる)
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaithCap(1); // +0.12 (閾値超え、上がる)
+    r.update(w.snapshot());
+    const capEvents = r.timeline().filter((e) => e.kind === 'civ_faith_cap');
+    expect(capEvents).toEqual([
+      { year: 1, kind: 'civ_faith_cap', from: 1, to: 0.88 },
+      { year: 2, kind: 'civ_faith_cap', from: 0.88, to: 1 },
+    ]);
+  });
+
+  it('|Δ| < 0.1 なら積まない (祈りの無い年の +0.01 回復など)', () => {
+    const w = fakeWorld({ civStage: 4, civFaithCap: 0.9 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaithCap(0.91); // +0.01 (閾値未満)
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'civ_faith_cap')).toEqual([]);
+  });
+
+  it('発生前 (faithCap が undefined → 値が付く年) は積まない', () => {
+    const w = fakeWorld({ civStage: 4 }); // civFaithCap 省略 = undefined
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaithCap(1); // 誕生年相当。前年の値が無いので積まない
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'civ_faith_cap')).toEqual([]);
   });
 });
 

@@ -29,6 +29,15 @@ describe('formatCiv (HUD の文明の 1 行)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 6, progress: 0.4, home: 10, population: 12 };
     expect(formatCiv(civ)).toBe('文明 塔(6) · 進み 13% · 民 1200');
   });
+  it('faithCap があれば「信仰 0.50 / 上限 0.90」を出す (M10R-02)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6, faith: 0.5, faithCap: 0.9 };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360 · 信仰 0.50 / 上限 0.90');
+    expect(formatCiv(civ)).toContain('信仰 0.50 / 上限 0.90');
+  });
+  it('faithCap が undefined なら上限の表示は出ない (古いセーブ等、M10R-02)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6, faith: 0.62 };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360 · 信仰 0.62');
+  });
 });
 
 describe('formatCiv の採掘の停止 (M9-03)', () => {

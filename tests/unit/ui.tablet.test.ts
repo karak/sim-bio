@@ -27,6 +27,10 @@ describe('describeEvent (年表の文)', () => {
     expect(describeEvent({ year: 5, kind: 'civ_faith', from: 0.4, to: 0.62 }, names)).toBe('信仰が 0.40 → 0.62 に上がった');
     expect(describeEvent({ year: 5, kind: 'civ_faith', from: 0.62, to: 0.48 }, names)).toBe('信仰が 0.62 → 0.48 に下がった');
   });
+  it('信仰の上限 (民の記憶) の上下を人が読める文にする (M10R-02)', () => {
+    expect(describeEvent({ year: 5, kind: 'civ_faith_cap', from: 1, to: 0.9 }, names)).toBe('民は忘れない: 信仰の上限 0.90');
+    expect(describeEvent({ year: 5, kind: 'civ_faith_cap', from: 0.8, to: 0.91 }, names)).toBe('民の記憶が薄れる: 信仰の上限 0.91');
+  });
   it('勅令 (M9-03): 石板の言葉と、民が従ったか聞かなかったかを人が読める文にする', () => {
     expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'civ_edict', edict: 'stop_mining' } }, names)).toBe('石板が告げた: 採掘を止めよ');
     expect(describeEvent({ year: 3, kind: 'intervene', command: { type: 'civ_edict', edict: 'resume_mining' } }, names)).toBe('石板が告げた: 採掘を再開せよ');
