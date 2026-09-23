@@ -32,6 +32,9 @@ assets/**/*.aseprite
 playwright-report/
 test-results/
 
+# 観察画面の計測の台 (tools/bench-observe.ts) の出力
+.bench/
+
 # 他エージェントの worktree
 .claude/worktrees/
 
