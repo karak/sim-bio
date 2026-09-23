@@ -738,6 +738,41 @@
     }
   },
   {
+    "id": "test-intercept-low",
+    "title": "迎撃の備蓄不足の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。備蓄無しの星の文明を据え、迎撃の行の「押せない」理由だけを確かめる。",
+    "kind": "prevent",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 7,
+        "home": 1770,
+        "fuelStock": 600,
+        "faith": 0.9
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [
+      {
+        "atYear": 3,
+        "command": {
+          "type": "disaster",
+          "kind": "meteor",
+          "cell": -1,
+          "radius": 48
+        }
+      }
+    ],
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
+  },
+  {
     "id": "sky-ship",
     "title": "空の舟",
     "prophecy": "島は沈む。二百年で陸は三分の一になり、百七十五年目には集落も沈む。民は帆を持ち、集落の周りに鐘樹の林を残している。帆の燃料は鐘樹だけで、蓄えは無い。舟は年に六の材を伐り、成るまで二十年。林が痩せれば帆が落ち、舟は止まる。鐘樹は植えた所にだけ立ち、伐っても戻るのは遅い。舟が成っても信仰が低ければ、民が足りなければ、民は乗らない。五つの種と民を次の島へ逃がせたなら、それを生き延びたと呼ぼう。",
@@ -836,6 +871,34 @@
     ]
   },
   {
+    "id": "test-ship-gate",
+    "title": "舟の門の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。段階が帆に満たない文明を据え、舟の行の「押せない」理由だけを確かめる。",
+    "kind": "escape",
+    "start": {
+      "seed": 42,
+      "size": 64,
+      "civilization": {
+        "speciesId": "deer",
+        "stage": 4,
+        "home": -1,
+        "faith": 0.9
+      }
+    },
+    "referenceSize": 64,
+    "years": 5,
+    "schedule": [],
+    "escape": {
+      "type": "escaped",
+      "minSpecies": 1
+    },
+    "alive": {
+      "type": "year_reached",
+      "year": 5
+    }
+  },
+  {
     "id": "test-ship",
     "title": "帆の試し読み",
     "hidden": true,
@@ -863,6 +926,34 @@
     "alive": {
       "type": "year_reached",
       "year": 5
+    }
+  },
+  {
+    "id": "test-event",
+    "title": "警告の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。一年目に狼の群れが下りる警告(狼レイヤーへの案内チップ付き)だけを確かめる。",
+    "kind": "endure",
+    "start": {
+      "seed": 42
+    },
+    "years": 3,
+    "schedule": [
+      {
+        "atYear": 1,
+        "text": "狼の群れが北の谷に下りた",
+        "command": {
+          "type": "spawn_species",
+          "speciesId": "wolf",
+          "cell": -1,
+          "amount": 1,
+          "radius": 3
+        }
+      }
+    ],
+    "alive": {
+      "type": "year_reached",
+      "year": 3
     }
   }
 ]

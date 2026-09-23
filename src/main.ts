@@ -100,13 +100,22 @@ async function boot(): Promise<void> {
     },
   });
 
-  const tablet = createTablet(app, scenarios, scenario, selectScenario, Object.fromEntries(species.map((d) => [d.id, d.name])));
+  const tablet = createTablet(
+    app,
+    scenarios,
+    scenario,
+    selectScenario,
+    Object.fromEntries(species.map((d) => [d.id, d.name])),
+    (id) => hud.showSpeciesLayer(id),
+  );
   const loop = createRunner(
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
         view.update(s);
         hud.update(s);
+        // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)
+        hud.setNextMeteor(runner ? runner.nextMeteorYear() : null);
         if (selected !== null) hud.showCell(selected, s);
         if (runner) {
           const verdict = runner.update(s);
