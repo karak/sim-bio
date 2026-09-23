@@ -32,6 +32,8 @@ import { createToonMaterial } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { instanceProps, lodProps, type LodProps } from './render/instancer';
 import { createCreatureView } from './render/creatures';
+import { AtmospherePass, createSky } from './render/atmosphere';
+import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks } from './area';
 import { K_DEFAULT, BUDGET_PER_SECOND, folkRuleFor, reconcile, targetCounts } from './population';
 import { applyPlan, stepAgents, type AgentWorld } from './agents';
@@ -41,6 +43,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * 本体は読むだけ。個体の動きは試作用の単純な徘徊で、M22-04 の個体層に置き換える。
  * URL: ?deer=300&trees=200&near=40&grass=20000&grade=1&bloom=1&shadow=1
  * (個体層をつないだ後: deer は区域の鹿の目標頭数。K を密度の合計から逆算する。0 なら本体の密度 × K_DEFAULT のまま。near は使わない)
+ * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  */
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => Number(params.get(k) ?? d);
@@ -53,6 +56,10 @@ const OPT = {
   grade: flag('grade'),
   bloom: flag('bloom'),
   shadow: flag('shadow'),
+  air: flag('air'),
+  time: num('time', 0.16),
+  day: num('day', DAY_CYCLE_S),
+  freeze: params.get('freeze') === '1',
 };
 /** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
 const AREA_R = 8;
@@ -162,7 +169,15 @@ async function boot(): Promise<void> {
   scene.background = skyTexture();
   // 霧の色は空の地平の帯に合わせ、水面の端 (区域の外の遠景) を地平に溶かす
   scene.fog = new Fog(new Color('#D9E4E2'), 80, 320);
-  const camera = new PerspectiveCamera(42, 1, 0.2, 800);
+  // (M22-07: 空気の層を使うときは、空は昼夜で変わる球、霧は後段の霞と靄が受け持つ)
+  const sky = OPT.air ? createSky() : null;
+  if (sky) {
+    scene.background = null;
+    scene.fog = null;
+    scene.add(sky.mesh);
+  }
+  // (M22-07: 空気の層で水面の果て 1.5 km まで霞ませるので、遠くの切り捨てを 800 m から 2 km に)
+  const camera = new PerspectiveCamera(42, 1, 0.2, 2000);
   camera.position.set(-26, field.heightAt(-26, 44) + 6, 44);
   const controls = new OrbitControls(camera, canvas);
   controls.target.set(2, field.heightAt(2, 0) + 3, 0);
@@ -171,7 +186,8 @@ async function boot(): Promise<void> {
   controls.minDistance = 4;
   controls.maxDistance = 160;
 
-  scene.add(new HemisphereLight(new Color('#D7E8F2'), new Color('#6F7A4E'), 1.1));
+  const hemi = new HemisphereLight(new Color('#D7E8F2'), new Color('#6F7A4E'), 1.1);
+  scene.add(hemi);
   const sun = new DirectionalLight(new Color('#FFE3B6'), 2.4);
   sun.position.set(-60, 70, 40);
   sun.castShadow = OPT.shadow;
@@ -297,7 +313,10 @@ async function boot(): Promise<void> {
   }
   const building = !!s.ship && s.ship.launchedYear === undefined && (s.civ?.stage ?? 0) >= 5;
 
-  const grade = createGrade(renderer, scene, camera);
+  const air = OPT.air ? new AtmospherePass(camera, sun) : null;
+  const grade = createGrade(renderer, scene, camera, air ? [air] : []);
+  // 調整用 (M22-07): 開発者ツールから空気の層の uniform と時刻を触る
+  (window as unknown as { __observeAir: unknown }).__observeAir = { air, sun, camera, controls, heightAt: field.heightAt };
   grade.setEnabled({ grade: OPT.grade, bloom: OPT.bloom });
   const resize = () => {
     const w = canvas.clientWidth;
@@ -374,7 +393,18 @@ async function boot(): Promise<void> {
     const plan = reconcile(agents.agents, targets, BUDGET_PER_SECOND, dt, arng, credit);
     credit = plan.credit;
     agents = applyPlan(agents, plan);
-    agents = stepAgents(agents, { area, marks, night: false, building, launched: false, targets }, dt, arng);
+    const day = daylightAt(phaseAt(OPT.freeze ? 0 : (t * DAY_CYCLE_S) / OPT.day, OPT.time));
+    if (sky && air) {
+      sky.update(day, camera);
+      air.setDay(day, t);
+      hemi.color.set(day.skyColor);
+      hemi.groundColor.set(day.groundColor);
+      hemi.intensity = day.hemiIntensity;
+      sun.color.set(day.lightColor);
+      sun.intensity = day.lightIntensity;
+      sun.position.set(day.lightDir.x * 120, day.lightDir.y * 120, day.lightDir.z * 120);
+    }
+    agents = stepAgents(agents, { area, marks, night: day.night > 0.6, building, launched: false, targets }, dt, arng);
     creatures.update(agents.agents, camera, field.heightAt, t, dt);
     for (const l of lods) l.update(camera);
     water.update(t);
@@ -391,7 +421,7 @@ async function boot(): Promise<void> {
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       stats.textContent = `${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;

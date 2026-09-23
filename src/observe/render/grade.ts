@@ -1,4 +1,5 @@
-import { Vector2, type Camera, type Scene, type WebGLRenderer } from 'three';
+import { DepthTexture, HalfFloatType, Vector2, WebGLRenderTarget, type Camera, type Scene, type WebGLRenderer } from 'three';
+import type { Pass } from 'three/addons/postprocessing/Pass.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -50,9 +51,12 @@ const GradeShader = {
 
 export type Grade = { render(dt: number): void; setSize(w: number, h: number): void; setEnabled(o: { grade: boolean; bloom: boolean }): void };
 
-export function createGrade(renderer: WebGLRenderer, scene: Scene, camera: Camera): Grade {
-  const composer = new EffectComposer(renderer);
+/** air: 場面の描画のすぐ後 (bloom の前) に挟むパス。深度を読むので、合成の描画先に深度のテクスチャと MSAA を持たせる */
+export function createGrade(renderer: WebGLRenderer, scene: Scene, camera: Camera, air: Pass[] = []): Grade {
+  const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4, depthTexture: new DepthTexture(1, 1) });
+  const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
+  for (const p of air) composer.addPass(p);
   // シアンの発光 (ムーの遺産の光) と鐘の灯りだけが滲むよう、閾値を高めにする
   const bloom = new UnrealBloomPass(new Vector2(1, 1), 0.4, 0.5, 0.92);
   composer.addPass(bloom);
