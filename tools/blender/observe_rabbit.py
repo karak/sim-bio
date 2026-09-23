@@ -57,6 +57,10 @@ def smoothstep(e0, e1, x):
 PAL = {k: lin(v) for k, v in {
     "fur": "#CBA468",       # 砂色の地
     "fur_dark": "#A98452",  # 腹の下・脚の内側のわずかに濃い面
+    # (M22-05 残りの手直しで追加) 面ごとの明暗の幅 (基準画の明るい面 #DFBE80・陰 #977651 から)。上を向く面は明るく、下・奥を向く面と
+    # 腿の前の縁・頬の下の境は陰にして、平たく見えた陰影に幅を持たせる
+    "fur_lit": "#DDBB7A",
+    "fur_shade": "#8E7049",
     "light": "#E0C38C",     # 鼻づら・顎の下・耳の背・尾
     "teal": "#3F7C73",      # 六角の縁取り・首輪・継ぎ目の下地 (暗い青緑)
     "ear": "#5E3D2D",       # 耳の内側と先 (焦げ茶)
@@ -172,6 +176,23 @@ def ring(bm, center, ux, uy, rx, ry_top, ry_bot, n, pinch=0.0, sq=2.0, phase=0.0
     return vs
 
 
+def facet_ring(bm, center, ux, uy, corners, pairs, bevel=0.2):
+    """(M22-05 残りの手直しで追加) 面の立った断面のリング。corners は右半分 (ux >= 0) の角を上 (+uy) から下 (-uy) へ並べた (x, y)。
+    pairs[i] が真の角は 2 点 (両隣の辺へ bevel の割合だけ寄せる) にして、スムーズシェードでも面の中ほどを平らに、角を丸く読ませる。
+    並びは ring() (phase = π/2) と同じ (上 → -ux の側 → 下 → +ux の側)"""
+    pts = [corners[0]]
+    for i in range(1, len(corners) - 1):
+        c = Vector(corners[i])
+        if pairs[i]:
+            a, b = Vector(corners[i - 1]), Vector(corners[i + 1])
+            pts += [tuple(c + (a - c) * bevel), tuple(c + (b - c) * bevel)]
+        else:
+            pts.append(tuple(c))
+    pts.append(corners[-1])
+    loop = [(-x, y) for x, y in pts] + [(x, y) for x, y in reversed(pts[1:-1])]
+    return [bm.verts.new(center + ux * x + uy * y) for x, y in loop]
+
+
 def loft(bm, rings, mat=BODY):
     """リング (または先端の 1 点) の列を面で繋ぐ"""
     faces = []
@@ -212,11 +233,14 @@ def frame_of(d):
 
 # ---------------------------------------------------------------- LOD の密度
 # hexes: 六角の紋のうち使うもの (None = 全部)。seams: 横の継ぎ目のうち使うもの
-HERO = dict(name="hero", body=(10, 12), neck=(2, 10), head=(8, 10), ear=(6, 8), fleg=(6, 6), hleg=(5, 6), thigh=(5, 8),
-            tail=(3, 6), eye=8, hex_ring=True, ribbon_seg=6, sq=2.15, hexes=None, seams=("back", "thigh", "shoulder"))
+# (M22-05 残りの手直しで変更: 頭の周を 10 → 12 (面の立った断面)、胴の断面を 10 → 9。背の六角は蜂の巣 (comb) に置き換え、
+#  comb_net で網目の暗い線を持つか、comb_glow で光る六角を入れる蜂の巣の目 (None = 全部) を選ぶ)
+HERO = dict(name="hero", body=(9, 12), neck=(2, 10), head=(8, 12), ear=(6, 8), fleg=(6, 6), hleg=(5, 6), thigh=(5, 8),
+            tail=(3, 6), eye=8, hex_ring=True, ribbon_seg=6, sq=2.15, hexes=None, seams=("back", "thigh", "shoulder"),
+            comb_net=True, comb_glow=None)
 LOD1 = dict(name="lod1", body=(6, 8), neck=(2, 6), head=(5, 8), ear=(3, 4), fleg=(3, 4), hleg=(3, 4), thigh=(3, 6),
             tail=(2, 4), eye=4, hex_ring=False, ribbon_seg=3, sq=2.1, hexes={"chest": [0], "back": [0, 2], "top": [0]},
-            seams=("back", "thigh"))
+            seams=("back", "thigh"), comb_net=False, comb_glow=None)
 
 # 胴 (尻 → 胸): (y, 背の高さ, 腹の高さ, 半幅, 腹側の絞り)。基準画の側面から (座った姿勢: 尻は地面すれすれ)
 BODY_KEYS = [
@@ -226,10 +250,12 @@ BODY_KEYS = [
     (0.080, 0.266, 0.034, 0.102, 0.14),
     (0.020, 0.270, 0.046, 0.100, 0.20),
     (-0.040, 0.262, 0.060, 0.094, 0.26),
-    (-0.090, 0.250, 0.072, 0.086, 0.30),
-    (-0.130, 0.238, 0.084, 0.076, 0.30),
-    (-0.162, 0.222, 0.098, 0.062, 0.25),
-    (-0.182, 0.205, 0.118, 0.040, 0.15),
+    # (M22-05 残りの手直しで変更: 立ち上がりで胴が細く見えたので、胸の前を広げた (半幅 0.086 / 0.076 / 0.062 / 0.040 →
+    #  0.090 / 0.084 / 0.072 / 0.050))
+    (-0.090, 0.250, 0.072, 0.090, 0.30),
+    (-0.130, 0.238, 0.084, 0.084, 0.30),
+    (-0.162, 0.222, 0.098, 0.072, 0.25),
+    (-0.182, 0.205, 0.118, 0.050, 0.15),
 ]
 
 
@@ -278,17 +304,29 @@ HEAD_KEYS = [
     (-0.092, 0.292, 0.056, 0.052, 0.050, 0.10),
     (-0.118, 0.292, 0.070, 0.058, 0.062, 0.20),
     (-0.152, 0.288, 0.075, 0.060, 0.066, 0.30),
-    (-0.188, 0.278, 0.068, 0.056, 0.058, 0.38),
-    (-0.218, 0.267, 0.052, 0.044, 0.046, 0.38),
-    (-0.240, 0.259, 0.040, 0.034, 0.034, 0.30),
-    (-0.255, 0.254, 0.027, 0.025, 0.024, 0.15),
+    # (M22-05 残りの手直しで変更: 頭が丸かったので、鼻づらを楔に (上の線を早く下げ、顎の線を鼻先へ上げる)。元は
+    #  (-0.188, 0.278, 0.068, 0.056, 0.058, 0.38), (-0.218, 0.267, 0.052, 0.044, 0.046, 0.38), (-0.240, 0.259, 0.040, 0.034, 0.034, 0.30),
+    #  (-0.255, 0.254, 0.027, 0.025, 0.024, 0.15))
+    (-0.188, 0.279, 0.066, 0.059, 0.055, 0.40),
+    (-0.218, 0.271, 0.050, 0.045, 0.043, 0.40),
+    (-0.240, 0.265, 0.038, 0.031, 0.029, 0.32),
+    (-0.255, 0.261, 0.026, 0.019, 0.019, 0.15),
 ]
+
+
+def head_corners(rx, rt, rb, pinch):
+    """(M22-05 残りの手直しで追加) 頭の断面の角 (右半分、上から下): 頭頂の平ら・額と頬の境・頬の張り (最も広い、目の下)・顎の縁・顎の下"""
+    return [(0.0, rt), (0.62 * rx, 0.86 * rt), (rx, -0.08 * rb), (0.66 * rx * (1 - 0.5 * pinch), -0.78 * rb), (0.0, -rb)]
 
 
 def build_head(bm, lod):
     nsec, n = lod["head"]
     secs = resample(HEAD_KEYS, nsec)
-    rings = [ring(bm, Vector((0, y, zc)), X, Z, rx * 1.06, rt, rb, n, pinch, sq=2.45, phase=math.pi / 2) for y, zc, rx, rt, rb, pinch in secs]
+    # (M22-05 残りの手直しで変更: 頭が丸く、頬の面が分かれていなかったので、超楕円 (sq=2.45) から面の立った断面 (head_corners) へ。
+    #  近 LOD は額の縁と頬の張りの角を 2 点にして面を立てる (周 10 → 12)。元は
+    #  ring(bm, Vector((0, y, zc)), X, Z, rx * 1.06, rt, rb, n, pinch, sq=2.45, phase=math.pi / 2))
+    pairs = [False, True, True, False, False] if lod["name"] == "hero" else [False] * 5
+    rings = [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners(rx * 1.08, rt, rb, pinch), pairs) for y, zc, rx, rt, rb, pinch in secs]
     back = bm.verts.new((0, secs[0][0] + 0.006, secs[0][1]))
     tip = bm.verts.new((0, secs[-1][0] - 0.007, secs[-1][1]))
     loft(bm, [back] + rings + [tip])
@@ -382,8 +420,10 @@ def build_leg(bm, lod, name):
 def build_thigh(bm, lod, side):
     """後脚の腿: 胴の脇に張り出した卵形 (基準画の尻の丸い塊)"""
     nsec, n = lod["thigh"]
-    c = Vector((side * 0.072, 0.088, 0.104))
-    ry, rx, rz = 0.080, 0.046, 0.078
+    # (M22-05 残りの手直しで変更: 基準画の腿は大きな塊 (立ち上がりで胴が細く見えた) なので 1 割大きく、外の面を平らに (sq 2.1 → 2.7)。
+    #  元は c = (side * 0.072, 0.088, 0.104)、ry, rx, rz = 0.080, 0.046, 0.078)
+    c = Vector((side * 0.076, 0.090, 0.106))
+    ry, rx, rz = 0.088, 0.052, 0.086
     rings = []
     for i in range(nsec):
         t = -1 + 2 * (i + 1) / (nsec + 1)
@@ -391,7 +431,7 @@ def build_thigh(bm, lod, side):
         k = k ** 0.85
         yy = c.y + ry * t
         zz = c.z - 0.012 * t  # 前ほどわずかに高く
-        rings.append(ring(bm, Vector((c.x, yy, zz)), X, Z, rx * k, rz * k, rz * k * 0.92, n, phase=math.pi / 2, sq=2.1))
+        rings.append(ring(bm, Vector((c.x, yy, zz)), X, Z, rx * k, rz * k, rz * k * 0.92, n, phase=math.pi / 2, sq=2.7))
     a = bm.verts.new((c.x, c.y - ry, c.z + 0.012))
     b = bm.verts.new((c.x, c.y + ry, c.z - 0.012))
     loft(bm, [a] + rings + [b])
@@ -440,7 +480,7 @@ class Shell:
         # 殻の法線は向きが揃っていないことがあるので、体の軸から外へ向ける
         c = Vector((0, loc.y, body_zc(loc.y))) if loc.y > -0.1 else Vector((0, -0.12, 0.2))
         if abs(loc.x) > 0.045 and 0.0 < loc.y < 0.17 and loc.z < 0.19:
-            c = Vector((math.copysign(0.036, loc.x), 0.088, 0.104))  # 腿の上
+            c = Vector((math.copysign(0.036, loc.x), 0.088, 0.104))  # 腿の上 (M22-05 残りの手直しで腿を大きくしたが、外向きの判定の中心はこのまま)
         return nrm if nrm.dot(loc - c) >= 0 else -nrm
 
     def snap(self, p, off):
@@ -545,11 +585,114 @@ BACK_HEX = [(0.005, 0.248, 0.023), (0.078, 0.238, 0.023), (0.040, 0.210, 0.018),
 TOP_HEX = [(0.0, -0.005, 0.017), (0.0, 0.080, 0.017)]
 # 継ぎ目 (横から見た (y, z))。背の紋の区画の下の線、腿の前と上の線、肩から胸の脇へ下りる線
 SEAM_BACK = [(-0.100, 0.236), (-0.050, 0.220), (0.000, 0.198), (0.060, 0.180), (0.120, 0.166), (0.165, 0.145)]
-SEAM_THIGH = [(0.016, 0.060), (0.020, 0.100), (0.030, 0.136), (0.062, 0.166), (0.104, 0.170), (0.150, 0.158)]
+# (M22-05 残りの手直しで変更: 腿を大きくしたので、腿の線を前へ 8 mm・上へ 8 mm 出した (腿の中へ潜って途切れていた)。
+#  元は [(0.016, 0.060), (0.020, 0.100), (0.030, 0.136), (0.062, 0.166), (0.104, 0.170), (0.150, 0.158)])
+SEAM_THIGH = [(0.008, 0.058), (0.011, 0.100), (0.021, 0.140), (0.058, 0.175), (0.104, 0.180), (0.152, 0.167)]
 SEAM_SHOULDER = [(-0.140, 0.214), (-0.150, 0.175), (-0.140, 0.135), (-0.115, 0.108)]
 SEAMS = {"back": SEAM_BACK, "thigh": SEAM_THIGH, "shoulder": SEAM_SHOULDER}
 # 胸の盾形の輪郭 (正面から見た (x, z)、左右対称)
 SEAM_CHEST = [(0.050, 0.196), (0.054, 0.160), (0.048, 0.120), (0.030, 0.090), (0.0, 0.080)]
+
+
+# (M22-05 残りの手直しで追加) 背の蜂の巣: 胴の軸の周りの角度で背を開いた (y, v) の平面 (v = 角度 × 0.1 m、背骨の上が v = 0) に
+# 平らな頂の六角 (外接円の半径 COMB_R) を敷き詰め、各目の中心を胴の軸から外へ撃って殻に貼る。
+# 基準画の背は六角が隣り合い、区画の縁を暗い青緑の線が縁取る (網目)。光る六角はその目の中に一回り小さく入る
+COMB_R = 0.040
+COMB_REFF = 0.10
+COMB_INSET = 0.52
+
+
+def seam_z(path, y):
+    """横から見た継ぎ目の線 (y, z) の y での高さ (両端の外は端の値)"""
+    if y <= path[0][0]:
+        return path[0][1]
+    for (y0, z0), (y1, z1) in zip(path, path[1:]):
+        if y0 <= y <= y1:
+            return z0 + (z1 - z0) * (y - y0) / (y1 - y0)
+    return path[-1][1]
+
+
+def comb_cells(shell):
+    """蜂の巣の目の中心 (y, v) の列。前 (首の側) の列から後ろへ、各列は v の小さい順。
+    基準画の背の区画は背の継ぎ目 (SEAM_BACK) の上にあるので、角が継ぎ目より下へ出る目と首輪の前へ出る目は除く"""
+    cells = []
+    dy, dv = 1.5 * COMB_R, math.sqrt(3) * COMB_R
+    for j in range(4):
+        y = -0.068 + dy * j
+        vs = [0.0, -dv, dv] if j % 2 == 0 else [-dv * 0.5, dv * 0.5]
+        for v in sorted(vs):
+            ok = True
+            for k in range(6):
+                cy, cv = comb_corner(y, v, k, COMB_R)
+                if cy < -0.105 or cy > 0.175:
+                    ok = False
+                    break
+                p, _ = comb_point(shell, cy, cv, 0.0)
+                if p.z < seam_z(SEAM_BACK, cy) + 0.004:
+                    ok = False
+                    break
+            if ok:
+                cells.append((y, v))
+    return cells
+
+
+def comb_corner(y, v, k, r):
+    a = math.radians(60 * k)
+    return y + r * math.cos(a), v + r * math.sin(a)
+
+
+def comb_point(shell, y, v, off):
+    """(y, v) を殻の表面へ: 胴の軸 (0, y, 胴の中心の高さ) から角度 v / COMB_REFF の向き (0 = 真上、+ = +X) へ外から撃つ"""
+    th = v / COMB_REFF
+    d = Vector((math.sin(th), 0.0, math.cos(th)))
+    a = Vector((0.0, y, body_zc(y)))
+    loc, nrm, _, _ = shell.bvh.ray_cast(a + d * 0.5, -d)
+    if loc is None:
+        raise RuntimeError(f"comb miss y={y} v={v}")
+    nrm = shell.outward(loc, nrm)
+    return loc + nrm * off, nrm
+
+
+def build_honeycomb(bm_glow, bm_teal, shell, lod):
+    cells = comb_cells(shell)
+    print(lod["name"], "comb cells", len(cells), [(round(y, 3), round(v, 3)) for y, v in cells])
+    pick = lod["comb_glow"]
+    for i, (y, v) in enumerate(cells):
+        if pick is not None and i not in pick:
+            continue
+        c, n = comb_point(shell, y, v, 0.0045)
+        vs = [bm_glow.verts.new(comb_point(shell, *comb_corner(y, v, k, COMB_R * COMB_INSET), 0.0045)[0]) for k in range(6)]
+        cv = bm_glow.verts.new(c)
+        for k in range(6):
+            f = bm_glow.faces.new((vs[k], vs[(k + 1) % 6], cv))
+            f.material_index = GLOW
+            f.normal_update()
+            if f.normal.dot(n) < 0:
+                f.normal_flip()
+    if not lod["comb_net"]:
+        return
+    # 網目: 全部の目の辺を重複なく集め、1 辺ずつ細い帯にする (隣り合う目は辺を共有する)
+    edges = {}
+    for y, v in cells:
+        pts = [comb_corner(y, v, k, COMB_R) for k in range(6)]
+        for k in range(6):
+            a, b = pts[k], pts[(k + 1) % 6]
+            key = tuple(sorted((tuple(round(q, 4) for q in a), tuple(round(q, 4) for q in b))))
+            edges[key] = (a, b)
+    w = 0.0036
+    for a, b in edges.values():
+        pa, na = comb_point(shell, *a, 0.0028)
+        pb, nb = comb_point(shell, *b, 0.0028)
+        d = (pb - pa).normalized()
+        sa, sb = na.cross(d).normalized() * w, nb.cross(d).normalized() * w
+        # 角で隣の辺と重なるよう、両端を半幅だけ延ばす
+        ea, eb = pa - d * w, pb + d * w
+        q = [bm_teal.verts.new(ea - sa), bm_teal.verts.new(ea + sa), bm_teal.verts.new(eb + sb), bm_teal.verts.new(eb - sb)]
+        f = bm_teal.faces.new(q)
+        f.material_index = BODY
+        f.normal_update()
+        if f.normal.dot(na) < 0:
+            f.normal_flip()
 
 
 def collar_points(shell):
@@ -577,26 +720,25 @@ def build_decals(shell, lod, mats, obj_name):
     for x, z, r in pick("chest", CHEST_HEX):
         loc, nrm = shell.project("front", x, z)
         build_hex(bm_glow, bm_teal, shell, loc, nrm, r, lod)
-    for side in (-1, 1):
-        for y, z, r in pick("back", BACK_HEX):
-            loc, nrm = shell.project("side", y, z, side)
-            build_hex(bm_glow, bm_teal, shell, loc, nrm, r, lod, rot=0, ref=-Y)
-    for x, y, r in pick("top", TOP_HEX):
-        loc, nrm = shell.project("top", x, y)
-        build_hex(bm_glow, bm_teal, shell, loc, nrm, r, lod, rot=30, ref=-Y)
+    # (M22-05 残りの手直しで変更: 背の左右の六角 (BACK_HEX) と背骨の上の六角 (TOP_HEX) を 1 つずつ離して貼っていたのを、
+    #  網目の暗い線で繋がった蜂の巣 (build_honeycomb) に置き換えた。BACK_HEX / TOP_HEX の表は使わない)
+    build_honeycomb(bm_glow, bm_teal, shell, lod)
     wide = 0.007 if lod["hex_ring"] else 0.0
     for side in (-1, 1):
         for path in (SEAMS[k] for k in lod["seams"]):
             pts = [shell.project("side", y, z, side)[0] for y, z in path]
+            # (M22-05 残りの手直しで変更: 帯が胴と腿の境のくぼみで面の下へ潜って途切れて見えたので、浮かせる量を
+            #  下地 0.0025 → 0.0032、光 0.0040 → 0.0050 に)
             if wide:
-                build_ribbon(bm_teal, shell, pts, lod, wide, 0.0025, BODY)
-            build_ribbon(bm_glow, shell, pts, lod, 0.0042, 0.0040, GLOW)
+                build_ribbon(bm_teal, shell, pts, lod, wide, 0.0032, BODY)
+            build_ribbon(bm_glow, shell, pts, lod, 0.0042, 0.0050, GLOW)
         pts = [shell.project("front", side * x, z)[0] for x, z in SEAM_CHEST]
         if wide:
             build_ribbon(bm_teal, shell, pts, lod, wide, 0.0025, BODY, seg=max(2, lod["ribbon_seg"] // 2 + 1))
         build_ribbon(bm_glow, shell, pts, lod, 0.0042, 0.0040, GLOW, seg=max(2, lod["ribbon_seg"] // 2 + 1))
     # 首輪: 暗い青緑の帯 (群れ LOD も持つ。遠目にも頭と胴の境が読める)
-    build_ribbon(bm_teal, shell, collar_points(shell), lod, 0.013, 0.003, BODY, closed=True,
+    # (M22-05 残りの手直しで変更: 首輪が首と胴の境で途切れて見えたので、浮かせる量を 0.003 → 0.0045 に)
+    build_ribbon(bm_teal, shell, collar_points(shell), lod, 0.013, 0.0045, BODY, closed=True,
                  seg=12 if lod["hex_ring"] else 8)
     parts = []
     for bm, part in ((bm_glow, "glow"), (bm_teal, "teal")):
@@ -664,22 +806,39 @@ def color_for(part, co, n):
         return PAL["teal"]
     if part in ("glow", "rigid"):
         return WHITE
+    # (M22-05 残りの手直しで変更: 陰影が平たかったので、上を向く面を fur_lit へ、下・奥を向く面を fur_shade へ寄せて明暗の幅を広げた。
+    #  胴は腿の前の縁と前脚の付け根の後ろを陰にして、腿と胴の面を分ける。頭は頬の下の縁と顎の下を陰にして頬の面を立てる)
     if part == "body":
         c = mix(PAL["fur"], PAL["fur_dark"], smoothstep(-0.2, -0.8, n.z) * 0.8)
-        return mix(c, PAL["light"], smoothstep(0.55, 1.0, n.z) * 0.25)
+        c = mix(c, PAL["light"], smoothstep(0.55, 1.0, n.z) * 0.25)
+        c = mix(c, PAL["fur_lit"], smoothstep(0.35, 0.9, n.z) * 0.7)
+        c = mix(c, PAL["fur_shade"], smoothstep(-0.1, -0.7, n.z) * 0.75)
+        # 腿の前の縁 (腿の前、胴の脇の低いところ) の陰
+        th = smoothstep(0.05, -0.03, co.y) * smoothstep(-0.07, -0.01, co.y) * smoothstep(0.16, 0.10, co.z) * smoothstep(0.03, 0.07, abs(co.x))
+        return mix(c, PAL["fur_shade"], th * 0.6)
     if part == "neck":
-        return mix(PAL["fur"], PAL["light"], smoothstep(-0.1, -0.7, n.y) * 0.3)
+        c = mix(PAL["fur"], PAL["light"], smoothstep(-0.1, -0.7, n.y) * 0.3)
+        return mix(c, PAL["fur_shade"], smoothstep(0.0, -0.6, n.z) * 0.5)  # (M22-05 残りの手直しで追加) 顎の下の陰
     if part == "head":
-        c = mix(PAL["fur"], PAL["light"], smoothstep(-0.205, -0.245, co.y) * 0.7)
+        c = mix(PAL["fur"], PAL["fur_lit"], smoothstep(0.4, 0.9, n.z) * 0.8)  # (M22-05 残りの手直しで追加) 頭頂・額の面は明るく
+        c = mix(c, PAL["light"], smoothstep(-0.205, -0.245, co.y) * 0.7)
         c = mix(c, PAL["light"], smoothstep(-0.2, -0.7, n.z) * 0.6)
+        # (M22-05 残りの手直しで追加) 頬の張りの下 (顎の縁、横を向きつつ下へ傾く面) は陰にして頬の面を分ける
+        c = mix(c, PAL["fur_shade"], smoothstep(-0.05, -0.45, n.z) * smoothstep(0.3, 0.7, abs(n.x)) * smoothstep(-0.2, -0.13, co.y) * 0.7)
+        # (M22-05 残りの手直しで変更: 上の 2 行を足したので、元の 2 行の mix の起点 PAL["fur"] を c に)
         return c
     if part.startswith("ear"):
         return mix(PAL["fur"], PAL["light"], 0.35 if n.dot(EAR_FRONT[part]) < -0.3 else 0.0)
     if part.startswith("thigh"):
-        return mix(PAL["fur"], PAL["fur_dark"], smoothstep(0.0, -0.8, n.z) * 0.7)
+        # (M22-05 残りの手直しで変更: 腿の上の面は明るく、前の面と下は陰にして腿の塊を立てる。元は下への fur_dark の 1 段だけ)
+        c = mix(PAL["fur"], PAL["fur_dark"], smoothstep(0.0, -0.8, n.z) * 0.7)
+        c = mix(c, PAL["fur_lit"], smoothstep(0.3, 0.85, n.z) * 0.75)
+        c = mix(c, PAL["fur_shade"], smoothstep(-0.3, -0.8, n.y) * 0.55)
+        return mix(c, PAL["fur_shade"], smoothstep(-0.2, -0.8, n.z) * 0.5)
     if part.startswith("leg"):
         side = 1 if co.x > 0 else -1
         c = mix(PAL["fur"], PAL["fur_dark"], smoothstep(0.2, 0.8, -n.x * side) * 0.6)
+        c = mix(c, PAL["fur_shade"], smoothstep(0.2, 0.8, -n.x * side) * 0.4)  # (M22-05 残りの手直しで追加) 脚の内側をもう一段暗く
         return mix(c, PAL["light"], smoothstep(0.03, 0.0, co.z) * 0.35)
     if part == "tail":
         return PAL["light"]
@@ -1077,12 +1236,14 @@ def pose_graze(rig, t):
     chew = ease(0.7, 0.9, t) * (1 - ease(3.1, 3.3, t))
     b = {}
     # 腰を少し上げて背を丸め (基準画の採食)、胸を前へ下げ、首と頭で鼻先を地面へ (鼻先の高さ ~0.03 m)
-    b["pelvis"] = pelvis_basis(rig, Vector((0, -0.004 * down, 0.014 * down)), wrot=Quaternion(X, D(14) * down), pivot=Vector((0, 0.12, 0.03)))
-    b["spine"] = rot_basis(D(8) * down)
-    b["chest"] = rot_basis(D(12) * down)
+    # (M22-05 残りの手直しで変更: 背の丸みが弱かったので、腰を 14° → 18° 起こして 0.014 → 0.03 m 上げ、背骨を 8° → 14° 丸めた。
+    #  胸は 12° → 8°、首は 34° → 24°、頭は -18° → -25° にして鼻先と胸の高さを保つ (地面へ潜らない))
+    b["pelvis"] = pelvis_basis(rig, Vector((0, -0.004 * down, 0.030 * down)), wrot=Quaternion(X, D(18) * down), pivot=Vector((0, 0.12, 0.03)))
+    b["spine"] = rot_basis(D(14) * down)
+    b["chest"] = rot_basis(D(8) * down)
     nib = math.sin(2 * math.pi * 4 * t) * chew
-    b["neck"] = rot_basis(D(34) * down + D(1.5) * nib)
-    b["head"] = rot_basis(-D(18) * down + D(2.5) * nib, 0, D(4) * math.sin(2 * math.pi * t / 2) * chew)
+    b["neck"] = rot_basis(D(24) * down + D(1.5) * nib)
+    b["head"] = rot_basis(-D(25) * down + D(2.5) * nib, 0, D(4) * math.sin(2 * math.pi * t / 2) * chew)
     b["nose"] = rot_basis(D(10) * math.sin(2 * math.pi * 7 * t) * chew)
     # 耳は頭が下がった分だけ後ろへ寝かせ、上へ立てたままにする (基準画の採食)
     b["ear1_L"] = rot_basis(-D(40) * down, 0, D(8) * down)
@@ -1099,12 +1260,15 @@ def pose_alert(rig, t):
     k = ease(0.0, 0.7, t) * (1 - ease(2.3, 3.0, t))
     b = {}
     # 腰の後ろ下 (踵の上) を中心に体を 58° 起こし、少し持ち上げる
-    b["pelvis"] = pelvis_basis(rig, Vector((0, -0.035 * k, 0.065 * k)), wrot=Quaternion(X, -D(64) * k), pivot=Vector((0, 0.12, 0.05)))
-    b["spine"] = rot_basis(-D(6) * k)
-    b["chest"] = rot_basis(D(4) * k)
+    # (M22-05 残りの手直しで変更: 立ち上がりで胴が細長い柱に見えたので、体の起こしを 64° → 58° にし、背骨と胸を前へ丸めて
+    #  (spine -6° → +3°、chest 4° → 8°) 胴を詰め、腹を前へ張らせる。首と頭はその分を戻す (neck 34° → 28°、head 18° → 15°)。
+    #  元は wrot=Quaternion(X, -D(64) * k)、spine rot_basis(-D(6) * k)、chest rot_basis(D(4) * k))
+    b["pelvis"] = pelvis_basis(rig, Vector((0, -0.035 * k, 0.062 * k)), wrot=Quaternion(X, -D(58) * k), pivot=Vector((0, 0.12, 0.05)))
+    b["spine"] = rot_basis(D(3) * k)
+    b["chest"] = rot_basis(D(8) * k)
     look = -ease(0.8, 1.1, t) * (1 - ease(1.4, 1.7, t)) + ease(1.5, 1.8, t) * (1 - ease(1.95, 2.25, t))
-    b["neck"] = rot_basis(D(34) * k, D(18) * look)
-    b["head"] = rot_basis(D(18) * k, 0, D(-28) * look)
+    b["neck"] = rot_basis(D(28) * k, D(18) * look)
+    b["head"] = rot_basis(D(15) * k, 0, D(-28) * look)
     b["nose"] = rot_basis(D(9) * math.sin(2 * math.pi * 8 * t) * pulse(t, 1.35, 0.3))
     # 耳を立てて前へ開く
     b["ear1_L"] = rot_basis(D(12) * k, D(-18) * k, D(-8) * k)
