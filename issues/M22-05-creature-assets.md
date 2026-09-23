@@ -25,3 +25,5 @@ M22-02
 - [ ] 予算内
 
 ## 作業ログ
+
+- 2026-09-24 灰狼: `assets/models/observe/wolf.glb`(近 2,541 / 群れ 650 三角形、骨 29、idle/walk/stalk/run/pounce/fall)。比較画と記録は `docs/design/qa/observe/wolf.md`。美観チェック待ち(面の立ち方・鼻づらが狐寄り)
