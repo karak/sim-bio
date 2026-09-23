@@ -52,6 +52,7 @@ const sinkingOps = (r: ScenarioRunner, s: WorldSnapshot) => ({
     let bi = -1;
     let bv = -1;
     for (let i = 0; i < s.layers.elevation.length; i++) if (s.layers.populations.wolf[i] > bv) { bv = s.layers.populations.wolf[i]; bi = i; }
+    // UI の疫病の半径 (DISASTER_RADIUS.plague = 4) に合わせる (M10R-07 で一時 6 にしたが谷の波なら 4 で足りるので戻した)
     r.intervene({ type: 'disaster', kind: 'plague', cell: bi, radius: 4 });
   },
 });
@@ -268,32 +269,51 @@ describe('tower scenario v2 playthroughs (size 64)', { timeout: 600_000 }, () =>
 });
 
 /**
- * M9-04: 「祈りに応えるな」「霊脈枯れ」。レベルデザイン docs/design/2026-09-21-level-design-faith.md §4、§5 の判定行列。
- * どちらも 12 年ごとに集落へ狼の群れが下りて (schedule)、民が「狼を減らして」と祈る。
- * 祈りに応えるな (歌 (3)、集落 2787 = 輝石が無く段階が進まない): 応えれば即 dead。儀式 (同じ放流を 3 年ごと) か先回り (狼が来た年に疫病) で信仰を保つ。
+ * 「祈りに応えるな」「霊脈枯れ」。
+ * 祈りに応えるな (歌 (3)、集落 2063 = 振幅比 0.06 の安定な群れ、狼の波 1.0 / 環 3 を北の谷 1366 (集落から 13 セル) へ 6 年目から 8 年ごと): レベルデザイン
+ * docs/design/2026-09-22-level-design-faith-economy.md §8.5〜8.6、§8.10(M10R-07 の作り直し、判定行列)。
+ * 狼はひと冬かけて集落へ歩く。波の年のうち (計測では 3 か月以内) に谷へ疫病 環 4 を打てば祈りは出ない
+ * (集落に落とす環 6 の波は波と同じ tick でしか追えず UI で打てなかったので、谷に落とす形にした)。見送れば 2 年後に祈りが出て、応えれば即 dead、無視すれば
+ * 若い信仰 (歌以下) の記憶に −0.1 が刻まれる (取り下げでも)。年収は実効 3/年 (§8.10 の M12) で全部の波は先回りできず、
+ * 儀式 (苔を 3 年ごと) で記憶の目減りを埋めつつ、どの波を先回りしどの波を見送るかが問い。先回り 6〜7 回は alive、5 回以下は夢喰い。
+ * (M9-04 の旧設計: 集落 2787 = 輝石が無く段階が進まない、狼は 12 年ごとに一定の群れ。応えれば即 dead、儀式または全部先回りで信仰を保つ、
+ * という単純な二択だった。判定行列の幅が無く、M10R-07 で安定な集落・着地する波・記憶の予算のジレンマに作り直した)
  * 霊脈枯れ (石 (4)、集落 1770 = 脈の上、薪の蓄え 600): 信仰 0.6 で「止めよ」。応えて速く上げるか、儀式で積むか。止めずに苔を放っても戻らない。
+ * 12 年ごとに狼が下りて民は祈る (定義は変えていない)。
  */
-const NO_ANSWER_HOME = 2787;
+const NO_ANSWER_HOME = 2063;
 const VEIN_HOME = 1770;
-/** 儀式: 集落に苔を放つ (4)。同じ種類の介入を 3 年ごとに続けると信仰が上がる */
+/** 儀式: 集落に苔を放つ (4)。同じ種類の介入を 3 年ごとに続けると信仰が上がる (狼の祈りの応えにはならない) */
 const ritual = (r: ScenarioRunner, home: number) => r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: home, amount: 0.3, radius: 1 });
-/** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered、出る前なら先回り) */
+/** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered)。半径 4 は UI の DISASTER_RADIUS.plague と同じ (M10R-07 で 6 を試したが、谷の波なら 4 で足りるので戻した) */
 const plagueHome = (r: ScenarioRunner, home: number) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: home, radius: 4 }); };
-/** 狼の群れが下りる年 (schedule と同じ) */
-const wolfYear = (y: number) => y >= 6 && (y - 6) % 12 === 0;
+/** 狼の波が落ちる北の谷 (schedule と同じセル、M10R-07)。集落 2063 から 13 セル */
+const NO_ANSWER_VALLEY = 1366;
+/** 先回り: 谷に疫病 (24、環 4 = UI と同じ)。波の年のうち (計測では 3 か月以内) に谷を病ませれば狼は集落へ着かず、民は祈らない */
+const plagueValley = (r: ScenarioRunner) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: NO_ANSWER_VALLEY, radius: 4 }); };
+/** 狼の波が下りる年 (schedule と同じ: 6 年目から 8 年ごと、M10R-07) */
+const waveYear = (y: number) => y >= 6 && (y - 6) % 8 === 0;
 
 const noAnswerScripts: Record<string, Script> = {
   // 応える: 祈りが出たら疫病。一度でも応えれば民は考えるのをやめる → dead
   answer: (r, s) => { if (s.civ?.prayer?.kind === 'wolves') plagueHome(r, NO_ANSWER_HOME); },
-  // 気まぐれ: 毎年違う種を放つ。3 種類以上が混ざって信仰が下がり、祈りの無視と合わせて内乱 → dead
-  capricious: (r, _s, y) => { const ids = ['grass', 'moss', 'forest', 'rabbit']; if (y >= 1) r.intervene({ type: 'spawn_species', speciesId: ids[y % ids.length], cell: NO_ANSWER_HOME, amount: 0.3, radius: 1 }); },
-  // 想定解 1: 儀式。3 年ごとに苔を放つだけ。祈りは無視するが、儀式の分で信仰が保たれる
+  // 儀式。3 年ごとに苔を放つだけ。祈りは無視するが、儀式の分で記憶の目減りをいくらか埋める (先回りが無ければ夢喰いは避けられない)
   ritual: (r, _s, y) => { if (y >= 1 && y % 3 === 1) ritual(r, NO_ANSWER_HOME); },
-  // 想定解 2: 先回り (after で使う)。狼が下りた年のうち (年末に祈りが出る前) に集落へ疫病を打ち、祈りそのものを出させない
-  // 祈りがすでに出ている年は打たない (打てば応えになって滅びる)。その分は儀式で埋める
-  preempt: (r, s, y) => { if (wolfYear(y) && !s.civ?.prayer) plagueHome(r, NO_ANSWER_HOME); },
-  // 先回りの儀式 (災害の −0.1 を埋める)。最初の狼 (6 年目) までに 3 回そろうよう 1 年目から 2 年ごと (3 年ごとでは 8〜14 年目に 0.30 で止まり 15 年目に内乱)
-  preemptRitual: (r, _s, y) => { if (y >= 1 && y % 2 === 1) ritual(r, NO_ANSWER_HOME); },
+};
+
+/**
+ * 先回り (playTower の after で使う)。波は r.update 内の runner の schedule で発火するので、年次評価の後でなければ
+ * その年に祈りが出たかどうかを確かめられない (M9-04 由来の制約、M10R-07 でも変わらない)
+ */
+const preemptScripts: Record<string, Script> = {
+  // 想定解 1: 欲張り。波の年のうち、まだ祈りが出ていなければ谷に疫病 (plagueValley が力 24 未満なら何もしない)
+  greedy: (r, s, y) => { if (waveYear(y) && !s.civ?.prayer) plagueValley(r); },
+  // 想定解 2: 一つおき (2 波に 1 回) に先回り
+  alt1in2: (r, s, y) => { if (waveYear(y) && ((y - 6) / 8) % 2 === 0 && !s.civ?.prayer) plagueValley(r); },
+  // naive: 3 波に 1 回だけ先回り。記憶の予算が足りず夢喰い
+  alt1in3: (r, s, y) => { if (waveYear(y) && ((y - 6) / 8) % 3 === 0 && !s.civ?.prayer) plagueValley(r); },
+  // naive: 波の翌年に打つ。窓 (波の年) を外しているので群れはもう崩れて祈りになっている
+  late: (r, s, y) => { if (waveYear(y - 1) && !s.civ?.prayer) plagueValley(r); },
 };
 
 const veinScripts: Record<string, Script> = {
@@ -317,25 +337,39 @@ describe('faith scenarios (M9-04, size 64)', { timeout: 600_000 }, () => {
   const noAnswer = defs.find((d) => d.id === 'no-answer');
   const vein = defs.find((d) => d.id === 'vein-drain');
   if (!noAnswer || !vein) throw new Error('faith scenarios missing');
-  it('no-answer: idle → dead (祈りの無視と減衰で内乱、一段退けば dead)', () => {
+  it('no-answer: idle → dead (放置。信仰が減衰して内乱、崩壊)', () => {
     const v = playTower(noAnswer, null);
     expect(v.status, v.reason).toBe('dead');
   });
-  it('no-answer: answer the prayer → dead (民は考えるのをやめた)', () => {
+  it('no-answer: naive ritual only (儀式だけ、先回りなし) → dead (記憶の予算が尽きて夢喰い)', () => {
+    const v = playTower(noAnswer, noAnswerScripts.ritual);
+    expect(v.status, v.reason).toBe('dead');
+    expect(v.reason).toContain('夢喰い');
+  });
+  it('no-answer: naive answer (祈りが出たら疫病) → dead (民は考えるのをやめた)', () => {
     const v = playTower(noAnswer, noAnswerScripts.answer);
     expect(v.status, v.reason).toBe('dead');
-    expect(v.reason).toContain('祈り');
+    expect(v.reason).toContain('応え');
   });
-  it('no-answer: capricious → dead', () => {
-    const v = playTower(noAnswer, noAnswerScripts.capricious);
+  it('no-answer: naive greedy the year after the wave (波の翌年に疫病) → dead (窓は波の年だけ)', () => {
+    const v = playTower(noAnswer, noAnswerScripts.ritual, preemptScripts.late);
     expect(v.status, v.reason).toBe('dead');
   });
-  it('no-answer: ritual (想定解 1) → alive', () => {
-    const v = playTower(noAnswer, noAnswerScripts.ritual);
+  it('no-answer: naive alt 1:2 (3 波に 1 回だけ先回り) → dead (夢喰い)', () => {
+    const v = playTower(noAnswer, noAnswerScripts.ritual, preemptScripts.alt1in3);
+    expect(v.status, v.reason).toBe('dead');
+    expect(v.reason).toContain('夢喰い');
+  });
+  it('no-answer: naive greedy without ritual → dead (信仰の減衰で内乱)', () => {
+    const v = playTower(noAnswer, null, preemptScripts.greedy);
+    expect(v.status, v.reason).toBe('dead');
+  });
+  it('no-answer: solution 1: greedy (波の年に力 24 があれば集落へ疫病) + ritual → alive (7 回買えて 5 回見送り、上限 0.5)', () => {
+    const v = playTower(noAnswer, noAnswerScripts.ritual, preemptScripts.greedy);
     expect(v.status, v.reason).toBe('alive');
   });
-  it('no-answer: preempt (想定解 2) → alive', () => {
-    const v = playTower(noAnswer, noAnswerScripts.preemptRitual, noAnswerScripts.preempt);
+  it('no-answer: solution 2: alt 1:1 (一つおきに先回り) + ritual → alive', () => {
+    const v = playTower(noAnswer, noAnswerScripts.ritual, preemptScripts.alt1in2);
     expect(v.status, v.reason).toBe('alive');
   });
   it('vein-drain: idle → dead', () => {

@@ -9,7 +9,7 @@ import { TOWER_COST, TOWER_RAIN_SCALE_DEFAULT, TOWER_TEMP_OFFSET_DEFAULT, TOWER_
 /** 年表の 1 行。石板が種名などに整形して出す */
 export type TimelineEvent =
   | { year: number; kind: 'intervene'; command: Command }
-  | { year: number; kind: 'scheduled'; command: Command }
+  | { year: number; kind: 'scheduled'; command: Command; text?: string }
   | { year: number; kind: 'power_exhausted' }
   | { year: number; kind: 'warning'; warning: Warning }
   | { year: number; kind: 'verdict'; verdict: Verdict }
@@ -164,6 +164,8 @@ export function createScenarioRunner(
     return c;
   };
 
+  /** 今年発火した text 付きの予定 (M10R-07)。年次評価の警告に足してから空にする */
+  let announced: Warning[] = [];
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
       if (cancelled.has(idx)) continue;
@@ -176,8 +178,11 @@ export function createScenarioRunner(
         fired.add(key);
         // 予定コマンドは星の行為ではない (信仰の儀式・祈りの応えに数えない。M9 レビュー)
         world.dispatch(resolve(sc.command), { fromStar: false });
-        // 毎年繰り返す進行 (沈降など) は年表に出さない。単発の予定イベントだけ
+        // 毎年繰り返す進行 (沈降など) は年表に出さない。単発の予定イベントだけ。
+        // ただし text のある予定 (M10R-07: 狼の波) は繰り返しでも年表と警告に出す (星が気づいて動くための台詞)
         if (!sc.everyYears) timeline.push({ year: y, kind: 'scheduled', command: sc.command });
+        else if (sc.text) timeline.push({ year: y, kind: 'scheduled', command: sc.command, text: sc.text });
+        if (sc.text) announced.push({ kind: 'event', key: `event:${idx}@${y}`, text: sc.text });
         if (!sc.everyYears) break;
       }
     }
@@ -353,9 +358,12 @@ export function createScenarioRunner(
         const civ: CivContext = prevCivStage === null ? null : { prevStage: prevCivStage };
         // 舟の警告 (M10-04): 前年の進みと比べる。前年に舟が無ければ null
         warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ, { year, prevProgress: prevShipProgress });
+        // text 付きの予定 (M10R-07) はその年の警告の先頭に出す (年表には fireDue で積んである)
+        if (announced.length) { warnings = [...announced, ...warnings]; announced = []; }
         prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;
         for (const w of warnings) {
-          if (warned.has(w.key)) continue;
+          // text 付きの予定の台詞 (event) は fireDue が年表に scheduled として積んでいるので、警告としては重ねて積まない (手動受入で二重に出た)
+          if (w.kind === 'event' || warned.has(w.key)) continue;
           warned.add(w.key);
           timeline.push({ year, kind: 'warning', warning: w });
           opts.onWarning?.(w);

@@ -26,6 +26,24 @@ const def: ScenarioDef = {
 };
 
 describe('createScenarioRunner', () => {
+  it('text 付きの繰り返し予定 (M10R-07: 狼の波) は発火した年に年表 (text 付きの scheduled) と警告 (event) に出る。text 無しの繰り返しは今まで通り出ない', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 7, schedule: [
+      { atYear: 2, everyYears: 2, text: '狼の群れが北の谷に下りた', command: wave },
+      { atYear: 1, everyYears: 1, command: { type: 'sink', amount: 0.01 } },
+    ] };
+    const r = createScenarioRunner(d, w);
+    const eventsByYear: Record<number, string[]> = {};
+    for (let y = 0; y <= 7; y++) { r.update(w.snapshot()); eventsByYear[y] = r.warnings().filter((x) => x.kind === 'event').map((x) => x.text); w.step(360); }
+    expect(eventsByYear[2]).toEqual(['狼の群れが北の谷に下りた']);
+    expect(eventsByYear[3]).toEqual([]);
+    expect(eventsByYear[4]).toEqual(['狼の群れが北の谷に下りた']);
+    const scheduled = r.timeline().filter((e) => e.kind === 'scheduled');
+    expect(scheduled).toEqual([2, 4, 6].map((year) => ({ year, kind: 'scheduled', command: wave, text: '狼の群れが北の谷に下りた' })));
+    // 台詞は年表に scheduled として 1 行だけ。警告 (warning) の行としては重ねない
+    expect(r.timeline().filter((e) => e.kind === 'warning' && e.warning.kind === 'event')).toEqual([]);
+  });
   it('everyYears があって untilYear が無い予定は予言の年まで繰り返す (M10R レビュー: 以前は 1 回しか撃たなかった)', () => {
     const w = fakeWorld({ deer: 1 });
     const d: ScenarioDef = { ...def, years: 7, schedule: [{ atYear: 2, everyYears: 2, command: { type: 'sink', amount: 0.01 } }] };

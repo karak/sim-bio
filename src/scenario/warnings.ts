@@ -6,9 +6,9 @@ import { formatFaith } from '../simulation/faith';
 import { SHIP_CREW, SHIP_FAITH, SHIP_NEED, SHIP_STAGE } from '../simulation/ship';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low' | 'ship_stalled' | 'ship_late' | 'ship_waiting';
+export type WarningKind = 'event' | 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low' | 'ship_stalled' | 'ship_late' | 'ship_waiting';
 
-/** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子 */
+/** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子。event は text 付きの予定コマンドの台詞 (M10R-07、ScenarioRunner が足す) */
 export type Warning = {
   kind: WarningKind;
   /** species_low のとき、その種の id */
