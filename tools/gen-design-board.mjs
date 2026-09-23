@@ -8,7 +8,7 @@
  *   node tools/gen-design-board.mjs                  # 全部 (1 枚ずつ)
  *   node tools/gen-design-board.mjs --variants=2 kv-herd kv-shipyard
  *   node tools/gen-design-board.mjs --force sheet-deer
- *   GEMINI_IMAGE_MODEL=... で モデルを変更 (既定: gemini-2.5-flash-image)
+ *   GEMINI_IMAGE_MODEL=... で モデルを変更 (既定: gemini-2.5-flash-image)。動物の基準画 (creature) は GEMINI_CREATURE_MODEL (既定: gemini-3-pro-image-preview)
  * 出力: assets/textures/board/<id>.png (--variants=N なら <id>-v1..vN.png)。既にあればスキップ
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -33,6 +33,8 @@ if (!KEY) {
   process.exit(1);
 }
 const MODEL = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image';
+/** 元の参照に造形を合わせつつ画風を変える (creature) は 2.5 flash だと平板な参照のまま描き直せなかったので、既定を上位モデルにする */
+const CREATURE_MODEL = process.env.GEMINI_CREATURE_MODEL ?? 'gemini-3-pro-image-preview';
 
 const WORLD =
   'World: "Fragments of Mu" — a small island in a warm sea, a remnant of a sunken ancient civilization, ' +
@@ -55,15 +57,24 @@ const SHEET =
   `${PAINTERLY} ${WORLD} Reference sheet for a 3D modeller: plain warm light-grey background, ` +
   'even soft studio light, each item separated with space, consistent scale noted by relative size only (no labels, no text). 16:9.';
 
+const CREATURE =
+  `${PAINTERLY} Reference sheet for a 3D modeller: plain warm light-grey background, even soft studio light, no labels, no text. 16:9. ` +
+  'Two images are attached. IMAGE 1 is the approved creature design; IMAGE 2 is the approved painting style and lighting (use it only for rendering, never for anatomy). ' +
+  'CRITICAL: keep the identity of IMAGE 1 exactly: same silhouette and proportions, same head shape, ' +
+  'same antler/ear/tail shapes, same colour-block layout (which parts are which colour), same glowing cyan seam lines and markings, same eye treatment. ' +
+  'Only change the rendering, to match IMAGE 2: no flat vector fills and no hard facet edges — gently rounded volumes, soft painterly shading with warm key light and cool shadow, subtle brush texture, soft bloom on the cyan glow, ' +
+  'at the fidelity of a Nintendo Switch era 3D Pokémon model (clean readable shapes, smooth but simple surfaces, no photoreal fur strands). ' +
+  'Do not add realistic anatomy that the design does not have.';
+
 /** 観察画面の方向性 (§決定 1・5・6・7・10) を絵にする。kind: scene はキービジュアル、sheet は基準画 */
 const ITEMS = [
   { id: 'kv-herd', kind: 'scene', prompt: 'Early morning mist in a bell-tree grove at the edge of a small settlement. A herd of moon deer grazes on dewy grass among young and mature bell trees; a fawn stays close to its mother; one deer with cord-braided antlers looks back toward the ruins. Shafts of low golden sunlight through the canopy, the bells glowing faintly. No ship anywhere in this scene.' },
   { id: 'kv-shipyard', kind: 'scene', prompt: 'Late afternoon at the deer settlement: megalithic ruins that the deer have restacked and roofed with vines and bark, warm lanterns hanging from stone posts. On a stone slipway, the sky ship is half built — keel and curved ribs, some planks fixed. Moon deer carry pale bell-tree logs dragged by braided cords; fresh stumps of cut bell trees nearby. Busy but peaceful.' },
   { id: 'kv-departure', kind: 'scene', prompt: 'Dusk. The finished sky ship, sails unfurled, lifts gently off the stone slipway and rises toward the horizon over the sea. The moon deer have gathered below and some are aboard; bell trees glow warm; the sky is deep blue to amber. A sense of farewell and hope.' },
   { id: 'kv-sinking', kind: 'scene', prompt: 'Overcast day. The sea has risen over the low edge of the island: waves wash through the lower bell-tree grove, drowned trunks stand in shallow water, a lantern post leans in the surf. On higher ground the deer herd moves uphill; a faint pale glow rises from the ground where a creature has died and returned to the soil. Melancholic but not violent, no blood. No ship anywhere in this scene (the ship was never finished).' },
-  { id: 'sheet-deer', kind: 'sheet', prompt: 'Moon deer: adult stag (side view, front view, three-quarter view), adult doe WITHOUT antlers (side view), fawn WITHOUT antlers with spotted coat (side view). One "intelligent" stag variant with braided cords and a small woven ornament on the crescent antlers. Warm tawny coat with pale belly, natural realistic fur.' },
-  { id: 'sheet-wolf', kind: 'sheet', prompt: 'Ash wolf: grey-ash coat with darker back and pale muzzle, lean predator. Side view, three-quarter view, a crouching stalking pose, and a running pose.' },
-  { id: 'sheet-rabbit', kind: 'sheet', prompt: 'Earth rabbit: sturdy wild rabbit with earthy sand-brown fur and long ears, half the height of a deer\'s leg. Side view, three-quarter view, sitting upright alert pose, grazing pose.' },
+  { id: 'sheet-deer', kind: 'creature', refs: ['assets/textures/concept/deer-angular.png', 'assets/textures/board/kv-herd-v2.png'], prompt: 'Moon deer turnaround: side view, front view, three-quarter view, back three-quarter view of the attached design; plus a doe (same design and plates, NO antlers at all) and a fawn (smaller, NO antlers, NO plates, spotted coat). One intelligent variant: EXACTLY the same stag design (same cyan crescent antlers, same teal plates and glowing seams) with only a thin braided cord tied around one antler base — not a natural brown deer.' },
+  { id: 'sheet-wolf', kind: 'creature', refs: ['assets/textures/concept/wolf-angular.png', 'assets/textures/board/kv-herd-v2.png'], prompt: 'Ash wolf turnaround of the attached design: side view, front view, three-quarter view, plus a stalking crouch and a running pose.' },
+  { id: 'sheet-rabbit', kind: 'creature', refs: ['assets/textures/concept/rabbit-angular.png', 'assets/textures/board/kv-herd-v2.png'], prompt: 'Earth rabbit turnaround of the attached design: side view, front view, three-quarter view, plus a grazing pose and an alert upright pose.' },
   { id: 'sheet-belltree', kind: 'sheet', prompt: 'Bell tree growth stages left to right: seedling just sprouted (with a soft sprouting glow), sapling, young tree, mature tree with hanging bronze-bell seed pods glowing faintly, and a freshly cut stump with pale timber. Plus a stack of pale bell-tree logs.' },
   { id: 'sheet-flora', kind: 'sheet', prompt: 'Ground flora: a tuft of moon grass (slender pale-green blades with a faint silver sheen), a clump of meadow grass, a patch of spore moss on a stone (bright green, tiny glowing spore heads in damp shade), and an ordinary broadleaf forest tree for contrast with the bell tree.' },
   { id: 'sheet-settlement', kind: 'sheet', prompt: 'Modular pieces of the deer settlement built into Mu megalithic ruins: a restacked stone shelter with a vine-and-bark roof, a stone post with a hanging warm lantern, a low dry-stone wall, a woven fibre screen, and the long stone slipway where the ship is built. Weathered stone with moss.' },
@@ -73,10 +84,14 @@ const ITEMS = [
 ];
 
 async function generate(item) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-  const base = item.kind === 'scene' ? SCENE : SHEET;
+  const model = item.kind === 'creature' ? CREATURE_MODEL : MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const base = item.kind === 'scene' ? SCENE : item.kind === 'creature' ? CREATURE : SHEET;
+  const input = [{ text: `${base}\n\nSubject: ${item.prompt}` }];
+  // 元の参照 (assets/textures/concept の採用画) があれば画像として渡し、造形はそれに合わせさせる
+  for (const ref of item.refs ?? []) input.push({ inlineData: { mimeType: 'image/png', data: readFileSync(resolve(root, ref)).toString('base64') } });
   const body = {
-    contents: [{ parts: [{ text: `${base}\n\nSubject: ${item.prompt}` }] }],
+    contents: [{ parts: input }],
     generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '16:9' } },
   };
   const res = await fetch(url, {
