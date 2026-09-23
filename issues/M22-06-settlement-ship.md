@@ -44,3 +44,9 @@ M22-02
 提案: 規則を「集落に近い、**外海に接する**陸。舟の舳先は外海が最も開けた方位」にし、着工の年に決めて以後は動かさない。飛び立ちのショットは集落の側から入江越しに南西の水平線を撮る。
 
 判断(2026-09-23 23:48、ユーザー): **水際のままでよい**。規則は提案どおり「集落に近い、外海に接する陸。舳先は外海が最も開けた方位。着工の年に決めて動かさない」で進める。
+
+## 作業ログ(2026-09-24)
+
+- 舟のアセット: `tools/blender/observe_ship.py` → `assets/models/observe/ship.glb`。段ごとに 1 ノード(`ship_keel` 412 / `ship_ribs` 1,792 / `ship_planks` 1,968 / `ship_mast` 2,496 / `ship_sails` 3,928 / `ship_flying` 3,906 三角形)と `timber_pile` 516。
+- 集落に `woven_screen` 360・`stone_wall_corner` 680 を足し、`lantern_post` の灯籠に格子(368 → 512)。
+- 比較画: `docs/design/qa/observe/{ship,ship-stages,shipyard}.png`、記録は `docs/design/qa/observe/keyitems.md`。ゲーム側の段の切り替え・浮上・灯りが消える演出は未着手。

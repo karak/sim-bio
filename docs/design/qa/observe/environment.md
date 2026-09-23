@@ -38,12 +38,12 @@ GLB の約束:
 |---|---:|---:|---|---|
 | `belltree_seedling` | 150 | — | 0.40 × 0.37 × 0.38 | soil, moss, bark, leaf, glow |
 | `belltree_sapling` | 468 | — | 1.47 × 1.45 × 2.95 | soil, moss, bark, leaf |
-| `belltree_mature` | 3,592 | ≤ 4,000 | 9.09 × 8.93 × 9.38 | bark, leaf, bell(鐘 30 個) |
-| `belltree_mature_lod1` | 932 | ≤ 1,200 | 9.07 × 8.87 × 9.30 | bark, leaf, bell(鐘 30 個、位置は成木と同じ) |
+| `belltree_mature` | 3,952 | ≤ 4,000 | 9.12 × 8.93 × 9.38 | bark, leaf, bell, bell_rim(鐘 30 個、M22-06 で裾を開いた) |
+| `belltree_mature_lod1` | 1,112 | ≤ 1,200 | 9.16 × 8.92 × 9.30 | bark, leaf, bell, bell_rim(鐘 30 個、位置は成木と同じ) |
 | `belltree_stump` | 300 | — | 2.06 × 2.21 × 0.87 | soil, moss, bark, cut, cut_ring |
 | `belltree_logs` | 432 | — | 2.14 × 1.28 × 1.08 | cut, cut_ring, bark |
 | `hut` | 1,934 | 1,200〜2,000 | 4.73 × 4.12 × 3.85 | straw, stone, moss, wood, bark, vine |
-| `lantern_post` | 368 | ≤ 600 | 1.36 × 0.86 × 2.35 | stone, moss, rope, frame, lantern |
+| `lantern_post` | 512 | ≤ 600 | 1.36 × 0.86 × 2.35 | stone, moss, rope, frame, lantern(M22-06 で灯籠に X の格子) |
 | `slipway` | 1,114 | ≤ 1,500 | 5.11 × 16.54 × 1.81 | stone, moss, wood |
 | `stone_wall` | 440 | ≤ 600 | 4.04 × 0.67 × 0.96 | stone, moss |
 | `megalith` | 596 | ≤ 800 | 1.98 × 1.79 × 3.78 | glyph, stone, moss |
@@ -60,7 +60,7 @@ GLB の約束:
 |---|---|---|---|
 | `belltree_bark` | #E6DFD1 | — | 白い幹・枝・根・鐘の吊り紐 |
 | `belltree_leaf` | #86A044 | — | 葉の塊・若木と芽の葉 |
-| `belltree_bell` | #A8703F | #FFC46B × 0.9 | 青銅の鐘 |
+| `belltree_bell` / `belltree_bell_rim` | #7E5230 / #FFD58F | #FFC46B × 0.2 / × 3.0 | 青銅の鐘の胴と、裾の帯と口(M22-06 で変更、`keyitems.md`) |
 | `belltree_glow` | #FFE7A8 | #FFD98A × 3.0 | 芽の先の光 |
 | `belltree_soil` / `belltree_moss` | #7B6043 / #8AA743 | — | 根元の土の盛り(上を向いた面が苔) |
 | `belltree_cut` / `belltree_cut_ring` | #EFD6A8 / #D2AC7B | — | 株と丸太の断面(年輪の帯) |
@@ -121,3 +121,8 @@ bloom はかけていません。並べ図の右端の月鹿(`assets/models/deer
 - LOD は成木だけです。小屋・船台などの遠景用 LOD はありません(予算の範囲内なので未作成)。
 - 描画は EEVEE の近似です。Three.js のトゥーン・縁の光・色調補正での比較画は、M22-02 の本体の組み立てで撮り直します。
 - 集落の衝立(`sheets/settlement.png` の編んだ衝立)は、今回の対象外として作っていません。
+
+## 追記(M22-06 / M22-03)
+
+舟の 6 段・丸太の山・衝立・L 字の石垣・森の木・羊歯・小花・穂の出た月草を足し、鐘樹の鐘と灯籠を直しました。三角形数・画像・自己評価は `keyitems.md` にあります。
+上の表の鐘樹の成木・lod1・灯り柱の数は直した後の実測に更新しました。上の「既知の課題」のうち、鐘が引きで円錐に見える点と、衝立を作っていない点は `keyitems.md` で対応済みです。

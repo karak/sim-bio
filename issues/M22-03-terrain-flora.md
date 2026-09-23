@@ -25,3 +25,8 @@ M22-02
 - [ ] 予算内で 60fps
 
 ## 作業ログ
+
+## 作業ログ(2026-09-24)
+
+- 植物のアセット: `flora.glb` に `forest_tree` 1,740 / `forest_tree_lod1` 579 / `moongrass_tuft_seed` 52 / `fern` 80 / `flower_patch` 67 三角形を足した。鐘樹の鐘を裾の開いた暗い青銅 + 明るい口に直した(成木 3,952、lod1 1,112)。
+- 比較画: `docs/design/qa/observe/{flora2,flora2_small,belltree,shipyard}.png`、記録は `docs/design/qa/observe/keyitems.md`。地形・海岸・配置は未着手。

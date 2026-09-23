@@ -4,6 +4,8 @@
 slipway (舟を組む石の船台、~16 m) / stone_wall (低い空積みの石垣 4 m) / megalith (ムーの立石、シアンの継ぎ目が淡く光る)。
 形は assets/textures/board/sheets/settlement.png、画風は creatures/ (丸めた角ばり・柔らかい量感・控えめなシアンの発光) に寄せる。
 予算: hut 1,200〜2,000 / lantern_post ≤600 / slipway ≤1,500 / stone_wall ≤600 / megalith ≤800 三角形。
+M22-06 で足したノード: woven_screen (二本の柱に張った編み繊維の衝立、≤400) / stone_wall_corner (L 字の空積みの石垣、≤800、
+原点は L の外側の角)。lantern_post の灯籠に木の格子 (各面に X) を足した。
 
 実行: blender -b --factory-startup --python tools/blender/observe_settlement.py
 """
@@ -17,6 +19,7 @@ from mathutils import Matrix, Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import observe_kit as K  # noqa: E402
 from observe_kit import Y, Z  # noqa: E402
+from observe_kit import X as X_AXIS  # noqa: E402
 
 K.reset()
 
@@ -31,6 +34,9 @@ M = {
     "frame": K.material("settlement_frame", "#6A4A2F", rough=0.8),
     "rope": K.material("settlement_rope", "#B79E6E", rough=0.95),
     "glyph": K.material("settlement_glyph", "#8FF5E6", rough=0.5, emit=K.MU_CYAN, strength=1.5),
+    "weave": K.material("settlement_weave", "#A8977A", rough=0.95, double=True),
+    "bell": K.material("settlement_bell", "#7A4E2A", rough=0.5, emit=K.BELL_AMBER, strength=0.2),
+    "bell_rim": K.material("settlement_bell_rim", "#FFD58F", rough=0.5, emit=K.BELL_AMBER, strength=3.0),
 }
 
 
@@ -174,6 +180,15 @@ def lantern_post():
         a = math.radians(60 * i + 30)
         p = Vector((0.6 + 0.188 * math.cos(a), 0.188 * math.sin(a), 0))
         n.add(K.tube([p + Z * 1.2, p + Z * 1.6], [0.018, 0.018], n=3, cap_start=False, cap_end=False), M["frame"])
+    # 灯籠の格子: 六つの面それぞれに X に組んだ細い木 (基準画の格子)
+    apo = 0.18 * math.cos(math.radians(30)) + 0.012
+    diag = math.degrees(math.atan2(0.36, 0.18))
+    for i in range(6):
+        a = math.radians(60 * i)
+        c = (0.6 + apo * math.cos(a), apo * math.sin(a), 1.4)
+        for sgn in (-1, 1):
+            n.add(K.box((0.4, 0.018, 0.022)), M["frame"], matrix=K.trs(c, (0, sgn * diag, 60 * i + 90)),
+                  shade=K.shade_const(0.9))
     return n
 
 
@@ -296,7 +311,109 @@ def megalith():
     return n
 
 
+# ---------------------------------------------------------------- 編んだ衝立 (M22-06)
+
+def woven_screen():
+    """二本の柱 (束ねた枝) の間に、横 5・縦 6 の繊維の帯を上下に編んだ衝立。四隅を縄で括り、蔓と小さな鐘を 2 つ下げる。
+    面は X 方向 (幅 2 m)、正面は −Y"""
+    n = K.Node("woven_screen")
+    rnd = random.Random(606)
+    for sx in (-1, 1):
+        x = sx * 0.95
+        n.add(K.tube([(x, 0, -0.05), (x + sx * 0.02, 0, 1.0), (x, 0, 2.02)], [0.065, 0.058, 0.045], n=5), M["wood"],
+              smooth=True, shade=K.shade_height(0, 1.0, 0.75, 1.0))
+        n.add(K.tube([(x + sx * 0.08, 0.03, -0.05), (x + sx * 0.1, 0.02, 1.86)], [0.035, 0.025], n=3), M["wood"],
+              smooth=True, shade=K.shade_const(0.85))  # 束ねた細い枝
+    for z in (0.42, 1.78):
+        n.add(K.tube([(-1.0, 0, z), (1.0, 0, z + rnd.uniform(-0.03, 0.03))], [0.04, 0.04], n=4), M["wood"],
+              shade=K.shade_const(0.9))
+    import bmesh
+    H = [0.56 + 0.26 * k for k in range(5)]   # 横の帯の高さ
+    V = [-0.72 + 0.288 * k for k in range(6)]  # 縦の帯の位置
+
+    def ribbon(pts, width_dir, shade, w):
+        bm = bmesh.new()
+        rows = [(bm.verts.new(p - width_dir * w / 2), bm.verts.new(p + width_dir * w / 2)) for p in pts]
+        for (a0, a1), (b0, b1) in zip(rows, rows[1:]):
+            bm.faces.new((a0, b0, b1, a1))
+        n.add(bm, M["weave"], smooth=True, recalc=False, shade=shade)
+    for k, z in enumerate(H):
+        xs = [-0.9] + V + [0.9]
+        pts = [Vector((x, (0.018 if (j + k) % 2 else -0.018) if 0 < j < len(xs) - 1 else 0.0, z)) for j, x in enumerate(xs)]
+        ribbon(pts, Z, K.shade_const(rnd.uniform(0.85, 1.0)), 0.2)
+    for k, x in enumerate(V):
+        zs = [0.44] + H + [1.76]
+        pts = [Vector((x, (-0.018 if (j + k) % 2 else 0.018) if 0 < j < len(zs) - 1 else 0.0, z)) for j, z in enumerate(zs)]
+        ribbon(pts, X_AXIS, K.shade_const(rnd.uniform(0.75, 0.9)), 0.18)
+    for sx in (-1, 1):  # 四隅の括り縄
+        for z in (0.42, 1.78):
+            n.add(K.lathe([(0.075, -0.05), (0.075, 0.05)], n=4, cap_top=False, cap_bottom=False), M["rope"],
+                  matrix=K.trs((sx * 0.95, 0, z)), shade=K.shade_const(0.9))
+    vine = [(-0.95, -0.06, 1.95), (-0.55, -0.07, 1.62), (-0.1, -0.06, 1.7), (0.3, -0.07, 1.35), (0.55, -0.06, 0.9)]
+    n.add(K.tube(vine, [0.028] * 4 + [0.015], n=3), M["vine"], smooth=True)
+    m = K.aim(Vector((0.4, -0.5, 0.6)))
+    m.translation = Vector(vine[2])
+    n.add(K.leaf(0.24, 0.15, 0.025, bend=0.2), M["vine"], matrix=m, smooth=True)
+    for x, z in ((-0.5, 1.78), (0.45, 1.78)):  # 上の横木に吊った小さな鐘
+        top = Vector((x, -0.05, z - 0.14))
+        n.add(K.tube([top + Z * 0.12, top], [0.008, 0.008], n=3, cap_start=False, cap_end=False), M["rope"])
+        prof = [(0.0, 0.0), (0.05, -0.06), (0.07, -0.12), (0.0, -0.09)]
+        n.add(K.lathe(prof, n=5), M["bell"], matrix=K.trs(top), smooth=True,
+              per_face_mat=lambda c, nrm, t=top: M["bell_rim"] if c.z - t.z < -0.09 else None)
+    return n
+
+
+# ---------------------------------------------------------------- L 字の石垣 (M22-06)
+
+def stone_wall_corner():
+    """L 字に曲がる 2 段の空積みの石垣。腕 A は +X へ 3 m、腕 B は +Y へ 2.4 m、原点は L の外側の角。
+    角と腕 A の端に太い立石 (端の石の正面に浅く彫った六角の枠)"""
+    n = K.Node("stone_wall_corner")
+    rnd = random.Random(707)
+    T = 0.55  # 壁の厚み
+    # 角の立石
+    stone(n, rnd, (T / 2, T / 2, 0), (0.72, 0.72, 0.98), yaw=rnd.uniform(-4, 4), bevel=0.08, jitter=0.02, taper=0.9,
+          moss=1.0, base_z=True, z1=0.9)
+    # 腕 A (+X)
+    LA0, LA1 = 0.62, 2.7
+    for k in range(3):
+        x = LA0 + (k + 0.5) * (LA1 - LA0) / 3
+        stone(n, rnd, (x, T / 2 + rnd.uniform(-0.03, 0.03), 0.2), ((LA1 - LA0) / 3 - 0.05, T, 0.4),
+              yaw=rnd.uniform(-4, 4), bevel=0.08, jitter=0.03)
+    for k in range(3):
+        x = LA0 + 0.1 + (k + 0.5) * (LA1 - LA0 - 0.2) / 3
+        stone(n, rnd, (x, T / 2, 0.57), ((LA1 - LA0 - 0.2) / 3 - 0.06, T - 0.1, 0.34),
+              yaw=rnd.uniform(-5, 5), tilt=(rnd.uniform(-3, 3), rnd.uniform(-3, 3)), bevel=0.08, jitter=0.03, moss=0.7)
+    end = (LA1 + 0.3, T / 2, 0)
+    stone(n, rnd, end, (0.6, 0.64, 0.92), yaw=rnd.uniform(-3, 3), bevel=0.07, jitter=0.02, taper=0.9, moss=0.9,
+          base_z=True, z1=0.9)
+    # 腕 B (+Y)
+    LB0, LB1 = 0.62, 2.4
+    for k in range(3):
+        y = LB0 + (k + 0.5) * (LB1 - LB0) / 3
+        stone(n, rnd, (T / 2 + rnd.uniform(-0.03, 0.03), y, 0.2), (T, (LB1 - LB0) / 3 - 0.05, 0.4),
+              yaw=rnd.uniform(-4, 4), bevel=0.08, jitter=0.03)
+    for k in range(2):
+        y = LB0 + 0.15 + (k + 0.5) * (LB1 - LB0 - 0.5) / 2
+        stone(n, rnd, (T / 2, y, 0.57), (T - 0.1, (LB1 - LB0 - 0.5) / 2 - 0.06, 0.34),
+              yaw=rnd.uniform(-5, 5), tilt=(rnd.uniform(-3, 3), rnd.uniform(-3, 3)), bevel=0.08, jitter=0.03, moss=0.7)
+    stone(n, rnd, (T / 2 + 0.05, LB1 - 0.2, 0.46), (0.4, 0.36, 0.14), yaw=20, bevel=0.0, jitter=0.03, z1=0.6)  # 崩れかけた天端の石
+    # 端の立石の正面 (−Y) に浅く彫った六角の枠 (光らない、影になった溝)
+    for i in range(6):
+        a0, a1 = math.radians(90 + 60 * i), math.radians(150 + 60 * i)
+        p0 = Vector((end[0] + 0.14 * math.cos(a0), 0.0, 0.55 + 0.14 * math.sin(a0)))
+        p1 = Vector((end[0] + 0.14 * math.cos(a1), 0.0, 0.55 + 0.14 * math.sin(a1)))
+        d = p1 - p0
+        m = K.aim(d, up=-Y)
+        m.translation = (p0 + p1) / 2 + Vector((0, T / 2 - 0.32 - 0.004, 0))
+        n.add(K.box((d.length + 0.03, 0.03, 0.02)), M["stone"], matrix=m, shade=K.shade_const(0.45))
+    for i in range(2):  # 足元の落ちた石
+        stone(n, rnd, (1.2 + 0.8 * i, -0.35 - 0.1 * i, 0.08), (0.3, 0.26, 0.16), yaw=rnd.uniform(0, 90), bevel=0.0,
+              jitter=0.03, moss=0.5)
+    return n
+
+
 if __name__ == "__main__":
-    nodes = [hut(), lantern_post(), slipway(), stone_wall(), megalith()]
+    nodes = [hut(), lantern_post(), slipway(), stone_wall(), megalith(), woven_screen(), stone_wall_corner()]
     objs = [nd.build() for nd in nodes]
     K.export_glb(objs, os.path.join(K.OUT_DIR, "settlement.glb"))

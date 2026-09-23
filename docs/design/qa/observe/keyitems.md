@@ -1,0 +1,151 @@
+# 観察画面のキーアイテムと残りの植物(M22-06 舟・集落の追加、M22-03 植物)
+
+空の舟の建造 5 段と飛び立ち、造船場の材木、集落の衝立と L 字の石垣、森の木・羊歯・小花・穂の出た月草を、`environment.md` と同じ作り方(丸めたローポリ・柔らかい量感・頂点色・UV なし・発光は `KHR_materials_emissive_strength`)で足しました。
+形は `assets/textures/board/sheets/{ship,settlement,flora}.png` と `key-visuals/{shipyard,departure}.png`、画風は動物の基準画 `creatures/*.png` に寄せています。
+鐘樹の鐘も、引いて見ても鐘と読めるように直しました。
+
+## 作り方と確認
+
+| 何を | どこで |
+|---|---|
+| 舟(6 段)と丸太の山 | `tools/blender/observe_ship.py` → `assets/models/observe/ship.glb`(新規) |
+| 衝立・L 字の石垣・灯籠の格子 | `tools/blender/observe_settlement.py` → `settlement.glb`(既存ノードはそのまま) |
+| 森の木・羊歯・小花・穂の出た月草 | `tools/blender/observe_flora.py` → `flora.glb`(既存ノードはそのまま) |
+| 鐘の形と光り方 | `tools/blender/observe_belltree.py` → `belltree.glb` |
+| 読み直し・並べ図・舟の段・造船場 | `tools/blender/observe_render.py`(`verify` / `lineup` / `ship-stages` / `ship` / `shipyard`) |
+
+```sh
+blender -b --factory-startup --python tools/blender/observe_ship.py
+blender -b --factory-startup --python tools/blender/observe_settlement.py
+blender -b --factory-startup --python tools/blender/observe_flora.py
+blender -b --factory-startup --python tools/blender/observe_belltree.py
+blender -b --factory-startup --python tools/blender/observe_render.py -- verify assets/models/observe/{ship,settlement,flora,belltree}.glb
+blender -b --factory-startup --python tools/blender/observe_render.py -- ship-stages docs/design/qa/observe/ship-stages.png
+blender -b --factory-startup --python tools/blender/observe_render.py -- ship docs/design/qa/observe/ship.png
+blender -b --factory-startup --python tools/blender/observe_render.py -- shipyard docs/design/qa/observe/shipyard.png
+blender -b --factory-startup --python tools/blender/observe_render.py -- lineup assets/models/observe/flora.glb docs/design/qa/observe/flora2.png --only forest_tree,forest_tree_lod1,moongrass_tuft,moongrass_tuft_seed,fern,flower_patch --gap 0.6 --ref assets/models/deer.glb
+blender -b --factory-startup --python tools/blender/observe_render.py -- lineup assets/models/observe/flora.glb docs/design/qa/observe/flora2_small.png --only grass_tuft,moongrass_tuft,moongrass_tuft_seed,fern,flower_patch --gap 0.3
+blender -b --factory-startup --python tools/blender/observe_render.py -- lineup assets/models/observe/settlement.glb docs/design/qa/observe/settlement_new.png --only lantern_post,woven_screen,stone_wall_corner --gap 0.6
+blender -b --factory-startup --python tools/blender/observe_render.py -- lineup assets/models/observe/ship.glb docs/design/qa/observe/timber_pile.png --only timber_pile --ref assets/models/deer.glb
+```
+
+## 舟の GLB の約束(`ship.glb`)
+
+- 段ごとに 1 ノードです。ゲーム側は進みに合わせて 1 つだけ表示します。
+  配線はまだしていません。対応の案は 竜骨 0〜19 / 肋 20〜39 / 板 40〜59 / 帆柱 60〜89 / 帆 90〜119 / 完成 120(`ship_sails`)/ 飛び立ち(`launchedYear` 以降、`ship_flying`)です。
+- 原点は竜骨の底の中心で、船首は +Z(glTF)を向きます。全長は船体で 14.1 m、船首・船尾の反りまで入れて 15.3 m、幅は 3.9 m(舷縁まで)です。
+- 盤木と支柱は原点より下(−0.35 m まで)に伸びます。平らな地面に置くときは y = +0.35、船台に載せるときは船台の盤木の上面(`slipway` の中央で 0.99 m)に 0.35 m を足し、船台の傾き(atan(0.9/16) ≈ 3.2°、船首側が下)だけ傾けます。
+  盤木は `slipway` の盤木と同じ前後位置(±1.3 m・±3.85 m)に置いたので、重ねると盤木の上に盤木が載ります。
+- `ship_flying` は盤木と支柱がなく、竜骨の下に光の輪とレンズが原点の 1.6 m 下まで下がります。浮かせて使う前提です。
+- 各段の同じ部品(竜骨・外板・帆柱)は同じ形で、段を切り替えても位置が飛びません。
+- 船体(`ship_hull`)と帆(`ship_sail`)は両面です。浮かぶ力のレンズ(`ship_lift`)だけ `alphaMode: BLEND`(不透明度 0.2)です。
+
+## 三角形数(書き出した .glb を Blender で読み直した実測)
+
+| ノード | 三角形 | 予算 | 大きさ(幅 × 奥 × 高さ m) | 材質 |
+|---|---:|---:|---|---|
+| `ship_keel` | 412 | ≤ 6,000 | 3.54 × 16.67 × 6.25 | timber, block |
+| `ship_ribs` | 1,792 | ≤ 6,000 | 3.91 × 15.32 × 6.20 | timber, block |
+| `ship_planks` | 1,968 | ≤ 6,000 | 5.72 × 15.32 × 6.20 | timber, block, hull |
+| `ship_mast` | 2,496 | ≤ 6,000 | 5.72 × 15.32 × 11.96 | timber, block, hull, deck |
+| `ship_sails` | 3,928 | ≤ 6,000 | 6.50 × 15.32 × 11.96 | timber, block, hull, deck, rope, bell, bell_rim, sail |
+| `ship_flying` | 3,906 | ≤ 6,000 | 6.74 × 15.32 × 13.20 | timber, hull, deck, rope, bell, bell_rim, sail, mu, mu_ring, lift |
+| `timber_pile` | 516 | ≤ 600 | 3.19 × 2.75 × 0.83 | log_ring, log_cut, log_bark, block, timber |
+| `woven_screen` | 360 | ≤ 400 | 2.14 × 0.30 × 2.07 | wood, weave, rope, vine, bell, bell_rim |
+| `stone_wall_corner` | 680 | ≤ 800 | 3.40 × 3.10 × 1.02 | stone, moss |
+| `lantern_post`(格子を足した) | 512(368 から) | ≤ 600 | 1.36 × 0.86 × 2.35 | stone, moss, rope, frame, lantern |
+| `forest_tree` | 1,740 | ≤ 2,000 | 5.43 × 5.32 × 7.64 | forest_bark, forest_leaf |
+| `forest_tree_lod1` | 579 | ≤ 600 | 5.37 × 5.16 × 7.62 | forest_bark, forest_leaf |
+| `moongrass_tuft_seed` | 52 | ≤ 60 | 0.38 × 0.49 × 0.95 | moongrass, moonseed |
+| `fern` | 80 | ≤ 80 | 1.33 × 1.21 × 0.42 | fern |
+| `flower_patch` | 67 | ≤ 80 | 0.41 × 0.42 × 0.29 | stem, petal |
+| `belltree_mature`(鐘を直した) | 3,952(3,592 から) | ≤ 4,000 | 9.12 × 8.93 × 9.38 | bark, leaf, bell, bell_rim |
+| `belltree_mature_lod1`(鐘を直した) | 1,112(932 から) | ≤ 1,200 | 9.16 × 8.92 × 9.30 | bark, leaf, bell, bell_rim |
+
+`ship_keel` の奥行き 16.67 m は、船首と船尾の柱を支える斜めの支柱のぶんです。`stone_wall_corner` の原点は L の外側の角で、腕は +X に 3 m、−Z(glTF)に 2.4 m 伸びます。
+既存のノード(`hut`・`slipway`・`stone_wall`・`megalith`・草・苔・石・鐘樹の他の段)の三角形数は変わっていません。
+
+## 材質(新しいもの)
+
+| 材質 | 基本色 | 発光 | 使う所 |
+|---|---|---|---|
+| `ship_hull` / `ship_timber` / `ship_deck` | #E4D6BC / #D8C6A4 / #CDB58E | — | 鐘樹の淡い材の外板(両面)、竜骨・肋・帆柱・帆桁・手すり、甲板 |
+| `ship_block` / `ship_rope` / `ship_sail` | #A07A52 / #B79E6E / #EAE0C8 | — | 盤木と支柱(集落の木と同じ色)、編んだ縄、編み繊維の帆(両面) |
+| `ship_bell` / `ship_bell_rim` | #7A4E2A / #FFD58F | #FFC46B × 0.2 / × 3.0 | 舷側の小さな鐘の胴(暗い青銅)と、開いた裾の帯と口 |
+| `ship_mu` / `ship_mu_ring` / `ship_lift` | #8FF5E6 | #8FF5E6 × 2.0 / × 2.0 / × 1.0 | 竜骨の底の継ぎ目、細長い六角の光の輪 3 つ(両面)、淡いレンズ(半透明 0.2) |
+| `ship_log_bark` / `ship_log_cut` / `ship_log_ring` | #E6DFD1 / #EFD6A8 / #D2AC7B | — | 丸太の山(鐘樹の丸太と同じ色) |
+| `settlement_weave` | #A8977A | — | 衝立の編み繊維(両面) |
+| `settlement_bell` / `settlement_bell_rim` | #7A4E2A / #FFD58F | #FFC46B × 0.2 / × 3.0 | 衝立に吊った小さな鐘 |
+| `belltree_bell`(変更) / `belltree_bell_rim`(新規) | #7E5230(#A8703F から) / #FFD58F | #FFC46B × 0.2(× 0.9 から) / × 3.0 | 鐘樹の鐘の胴と、裾の帯と口 |
+| `flora_forest_leaf` / `flora_forest_bark` | #5A873C / #6E5039 | — | 森の木の葉の塊(鐘樹 #86A044 より濃く青い)と茶色の幹 |
+| `flora_fern` / `flora_stem` / `flora_petal` | #5F8D3A / #6F9642 / #F1EDE2 | — | 羊歯・花の茎と葉・花びら(いずれも両面) |
+| `flora_moonseed` | #DCEBDD | #C9F6EA × 0.8 | 月草の穂(淡く光る) |
+
+鐘の胴の発光を 0.2 に下げたのは、Three.js 側の `toToon` が発光の強さを 0.45 で頭打ちにするためです(`src/observe/render/assets.ts`)。
+胴が 0.9 のままだと、胴も裾もどちらも 0.45 になって差が消えます。胴 0.2 と裾 0.45 なら、暗い胴に明るい口という読みが本体でも残ります。
+
+## 画像
+
+| 画像 | 中身 |
+|---|---|
+| `ship-stages.png` | 建造の 6 段(手前の列: 竜骨・肋・板、奥の列: 帆柱・帆(完成)・飛び立ち)を左舷の斜め上から(正射影) |
+| `ship.png` | 完成(帆を畳む、盤木と支柱つき)と飛び立ち(帆を広げる、竜骨の下にシアンの光)の寄り。丸太の山と月鹿は物差し |
+| `shipyard.png` | 造船場: 船台に肋の段の舟、丸太の山、灯り柱 2、編んだ衝立、小屋、L 字の石垣、鐘樹 2、奥に森の木 9、羊歯・小花・穂の出た月草・草、月鹿 |
+| `flora2.png` / `flora2_small.png` | 森の木(lod0・lod1)と小さな植物、小さな植物の寄り |
+| `settlement_new.png` | 格子を足した灯り柱・編んだ衝立・L 字の石垣の寄り |
+| `timber_pile.png` | 丸太の山と月鹿 |
+| `belltree.png` / `settlement.png` / `corner.png` | 既存の図を、直した鐘と足したノードで描き直したもの |
+
+## 基準画との照合(自己評価)
+
+舟(`sheets/ship.png`・`key-visuals/shipyard.png`・`departure.png`):
+
+- 合っているところ: 淡い材の丸い船体、高く反った船首と船尾の柱、船首の先の巻き、舷側に並んだ小さな青銅の鐘、帆柱と縄梯子、四角い編み繊維の帆。
+  肋の段は、造船場のキービジュアルと同じく肋の頭が舷縁の上に並ぶ骨組みで、船台の上で舟を組んでいる場面として読めます。
+  基準画に無かった「板張りの途中」の段は、下 4 段と 5 段目の中ほどだけを張って上に肋を覗かせて補いました。
+- 違うところ: 基準画の船体はもっと短く深い(全長に対して高い)丸さで、船尾に低い欄干の台があります。こちらは細長いボートに近く、船尾の台は小さな箱です。
+  基準画の帆は帆桁の下に大きく張った一枚ですが、完成の段では畳んで帆桁に括っています(依頼どおり)。横から見ると帆桁の端が見え、畳んだ帆は小さな塊になります。
+  飛び立ちのキービジュアルは帆を何枚も重ねた大きな船ですが、こちらは帆 1 枚のままです。
+- 外板の鎧張りは、段の下の縁の影(頂点色 0.8)と段ごとの明るさで読ませています。寄れば板に見え、引くと滑らかな船体に見えます。
+
+浮かぶ力(ムーのシアン):
+
+- 竜骨の底の細い継ぎ目と、竜骨の下に重ねた細長い六角の輪 3 つ(土兎の六角の紋と同じ意匠)と、ごく淡いレンズです。
+  EEVEE(bloom なし)では輪がくっきりした線に見え、「柔らかい光」には届いていません。本体の bloom でぼけて光の層に見えるかを確かめる必要があります。
+  輪が機械的すぎるなら、輪を外してレンズと継ぎ目だけにする(三角形は 36 減る)のが次の候補です。
+- シアンは飛び立ちの段だけに使い、建造中の段には入れていません(控えめに、の指示どおり)。
+
+集落(`sheets/settlement.png`):
+
+- 衝立: 束ねた枝の柱 2 本、上下の横木、横 5・縦 6 の帯を上下交互に編んだ面、四隅の括り縄、蔓、小さな鐘 2 つ。基準画の要素は揃っています。基準画の編み目はもっと細かく、蔓が多いです。
+- L 字の石垣: 角と端に太い立石、2 段の丸めた石、崩れかけた天端の石、足元の落ちた石。基準画の「端の石の彫り物」は、浅い六角の溝(光らない)にしました。基準画の彫り物は文字のような形ですが、文字や人の形は避ける方針(`environment.md` の巨石)に合わせています。
+- 灯り柱: 灯籠の六つの面に X の格子を入れ、基準画の木の格子の灯籠に近づきました。
+
+植物(`sheets/flora.png`):
+
+- 森の木: 茶色の幹が 3 本の太枝に分かれ、濃い緑の丸い葉の塊の樹冠。鐘樹(白い幹・幅の広い樹冠・黄緑・鐘)とは、色・幹・大きさ(高さ 7.6 m、鐘樹は 9.4 m)ではっきり見分けられます(`shipyard.png` の奥)。
+  基準画の樹冠は細かい葉の房で縁が毛羽立っていますが、こちらは滑らかな塊の集まりです(鐘樹と同じ課題)。
+- 月草の穂: 細い茎の先に淡く光る穂 3 本。穂は細長い菱形で、寄ると結晶のようにも見えます。
+- 羊歯: 反って垂れる葉 5 枚、小葉は先へ向いた三角。寄ると紙を切ったような角ばりが目立ちますが、草の中に撒くと羊歯として読めます(`shipyard.png`)。
+- 小花: 5 弁の星形の淡い花(白と淡い藤色、中心は黄色)5 輪と、地に伏せた葉。小さいので引くと白い点になります。
+
+鐘樹の鐘:
+
+- 胴を暗い青銅(#7E5230、発光 0.2)に、裾を開いて(半径 0.27 → 0.30)、裾の帯と口を明るい材質にしました。
+  引いた距離でも「暗い釣鐘に明るい口」の形で読め、前の「橙の円錐」から改善しました(`belltree.png`・`shipyard.png`)。
+  群れ用(lod1)の鐘は四角の鐘にして、裾の帯を足しました(三角形は 932 → 1,112、予算 1,200 の内)。
+
+画風(creatures):
+
+- 合っているところ: 色味(淡い材・暖かい青銅の灯り・苔緑)と、丸めたローポリの密度は既存の環境アセットと揃っていて、月鹿と並べても浮きません(`ship.png`・`shipyard.png`)。
+- 届いていないところ: 船体・帆・丸太は大きな平らな面が多く、基準画の絵画らしさ(面の中の色の揺らぎ・筆の跡)はまだありません。`environment.md` と同じく、Three.js 側の色調補正と紙の粒で補う前提です。
+
+## 既知の課題
+
+- ゲーム側の配線(進み 0〜120 で段を切り替える、`launchedYear` で浮上して水平線へ去る、帆を失うと灯りが消える)は未着手です。M22-06 の受け入れ条件のうち、比較画の素材だけを用意しました。
+- 帆を失ったときの見た目(鐘の灯りを消す)は、`ship_bell_rim` の発光を 0 にすれば出せます。専用のノードは作っていません。
+- 飛び立ちの光の輪は bloom なしの EEVEE では硬い線です。本体での見え方の確認が要ります。
+- 帆の風の揺れ・索具の揺れはありません(頂点シェーダで帆の `position` を揺らす想定)。
+- 丸太の山の立てかけた板が杭と少し重なっています。丸太は 6 角なので、寄ると角が見えます。
+- 羊歯は寄ると角ばりが目立ちます。寄りで使うなら葉のカード(UV とテクスチャ)が要ります。
+- UV は引き続き書き出していません(`environment.md` の既知の課題と同じ)。

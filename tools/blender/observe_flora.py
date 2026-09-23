@@ -4,6 +4,9 @@
 moss_clump (胞子苔の塊、≤120、胞子の粒が淡く光る) / rock (苔の乗った石、≤200)。
 形は assets/textures/board/sheets/flora.png、画風は creatures/ に寄せる (太めの葉・柔らかい量感)。
 草の葉は両面の材質 (doubleSided)。頂点色で根元を暗く、先を明るく暖かくする (風の揺れは Three.js の頂点シェーダで高さに比例させる)。
+M22-03 で足したノード: forest_tree (森の広葉樹、鐘樹と見分ける: 濃い緑の丸い樹冠・茶色の幹・鐘なし、≤2,000) /
+forest_tree_lod1 (群れ用、≤600) / moongrass_tuft_seed (淡く光る穂のある月草、≤60) / fern (羊歯、≤80) /
+flower_patch (淡い小花の群れ、≤80)。
 
 実行: blender -b --factory-startup --python tools/blender/observe_flora.py
 """
@@ -26,6 +29,12 @@ M = {
     "moss": K.material("flora_moss", "#88A83F", rough=0.95),
     "spore": K.material("flora_spore", "#E9F5A6", rough=0.6, emit="#DDF28A", strength=1.5),
     "rock": K.material("flora_rock", "#9C9A8D", rough=0.95),
+    "moonseed": K.material("flora_moonseed", "#DCEBDD", rough=0.6, emit="#C9F6EA", strength=0.8),
+    "fern": K.material("flora_fern", "#5F8D3A", rough=0.9, double=True),
+    "petal": K.material("flora_petal", "#F1EDE2", rough=0.8, double=True),
+    "stem": K.material("flora_stem", "#6F9642", rough=0.9, double=True),
+    "forest_leaf": K.material("flora_forest_leaf", "#5A873C", rough=0.9),
+    "forest_bark": K.material("flora_forest_bark", "#6E5039", rough=0.9),
 }
 
 
@@ -89,7 +98,139 @@ def rock():
     return n
 
 
+# ---------------------------------------------------------------- M22-03 の追加
+
+def moongrass_tuft_seed():
+    """穂の出た月草: 葉 5 枚と、先に淡く光る細い穂を付けた茎 3 本"""
+    n = tuft("moongrass_tuft_seed", "moongrass", blades=5, height=0.68, width=0.05, spread=0.06, bend=0.3, seed=12,
+             lo=0.62, warm=0.04)
+    rnd = random.Random(13)
+    for i in range(3):
+        a = 2 * math.pi * i / 3 + rnd.uniform(-0.3, 0.3)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        h = rnd.uniform(0.78, 0.92)
+        n.add(K.blade(d * 0.03, d, h, 0.014, 0.12, segs=0), M["moongrass"], recalc=False, shade=K.shade_const(0.85))
+        tip = d * 0.03 + Z * (h * (1 - 0.35 * 0.12)) + d * (0.12 * h)
+        n.add(K.lathe([(0.0, 0.0), (0.018, 0.04), (0.0, 0.11)], n=4), M["moonseed"],
+              matrix=K.trs(tip - Z * 0.02, (0, 12 * math.cos(a), 12 * math.sin(a))), smooth=True)
+    return n
+
+
+def frond(n, base, yaw, length, rise, width, k=8):
+    """羊歯の葉 1 枚: 反って垂れる軸の両側に、先へ向いた細い小葉の三角を並べる (片面、材質は両面)。
+    小葉は根元で細く、中ほどで広く、先へ細る"""
+    import bmesh
+    bm = bmesh.new()
+    c = []
+    for i in range(k + 1):
+        u = i / k
+        c.append(Vector((length * u, 0, rise * (1.9 * u - 1.6 * u * u))))
+    cv = [bm.verts.new(p) for p in c]
+    seg = length / k
+    for i in range(k):
+        u = (i + 0.5) / k
+        w = width * min(1.0, u * 3.5) * (1 - u) ** 0.5
+        mid = (c[i] + c[i + 1]) / 2 + Vector((seg * 0.9, 0, -0.2 * w))
+        for side in (-1, 1):
+            tip = bm.verts.new(mid + Vector((0, side * w, 0)))
+            f = (cv[i], cv[i + 1], tip) if side > 0 else (cv[i + 1], cv[i], tip)
+            bm.faces.new(f)
+    m = K.trs(base, (0, 0, yaw))
+    n.add(bm, M["fern"], matrix=m, smooth=True, recalc=False,
+          shade=lambda co, nrm: (lambda v: (v, v, v * 0.95))(0.6 + 0.4 * min(1.0, co.z / max(0.01, rise * 0.6))),
+          soft=((0, 0, -0.4), 0.5))
+
+
+def fern():
+    n = K.Node("fern")
+    rnd = random.Random(21)
+    for i in range(5):
+        yaw = 72 * i + rnd.uniform(-15, 15)
+        frond(n, (0, 0, 0.02), yaw, rnd.uniform(0.58, 0.72), rnd.uniform(0.62, 0.78), 0.13)
+    return n
+
+
+def flower_patch():
+    """淡い小花 5 輪 (白・淡い藤色、中心は黄色) と、地に伏せた葉 4 枚。花は 5 弁の星形で、外へ少し傾けて上を向く"""
+    import bmesh
+    n = K.Node("flower_patch")
+    rnd = random.Random(31)
+    for i in range(4):
+        a = math.pi / 2 * i + rnd.uniform(-0.4, 0.4)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        n.add(K.blade(d * 0.02, d, 0.16, 0.07, 1.2, segs=1), M["stem"], recalc=False, shade=K.shade_const(0.8))
+    for i in range(5):
+        a = 2 * math.pi * i / 5 + rnd.uniform(-0.4, 0.4)
+        r = rnd.uniform(0.05, 0.2)
+        base = Vector((math.cos(a) * r, math.sin(a) * r, 0))
+        h = rnd.uniform(0.14, 0.26)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        n.add(K.blade(base, d, h, 0.012, 0.15, segs=0), M["stem"], recalc=False, shade=K.shade_const(0.85))
+        head = base + Z * (h * (1 - 0.35 * 0.15)) + d * (0.15 * h)
+        bm = bmesh.new()
+        ctr = bm.verts.new((0, 0, 0.006))
+        ph = rnd.uniform(0, 1)
+        rim = [bm.verts.new(((0.065 if j % 2 == 0 else 0.02) * math.cos(ph + math.pi * j / 5),
+                             (0.065 if j % 2 == 0 else 0.02) * math.sin(ph + math.pi * j / 5),
+                             0.012 if j % 2 == 0 else 0.0)) for j in range(10)]
+        for j in range(10):
+            bm.faces.new((ctr, rim[j], rim[(j + 1) % 10]))
+        tint = (0.93, 0.9, 1.0) if i % 2 else (1.0, 1.0, 0.97)
+
+        def shade(co, nrm, c=head, t=tint):
+            if (co - c).length < 0.012:
+                return (1.0, 0.86, 0.42)  # 花の中心
+            return t
+        tilt = 35
+        n.add(bm, M["petal"], matrix=K.trs(head, (0, 0, math.degrees(a))) @ K.trs((0, 0, 0), (0, tilt, 0)),
+              smooth=True, recalc=False, shade=shade)
+    return n
+
+
+FOREST_C = Vector((0, 0, 5.1))  # 森の木の樹冠の中心
+
+
+def forest_tree(lod=0):
+    """森の広葉樹: 茶色の幹が 3 本の太枝に分かれ、濃い緑の丸い葉の塊をまとめた樹冠。鐘は無い (鐘樹と見分ける)"""
+    name = "forest_tree" if lod == 0 else "forest_tree_lod1"
+    n = K.Node(name)
+    rnd = random.Random(41)
+    sides = 7 if lod == 0 else 5
+    spine = [(0, 0, 0), (0.05, 0.02, 1.1), (-0.02, 0.05, 2.2), (0.03, 0.0, 3.0)]
+    radii = [0.34, 0.26, 0.21, 0.16]
+    if lod:
+        spine, radii = [spine[0], spine[2], spine[3]], [radii[0], radii[2], radii[3]]
+    bark = K.shade_height(0, 2.5, 0.65, 1.0)
+    n.add(K.tube(spine, radii, n=sides, cap_start=False), M["forest_bark"], smooth=True, shade=bark)
+    if lod == 0:
+        for i in range(4):
+            a = math.radians(30 + 90 * i)
+            d = Vector((math.cos(a), math.sin(a), 0))
+            n.add(K.tube([d * 0.15 + Z * 0.6, d * 0.45 + Z * 0.14, d * 0.78 + Z * -0.03], [0.17, 0.1, 0.03], n=4,
+                         tip=True, cap_start=False), M["forest_bark"], smooth=True, shade=bark)
+    for i in range(3):
+        a = math.radians(40 + 120 * i)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        p0 = Vector((0, 0, 2.6 + 0.2 * i))
+        n.add(K.tube([p0, p0 + d * 0.7 + Z * 0.9, p0 + d * 1.3 + Z * 1.9], [0.15, 0.1, 0.05], n=5 if lod == 0 else 4,
+                     tip=True, cap_start=False), M["forest_bark"], smooth=True, shade=K.shade_const(0.8))
+    clumps = [((0.0, 0.0, 5.2), 1.9, 2, 1), ((0.25, -0.15, 6.35), 1.4, 2, 1)]
+    for i in range(5):
+        a = math.radians(10 + 72 * i)
+        r = 1.55
+        clumps.append(((r * math.cos(a), r * math.sin(a), 4.55 + 0.25 * (i % 2)), 1.2, 2 if i in (0, 2) else 1,
+                       1 if i < 3 else 0))
+    clumps.append(((-0.6, 0.7, 6.1), 1.1, 1, 1))
+    for i, (c, r, s0, s1) in enumerate(clumps):
+        sub = s0 if lod == 0 else s1
+        n.add(K.ico((r, r, r * 0.88), subdiv=sub, jitter=(0.05, 0.09, 0.1)[sub], seed=50 + i, flat_bottom=0.25),
+              M["forest_leaf"], matrix=K.trs(c, (0, 0, rnd.uniform(0, 360))), smooth=True,
+              shade=K.shade_canopy(FOREST_C, 2.2, lo=0.5, hi=1.0, warm=0.12), soft=(FOREST_C, 0.6))
+    return n
+
+
 if __name__ == "__main__":
-    nodes = [grass_tuft(), moongrass_tuft(), moss_clump(), rock()]
+    nodes = [grass_tuft(), moongrass_tuft(), moss_clump(), rock(),
+             forest_tree(0), forest_tree(1), moongrass_tuft_seed(), fern(), flower_patch()]
     objs = [nd.build() for nd in nodes]
     K.export_glb(objs, os.path.join(K.OUT_DIR, "flora.glb"))
