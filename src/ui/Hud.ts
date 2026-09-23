@@ -49,12 +49,15 @@ export function formatCiv(civ: CivState | null, dreamEater = false): string | nu
 /**
  * #hud-ship の説明文 (M10-03)。formatCiv とは別の行に出す (formatCiv の既存の文字列はテストが留め金にしているので変えない)。
  * 未着工なら門の説明、建造中なら進み、完成したが信仰不足なら「民は乗らない」を添え、飛び立てば専用の文を返す。
+ * timber (M21-02 D2): 徴収半径内の材 (Hud.update が timberAround で計算した値をそのまま渡す)。
+ * 林があと何年で舟を養えるか読めないプレイテスト (m10r-08) を受け、未着工では末尾に、建造中は進みの直後に足す。
  */
-export function formatShipHint(civ: CivState | null, ship: ShipState | null): string {
-  if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。年に ${SHIP_CUT_PER_YEAR} の材を伐って ${SHIP_NEED} まで進む(${SHIP_NEED / SHIP_CUT_PER_YEAR} 年)`;
+export function formatShipHint(civ: CivState | null, ship: ShipState | null, timber: number): string {
+  if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。年に ${SHIP_CUT_PER_YEAR} の材を伐って ${SHIP_NEED} まで進む(${SHIP_NEED / SHIP_CUT_PER_YEAR} 年) · 材 ${timber.toFixed(1)}`;
   if (ship.launchedYear !== undefined) return '舟は飛び立った';
+  const timberText = ` · 材 ${timber.toFixed(1)}`;
   // 帆を失えば舟は止まる (M10R-05): 段階が帆に満たない年は理由を添える (warnings.ts の「帆を失い」と同じ)
-  if ((civ?.stage ?? 0) < SHIP_STAGE) return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED} · 帆を失い止まっている(段階 ${civ?.stage ?? 0} < ${SHIP_STAGE})`;
+  if ((civ?.stage ?? 0) < SHIP_STAGE) return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED}${timberText} · 帆を失い止まっている(段階 ${civ?.stage ?? 0} < ${SHIP_STAGE})`;
   const faith = civ?.faith ?? 0;
   const done = shipDone(ship);
   const faithWaiting = done && faith < SHIP_FAITH;
@@ -62,7 +65,7 @@ export function formatShipHint(civ: CivState | null, ship: ShipState | null): st
   const crew = civ?.populationShip ?? 0;
   const crewWaiting = done && !faithWaiting && crew < SHIP_CREW;
   const waitingText = faithWaiting ? ` · 民は乗らない(信仰 ${formatFaith(faith)})` : crewWaiting ? ` · 民が乗るには足りない(民 ${crew.toFixed(2)} / ${SHIP_CREW})` : '';
-  return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED}` + waitingText;
+  return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED}${timberText}` + waitingText;
 }
 
 export type HudHandlers = {
@@ -91,6 +94,10 @@ export type Hud = {
   setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean; tower: boolean }): void;
   /** 舟の行を出すか (M10-04)。逃がす条件 (escape) の無い石板では「舟を作れ」が気を散らすので隠す。自由モードでは出す */
   setShipEnabled(on: boolean): void;
+  /** 迎撃で取り消せる次の予定隕石の年 (M21-02 D4)。無ければ (自由モード・撃ち尽くした後) #hud-works ごと畳む */
+  setNextMeteor(year: number | null): void;
+  /** 警告の種レイヤーチップ (M21-02 D5) を押したのと同じ動作。layer-species-${id} のクリックハンドラと処理を共有する */
+  showSpeciesLayer(id: string): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -123,8 +130,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
     <div id="hud-civ" class="mono" hidden></div>
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
-    <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span></div>
-    <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span></div>
+    <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span id="intercept-next" class="dim"></span><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span><span id="intercept-reason" class="dim"></span></div>
+    <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span><span id="ship-reason" class="dim"></span></div>
     <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
@@ -165,6 +172,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   const local = new TimeSeries((LOCAL_YEARS * 360) / LOCAL_SAMPLE_TICKS);
   let localCell: number | null = null;
   let shipEnabled = true;
+  /** 迎撃で取り消せる次の予定隕石の年 (M21-02 D4)。main.ts が毎フレーム setNextMeteor で揃える。自由モードでは常に null */
+  let nextMeteor: number | null = null;
   let localLastTick = -1;
   const markers: GraphMarker[] = [];
   let lines: GraphLine[] = [];
@@ -206,6 +215,16 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   };
   $('layer-mode-density').addEventListener('click', () => setLayerMode('density'));
   $('layer-mode-suit').addEventListener('click', () => setLayerMode('suit'));
+  /**
+   * 種レイヤーチップ (#layer-species-${id}) を選ぶ処理そのもの (M21-02 D5)。
+   * ensureSpecies のクリックハンドラと showSpeciesLayer (警告の「〜を見る」チップ、main.ts 経由) の両方から呼ぶ
+   */
+  const showSpeciesLayerInner = (id: string) => {
+    activeSpeciesId = id;
+    h.onLayer(layerMode === 'suit' ? `suit:${id}` : `species:${id}`);
+    setOn('layer-row', `layer-species-${id}`);
+    setLayerModeUI();
+  };
   const tempEl = $<HTMLInputElement>('temp-offset');
   const rainEl = $<HTMLInputElement>('rain-scale');
   /** 直前のフレームで世界が持っていた気候。変化したときだけスライダーを追従させる */
@@ -319,12 +338,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     $('legend').innerHTML = lines.map((l) => `<span><i style="background:${l.color}"></i>${l.label} <b id="legend-${l.key}" class="mono"></b></span>`).join('');
     $('layer-species').innerHTML = s.species.map((d) => `<button id="layer-species-${d.id}" class="chip">${d.name}</button>`).join('');
     for (const d of s.species) {
-      $(`layer-species-${d.id}`).addEventListener('click', () => {
-        activeSpeciesId = d.id;
-        h.onLayer(layerMode === 'suit' ? `suit:${d.id}` : `species:${d.id}`);
-        setOn('layer-row', `layer-species-${d.id}`);
-        setLayerModeUI();
-      });
+      $(`layer-species-${d.id}`).addEventListener('click', () => showSpeciesLayerInner(d.id));
     }
     // spawnable: false の種 (M8-09: 炎蜥蜴) は放流チップを出さない。凡例・住みやすさレイヤーには出る (上のループ)
     const spawnableSpecies = s.species.filter((d) => d.spawnable !== false);
@@ -386,19 +400,37 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $('edict-resume').classList.toggle('on', !stopped);
     }
     // 迎撃 (M10-02): 星になって工事が始まったら行を出す。備蓄が足りるまでは沈める (unaffordable)
+    // 撃つ星が無ければ行ごと畳む (M21-02 D4): nextMeteor は main.ts が setNextMeteor で毎フレーム揃える
     const worksEl = $('hud-works');
-    worksEl.hidden = !s.civ?.works;
-    if (s.civ?.works) $('intercept-btn').classList.toggle('unaffordable', !canIntercept(s.civ).ok);
+    worksEl.hidden = !s.civ?.works || nextMeteor === null;
+    if (s.civ?.works) {
+      const gate = canIntercept(s.civ);
+      $('intercept-btn').classList.toggle('unaffordable', !gate.ok);
+      // 拒まれた理由を行に出す (M21-02 D3): 灰色のボタンと信仰の数値から推し量るしかなかったプレイテスト (m10r / m10r-08) を受け
+      const reasonText = gate.ok ? '' : `押せない: ${gate.reason}`;
+      const reasonEl = $('intercept-reason');
+      if (reasonEl.textContent !== reasonText) reasonEl.textContent = reasonText;
+      reasonEl.hidden = reasonText === '';
+      const nextText = nextMeteor !== null ? `次の星 ${nextMeteor} 年目` : '';
+      const nextEl = $('intercept-next');
+      if (nextEl.textContent !== nextText) nextEl.textContent = nextText;
+    }
     // 空の舟 (M10-03): 文明が発生していれば行を出す (帆に満たない間は門の説明だけ)。formatCiv は変えず、この行にだけ進みを出す
     // M10-04 のプレイテスト: 「迎撃の塔」で「舟を作れ」が並ぶと気が散るので、石板に逃がす条件が無ければ行ごと隠す (setShipEnabled)
     const shipEl = $('hud-ship');
     shipEl.hidden = civText === null || !shipEnabled;
     if (civText !== null && s.civ && shipEnabled) {
       const civ = s.civ;
-      $('ship-hint').textContent = formatShipHint(civ, s.ship);
       const radius = LOAD_RADIUS[civ.stage] ?? 0;
       const timber = timberAround({ forest: s.layers.populations['forest'], belltree: s.layers.populations['belltree'] }, civ.home, radius, s.layers.elevation, s.size);
+      $('ship-hint').textContent = formatShipHint(civ, s.ship, timber);
       $('ship-btn').classList.toggle('unaffordable', !canLaunchShip(civ, timber, s.ship).ok);
+      // 拒まれた理由を行に出す (M21-02 D3): 未着工のときだけ「押せない」を出す (建造中・既発進の理由はボタンの拒否ではないので出さない)
+      const shipGate = s.ship === null ? canLaunchShip(civ, timber, null) : null;
+      const shipReasonText = shipGate && !shipGate.ok ? `押せない: ${shipGate.reason}` : '';
+      const shipReasonEl = $('ship-reason');
+      if (shipReasonEl.textContent !== shipReasonText) shipReasonEl.textContent = shipReasonText;
+      shipReasonEl.hidden = shipReasonText === '';
     }
     if (s.year !== lastYear) {
       lastYear = s.year;
@@ -467,5 +499,9 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       rainEl.classList.toggle('unaffordable', !a.climate);
       $('tower-chip').classList.toggle('unaffordable', !a.tower);
     },
+    setNextMeteor: (year) => {
+      nextMeteor = year;
+    },
+    showSpeciesLayer: showSpeciesLayerInner,
   };
 }
