@@ -22,6 +22,8 @@ from mathutils import Vector
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 blend, out = argv[0], argv[1]
 RES = int(argv[2]) if len(argv) > 2 else 720
+# (M22-05 残りの手直しで追加) 4 つ目の引数 views で、比較画に使う向き (view-* と pose-*) だけ撮る (作り直しの途中の確認用)
+ONLY = argv[3] if len(argv) > 3 else "all"
 os.makedirs(out, exist_ok=True)
 bpy.ops.wm.open_mainfile(filepath=blend)
 scene = bpy.context.scene
@@ -153,6 +155,8 @@ POSES = [("stalk", 12), ("run", 12)]
 for name, f in POSES:
     set_action(name, f)
     shoot(f"pose-{name}.png", 6, 5)
+if ONLY == "views":
+    sys.exit(0)
 set_action(None, 0)
 show("wolf_lod1")
 shoot("lod1-side.png", *VIEWS["side"])
