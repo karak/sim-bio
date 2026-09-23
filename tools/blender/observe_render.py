@@ -6,6 +6,8 @@
   blender -b --factory-startup --python tools/blender/observe_render.py -- verify <a.glb> [<b.glb> ...]
   blender -b --factory-startup --python tools/blender/observe_render.py -- lineup <a.glb> <out.png> [--ref <deer.glb>]
   blender -b --factory-startup --python tools/blender/observe_render.py -- corner <out.png>
+  blender -b --factory-startup --python tools/blender/observe_render.py -- ship-stages|ship|shipyard <out.png>
+  (lineup は --yaw <度> で各ノードを回して並べる、--el <度> でカメラの仰角)
 """
 import math
 import os
@@ -158,7 +160,19 @@ def toonify(m, vcol_name):
         col = add.outputs[2]
     em = N("ShaderNodeEmission")
     L(col, em.inputs["Color"])
-    L(em.outputs[0], out.inputs["Surface"])
+    if base[3] < 0.999:  # 半透明 (alphaMode BLEND): 透過と混ぜる
+        tr = N("ShaderNodeBsdfTransparent")
+        mx = N("ShaderNodeMixShader")
+        mx.inputs["Fac"].default_value = base[3]
+        L(tr.outputs[0], mx.inputs[1])
+        L(em.outputs[0], mx.inputs[2])
+        L(mx.outputs[0], out.inputs["Surface"])
+        try:
+            m.surface_render_method = "BLENDED"
+        except AttributeError:
+            m.blend_method = "BLEND"
+    else:
+        L(em.outputs[0], out.inputs["Surface"])
     m["toon"] = True
 
 
@@ -246,11 +260,22 @@ def render(path):
 
 ORDER = ["belltree_seedling", "belltree_sapling", "belltree_mature", "belltree_mature_lod1", "belltree_stump", "belltree_logs",
          "hut", "lantern_post", "slipway", "stone_wall", "megalith",
-         "grass_tuft", "moongrass_tuft", "moss_clump", "rock"]
+         "grass_tuft", "moongrass_tuft", "moss_clump", "rock",
+         "woven_screen", "stone_wall_corner",
+         "forest_tree", "forest_tree_lod1", "moongrass_tuft_seed", "fern", "flower_patch",
+         "ship_keel", "ship_ribs", "ship_planks", "ship_mast", "ship_sails", "ship_flying", "timber_pile"]
 
 
-def lineup(glb, out, ref=None, gap=1.0, only=None, res=(1600, 900)):
+def world_width(o):
+    """回転を含めた X 方向の幅 (yaw を付けて並べるとき用)"""
+    bpy.context.view_layer.update()
+    xs = [(o.matrix_world @ Vector(c)).x for c in o.bound_box]
+    return max(xs) - min(xs), (max(xs) + min(xs)) / 2 - o.location.x
+
+
+def lineup(glb, out, ref=None, gap=1.0, only=None, res=(1600, 900), yaw=0.0, el_deg=14, az_deg=-18):
     """並べ図。only で描くノードを絞る (小さいものの寄りの図)"""
+    # yaw (度) で各ノードを回して並べる (舟を横から見る)。el_deg / az_deg はカメラの仰角と方位
     K.reset()
     sc = setup_scene(res)
     tops = import_glb(glb)
@@ -268,16 +293,20 @@ def lineup(glb, out, ref=None, gap=1.0, only=None, res=(1600, 900)):
         tops = tops + [o for o in rt if o.type == "MESH"]
     x = 0.0
     for o in tops:
-        w = o.dimensions.x
-        o.location.x = x + w / 2
+        if yaw and not o.name.startswith("ref_"):
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(yaw))
+        o.location = (0, 0, 0)
+        w, off = world_width(o)
+        o.location.x = x + w / 2 - off
         o.location.y = 0
         x += w + gap
     floor()
     toonify_all()
     width = x - gap
-    height = max(o.dimensions.z for o in tops)
+    height = max(o.dimensions.z if not yaw else max((o.matrix_world @ Vector(c)).z for c in o.bound_box) for o in tops)
     cx = width / 2
-    el, az = math.radians(14), math.radians(-18)
+    el, az = math.radians(el_deg), math.radians(az_deg)
     dist = 200
     loc = Vector((cx + dist * math.sin(az) * math.cos(el) * -1, -dist * math.cos(az) * math.cos(el), height * 0.45 + dist * math.sin(el)))
     aspect = sc.render.resolution_x / sc.render.resolution_y
@@ -352,6 +381,131 @@ def corner(out):
     render(out)
 
 
+# ---------------------------------------------------------------- 舟と造船場 (M22-06)
+
+CRADLE_H_SHIP = 0.35  # observe_ship.py の CRADLE_H (盤木の底を地面に置く高さ)
+SHIP_STAGES = ["ship_keel", "ship_ribs", "ship_planks", "ship_mast", "ship_sails", "ship_flying"]
+
+
+def library(names):
+    """observe/<name>.glb を読み、ノード名 -> 隠した原型。placer で複製して置く"""
+    lib = {}
+    for name in names:
+        for o in import_glb(os.path.join(K.OUT_DIR, f"{name}.glb")):
+            lib[o.name] = o
+            o.hide_render = True
+            o.location = (0, 0, -100)
+    return lib
+
+
+def placer(lib):
+    sc = bpy.context.scene
+
+    def place(name, loc, yaw=0.0, scale=1.0, pitch=0.0):
+        o = lib[name].copy()
+        o.hide_render = False
+        sc.collection.objects.link(o)
+        o.location = (loc[0], loc[1], loc[2] if len(loc) > 2 else 0.0)
+        o.rotation_mode = "ZXY"  # 先に船台の傾き (X)、その後に向き (Z)
+        o.rotation_euler = (math.radians(pitch), 0, math.radians(yaw))
+        o.scale = (scale, scale, scale)
+        return o
+    return place
+
+
+def ship_stages(out):
+    """建造の 6 段を 2 列 × 3 で、左舷の斜め上から (船首は右)"""
+    K.reset()
+    setup_scene((1600, 900))
+    place = placer(library(["ship"]))
+    for i, name in enumerate(SHIP_STAGES):
+        r, c = divmod(i, 3)
+        z = 2.2 if name == "ship_flying" else CRADLE_H_SHIP
+        place(name, (c * 19.0, r * 17.0, z), yaw=90)
+    floor(400)
+    toonify_all()
+    camera((19.0 - 30.0, 9.5 - 60.0, 4.5 + 40.0), (19.0, 9.5, 4.5), ortho=62)
+    render(out)
+
+
+def ship_views(out):
+    """完成 (帆を畳む) と飛び立ち (帆を広げる) の寄り、丸太の山と月鹿を物差しに"""
+    K.reset()
+    sc = setup_scene((1600, 900))
+    place = placer(library(["ship"]))
+    place("ship_sails", (0, 0, CRADLE_H_SHIP), yaw=62)
+    place("ship_flying", (16.5, 11.0, 3.4), yaw=25)
+    place("timber_pile", (-4.5, -6.0), yaw=20)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (-1.5, -7.5, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-150))
+    floor(400)
+    toonify_all()
+    sc.world.node_tree.nodes["Background.001"].inputs["Color"].default_value = (0.78, 0.82, 0.86, 1)
+    camera((-8.0, -30.0, 9.0), (7.0, 3.5, 4.8), lens=30)
+    render(out)
+
+
+def shipyard(out):
+    """造船場: 船台の上に肋の段の舟、丸太の山、灯り柱 2、編んだ衝立、小屋、鐘樹 2、奥に森の木、手前に羊歯と花と草"""
+    K.reset()
+    sc = setup_scene((1600, 900))
+    place = placer(library(["belltree", "settlement", "flora", "ship"]))
+    rnd = random.Random(8)
+    slip_yaw = -58
+    slip_c = Vector((6.0, 9.0, 0))
+    ang = math.degrees(math.atan2(0.9, 16.0))
+    place("slipway", slip_c, yaw=slip_yaw)
+    # 船台の盤木の上面 (y=0 で slip_z(0)+0.29 ≈ 0.99) に舟の盤木の底を載せる
+    place("ship_ribs", (slip_c.x, slip_c.y, 0.99 + CRADLE_H_SHIP), yaw=slip_yaw, pitch=ang)
+    place("timber_pile", (-0.5, 3.0), yaw=-20)
+    place("lantern_post", (1.6, 0.2), yaw=-30)
+    place("lantern_post", (11.8, 3.2), yaw=150)
+    place("woven_screen", (-2.6, 6.2), yaw=-15)
+    place("hut", (-7.5, 9.5), yaw=-30)
+    place("stone_wall_corner", (-5.8, 1.2), yaw=-100)
+    place("belltree_mature", (-13.0, 16.0), yaw=40)
+    place("belltree_mature", (0.5, 23.0), yaw=160)
+    for i, (x, y) in enumerate(((-20, 30), (-9, 33), (3, 38), (14, 33), (24, 27), (-26, 22), (30, 20), (9, 42), (-16, 40))):
+        place("forest_tree" if i < 6 else "forest_tree_lod1", (x, y), yaw=rnd.uniform(0, 360), scale=rnd.uniform(0.9, 1.25))
+    occupied = [(-7.5, 9.5, 3.0), (-13, 16, 1.4), (0.5, 23, 1.4), (-0.5, 3.0, 1.9),
+                (1.6, 0.2, 0.6), (11.8, 3.2, 0.6), (-2.6, 6.2, 1.1)]
+    along = Vector((-math.sin(math.radians(slip_yaw)), math.cos(math.radians(slip_yaw)), 0))  # 船台の長さ方向 (ローカル Y)
+    across = Vector((along.y, -along.x, 0))
+
+    def free(x, y, pad=0.0):
+        d = Vector((x, y, 0)) - slip_c
+        if abs(d.dot(along)) < 9.0 + pad and abs(d.dot(across)) < 3.2 + pad:
+            return False
+        return all(math.hypot(x - a, y - b) > r + pad for a, b, r in occupied)
+    for i in range(650):
+        x, y = rnd.uniform(-18, 20), rnd.uniform(-5, 30)
+        if not free(x, y):
+            continue
+        kind = "moongrass_tuft_seed" if rnd.random() < 0.08 else ("moongrass_tuft" if rnd.random() < 0.25 else "grass_tuft")
+        place(kind, (x, y), yaw=rnd.uniform(0, 360), scale=rnd.uniform(0.8, 1.3))
+    for i in range(60):
+        x, y = rnd.uniform(-16, 18), rnd.uniform(-5, 28)
+        if free(x, y, 0.3):
+            place("fern" if i % 2 else "flower_patch", (x, y), yaw=rnd.uniform(0, 360), scale=rnd.uniform(0.9, 1.5))
+    for i in range(10):
+        x, y = rnd.uniform(-14, 16), rnd.uniform(-4, 24)
+        if free(x, y):
+            place("moss_clump" if i % 2 else "rock", (x, y), yaw=rnd.uniform(0, 360), scale=rnd.uniform(0.7, 1.3))
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (3.4, 1.2, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-150))
+    floor(400, "#7F9A4C")
+    toonify_all()
+    sc.world.node_tree.nodes["Background.001"].inputs["Color"].default_value = (0.78, 0.82, 0.86, 1)
+    camera((-4.0, -12.5, 4.2), (3.0, 10.0, 2.2), lens=24)
+    render(out)
+
+
 if __name__ == "__main__":
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     mode = argv[0]
@@ -363,6 +517,14 @@ if __name__ == "__main__":
         ref = argv[argv.index("--ref") + 1] if "--ref" in argv else None
         only = argv[argv.index("--only") + 1].split(",") if "--only" in argv else None
         gap = float(argv[argv.index("--gap") + 1]) if "--gap" in argv else 1.0
-        lineup(argv[1], argv[2], ref, gap=gap, only=only)
+        yaw = float(argv[argv.index("--yaw") + 1]) if "--yaw" in argv else 0.0
+        el = float(argv[argv.index("--el") + 1]) if "--el" in argv else 14
+        lineup(argv[1], argv[2], ref, gap=gap, only=only, yaw=yaw, el_deg=el)
     elif mode == "corner":
         corner(argv[1])
+    elif mode == "ship-stages":
+        ship_stages(argv[1])
+    elif mode == "ship":
+        ship_views(argv[1])
+    elif mode == "shipyard":
+        shipyard(argv[1])

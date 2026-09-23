@@ -24,7 +24,8 @@ K.reset()
 M = {
     "bark": K.material("belltree_bark", "#E6DFD1", rough=0.9),
     "leaf": K.material("belltree_leaf", "#86A044", rough=0.9),
-    "bell": K.material("belltree_bell", "#A8703F", rough=0.55, emit=K.BELL_AMBER, strength=0.9),
+    "bell": K.material("belltree_bell", "#7E5230", rough=0.55, emit=K.BELL_AMBER, strength=0.2),
+    "bell_rim": K.material("belltree_bell_rim", "#FFD58F", rough=0.5, emit=K.BELL_AMBER, strength=3.0),
     "glow": K.material("belltree_glow", "#FFE7A8", rough=0.6, emit="#FFD98A", strength=3.0),
     "soil": K.material("belltree_soil", "#7B6043", rough=0.95),
     "moss": K.material("belltree_moss", "#8AA743", rough=0.95),
@@ -149,11 +150,17 @@ def bell(node, p, lod, seed):
     top = p - Z * stem
     if lod == 0:
         node.add(K.tube([p, top], [0.018, 0.015], n=3, cap_start=False, cap_end=False), M["bark"])
-        prof = [(0.0, 0.0), (0.13, -0.05), (0.155, -0.26), (0.27, -0.49), (0.0, -0.4)]  # 丸い肩と開いた裾
-        node.add(K.lathe(prof, n=6, phase=rnd.uniform(0, 1)), M["bell"], matrix=K.trs(top), smooth=True)
+        prof = [(0.0, 0.0), (0.12, -0.04), (0.14, -0.24), (0.2, -0.4), (0.3, -0.5), (0.0, -0.38)]  # 丸い肩と開いた裾
+        node.add(K.lathe(prof, n=6, phase=rnd.uniform(0, 1)), M["bell"], matrix=K.trs(top), smooth=True,
+                 per_face_mat=bell_rim(top))
     else:
-        prof = [(0.0, 0.0), (0.26, -0.49), (0.0, -0.4)]
-        node.add(K.lathe(prof, n=5), M["bell"], matrix=K.trs(top), smooth=True)
+        prof = [(0.0, 0.0), (0.24, -0.42), (0.3, -0.5), (0.0, -0.38)]  # 群れ用: 四角の鐘、裾の帯と口が光る
+        node.add(K.lathe(prof, n=4), M["bell"], matrix=K.trs(top), smooth=True, per_face_mat=bell_rim(top))
+
+
+def bell_rim(top):
+    """裾の開いた帯と内側 (z が肩から 0.4 より下) を明るい縁の材質に。引いても鐘の形が読める"""
+    return lambda c, nrm: M["bell_rim"] if c.z - top.z < -0.4 else None
 
 
 def mature(lod=0):

@@ -25,3 +25,9 @@ M22-02
 - [ ] 帆を失うと灯りが消え工事が止まる
 
 ## 作業ログ
+
+## 作業ログ(2026-09-24)
+
+- 舟のアセット: `tools/blender/observe_ship.py` → `assets/models/observe/ship.glb`。段ごとに 1 ノード(`ship_keel` 412 / `ship_ribs` 1,792 / `ship_planks` 1,968 / `ship_mast` 2,496 / `ship_sails` 3,928 / `ship_flying` 3,906 三角形)と `timber_pile` 516。
+- 集落に `woven_screen` 360・`stone_wall_corner` 680 を足し、`lantern_post` の灯籠に格子(368 → 512)。
+- 比較画: `docs/design/qa/observe/{ship,ship-stages,shipyard}.png`、記録は `docs/design/qa/observe/keyitems.md`。ゲーム側の段の切り替え・浮上・灯りが消える演出は未着手。
