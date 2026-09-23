@@ -23,6 +23,9 @@ export function instanceProps(node: Object3D, placements: Matrix4[], castShadow 
     inst.instanceMatrix.needsUpdate = true;
     inst.castShadow = castShadow;
     inst.receiveShadow = true;
+    // (木の磨き上げで追加) 葉のカード (assets.ts の toToon が印を付ける) は切り抜いた影の材質を引き継ぎ、光線の当たり判定から外す
+    inst.customDepthMaterial = mesh.customDepthMaterial;
+    if (mesh.userData.foliage) inst.raycast = () => {};
     inst.computeBoundingSphere();
     group.add(inst);
   });

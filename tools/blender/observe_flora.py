@@ -35,7 +35,19 @@ M = {
     "stem": K.material("flora_stem", "#6F9642", rough=0.9, double=True),
     "forest_leaf": K.material("flora_forest_leaf", "#5A873C", rough=0.9),
     "forest_bark": K.material("flora_forest_bark", "#6E5039", rough=0.9),
+    # (木の磨き上げで追加) 森の木の幹と根 (基本色は白、樹皮と苔の色は頂点色が持つ) と、葉のカード (鐘樹と同じ絵)
+    "forest_trunk": K.material("flora_forest_trunk", "#FFFFFF", rough=0.9),
+    "forest_foliage": K.foliage_material("flora_forest_foliage", K.leaf_card_image()),
 }
+
+# (木の磨き上げで追加) 森の木の樹皮・苔・葉のカードの色 (リニア)。鐘樹 (observe_belltree.py) と同じ作りで、葉は濃く青い緑、幹は茶色
+FOREST_BARK_LIN = K.hex_rgb("#6E5039")
+FOREST_MOSS_LIN = K.hex_rgb("#5E7E34")
+FOREST_CARD_LIN = K.hex_rgb("#6F9C45")
+FOREST_LUMP_K = 0.86
+FOREST_INNER = (0.5, 0.56, 0.7)
+# lod ごとの葉のカード: (1 m² あたりの枚数, 一辺 m)
+FOREST_CARDS = {0: (2.6, 1.45), 1: (1.4, 2.0)}
 
 
 def blade_shade(height, lo=0.5, warm=0.12):
@@ -196,19 +208,23 @@ def forest_tree(lod=0):
     name = "forest_tree" if lod == 0 else "forest_tree_lod1"
     n = K.Node(name)
     rnd = random.Random(41)
-    sides = 7 if lod == 0 else 5
+    # (木の磨き上げで変更: 幹に縦の裂け目を入れるため、面を 7 → 12 (lod1 は 5 → 6) にする)
+    sides = 12 if lod == 0 else 6
     spine = [(0, 0, 0), (0.05, 0.02, 1.1), (-0.02, 0.05, 2.2), (0.03, 0.0, 3.0)]
     radii = [0.34, 0.26, 0.21, 0.16]
     if lod:
         spine, radii = [spine[0], spine[2], spine[3]], [radii[0], radii[2], radii[3]]
-    bark = K.shade_height(0, 2.5, 0.65, 1.0)
-    n.add(K.tube(spine, radii, n=sides, cap_start=False), M["forest_bark"], smooth=True, shade=bark)
+    # (木の磨き上げで変更: 幹と根は、縦の裂け目・筋・根元の苔を頂点色で持つ forest_trunk の材質にする)
+    bark = K.bark_shade(spine, radii, FOREST_BARK_LIN, FOREST_MOSS_LIN, lo=0.6, hi=1.0, z1=2.5, moss_z=(0.05, 0.8), seed=2.1)
+    n.add(K.tube(spine, radii, n=sides, cap_start=False, ridge=K.fissures(sides, depth=(0.07, 0.14), seed=9, rings=len(spine))),
+          M["forest_trunk"], smooth=True, shade=bark)
     if lod == 0:
         for i in range(4):
             a = math.radians(30 + 90 * i)
             d = Vector((math.cos(a), math.sin(a), 0))
+            # (木の磨き上げで変更: 根の断面を縦長の楕円 (鰭) にする)
             n.add(K.tube([d * 0.15 + Z * 0.6, d * 0.45 + Z * 0.14, d * 0.78 + Z * -0.03], [0.17, 0.1, 0.03], n=4,
-                         tip=True, cap_start=False), M["forest_bark"], smooth=True, shade=bark)
+                         tip=True, cap_start=False, aspect=(0.7, 1.3)), M["forest_trunk"], smooth=True, shade=bark)
     # (M22-07 光の筋のために変更: 3 本の太枝の先に大きな塊 8 つを重ねた樹冠をやめ、房 6 つ (FOREST_CLUSTERS) に
     #  1 本ずつ枝を伸ばす。房と房の間 (0.4〜0.6 m) が抜け、日の影の地図で影がまだらになる。lod1 も隙間を残す)
     trunk_top = Vector(spine[-1])
@@ -220,16 +236,43 @@ def forest_tree(lod=0):
         rad = [0.12, 0.08, 0.04] if upper else [0.15, 0.1, 0.05]
         n.add(K.tube([p0, p1, end], rad, n=5 if lod == 0 else 4, tip=True, cap_start=False), M["forest_bark"],
               smooth=True, shade=K.shade_const(0.8))
+    # (木の磨き上げで変更: 塊は FOREST_LUMP_K に縮めて暗い内側にし、表面に葉のカードを散らす。塊は lod0 の真ん中だけ細かさ 1、
+    #  他は 0 (カードに三角形を回す)。柔らかい法線は 0.6 → 0.9 (粗い塊の面の角を陰りに出さない))
+    card_lumps = []
     for k, (c, r, upper, _) in enumerate(forest_clusters()):
         lumps = forest_lumps(c, r, upper)
         if lod:
             g = sum((lc * lr ** 3 for lc, lr in lumps), Vector()) / sum(lr ** 3 for _, lr in lumps)
             lumps = [(g, r * 1.02)]  # (試作 3 の判断で変更: 1.08 → 1.02。房を大きくしたので、lod1 の隙間が lod0 より詰まりすぎないように)
         for j, (lc, lr) in enumerate(lumps):
-            n.add(K.ico((lr, lr, lr * 0.88), subdiv=1, jitter=0.09, seed=50 + 3 * k + j, flat_bottom=0.25),
+            lr *= FOREST_LUMP_K
+            base = K.shade_canopy(FOREST_C, 2.2, lo=0.5, hi=1.0, warm=0.12)
+            n.add(K.ico((lr, lr, lr * 0.88), subdiv=1 if (j == 0 and not lod) else 0, jitter=0.09, seed=50 + 3 * k + j,
+                        flat_bottom=0.25),
                   M["forest_leaf"], matrix=K.trs(lc, (0, 0, rnd.uniform(0, 360))), smooth=True,
-                  shade=K.shade_canopy(FOREST_C, 2.2, lo=0.5, hi=1.0, warm=0.12), soft=(c + Z * 0.15 * r, 0.6))
+                  shade=lambda co, nrm, b=base: tuple(v * q for v, q in zip(b(co, nrm), FOREST_INNER)),
+                  soft=(c + Z * 0.15 * r, 0.9))
+            card_lumps.append((lc, lr, k))
+    clusters = forest_clusters()
+    density, size = FOREST_CARDS[lod]
+    cards = K.scatter_cards(n, M["forest_foliage"], card_lumps, density, size, seed=90 + lod, color=FOREST_CARD_LIN,
+                            shade_of=lambda k: forest_card_shade(clusters[k][0], clusters[k][1]),
+                            soft_of=lambda k: (clusters[k][0] + Z * 0.15 * clusters[k][1], 1.0), rz=0.88, flat_bottom=0.25,
+                            gap_clear=0.25)
+    print(f"  {name}: cards={cards}")
     return n
+
+
+def forest_card_shade(c, r):
+    """(木の磨き上げで追加) 森の木の葉のカードの陰り: 樹冠全体の上下に、房の上ほど明るく暖かく・下ほど暗く (鐘樹の shade_card と同じ)"""
+    base = K.shade_canopy(FOREST_C, 2.2, lo=0.6, hi=1.0, warm=0.08)
+
+    def f(co, nrm):
+        v = base(co, nrm)
+        t = min(1.0, max(0.0, 0.5 + (co.z - c.z) / (r * 1.3)))
+        k = 0.6 + 0.55 * t
+        return (v[0] * k, v[1] * k, v[2] * k * (1.08 - 0.25 * t))
+    return f
 
 
 # (M22-07 光の筋のために追加) 森の木の房: (方位 度, 幹からの距離, 高さ, 半径, 枝の付け根の高さ)。
@@ -268,4 +311,4 @@ if __name__ == "__main__":
     nodes = [grass_tuft(), moongrass_tuft(), moss_clump(), rock(),
              forest_tree(0), forest_tree(1), moongrass_tuft_seed(), fern(), flower_patch()]
     objs = [nd.build() for nd in nodes]
-    K.export_glb(objs, os.path.join(K.OUT_DIR, "flora.glb"))
+    K.export_glb(objs, os.path.join(K.OUT_DIR, "flora.glb"), texcoords=True)

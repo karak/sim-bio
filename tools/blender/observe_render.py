@@ -97,6 +97,8 @@ def toonify(m, vcol_name):
     if max(ecol) > 0:
         k = 1.0 / max(ecol)
         ecol = tuple(c * k for c in ecol)
+    # (木の磨き上げで追加) 絵 (葉のカード) を持つ材質は、絵の色を地の色に掛け、絵のアルファで切り抜く
+    img = next((n.image for n in nt.nodes if n.type == "TEX_IMAGE" and n.image), None)
     nt.nodes.clear()
     N = nt.nodes.new
     L = nt.links.new
@@ -114,8 +116,31 @@ def toonify(m, vcol_name):
         L(rgb.outputs[0], mul.inputs[6])
         L(vc.outputs["Color"], mul.inputs[7])
         albedo = mul.outputs[2]
+    if img is not None:
+        tex = N("ShaderNodeTexImage")
+        tex.image = img
+        tm = N("ShaderNodeMix")
+        tm.data_type = "RGBA"
+        tm.blend_type = "MULTIPLY"
+        tm.inputs["Factor"].default_value = 1.0
+        L(albedo, tm.inputs[6])
+        L(tex.outputs["Color"], tm.inputs[7])
+        albedo = tm.outputs[2]
     dif = N("ShaderNodeBsdfDiffuse")
     dif.inputs["Color"].default_value = (1, 1, 1, 1)
+    if img is not None:
+        # 両面のカードの裏も表と同じ法線で陰らせる (Three.js 側の foliage.ts と同じ。裏返った法線で暗くならない)
+        geo = N("ShaderNodeNewGeometry")
+        flip = N("ShaderNodeMath")
+        flip.operation = "MULTIPLY_ADD"
+        flip.inputs[1].default_value = -2.0
+        flip.inputs[2].default_value = 1.0
+        L(geo.outputs["Backfacing"], flip.inputs[0])
+        vs = N("ShaderNodeVectorMath")
+        vs.operation = "SCALE"
+        L(geo.outputs["Normal"], vs.inputs[0])
+        L(flip.outputs[0], vs.inputs["Scale"])
+        L(vs.outputs[0], dif.inputs["Normal"])
     s2r = N("ShaderNodeShaderToRGB")
     L(dif.outputs[0], s2r.inputs[0])
     bw = N("ShaderNodeRGBToBW")
@@ -144,6 +169,9 @@ def toonify(m, vcol_name):
     rr.inputs["From Min"].default_value = 0.55
     rr.inputs["From Max"].default_value = 0.95
     rr.inputs["To Max"].default_value = 0.22
+    if img is not None:
+        # (木の磨き上げで追加) 葉のカードの縁の光は弱く (foliage.ts の rim 0.06 と同じ考え。寝たカードが白く光らない)
+        rr.inputs["To Max"].default_value = 0.04
     L(lw.outputs["Facing"], rr.inputs["Value"])
     rim = N("ShaderNodeMix")
     rim.data_type = "RGBA"
@@ -162,7 +190,26 @@ def toonify(m, vcol_name):
         col = add.outputs[2]
     em = N("ShaderNodeEmission")
     L(col, em.inputs["Color"])
-    if base[3] < 0.999:  # 半透明 (alphaMode BLEND): 透過と混ぜる
+    if img is not None:  # (木の磨き上げで追加) 切り抜き (alphaMode MASK): 絵のアルファ 0.5 で透過と切り替える
+        cut = N("ShaderNodeMath")
+        cut.operation = "GREATER_THAN"
+        cut.inputs[1].default_value = 0.5
+        L(tex.outputs["Alpha"], cut.inputs[0])
+        tr = N("ShaderNodeBsdfTransparent")
+        mx = N("ShaderNodeMixShader")
+        L(cut.outputs[0], mx.inputs["Fac"])
+        L(tr.outputs[0], mx.inputs[1])
+        L(em.outputs[0], mx.inputs[2])
+        L(mx.outputs[0], out.inputs["Surface"])
+        try:
+            m.surface_render_method = "DITHERED"
+        except AttributeError:
+            m.blend_method = "CLIP"
+        try:
+            m.use_transparent_shadow = True
+        except AttributeError:
+            pass
+    elif base[3] < 0.999:  # 半透明 (alphaMode BLEND): 透過と混ぜる
         tr = N("ShaderNodeBsdfTransparent")
         mx = N("ShaderNodeMixShader")
         mx.inputs["Fac"].default_value = base[3]
@@ -562,7 +609,32 @@ def gap_fraction(o, el_deg, az_deg, step=0.12):
     leaf = {i for i, m in enumerate(o.data.materials) if m and "leaf" in m.name}
     for v in {v for f in bm.faces if f.material_index in leaf for v in f.verts}:
         hull.verts.new(v.co)
+    # (木の磨き上げで追加) 葉のカード (材質名に foliage) は、面の中心を包みに入れ (カードの角は葉の外なので入れない)、
+    # 光線がカードに当たったら絵のアルファを引いて、0.5 未満 (葉の隙間) なら先へ通す
+    cards = _alpha_lookup(o)
+    for f in bm.faces:
+        if f.material_index in cards:
+            hull.verts.new(f.calc_center_median())
     bmesh.ops.convex_hull(hull, input=list(hull.verts))
+    uv_layer = bm.loops.layers.uv.active
+    bm.faces.ensure_lookup_table()
+
+    def blocked(g):
+        origin = g.copy()
+        for _ in range(24):
+            loc, _n, idx, _d = tree.ray_cast(origin, L)
+            if loc is None:
+                return False
+            f = bm.faces[idx]
+            if f.material_index not in cards or uv_layer is None:
+                return True
+            from mathutils.interpolate import poly_3d_calc
+            w = poly_3d_calc([v.co for v in f.verts], loc)
+            uv = sum((lp[uv_layer].uv * wi for lp, wi in zip(f.loops, w)), Vector((0, 0)))
+            if cards[f.material_index](uv) >= 0.5:
+                return True
+            origin = loc + L * 1e-3
+        return True
     htree = BVHTree.FromBMesh(hull)
     L = sun_vector(el_deg, az_deg)
     pts = [v.co - L * (v.co.z / L.z) for v in hull.verts]  # 凸包の頂点の影
@@ -576,13 +648,29 @@ def gap_fraction(o, el_deg, az_deg, step=0.12):
             g = Vector((x, y, 0.02))
             if htree.ray_cast(g, L)[0] is not None:
                 inside += 1
-                if tree.ray_cast(g, L)[0] is None:
+                if not blocked(g):
                     lit += 1
             x += step
         y += step
     bm.free()
     hull.free()
     return lit / max(1, inside)
+
+
+def _alpha_lookup(o):
+    """(木の磨き上げで追加) 材質の番号 -> uv を受けて絵のアルファを返す関数 (絵を持つ葉のカードの材質だけ)"""
+    import numpy as np
+    out = {}
+    for i, m in enumerate(o.data.materials):
+        if not m or "foliage" not in m.name or not m.node_tree:
+            continue
+        img = next((n.image for n in m.node_tree.nodes if n.type == "TEX_IMAGE" and n.image), None)
+        if img is None:
+            continue
+        w, h = img.size
+        a = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)[..., 3]
+        out[i] = lambda uv, a=a, w=w, h=h: float(a[min(h - 1, max(0, int((uv.y % 1.0) * h))), min(w - 1, max(0, int((uv.x % 1.0) * w)))])
+    return out
 
 
 def label(text, loc, size=1.2):

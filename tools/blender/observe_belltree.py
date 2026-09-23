@@ -31,7 +31,21 @@ M = {
     "moss": K.material("belltree_moss", "#8AA743", rough=0.95),
     "cut": K.material("belltree_cut", "#EFD6A8", rough=0.9),
     "ring": K.material("belltree_cut_ring", "#D2AC7B", rough=0.9),
+    # (木の磨き上げで追加) 成木の幹と板根 (基本色は白、樹皮と苔の色は頂点色が持つ) と、葉のカード (絵で葉の縁を出す)
+    "trunk": K.material("belltree_trunk", "#FFFFFF", rough=0.9),
+    "foliage": K.foliage_material("belltree_foliage", K.leaf_card_image()),
 }
+
+# (木の磨き上げで追加) 樹皮・苔・葉のカードの色 (リニア)。塊は内側の陰として暗く寒色に寄せ、カードの葉が明るい外側になる
+BARK_LIN = K.hex_rgb("#E6DFD1")
+MOSS_LIN = K.hex_rgb("#7F9B3F")
+CARD_LIN = K.hex_rgb("#9DB54E")
+GAP_CLEAR = 0.35        # 房と房の間の隙間を塞ぐカードを除く距離 (m、scatter_cards の gap_clear)
+BELL_OUT = 1.28         # 鐘の付け根を塊の中心から外へ出す倍率 (葉のカードの層の外へ)
+LUMP_K = 0.86           # 葉の塊を縮める割合 (カードが外へ出る分、輪郭の大きさを保つ)
+INNER = (0.5, 0.56, 0.7)  # 塊 (内側) の陰りに掛ける乗数
+# lod ごとの葉のカード: (1 m² あたりの枚数, 一辺 m)
+CARDS = {0: (1.9, 1.8), 1: (0.8, 2.6)}
 
 CANOPY_C = Vector((0, 0, 6.9))  # 成木の樹冠の中心 (柔らかい法線の向きの基準)
 
@@ -142,14 +156,16 @@ def canopy_clumps(lod):
     # (M22-07 光の筋のために変更: 一つにまとまった樹冠の塊 11 個をやめ、離れた房 8 つ (CLUSTERS) の塊を返す。
     #  lod0 は房ごとに塊 3 つ (細かさ 1)、lod1 は房ごとに塊 1 つ (房の輪郭の重心に、少し大きく。下の輪は細かさ 1、上の輪は 0)。
     #  隙間は lod1 でも残す (45 m より先でも影を落とすため))
+    # (木の磨き上げで変更: 塊は葉のカードの奥の暗い内側になり、輪郭はカードが作るので、塊を粗くして三角形をカードに回す。
+    #  lod0 は房の真ん中の塊だけ細かさ 1、盛った塊 2 つは 0。lod1 は全部 0)
     cl = []
     for k, (c, r, upper, _) in enumerate(cluster_centers()):
         lumps = cluster_lumps(c, r, upper, k)
         if lod == 0:
-            cl += [(lc, lr, 1) for lc, lr in lumps]
+            cl += [(lc, lr, 1 if j == 0 else 0) for j, (lc, lr) in enumerate(lumps)]
         else:
             g = sum((lc * lr ** 3 for lc, lr in lumps), Vector()) / sum(lr ** 3 for _, lr in lumps)
-            cl.append((g, r * 1.14, 0 if upper else 1))
+            cl.append((g, r * 1.14, 0))
     return cl
 
 
@@ -171,6 +187,25 @@ def shade_cluster(c, r):
         k = 0.78 + 0.22 * t
         return (v[0] * k, v[1] * k, v[2] * k)
     return f
+
+
+def shade_card(c, r):
+    """(木の磨き上げで追加) 葉のカードの陰り: 房の上ほど明るく暖かく (1.18 倍、青を抜く)、下ほど暗く寒色に (0.6 倍)。
+    基準画の樹冠は、日の当たる房の上の葉が明るい黄緑で、房の下と奥が暗い"""
+    base = K.shade_canopy(CANOPY_C, 2.6, lo=0.62, hi=1.0, warm=0.1)
+
+    def f(co, nrm):
+        v = base(co, nrm)
+        t = min(1.0, max(0.0, 0.5 + (co.z - c.z) / (r * 1.3)))
+        k = 0.6 + 0.58 * t
+        return (v[0] * k, v[1] * k, v[2] * k * (1.08 - 0.25 * t))
+    return f
+
+
+def shade_inner(c, r):
+    """(木の磨き上げで追加) 葉の塊 (カードの奥の内側) の陰り: 房の陰りを INNER で暗く寒色に寄せる"""
+    base = shade_cluster(c, r)
+    return lambda co, nrm: tuple(v * k for v, k in zip(base(co, nrm), INNER))
 
 
 def inside_other(p, clumps, skip):
@@ -204,6 +239,12 @@ def bell_points(clumps, count, seed):
     return pts
 
 
+def bell_out(p, clumps):
+    """(木の磨き上げで追加) 鐘の付け根 p を、p に最も近い (半径で割った距離の) 塊の中心から BELL_OUT 倍に出す"""
+    c, r, _ = min(clumps, key=lambda cl: (p - cl[0]).length / cl[1])
+    return c + (p - c) * BELL_OUT
+
+
 def bell(node, p, lod, seed):
     rnd = random.Random(seed)
     stem = 0.14 + rnd.uniform(0, 0.12)
@@ -226,20 +267,26 @@ def bell_rim(top):
 def mature(lod=0):
     name = "belltree_mature" if lod == 0 else "belltree_mature_lod1"
     n = K.Node(name)
-    sides = 8 if lod == 0 else 6
+    # (木の磨き上げで変更: 幹に縦の裂け目を入れるため、面を 8 → 14 (lod1 は 6 → 8) にする。偶数の頂点を凹ませる)
+    sides = 14 if lod == 0 else 8
     spine = [(0, 0, 0), (0.06, 0.02, 0.6), (0.12, 0.06, 1.7), (0.05, 0.12, 3.0), (-0.02, 0.06, 4.3), (0.0, 0.0, 5.6), (0.05, -0.05, 6.8)]
     radii = [0.8, 0.6, 0.5, 0.46, 0.4, 0.3, 0.18]
     if lod:
         spine, radii = spine[::2], radii[::2]
-    bark_shade = K.shade_height(0, 2.0, 0.7, 1.0)
-    n.add(K.tube(spine, radii, n=sides, cap_start=False), M["bark"], smooth=True, shade=bark_shade)
-    roots = 5 if lod == 0 else 3
+    # (木の磨き上げで変更: 幹と根は樹皮の縦の筋・裂け目・根元の苔を頂点色で持つ trunk の材質にする。
+    #  基準画の幹は淡い樹皮に縦の筋が走り、板根が広がって根元に苔が付く)
+    bark_shade = K.bark_shade(spine, radii, BARK_LIN, MOSS_LIN, lo=0.66, hi=1.0, z1=2.4, moss_z=(0.2, 1.5), seed=1.3)
+    n.add(K.tube(spine, radii, n=sides, cap_start=False, ridge=K.fissures(sides, seed=5, flare=(2, 1.12), rings=len(spine))),
+          M["trunk"], smooth=True, shade=bark_shade)
+    # (木の磨き上げで変更: 板根を 6 本 (lod1 は 4 本) にし、断面を縦長の楕円 (鰭) にして根元で幹に広く付ける)
+    roots = 6 if lod == 0 else 4
     for i in range(roots):
         a = math.radians(20 + 360 * i / roots)
         d = Vector((math.cos(a), math.sin(a), 0))
-        pts = [d * 0.3 + Z * 1.1, d * 0.85 + Z * 0.32, d * 1.5 + Z * (-0.03)]
-        n.add(K.tube(pts, [0.36, 0.24, 0.06], n=5 if lod == 0 else 4, tip=True, cap_start=False), M["bark"],
-              smooth=True, shade=bark_shade)
+        L = 1.0 + 0.18 * math.sin(i * 2.3)
+        pts = [d * 0.22 + Z * 1.55, d * 0.62 + Z * 0.62, d * 1.15 * L + Z * 0.14, d * 1.7 * L + Z * (-0.05)]
+        n.add(K.tube(pts, [0.34, 0.3, 0.15, 0.04], n=6 if lod == 0 else 4, tip=True, cap_start=False,
+                     aspect=(0.62, 1.35)), M["trunk"], smooth=True, shade=bark_shade)
     clumps = canopy_clumps(lod)
     # (M22-07 光の筋のために変更: 太枝 5 本 (lod1 は 3 本) を下の輪の塊へ伸ばす形をやめ、房 8 つのそれぞれへ枝を 1 本ずつ伸ばす。
     #  下の輪の枝は幹の 3.3〜4.2 m から外へ垂れてから上がり、上の輪の枝は幹の上 (5.2〜6.4 m) から立ち上がる。
@@ -261,16 +308,27 @@ def mature(lod=0):
     rnd = random.Random(7)
     per = 3 if lod == 0 else 1
     centers = cluster_centers()
+    bell_clumps = [(c, r, s) for c, r, s in canopy_clumps(0)]
+    pts = bell_points(bell_clumps, 30, seed=11)
     for i, (c, r, s) in enumerate(clumps):
-        src = K.ico((r, r, r * 0.82), subdiv=s, jitter=(0.03, 0.07, 0.1)[s], seed=10 + i, flat_bottom=0.3)
+        # (木の磨き上げで変更: 塊は LUMP_K に縮めて、葉のカードの奥の暗い内側にする)
+        src = K.ico((r * LUMP_K, r * LUMP_K, r * 0.82 * LUMP_K), subdiv=s, jitter=(0.03, 0.07, 0.1)[s], seed=10 + i,
+                    flat_bottom=0.3)
         # (M22-07 光の筋のために変更: 柔らかい法線の基準を樹冠の中心から房の中心に替え、房ごとの丸い量感にする。
         #  陰りは樹冠全体の上下に、房の下側の陰りを掛ける)
         cc, cr = centers[i // per][0], centers[i // per][1]
+        # (木の磨き上げで変更: 粗くした塊の面の角が陰りに出ないよう、柔らかい法線を 0.55 → 0.9 にする)
         n.add(src, M["leaf"], matrix=K.trs(c, (0, 0, rnd.uniform(0, 360))), smooth=True,
-              shade=shade_cluster(cc, cr), soft=(cc + Z * 0.15 * cr, 0.55))
-    bell_clumps = [(c, r, s) for c, r, s in canopy_clumps(0)]
-    pts = bell_points(bell_clumps, 30, seed=11)
-    print(f"  {name}: bells={len(pts)}")
+              shade=shade_inner(cc, cr), soft=(cc + Z * 0.15 * cr, 0.9))
+    # (木の磨き上げで追加) 塊の表面に葉のカードを散らす。鐘の付け根の近くには置かない (鐘が葉に埋もれない)
+    lumps = [(c, r * LUMP_K, i // per) for i, (c, r, _) in enumerate(clumps)]
+    density, size = CARDS[lod]
+    cards = K.scatter_cards(n, M["foliage"], lumps, density, size, seed=70 + lod, color=CARD_LIN,
+                            shade_of=lambda k: shade_card(centers[k][0], centers[k][1]),
+                            soft_of=lambda k: (centers[k][0] + Z * 0.15 * centers[k][1], 1.0), avoid=pts, avoid_r=0.5, gap_clear=GAP_CLEAR)
+    print(f"  {name}: bells={len(pts)} cards={cards}")
+    # (木の磨き上げで追加) 鐘の付け根を、いちばん近い塊の中心から BELL_OUT 倍だけ外へ出す (カードの葉の層の外に吊るし、葉に埋もれない)
+    pts = [bell_out(p, bell_clumps) for p in pts]
     for j, p in enumerate(pts):
         bell(n, p, lod, seed=100 + j)
     return n
@@ -354,4 +412,4 @@ def logs():
 if __name__ == "__main__":
     nodes = [seedling(), sapling(), mature(0), mature(1), stump(), logs()]
     objs = [nd.build() for nd in nodes]
-    K.export_glb(objs, os.path.join(K.OUT_DIR, "belltree.glb"))
+    K.export_glb(objs, os.path.join(K.OUT_DIR, "belltree.glb"), texcoords=True)
