@@ -13,6 +13,8 @@ export type Grass = { mesh: InstancedMesh; update(t: number, camera?: { x: numbe
  * 距離で間引く (M22-03 の三角形の予算)。房は 1 つ 40 三角形あり、25,000 房を全部描くと 100 万になる。
  * カメラから NEAR_M までは全部、FAR_M までに KEEP_FAR まで、OUT_M までに KEEP_OUT まで減らす。どの房を残すかは房ごとの固定の乱数で決め、カメラが動いても同じ房が残る。
  */
+/** 草の丈の倍率 (試作 2 の判断で低くした。房の高さは約 0.35〜0.7 m) */
+const GRASS_HEIGHT = 0.5;
 const NEAR_M = 28;
 const FAR_M = 70;
 const KEEP_FAR = 0.3;
@@ -88,7 +90,8 @@ export function createGrass(field: TerrainField, layers: { grass?: Float32Array;
     p.set(x, h - 0.02, z);
     q.setFromAxisAngle(new Vector3(0, 1, 0), rng() * Math.PI * 2);
     const s = 1.4 + rng() * 1.2;
-    sc.set(s, s * (0.8 + g), s);
+    // 丈は低めに (試作 2 の判断: 座高 0.35 m の兎が 0.7〜1.3 m の草に埋もれて見えなかった)。横の広がりはそのまま
+    sc.set(s, s * (0.8 + g) * GRASS_HEIGHT, s);
     m.compose(p, q, sc);
     mesh.setMatrixAt(k, m);
     c.copy(colA).lerp(colB, rng() * 0.5).lerp(colM, Math.min(0.6, mo * 0.5));
