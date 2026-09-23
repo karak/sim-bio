@@ -13,8 +13,12 @@ import { resolveCivilizationStart } from './simulation/civilization';
 import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 
-/** 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる */
-const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, wildfire: 0, plague: 4 };
+/**
+ * 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる。
+ * 疫病は 6 (M10R-07): 祈りに応えるなの狼の波 (環 6) を波の年のうちに追い払う「先回り」が、環 4 では波の外縁が残って効かなかった
+ * (LD 2026-09-22-level-design-faith-economy.md §8.10)。通し実行の台本 (plagueHome) も同じ 6 にそろえる
+ */
+const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, wildfire: 0, plague: 6 };
 /** 種を放つときに各セルへ加える密度 */
 const SPAWN_AMOUNT = 0.5;
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   commandKey, updateFaith, FAITH_UP, FAITH_DOWN, FAITH_DISASTER, FAITH_DECAY, FAITH_ANSWER, FAITH_IGNORE, formatFaith,
-  updateFaithCap, FAITH_CAP_INITIAL, FAITH_CAP_IGNORE, FAITH_CAP_ANSWER, FAITH_CAP_RECOVER,
+  updateFaithCap, FAITH_CAP_INITIAL, FAITH_CAP_IGNORE, FAITH_CAP_ANSWER, FAITH_CAP_RECOVER, FAITH_YOUNG_STAGE,
 } from '../../src/simulation/faith';
 import type { Command } from '../../src/simulation/types';
 
@@ -175,3 +175,25 @@ describe('updateFaithCap (M10R-02, 境界値)', () => {
     expect(cap).toBe(0);
   });
 });
+
+describe('updateFaithCap の若い信仰の記憶 (M10R-07, LD §8.6)', () => {
+  it('FAITH_YOUNG_STAGE は歌 (3)', () => {
+    expect(FAITH_YOUNG_STAGE).toBe(3);
+  });
+  it('young なら取り下げ 1 回につき FAITH_CAP_IGNORE だけ下がる (無視と同じ重さ)', () => {
+    const result = updateFaithCap(0.8, { answered: 0, ignored: 0, prayerPending: false, withdrawn: 1, young: true });
+    expect(result).toBeCloseTo(0.8 - FAITH_CAP_IGNORE, 6);
+  });
+  it('young なら祈りの無い年でも回復しない (回復は応えのみ)', () => {
+    expect(updateFaithCap(0.5, { answered: 0, ignored: 0, prayerPending: false, withdrawn: 0, young: true })).toBe(0.5);
+    expect(updateFaithCap(0.5, { answered: 1, ignored: 0, prayerPending: false, withdrawn: 0, young: true })).toBeCloseTo(0.5 + FAITH_CAP_ANSWER, 6);
+  });
+  it('young でなければ取り下げは効かず、祈りの無い年は FAITH_CAP_RECOVER だけ回復する (石以上は M10R-02 のまま)', () => {
+    expect(updateFaithCap(0.5, { answered: 0, ignored: 0, prayerPending: false, withdrawn: 1, young: false })).toBeCloseTo(0.5 + FAITH_CAP_RECOVER, 6);
+    expect(updateFaithCap(0.5, { answered: 0, ignored: 0, prayerPending: false, withdrawn: 1 })).toBeCloseTo(0.5 + FAITH_CAP_RECOVER, 6);
+  });
+  it('young の無視と取り下げは重なって効く', () => {
+    expect(updateFaithCap(0.5, { answered: 0, ignored: 1, prayerPending: false, withdrawn: 1, young: true })).toBeCloseTo(0.5 - 2 * FAITH_CAP_IGNORE, 6);
+  });
+});
+

@@ -9,7 +9,7 @@ import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, canAscend, checkDecline, DECLINE_YEARS, LOAD_RADIUS, populationFor } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
-import { commandKey, disasterHitsHome, updateFaith, updateFaithCap, FAITH_INITIAL, FAITH_HISTORY_YEARS, FAITH_CAP_INITIAL } from './faith';
+import { commandKey, disasterHitsHome, updateFaith, updateFaithCap, FAITH_INITIAL, FAITH_HISTORY_YEARS, FAITH_CAP_INITIAL, FAITH_YOUNG_STAGE } from './faith';
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
@@ -101,6 +101,8 @@ export class World {
   private civYearAnswered = 0;
   /** 祈り (M9-02): 今年まだ集計していない、祈りを無視した (期限切れの) 回数。年ごとにリセット */
   private civYearIgnored = 0;
+  /** 今年、民が祈りを取り下げた回数 (M10R-07: 若い信仰の記憶に刻む)。年の初めに 0 に戻す */
+  private civYearWithdrawn = 0;
   /**
    * 祈り (M9-02): 次の祈りを出してよい最初の年 (前回解決した年 + PRAYER_COOLDOWN)。
    * -Infinity のままなら (まだ一度も解決していなければ) クールダウンは無いのと同じ。civFaithHistory と同じく
@@ -550,6 +552,7 @@ export class World {
         const kind = civ.prayer.kind;
         civ.prayer = undefined;
         civ.prayersWithdrawn = (civ.prayersWithdrawn ?? 0) + 1;
+        this.civYearWithdrawn++;
         // M10R-02: +1 で「取り下げた年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
         this.markPrayerResolved(year);
         this.log('info', 'sim.civ.prayer', { year, phase: 'withdrawn', kind });
@@ -594,6 +597,9 @@ export class World {
         answered: this.civYearAnswered,
         ignored: this.civYearIgnored,
         prayerPending: !!civ.prayer,
+        // 若い信仰の記憶 (M10R-07): 段階 ≤ 歌なら取り下げも刻み、回復は応えのみ
+        withdrawn: this.civYearWithdrawn,
+        young: civ.stage <= FAITH_YOUNG_STAGE,
       });
       civ.faith = Math.min(civ.faith, civ.faithCap);
       const capDelta = civ.faithCap - prevCap;
@@ -633,6 +639,7 @@ export class World {
     this.civYearDisasters = 0;
     this.civYearAnswered = 0;
     this.civYearIgnored = 0;
+    this.civYearWithdrawn = 0;
     // 空の舟 (M10R-04): 民は舟を優先する。塔の燃料の徴収より先に置く。同じ徴収半径 (LOAD_RADIUS[civ.stage]) の
     // 森・鐘樹をまず舟が SHIP_CUT_PER_YEAR (M10R-08: 一定量 6/年) だけ伐り、塔の燃料 (collectFuel、鐘樹の材が対象) はその残りから取る。
     // 順序をここで固定する以外の依存は無い (fuel 側の計算は舟の有無を見ない) ので、ブロックを丸ごと前に動かすだけで済む

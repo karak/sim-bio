@@ -41,8 +41,13 @@ export const FAITH_CAP_INITIAL = 1.0;
 export const FAITH_CAP_IGNORE = 0.1;
 /** 祈りに応えた 1 件につき上限に足す量 (M10R-02)。LD §3.1 の据え置き値 */
 export const FAITH_CAP_ANSWER = 0.1;
-/** 祈りが無い年 (困りごとが無い) に上限へ戻す量 (M10R-02)。LD §3.1 の据え置き値 */
+/** 祈りが無い年 (困りごとが無い) に上限へ戻す量 (M10R-02)。LD §3.1 の据え置き値。若い信仰 (段階 ≤ FAITH_YOUNG_STAGE) には効かない (M10R-07) */
 export const FAITH_CAP_RECOVER = 0.01;
+/**
+ * 若い信仰の段階の上限 (M10R-07、LD §8.6): 歌 (3) まで。この段階の民は「応えられずに終わった祈り」を取り下げでも記憶に刻む
+ * (上限 −FAITH_CAP_IGNORE) し、上限は応えでしか戻らない。祈りに応えるなの圧はここに置く。石 (4) 以上は M10R-02 のまま
+ */
+export const FAITH_YOUNG_STAGE = 3;
 
 /**
  * コマンドの「種類」のキー。信仰の更新で「同じ種類」「ばらつき」を数えるのに使う。
@@ -117,14 +122,18 @@ export function updateFaith(prev: number, input: { recent: string[]; disasters: 
  * (b) 応えた 1 回につき +FAITH_CAP_ANSWER
  * (c) 祈りが無い年 (prayerPending が false かつ answered も ignored も 0、つまり今年は困りごと自体が無かった) だけ +FAITH_CAP_RECOVER
  * (d) [0,1] にクランプ
+ * (e) young (段階 ≤ FAITH_YOUNG_STAGE、M10R-07): withdrawn (取り下げ) 1 回につき −FAITH_CAP_IGNORE、(c) は効かない
  * (a)(b)(c) は理屈上重ならない (無視・応えがあった年は必ず prayerPending か answered/ignored > 0 なので (c) は成り立たない) が、
  * 念のため足し引きしてからまとめてクランプする
  */
-export function updateFaithCap(prev: number, input: { answered: number; ignored: number; prayerPending: boolean }): number {
+export function updateFaithCap(prev: number, input: { answered: number; ignored: number; prayerPending: boolean; withdrawn?: number; young?: boolean }): number {
   const { answered, ignored, prayerPending } = input;
   let cap = prev;
   cap += answered * FAITH_CAP_ANSWER - ignored * FAITH_CAP_IGNORE;
-  if (!prayerPending && answered === 0 && ignored === 0) cap += FAITH_CAP_RECOVER;
+  // 若い信仰の記憶 (M10R-07、LD §8.6): 段階 ≤ 歌 (young) では、応えられずに終わった祈りは取り下げでも −FAITH_CAP_IGNORE、
+  // 上限の回復は応えのみ ((c) を外す)。石以上は今まで通り (塔の重さ・霊脈枯れ・迎撃・舟は変わらない)
+  if (input.young) cap -= (input.withdrawn ?? 0) * FAITH_CAP_IGNORE;
+  else if (!prayerPending && answered === 0 && ignored === 0) cap += FAITH_CAP_RECOVER;
   return Math.min(1, Math.max(0, cap));
 }
 

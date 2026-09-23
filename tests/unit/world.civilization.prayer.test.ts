@@ -136,6 +136,20 @@ describe('World civilization prayer wiring (M9-02)', () => {
     expect(civ?.faith).toBeGreaterThan(0.5 - FAITH_IGNORE);
   });
 
+  it('若い信仰の記憶 (M10R-07): 歌 (3) の民は取り下げでも上限が FAITH_CAP_IGNORE だけ削れ、祈りの無い年に回復しない', () => {
+    const home = someLandCell();
+    const log = createMemorySink();
+    const w = World.create(prayerConfig({ civilization: { speciesId: 'deer', start: { stage: 3, home, prayer: 'wolves', faith: 0.5 } } }), { log });
+    w.step(360 * (PRAYER_BASELINE_MIN + 1));
+    const civ = w.snapshot().civ;
+    expect(civ?.prayer).toBeUndefined();
+    expect(civ?.prayersWithdrawn).toBe(1);
+    expect(civ?.faithCap).toBeCloseTo(1 - FAITH_CAP_IGNORE, 6);
+    // その後、祈りの無い年が続いても上限は戻らない
+    w.step(360 * 3);
+    expect(w.snapshot().civ?.faithCap).toBeCloseTo(1 - FAITH_CAP_IGNORE, 6);
+  });
+
   it('祈りに応える介入は dispatch した瞬間に解決する (同じ年に応えた・信仰が上がる・prayersAnswered が増える)', () => {
     const log = createMemorySink();
     const home = someLandCell();
