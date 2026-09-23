@@ -163,8 +163,8 @@
     "id": "belltree",
     "name": "鐘樹",
     "trophic": "plant",
-    "growthRate": 0.005,
-    "mortality": 0.0026,
+    "growthRate": 0.0025,
+    "mortality": 0.0005,
     "tempRange": [
       2,
       26
@@ -173,7 +173,7 @@
       0.4,
       1.0
     ],
-    "diffusion": 0.002,
+    "diffusion": 0,
     "shade": 0.2,
     "litterBoost": 2,
     "assetId": "belltree",
