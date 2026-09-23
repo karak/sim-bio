@@ -630,6 +630,23 @@ code-review の指摘 10 件を直した。
   `tests/unit/ship.test.ts`・`ui.hud.test.ts`、(c)(d) は `assets/data/scenarios.json`(sky-ship)、`tests/unit/scenario.runner.test.ts`(0 年目の予定)、
   `tests/slow/scenarios.playthrough.test.ts`(空の舟の 8 件)。
 
+### 4.31 実装時の差分(M10R-07: 祈りに応えるなの作り直し)
+
+レベルデザイン §8.5〜8.6、§8.10(仮説 → 縮約モデル → 本体計測)の結論を入れた。
+
+- **若い信仰の記憶**(`src/simulation/faith.ts` `FAITH_YOUNG_STAGE` = 歌 (3))。この段階以下では、応えられずに終わった祈りは
+  取り下げでも上限から `FAITH_CAP_IGNORE` を引く(石以上は取り下げでは引かない)。祈りの無い年の `FAITH_CAP_RECOVER` (+0.01) も
+  若い段階では効かせない(戻る手段を応えだけに絞り、記憶に圧をかける)。`World.ts` は `updateFaithCap` に `withdrawn`・`young`
+  (`civ.stage <= FAITH_YOUNG_STAGE`) を渡す。
+- **シナリオ「祈りに応えるな」**(`assets/data/scenarios.json`): 集落を 2787 から **2063**(振幅比 0.06 の安定な群れ、自然の祈りが
+  出ない)へ。狼の波は 0.8 / 環 6 を 6 年目から 8 年ごと(`schedule` の `everyYears`)。年収は 12 のままだが、実効収入は
+  `incomePerYear × 陸地率 × 生気率` で、この島では実効 ≈ 3/年 にしかならない(§8.10 の M12 の正体。台本の不具合ではなく予算だった)。
+  先回り(波の年に力 24 で疫病)は 12 波中 7 回までしか買えず、6〜7 回で alive、5 回以下は記憶が尽きて夢喰いになる。
+- **`DISASTER_RADIUS.plague` を 4 → 6**(`src/main.ts`)。波が環 6 なので、環 4 の疫病では外縁が残って群れが崩れず、先回りが
+  一度も効かなかった(UI 並みの検証で発覚)。環 5 でも足りず、波と同じ環 6 で初めて先回りが機能する。
+- **ファイル**: `src/simulation/faith.ts`、`src/simulation/World.ts`、`src/main.ts`、`assets/data/scenarios.json`、
+  `tests/unit/faith.test.ts`、`tests/unit/world.civilization.prayer.test.ts`、`tests/slow/scenarios.playthrough.test.ts`(祈りに応えるなの 8 件)。
+
 ## 6. マイルストーンと受入基準
 
 証跡はテスト名とファイルパスで示す。sprint-qa-process に従い、各項目に commit SHA を後から追記する。
