@@ -864,5 +864,33 @@
       "type": "year_reached",
       "year": 5
     }
+  },
+  {
+    "id": "test-event",
+    "title": "警告の試し読み",
+    "hidden": true,
+    "prophecy": "この石板は試し読み用。一年目に狼の群れが下りる警告(狼レイヤーへの案内チップ付き)だけを確かめる。",
+    "kind": "endure",
+    "start": {
+      "seed": 42
+    },
+    "years": 3,
+    "schedule": [
+      {
+        "atYear": 1,
+        "text": "狼の群れが北の谷に下りた",
+        "command": {
+          "type": "spawn_species",
+          "speciesId": "wolf",
+          "cell": -1,
+          "amount": 1,
+          "radius": 3
+        }
+      }
+    ],
+    "alive": {
+      "type": "year_reached",
+      "year": 3
+    }
   }
 ]

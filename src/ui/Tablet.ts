@@ -121,6 +121,8 @@ export function createTablet(
   onSelect: (id: string | null) => void,
   /** 種 id → 表示名。結果の内訳で使う。省略時は id をそのまま出す */
   speciesNames: Record<string, string> = {},
+  /** 警告の「〜を見る」チップ (M21-02 D5) を押したときに呼ぶ。省略時はチップを出しても押しても何もしない */
+  onShowSpecies?: (id: string) => void,
 ): Tablet {
   const options = [`<option value="">自由モード</option>`]
     .concat(defs.filter((d) => !d.hidden).map((d) => `<option value="${d.id}"${def?.id === d.id ? ' selected' : ''}>${d.title}</option>`))
@@ -159,6 +161,14 @@ export function createTablet(
   });
   $('verdict-retry').addEventListener('click', () => onSelect(def?.id ?? null));
   $('verdict-free').addEventListener('click', () => onSelect(null));
+  // 警告から種レイヤーを開ける (M21-02 D5): update() のたびに innerHTML ごと差し替わるチップに直接つけず、
+  // #tablet-warnings 自体に 1 つだけ委譲リスナーを持たせる (要素が消えてもリスナーは残る)。
+  // 自由モード (def === null) では #tablet-warnings 自体を描かないので、$ (無ければ例外) ではなく querySelector で確かめる
+  root.querySelector('#tablet-warnings')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('.tablet-warning-layer');
+    const id = btn?.dataset.species;
+    if (id) onShowSpecies?.(id);
+  });
   // 持ち出しの Blob URL (M10-03)。showVerdict のたびに前回分を捨てる (retry で作り直すため)
   let cargoUrl: string | null = null;
 
@@ -176,7 +186,15 @@ export function createTablet(
       const msHtml = pending.map((m) => `<div class="tablet-milestone">${m.atYear} 年目: ${m.text}</div>`).join('');
       const msEl = $('tablet-milestones');
       if (msEl.innerHTML !== msHtml) msEl.innerHTML = msHtml;
-      const wHtml = warnings.slice(0, MAX_WARNINGS).map((w) => `<div class="tablet-warning">⚠ ${w.text}</div>`).join('');
+      // 種レイヤーへの案内チップ (M21-02 D5): id を持つ警告 (species_low、狼の波などの event) だけに出す。
+      // 狼の波の警告からレイヤーを開けるよう促す (m10r-07 playtest)
+      const wHtml = warnings
+        .slice(0, MAX_WARNINGS)
+        .map((w) => {
+          const chip = w.id ? ` <button class="chip tablet-warning-layer" data-species="${w.id}">${speciesNames[w.id] ?? w.id}を見る</button>` : '';
+          return `<div class="tablet-warning">⚠ ${w.text}${chip}</div>`;
+        })
+        .join('');
       const wEl = $('tablet-warnings');
       if (wEl.innerHTML !== wHtml) wEl.innerHTML = wHtml;
       const tlSummary = `年表 (${timeline.length})`;

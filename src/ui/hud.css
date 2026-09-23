@@ -38,6 +38,8 @@
 .tablet-prayer { font-size: 12px; color: #e0b055; }
 .tablet-milestones { font-size: 12px; color: #9fb3c2; }
 .tablet-warnings { font-size: 12px; color: #e0b055; line-height: 1.5; }
+/* 警告の種レイヤーチップ (M21-02 D5) */
+.tablet-warning-layer { margin-left: 6px; }
 .tablet-timeline { font-size: 12px; color: #9fb3c2; text-align: left; margin-top: 4px; }
 .tablet-timeline summary { cursor: pointer; text-align: center; }
 .tablet-event { line-height: 1.5; }
