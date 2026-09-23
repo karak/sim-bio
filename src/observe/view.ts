@@ -268,7 +268,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // 鐘樹: 密度に比例して最大 OPT.trees 本。密度で段 (成木・若木・芽) を選ぶ。舟の材を伐った跡として船台の近くに株を置く
   const rng = mulberry32(11);
   const bt = s.layers.populations['belltree'];
-  const cands: { x: number; z: number; d: number }[] = [];
+  // (M22-03: 植えた鐘樹が芽吹くように) 候補地 (位置・選ぶ閾値・大きさ・向き) は一度だけ決め、本体の密度が変わるたびに同じ候補から選び直す。
+  // 残る木は同じ場所・同じ姿のまま、密度が上がった所に新しい木が現れる
+  type Spot = { x: number; z: number; th: number; k: number; rot: number };
+  const spots: Spot[] = [];
   for (let i = 0; i < OPT.trees * 8; i++) {
     const x = (rng() * 2 - 1) * AREA_R * CELL_M;
     const z = (rng() * 2 - 1) * AREA_R * CELL_M;
@@ -276,22 +279,30 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // 集落の広場と船台は民が切り開いた場所として木を置かない (本体の鐘樹は集落を中心に立つが、小屋が林に埋もれて見えない)
     // (M22-06: 船台の切り開きは南の固定位置 (0, 20) から目印の船台へ)
     if (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20) continue;
-    const d = bt ? field.layerAt(bt, x, z) : 0;
-    if (rng() < d * 1.4) cands.push({ x, z, d });
+    spots.push({ x, z, th: rng(), k: 0.65 + rng() * 0.3, rot: rng() * Math.PI * 2 });
   }
-  const treeCount = Math.min(OPT.trees, cands.length);
+  let treeCount = 0;
   // 段ごとに置き場所の行列を集め、GLB のノード (無ければ仮の形) をまとめてインスタンス化する
   const byKind: Record<string, Matrix4[]> = { mature: [], sapling: [], seedling: [], stump: [] };
   const tq = new Quaternion();
   const ty = new Vector3(0, 1, 0);
   const tp = new Vector3();
   const ts = new Vector3();
-  for (let i = 0; i < treeCount; i++) {
-    const c = cands[i];
-    const kind = c.d > 0.35 ? 'mature' : c.d > 0.15 ? 'sapling' : 'seedling';
-    const k = 0.65 + rng() * 0.3;
-    byKind[kind].push(new Matrix4().compose(tp.set(c.x, field.heightAt(c.x, c.z) - 0.1, c.z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(k, k, k)));
-  }
+  const selectBelltrees = (layer: Float32Array | undefined) => {
+    const out: Record<'mature' | 'sapling' | 'seedling', Matrix4[]> = { mature: [], sapling: [], seedling: [] };
+    let n = 0;
+    for (const c of spots) {
+      if (n >= OPT.trees) break;
+      const d = layer ? field.layerAt(layer, c.x, c.z) : 0;
+      if (c.th >= d * 1.4) continue;
+      const kind = d > 0.35 ? 'mature' : d > 0.15 ? 'sapling' : 'seedling';
+      out[kind].push(new Matrix4().compose(tp.set(c.x, field.heightAt(c.x, c.z) - 0.1, c.z), tq.setFromAxisAngle(ty, c.rot), ts.set(c.k, c.k, c.k)));
+      n++;
+    }
+    treeCount = n;
+    return out;
+  };
+  Object.assign(byKind, selectBelltrees(bt));
   for (let i = 0; i < 6; i++) {
     const a = rng() * Math.PI * 2;
     const x = slip.x + Math.cos(a) * (15 + rng() * 6);
@@ -299,12 +310,20 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     byKind.stump.push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.05, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(1, 1, 1)));
   }
   const lods: LodProps[] = [];
+  const belltreeSets: Partial<Record<string, LodProps>> = {};
   for (const [kind, mats] of Object.entries(byKind)) {
     const node = findNode(treeGlb, `belltree_${kind}`) ?? placeholderTree(kind as 'mature' | 'sapling' | 'seedling' | 'stump');
     const lod1 = kind === 'mature' ? findNode(treeGlb, 'belltree_mature_lod1') : null;
     if (lod1) {
-      const l = lodProps(node, lod1, mats, 45);
+      const l = lodProps(node, lod1, mats, 45, OPT.trees);
       lods.push(l);
+      belltreeSets[kind] = l;
+      scene.add(l.group);
+    } else if (kind !== 'stump') {
+      // (M22-03: 若木と芽も植え直せるよう、遠くも同じ形の組にして置き場所を入れ替えられるようにする)
+      const l = lodProps(node, node, mats, 45, OPT.trees);
+      lods.push(l);
+      belltreeSets[kind] = l;
       scene.add(l.group);
     } else scene.add(instanceProps(node, mats));
   }
@@ -313,21 +332,39 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const forest = s.layers.populations['forest'];
   const forestNode = findNode(floraGlb, 'forest_tree');
   const forestLod = findNode(floraGlb, 'forest_tree_lod1');
-  if (forest && forestNode && forestLod) {
-    const mats: Matrix4[] = [];
-    for (let i = 0; i < OPT.forest * 10 && mats.length < OPT.forest; i++) {
-      const x = (rng() * 2 - 1) * AREA_R * CELL_M;
-      const z = (rng() * 2 - 1) * AREA_R * CELL_M;
-      if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
-      if (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20) continue;
-      if (rng() >= field.layerAt(forest, x, z) * 1.6) continue;
-      const k = 0.8 + rng() * 0.35;
-      mats.push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.1, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(k, k, k)));
-    }
-    const l = lodProps(forestNode, forestLod, mats, 45);
-    lods.push(l);
-    scene.add(l.group);
+  // (M22-03: 鐘樹と同じく、候補地を一度だけ決めて密度が変わるたびに選び直す)
+  const forestSpots: Spot[] = [];
+  for (let i = 0; i < OPT.forest * 10; i++) {
+    const x = (rng() * 2 - 1) * AREA_R * CELL_M;
+    const z = (rng() * 2 - 1) * AREA_R * CELL_M;
+    if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
+    if (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20) continue;
+    forestSpots.push({ x, z, th: rng(), k: 0.8 + rng() * 0.35, rot: rng() * Math.PI * 2 });
   }
+  const selectForest = (layer: Float32Array | undefined) => {
+    const mats: Matrix4[] = [];
+    for (const c of forestSpots) {
+      if (mats.length >= OPT.forest) break;
+      if (!layer || c.th >= field.layerAt(layer, c.x, c.z) * 1.6) continue;
+      mats.push(new Matrix4().compose(tp.set(c.x, field.heightAt(c.x, c.z) - 0.1, c.z), tq.setFromAxisAngle(ty, c.rot), ts.set(c.k, c.k, c.k)));
+    }
+    return mats;
+  };
+  let forestSet: LodProps | null = null;
+  if (forestNode && forestLod) {
+    forestSet = lodProps(forestNode, forestLod, selectForest(forest), 45, OPT.forest);
+    lods.push(forestSet);
+    scene.add(forestSet.group);
+  }
+  // 本体の年が進んだら、鐘樹と森の木を今の密度で選び直す
+  let treeYear = s.year;
+  const replant = (next: WorldSnapshot) => {
+    if (next.year === treeYear) return;
+    treeYear = next.year;
+    const b = selectBelltrees(next.layers.populations['belltree']);
+    for (const kind of ['mature', 'sapling', 'seedling'] as const) belltreeSets[kind]?.setPlacements(b[kind]);
+    forestSet?.setPlacements(selectForest(next.layers.populations['forest']));
+  };
 
   // 下草 (M22-03): 羊歯は木の陰 (鐘樹と森の密度)、小花は草地、穂の出た月草は草地にまばら
   const under: Record<string, Matrix4[]> = { fern: [], flower_patch: [], moongrass_tuft_seed: [] };
@@ -433,6 +470,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   grass.setLevel(OPT.sink);
   const onSnapshot = (next: WorldSnapshot) => {
     snap = next;
+    replant(next);
     const level = OPT.sink + Math.max(0, elev0 - next.layers.elevation[home]) * ELEV_M;
     water.setLevel(level);
     grass.setLevel(level);
