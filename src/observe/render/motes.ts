@@ -138,6 +138,8 @@ export type Motes = {
   sprout(at: { x: number; z: number }, radiusM: number): void;
   /** 雨の強さ (0〜1) */
   setRain(amount: number): void;
+  /** 集落の灯りの強さ (0〜1)。帆を失うと民が灯りを消す (M22-08) */
+  setLamps(amount: number): void;
 };
 
 export function createMotes(input: MotesInput): Motes {
@@ -220,6 +222,7 @@ export function createMotes(input: MotesInput): Motes {
   group.add(dust, flies, vit, sprouts, rain);
 
   const up = new Vector3();
+  let lamps = 1;
   return {
     group,
     update(t, dt, night, camera, target, agents) {
@@ -267,7 +270,7 @@ export function createMotes(input: MotesInput): Motes {
       }
       dustMat.uniforms.uAmount.value = 1 - night;
       flyMat.uniforms.uAmount.value = Math.max(0, night - 0.3) / 0.7;
-      poolMat.uniforms.uAmount.value = night;
+      poolMat.uniforms.uAmount.value = night * lamps;
       // 生気: 還る個体ごとに毎秒 VITALITY_RATE 粒を体の周りから出す
       for (const a of agents) {
         if (a.state !== 'return') {
@@ -312,6 +315,9 @@ export function createMotes(input: MotesInput): Motes {
     },
     sprout(at, radiusM) {
       sQueue.push({ x: at.x, z: at.z, r: Math.max(4, Math.min(30, radiusM)), left: 2.4 });
+    },
+    setLamps(amount) {
+      lamps = amount;
     },
     setRain(amount) {
       rainMat.uniforms.uAmount.value = amount;

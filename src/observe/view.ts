@@ -23,6 +23,7 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
+import { describeEvent } from '../ui/Tablet';
 import { mulberry32 } from '../simulation/rng';
 import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh } from './render/terrain';
 import { createWater } from './render/water';
@@ -177,6 +178,8 @@ export type ObserveHost = {
   shots: HTMLElement;
   snapshot: WorldSnapshot;
   clock?: { step(n: number): void; snapshot(): WorldSnapshot };
+  /** 種 id → 名前 (知らせの帯の文に使う) */
+  names?: Record<string, string>;
 };
 
 export type ObservationView = {
@@ -562,6 +565,21 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       mistAt = { x: e.at.x, y: field.heightAt(e.at.x, e.at.z), z: e.at.z };
     } else if (e.kind === 'rain') rainLeft = RAIN_S;
     else if (e.kind === 'departure') departLeft = DEPART_S;
+    else if (e.kind === 'sailLost') lampsTarget = 0;
+  };
+  // 帆を失う (M22-08、設計 §6): 民が灯りを消す。文明の段階が帆に戻ったら (船が進み出したら) また灯す
+  let lamps = 1;
+  let lampsTarget = 1;
+  // 知らせの帯 (M22-08): 石板の警告・祈り・結末を、画面の上に控えめに出して 8 秒で消す
+  const band = document.createElement('div');
+  band.style.cssText = 'position:absolute;left:50%;top:14px;transform:translateX(-50%);max-width:min(560px,80%);padding:5px 14px;border-radius:14px;font:13px/1.5 system-ui,sans-serif;color:#F4F6F1;background:rgba(31,38,33,0.55);opacity:0;transition:opacity 1.2s;pointer-events:none;text-align:center';
+  canvas.parentElement?.appendChild(band);
+  let bandLeft = 0;
+  const notice = (e: TimelineEvent) => {
+    if (e.kind !== 'warning' && e.kind !== 'prayer' && e.kind !== 'verdict') return;
+    band.textContent = describeEvent(e, host.names ?? {});
+    band.style.opacity = '1';
+    bandLeft = 8;
   };
   // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
   const DEPART_S = 70;
@@ -582,6 +600,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     return true;
   };
   const fx = (dt: number) => {
+    if (bandLeft > 0 && (bandLeft -= dt) <= 0) band.style.opacity = '0';
+    if (lampsTarget === 0 && snap.ship && snap.civ && snap.civ.stage >= 5) lampsTarget = 1;
+    lamps += (lampsTarget - lamps) * Math.min(1, dt / 3);
+    motes.setLamps(lamps);
     mist = Math.max(0, mist - dt / MIST_S);
     air?.setMist(mistAt, mistR, mist);
     rainLeft = Math.max(0, rainLeft - dt);
@@ -598,6 +620,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const direct = (dt: number) => {
     const frame = sceneFrame(snap, area);
     const scenes = detectScenes(prevFrame, frame, newEvents, area);
+    for (const e of newEvents) notice(e);
     newEvents = [];
     for (const e of scenes) playScene(e);
     prevFrame = frame;
@@ -625,8 +648,52 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       camera.updateProjectionMatrix();
       shownShot = null;
     }
+    // 個体を追う (M22-08): 押した個体が動いたぶん、狙いとカメラを一緒に動かす
+    const f = followId !== null ? agents.agents.find((a) => a.id === followId) : undefined;
+    if (followId !== null && !f) followId = null;
+    if (f) {
+      const y = field.heightAt(f.x, f.z) + 0.8;
+      followDelta.set(f.x - controls.target.x, y - controls.target.y, f.z - controls.target.z).multiplyScalar(Math.min(1, dt * 3));
+      controls.target.add(followDelta);
+      camera.position.add(followDelta);
+    }
     controls.update();
   };
+  // 個体を押す (ドラッグでない短い押し) と、その個体を追う。何もない所を押すと追うのをやめる
+  let followId: number | null = null;
+  const followDelta = new Vector3();
+  const down = { x: 0, y: 0 };
+  const proj = new Vector3();
+  // 試験用 (E2E): 個体の画面上の位置 (canvas の左上から px)。画面の外・カメラの後ろなら null
+  (window as unknown as { __observeScreen: unknown }).__observeScreen = (id: number) => {
+    const a = agents.agents.find((g) => g.id === id);
+    if (!a) return null;
+    proj.set(a.x, field.heightAt(a.x, a.z) + 0.8, a.z).project(camera);
+    if (proj.z > 1 || Math.abs(proj.x) > 0.9 || Math.abs(proj.y) > 0.9) return null;
+    const r = canvas.getBoundingClientRect();
+    return { x: r.left + ((proj.x + 1) / 2) * r.width, y: r.top + ((1 - proj.y) / 2) * r.height };
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    down.x = e.clientX;
+    down.y = e.clientY;
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+    const r = canvas.getBoundingClientRect();
+    let best: number | null = null;
+    let bestD = 40;
+    for (const a of agents.agents) {
+      proj.set(a.x, field.heightAt(a.x, a.z) + 0.8, a.z).project(camera);
+      if (proj.z > 1) continue;
+      const d = Math.hypot(((proj.x + 1) / 2) * r.width - (e.clientX - r.left), ((1 - proj.y) / 2) * r.height - (e.clientY - r.top));
+      if (d < bestD) {
+        bestD = d;
+        best = a.id;
+      }
+    }
+    followId = best;
+    touched = true;
+  });
   const first = params.get('shot');
   if (first && presets[first]) setTimeout(presets[first], 1500);
   const stats = host.stats;
@@ -687,7 +754,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;

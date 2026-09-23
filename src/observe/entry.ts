@@ -17,6 +17,8 @@ export type ObserveEntry = {
 };
 
 export type ObserveEntryOptions = {
+  /** 種 id → 名前 (観察画面の知らせの帯に使う) */
+  names?: Record<string, string>;
   getSpeed(): number;
   setSpeed(s: 0 | 1 | 10): void;
 };
@@ -60,7 +62,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
     const q = (sel: string) => l.querySelector(sel) as HTMLElement;
     q('.o-status').textContent = '観察画面を組んでいます…';
     const { createObservationView } = await import('./view');
-    view = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s });
+    view = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names });
   };
 
   const entry: ObserveEntry = {

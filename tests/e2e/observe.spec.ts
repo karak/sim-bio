@@ -29,3 +29,31 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
   await page.click('#speed-100');
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 20_000 });
 });
+
+test('observe view: clicking an animal follows it, and the speed stays in the game controls', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/?scenario=sky-ship');
+  await page.getByRole('button', { name: '3D で見る' }).click();
+  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^\d+ 年 · \d+ fps/, { timeout: 90_000 });
+  // 観察画面では速さのボタンを出さない (操作画面の速さに従う)
+  await expect(page.locator('#observe-layer .o-shots').getByRole('button', { name: '10x' })).toHaveCount(0);
+  // 群れの寄せ先で画面の中の個体を 1 つ選び、その位置を押す
+  await page.locator('#observe-layer .o-shots').getByRole('button', { name: '群れ' }).click();
+  const onScreen = () =>
+    page.evaluate(() => {
+      const w = window as unknown as { __observeDebug: { agents: { id: number; st: string }[] }; __observeScreen: (id: number) => { x: number; y: number } | null };
+      for (const a of w.__observeDebug.agents) {
+        if (a.st === 'enter' || a.st === 'leave') continue;
+        const p = w.__observeScreen(a.id);
+        if (p) return { id: a.id, ...p };
+      }
+      return null;
+    });
+  await expect.poll(onScreen, { timeout: 15_000 }).not.toBeNull();
+  const target = await onScreen();
+  if (!target) throw new Error('no animal on screen');
+  await page.mouse.click(target.x, target.y);
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __observeStats: { follow: number | null; camera: string } }).__observeStats), { timeout: 5_000 })
+    .toMatchObject({ follow: expect.any(Number), camera: 'free' });
+});

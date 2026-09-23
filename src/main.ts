@@ -111,6 +111,7 @@ async function boot(): Promise<void> {
   );
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
   const observe = createObserveEntry(app, {
+    names: Object.fromEntries(species.map((d) => [d.id, d.name])),
     getSpeed: () => loop.getSpeed(),
     setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
   });
