@@ -44,12 +44,15 @@ export type ShotCamera = {
   target(): Vector3;
 };
 
+/** 樹冠の中かを見る距離 (m)。房の塊の外に葉のカードが 1〜1.5 m ほど張り出す */
+const FOLIAGE_M = 4;
 const AROUND = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, -1, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)];
 
 /** カメラの位置が樹冠の中か (6 方向 2.5 m 以内に木が 3 方向以上ある)。樹冠を房に分けたので、狙いとの見通しだけでは樹冠の中に入ることがある */
+/** (木の磨き上げで変更: 葉のカードは光線に当たらず、房の塊は 0.86 に縮んだので、カードの殻のぶん FOLIAGE_M まで見る) */
 export function inFoliage(at: Vector3, blockers: Object3D[]): boolean {
   let n = 0;
-  for (const d of AROUND) if (new Raycaster(at, d, 0, 2.5).intersectObjects(blockers, true).length > 0) n++;
+  for (const d of AROUND) if (new Raycaster(at, d, 0, FOLIAGE_M).intersectObjects(blockers, true).length > 0) n++;
   return n >= 3;
 }
 
@@ -166,19 +169,30 @@ export function createShotCamera(
       // 区域の縁で押し戻される向きは、距離が縮んで真下を向くので選ばない
       if (clamped || zones.some((z) => inFront(z, want, from))) return false;
     }
-    place(p, y, 0, want);
-    const to = want.clone().sub(from);
-    const len = to.length();
-    if (new Raycaster(from, to.normalize(), 0, len).intersectObjects(blockers(), true).length > 0 || inFoliage(want, blockers())) return false;
-    // 手前の木が画を覆わないか、実際の向きで確かめる
+    // (木の磨き上げで変更: 林の横移動は 1 ショットで数 m 動き、途中で木に入ったので、始め・中ほど・終わりの 3 か所で確かめる)
+    const d = shot?.duration ?? 0;
     const keep = camera.position.clone();
     const keepQ = camera.quaternion.clone();
-    camera.position.copy(want);
-    camera.lookAt(from);
-    const blocked = frameBlocked(camera, blockers(), 10, frame.height >= HIGH_M);
+    let ok = true;
+    for (const tt of frame.track || frame.orbit ? [0, d / 2, d] : [0]) {
+      place(p, y, tt, want);
+      const to = want.clone().sub(from);
+      const len = to.length();
+      if (new Raycaster(from, to.normalize(), 0, len).intersectObjects(blockers(), true).length > 0 || inFoliage(want, blockers())) {
+        ok = false;
+        break;
+      }
+      // 手前の木が画を覆わないか、実際の向きで確かめる
+      camera.position.copy(want);
+      camera.lookAt(from);
+      if (frameBlocked(camera, blockers(), 10, frame.height >= HIGH_M)) {
+        ok = false;
+        break;
+      }
+    }
     camera.position.copy(keep);
     camera.quaternion.copy(keepQ);
-    return !blocked;
+    return ok;
   };
   return {
     start(s, agents) {

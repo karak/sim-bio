@@ -100,6 +100,8 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
         '#include <begin_vertex>',
         // 房の上ほど揺れる。位置ごとに位相をずらし、風の帯が野を渡るように見せる
         'vec4 wp = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);',
+        // (比較画の撮り直しで追加) カメラの足元 1.5〜5 m の房は根元へ縮める。低い寄りの画で手前の房が画を覆わないように
+        'transformed *= smoothstep(1.5, 5.0, distance((modelMatrix * wp).xz, cameraPosition.xz));',
         'float sway = sin(uTime * 1.6 + wp.x * 0.15 + wp.z * 0.07) * 0.5 + sin(uTime * 2.7 + wp.z * 0.3) * 0.2;',
         // (草の磨き上げ) 風向きは世界で揃え (房ごとの回転を戻す)、大きな突風の帯で強弱を付け、葉の先ほど大きく撓ませる
         'float gust = 0.55 + 0.45 * sin(uTime * 0.6 - (wp.x * 0.93 + wp.z * 0.37) * 0.06);',

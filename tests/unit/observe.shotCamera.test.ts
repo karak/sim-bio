@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, Vector3, type Object3D } from 'three';
-import { createShotCamera } from '../../src/observe/render/shotCamera';
+import { BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, SphereGeometry, Vector3, type Object3D } from 'three';
+import { createShotCamera, inFoliage } from '../../src/observe/render/shotCamera';
 import type { Agent } from '../../src/observe/agents';
 import type { Shot } from '../../src/observe/director';
 
@@ -75,6 +75,37 @@ describe('自動カメラ (shotCamera)', () => {
       // 俯角が画角の半分 (20°) より浅ければ、水平線は画の中
       const dir = camera.getWorldDirection(new Vector3());
       expect((Math.asin(-dir.y) * 180) / Math.PI).toBeLessThan(20);
+    }
+  });
+
+  it('房の塊から 3 m 離れていても、3 方向を房に囲まれていれば樹冠の中 (葉のカードの殻のぶん)', () => {
+    const lump = (x: number, y: number, z: number) => {
+      const m = new Mesh(new SphereGeometry(1, 12, 8), new MeshBasicMaterial());
+      m.position.set(x, y, z);
+      m.updateMatrixWorld();
+      return m;
+    };
+    const blockers: Object3D[] = [lump(4, 0, 0), lump(-4, 0, 0), lump(0, 4, 0)];
+    expect(inFoliage(new Vector3(0, 0, 0), blockers)).toBe(true);
+    // 房が 5 m 先なら樹冠の外
+    expect(inFoliage(new Vector3(0, 0, 0), [lump(6, 0, 0), lump(-6, 0, 0), lump(0, 6, 0)])).toBe(false);
+  });
+
+  it('林の横移動は、ショットの終わりに木に塞がれる向きを選ばない', () => {
+    const shot: Shot = { kind: 'groveTrack', subject: { x: 0, z: 0 }, duration: 16, reason: 'landscape' };
+    // rng = 0 の向きでは、終わりの位置 (x ≈ +6.4、z = 22) と狙いの間に木がある。始め (x ≈ -6.4) と中ほどは通る
+    const tree = new Mesh(new BoxGeometry(4, 5, 1), new MeshBasicMaterial());
+    tree.position.set(5, 2.5, 17);
+    tree.updateMatrixWorld();
+    const blockers: Object3D[] = [tree];
+    const camera = new PerspectiveCamera(38, 16 / 9);
+    const cam = createShotCamera(camera, flat, () => blockers, 80, () => 0);
+    cam.start(shot, []);
+    const aim = new Vector3(0, 2.5, 0);
+    for (let i = 0; i <= 16 * 10; i++) {
+      if (i > 0) cam.update(0.1, []);
+      const seg = camera.position.clone().sub(aim);
+      expect(new Raycaster(aim, seg.clone().normalize(), 0, seg.length()).intersectObjects(blockers, true)).toHaveLength(0);
     }
   });
 });
