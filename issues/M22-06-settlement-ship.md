@@ -50,3 +50,5 @@ M22-02
 - 舟のアセット: `tools/blender/observe_ship.py` → `assets/models/observe/ship.glb`。段ごとに 1 ノード(`ship_keel` 412 / `ship_ribs` 1,792 / `ship_planks` 1,968 / `ship_mast` 2,496 / `ship_sails` 3,928 / `ship_flying` 3,906 三角形)と `timber_pile` 516。
 - 集落に `woven_screen` 360・`stone_wall_corner` 680 を足し、`lantern_post` の灯籠に格子(368 → 512)。
 - 比較画: `docs/design/qa/observe/{ship,ship-stages,shipyard}.png`、記録は `docs/design/qa/observe/keyitems.md`。ゲーム側の段の切り替え・浮上・灯りが消える演出は未着手。
+- 2026-09-24 船台の規則を実装: 集落に最も近い、外海(地図の縁から塗り広げた海)に接する陸。舳先は外海が区域の中で最も長く続く 8 方位(af4a55d、`tests/unit/observe.area.test.ts`)。
+- 2026-09-24 試作に配線: 舟は進みで段を切り替えて船台に載せる(`src/observe/render/ship.ts`、URL の ship=進み・launched=1)。飛び立った舟は船台の上 7 m に浮かべて揺らす。丸太の山は船台の横、衝立は小屋の脇、L 字の石垣は集落の北の角(2d811b8)。飛び去る動き・帆を失うと灯りが消える演出は M22-08 の場面で。
