@@ -50,7 +50,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * URL: ?deer=300&trees=200&near=40&grass=20000&grade=1&bloom=1&shadow=1
  * (個体層をつないだ後: deer は区域の鹿の目標頭数。K を密度の合計から逆算する。0 なら本体の密度 × K_DEFAULT のまま。near は使わない)
  * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
- * (M22-08: sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
+ * (M22-08: depart=1 で開いてすぐ舟が飛び去る。sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  */
 const params = new URLSearchParams(location.search);
@@ -67,6 +67,7 @@ const OPT = {
   forest: num('forest', 80),
   ship: params.has('ship') ? num('ship', 0) : null,
   launched: params.get('launched') === '1',
+  depart: params.get('depart') === '1',
   speed: num('speed', 1),
   sink: num('sink', 0),
   auto: params.get('auto') !== '0' && !params.has('shot'),
@@ -389,8 +390,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   scene.add(motes.group);
   // 空の舟 (M22-06): 進みで段を切り替えて船台に載せる
   const shipView = createShipView(shipGlb, slip, toSea, field.heightAt(slip.x, slip.z) - 0.15);
-  const shipState = s.ship ? { ...s.ship, ...(OPT.ship !== null ? { progress: OPT.ship } : {}), ...(OPT.launched ? { launchedYear: s.year } : {}) } : null;
-  shipView.set(shipState);
+  const shipState = s.ship ? { ...s.ship, ...(OPT.ship !== null ? { progress: OPT.ship } : {}), ...(OPT.launched || OPT.depart ? { launchedYear: s.year } : {}) } : null;
+  shipView.set(shipState, { hold: OPT.launched });
   scene.add(shipView.group);
 
   // 月鹿: 近い OPT.near 頭は SkinnedMesh、残りは VAT の InstancedMesh (設計 §8 の群れの LOD)
@@ -433,7 +434,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     area = extractArea(snap, home, AREA_R);
     targets = targetCounts(area, K, folkRuleFor(snap.civ, 3));
     building = !!snap.ship && snap.ship.launchedYear === undefined && (snap.civ?.stage ?? 0) >= 5;
-    if (OPT.ship === null && !OPT.launched) shipView.set(snap.ship);
+    if (OPT.ship === null && !OPT.launched && !OPT.depart) shipView.set(snap.ship);
   };
   const clock = host.clock;
   const advance = (dt: number) => {
@@ -556,6 +557,25 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       mistR = Math.max(12, e.radius * CELL_M);
       mistAt = { x: e.at.x, y: field.heightAt(e.at.x, e.at.z), z: e.at.z };
     } else if (e.kind === 'rain') rainLeft = RAIN_S;
+    else if (e.kind === 'departure') departLeft = DEPART_S;
+  };
+  // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
+  const DEPART_S = 70;
+  let departLeft = OPT.depart && OPT.auto ? DEPART_S : 0;
+  const shipAt = new Vector3();
+  const departCam = (dt: number): boolean => {
+    if (departLeft <= 0) return false;
+    departLeft -= dt;
+    const b = marks.slipwayBow;
+    const y = field.heightAt(slip.x, slip.z);
+    camera.position.set(slip.x - b.x * 62 + b.z * 22, y + 20, slip.z - b.z * 62 - b.x * 22);
+    shipView.group.getWorldPosition(shipAt);
+    camera.lookAt(shipAt.x, shipAt.y - 2, shipAt.z);
+    if (camera.fov !== 40) {
+      camera.fov = 40;
+      camera.updateProjectionMatrix();
+    }
+    return true;
   };
   const fx = (dt: number) => {
     mist = Math.max(0, mist - dt / MIST_S);
@@ -582,6 +602,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // auto=0 のあいだは自動に戻らない
     if (!OPT.auto) director = { ...director, mode: 'free', shot: null, idle: 0 };
     touched = false;
+    if (director.mode === 'auto' && departCam(dt)) {
+      shownShot = null;
+      return;
+    }
     if (director.mode === 'auto' && director.shot) {
       if (director.shot !== shownShot) {
         shownShot = director.shot;

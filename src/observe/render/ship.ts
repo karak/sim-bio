@@ -27,7 +27,16 @@ const BLOCK_DROP = 0.5;
 const SLIP_TILT = Math.atan(1.5 / 27);
 const HOVER = 11;
 
-export type ShipView = { group: Group; set(ship: ShipState | null): void; update(t: number): void; node(): string | null };
+/**
+ * 飛び立ち (M22-08、key-visuals/departure): 飛び立ちに気づいてから RISE_S 秒で船台の上へ浮かび、
+ * 続く SAIL_S 秒で舳先の向き (外海) へ SAIL_M 進みながら高く昇り、霞に消える。hold なら浮かんだまま (試作の確認用)
+ */
+const RISE_S = 10;
+const SAIL_S = 60;
+const SAIL_M = 700;
+const SAIL_UP = 90;
+
+export type ShipView = { group: Group; set(ship: ShipState | null, opts?: { hold?: boolean }): void; update(t: number): void; node(): string | null };
 
 export function createShipView(glb: GLTF | null, at: { x: number; z: number }, yaw: number, ground: number): ShipView {
   const group = new Group();
@@ -49,10 +58,21 @@ export function createShipView(glb: GLTF | null, at: { x: number; z: number }, y
   group.quaternion.copy(rest);
   let shown: string | null = null;
   let flying = false;
+  let hold = false;
+  let departAt: number | null = null;
+  const bow = new Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const pitch = new Quaternion();
+  const roll = new Quaternion();
+  const ax = new Vector3(1, 0, 0);
+  const az = new Vector3(0, 0, 1);
+  const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
   return {
     group,
-    set(ship) {
+    set(ship, opts) {
+      const wasFlying = flying;
       flying = ship?.launchedYear !== undefined;
+      hold = opts?.hold ?? false;
+      if (flying && !wasFlying) departAt = null;
       const name = !ship ? null : flying ? FLYING : NODE[shipStage(ship.progress)];
       shown = name && nodes.has(name) ? name : null;
       for (const [n, o] of nodes) o.visible = n === shown;
@@ -60,8 +80,21 @@ export function createShipView(glb: GLTF | null, at: { x: number; z: number }, y
     },
     update(t) {
       if (!flying) return;
-      group.position.set(base.x, base.y + HOVER + Math.sin(t * 0.6) * 0.35, base.z);
-      group.rotation.z = Math.sin(t * 0.45) * 0.03;
+      if (hold) {
+        group.position.set(base.x, base.y + HOVER + Math.sin(t * 0.6) * 0.35, base.z);
+        group.rotation.z = Math.sin(t * 0.45) * 0.03;
+        return;
+      }
+      departAt ??= t;
+      const s = t - departAt;
+      const rise = ease(s / RISE_S);
+      const sail = ease((s - RISE_S) / SAIL_S);
+      group.position.set(base.x, base.y + HOVER * rise + SAIL_UP * sail + Math.sin(t * 0.6) * 0.35, base.z).addScaledVector(bow, SAIL_M * sail);
+      // 浮かぶときは船首をわずかに上げ、進むときは風を受けて少し傾ける
+      pitch.setFromAxisAngle(ax, -0.05 * rise * (1 - sail) - 0.03 * sail);
+      roll.setFromAxisAngle(az, Math.sin(t * 0.45) * 0.03 + 0.04 * sail);
+      group.quaternion.copy(level).multiply(pitch).multiply(roll);
+      group.visible = s < RISE_S + SAIL_S;
     },
     node: () => shown,
   };
