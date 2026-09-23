@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { formatCiv, formatShipHint } from '../../src/ui/Hud';
 import type { CivState } from '../../src/simulation/civilization';
-import { SHIP_CREW, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
+import { SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
 
 describe('formatCiv (HUD の文明の 1 行)', () => {
   it('civ が null なら null (行を出さない)', () => {
@@ -81,8 +81,10 @@ describe('formatCiv: 星の工事 (M10-02)', () => {
 });
 
 describe('formatShipHint: #hud-ship の説明文 (M10-03)', () => {
-  it('未着工なら門の説明 (帆・信仰・材・SHIP_NEED を含む)', () => {
-    expect(formatShipHint(null, null)).toBe(`帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。材を伐って ${SHIP_NEED} まで進む`);
+  it('未着工なら門の説明 (帆・信仰・材・SHIP_NEED・SHIP_CUT_PER_YEAR を含む、M10R-08)', () => {
+    expect(formatShipHint(null, null)).toBe(
+      `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。年に ${SHIP_CUT_PER_YEAR} の材を伐って ${SHIP_NEED} まで進む(${SHIP_NEED / SHIP_CUT_PER_YEAR} 年)`,
+    );
   });
   it('建造中は「舟 進み X.X / SHIP_NEED」を出す (完成していなければ「民は乗らない」は付かない)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.9 };

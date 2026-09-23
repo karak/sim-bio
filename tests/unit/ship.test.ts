@@ -11,7 +11,7 @@ import {
   SHIP_CREW,
   SHIP_FAITH,
   SHIP_FOREST_MIN,
-  SHIP_CUT,
+  SHIP_CUT_PER_YEAR,
   SHIP_NEED,
   type ShipState,
 } from '../../src/simulation/ship';
@@ -70,18 +70,33 @@ describe('空の舟 (M10-03): canLaunchShip', () => {
   });
 });
 
-describe('空の舟 (M10-03): stepShip', () => {
-  it('材 × SHIP_CUT を伐って進みに積み、伐った分だけ森・鐘樹の密度が減る', () => {
-    const forestPop = new Float32Array(N).fill(0.2);
+describe('空の舟 (M10R-08): stepShip', () => {
+  it('材が潤沢なら SHIP_CUT_PER_YEAR をちょうど伐って進みに積み、各セルは立木に比例して (rate = cut / timber) 減る', () => {
+    const forestPop = new Float32Array(N).fill(0.2); // 潤沢な材 (半径内の合計が SHIP_CUT_PER_YEAR を上回る)
     const before = sum(forestPop);
+    const timber = timberAround({ forest: new Float32Array(N).fill(0.2) }, HOME, RADIUS, land, SIZE);
+    expect(timber).toBeGreaterThan(SHIP_CUT_PER_YEAR); // 前提: この密度・半径なら材は潤沢
     const ship: ShipState = { startedYear: 0, progress: 0 };
     const r = stepShip(ship, { forest: forestPop }, HOME, RADIUS, land, SIZE);
-    const timber = timberAround({ forest: new Float32Array(N).fill(0.2) }, HOME, RADIUS, land, SIZE);
-    expect(r.cut).toBeCloseTo(timber * SHIP_CUT, 5);
-    expect(r.ship.progress).toBeCloseTo(r.cut, 5);
-    expect(before - sum(forestPop)).toBeCloseTo(r.cut, 4);
+    expect(r.cut).toBeCloseTo(SHIP_CUT_PER_YEAR, 5);
+    expect(r.ship.progress).toBeCloseTo(SHIP_CUT_PER_YEAR, 5);
+    expect(before - sum(forestPop)).toBeCloseTo(SHIP_CUT_PER_YEAR, 4);
+    // 半径内の立木がある 1 セルを取り出し、減った割合が rate = cut / timber と一致することを確かめる
+    const rate = SHIP_CUT_PER_YEAR / timber;
+    expect(forestPop[HOME]).toBeCloseTo(0.2 * (1 - rate), 6);
   });
-  it('合計の伐採量が残りの必要量 (SHIP_NEED − progress) を超えるなら、そこで頭打ちにする', () => {
+  it('材が SHIP_CUT_PER_YEAR に満たなければ、全部を伐って進みに積む (セルは 0 になる)', () => {
+    const forestPop = new Float32Array(N).fill(0.001); // 半径内の合計が SHIP_CUT_PER_YEAR を大きく下回る乏しい材
+    const timber = timberAround({ forest: new Float32Array(N).fill(0.001) }, HOME, RADIUS, land, SIZE);
+    expect(timber).toBeLessThan(SHIP_CUT_PER_YEAR); // 前提: この密度・半径なら材は不足
+    const ship: ShipState = { startedYear: 0, progress: 0 };
+    const r = stepShip(ship, { forest: forestPop }, HOME, RADIUS, land, SIZE);
+    expect(r.cut).toBeCloseTo(timber, 6);
+    expect(r.ship.progress).toBeCloseTo(timber, 6);
+    // 全部伐られるので、半径内 (陸) のセルの残り (= 新たな timber) は 0 になる
+    expect(timberAround({ forest: forestPop }, HOME, RADIUS, land, SIZE)).toBeCloseTo(0, 6);
+  });
+  it('伐採量が残りの必要量 (SHIP_NEED − progress) を超えるなら、SHIP_CUT_PER_YEAR より小さい値で頭打ちにする', () => {
     const forestPop = new Float32Array(N).fill(1); // 潤沢な材
     const ship: ShipState = { startedYear: 0, progress: SHIP_NEED - 0.05 };
     const r = stepShip(ship, { forest: forestPop }, HOME, RADIUS, land, SIZE);
