@@ -13,6 +13,7 @@ import {
   Object3D,
   PCFShadowMap,
   PerspectiveCamera,
+  Raycaster,
   Quaternion,
   Scene,
   SRGBColorSpace,
@@ -312,7 +313,7 @@ async function boot(): Promise<void> {
   }
   for (const [name, mats] of Object.entries(under)) {
     const node = findNode(floraGlb, name);
-    if (node && mats.length) scene.add(instanceProps(node, mats));
+    if (node && mats.length) scene.add(instanceProps(node, mats, false));
   }
 
   // 集落の一角: 船台は南の海岸へ向け、小屋・灯り・巨石・石垣で囲む
@@ -402,9 +403,20 @@ async function boot(): Promise<void> {
   const lookFrom = (tx: number, tz: number, dist: number, height: number, yaw: number) => {
     const ty = field.heightAt(tx, tz);
     controls.target.set(tx, ty + 1.2, tz);
-    const cx = tx + Math.sin(yaw) * dist;
-    const cz = tz + Math.cos(yaw) * dist;
-    camera.position.set(cx, Math.max(ty + height, field.heightAt(cx, cz) + 1.6), cz);
+    // (M22-03: 林の置き方が変わると寄せ先のカメラが樹冠に入るので、狙いとの間に木があれば向きを少しずつ振って見通しの良い所を探す。
+    // どの向きも塞がっていれば、最初の向きで木の手前に寄せる)
+    const blockers = lods.map((l) => l.group);
+    const place = (yw: number) => {
+      const cx = tx + Math.sin(yw) * dist;
+      const cz = tz + Math.cos(yw) * dist;
+      camera.position.set(cx, Math.max(ty + height, field.heightAt(cx, cz) + 1.6), cz);
+      const to = camera.position.clone().sub(controls.target);
+      const len = to.length();
+      return { to: to.normalize(), hit: new Raycaster(controls.target.clone(), to, 0, len).intersectObjects(blockers, true)[0] };
+    };
+    for (const dy of [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4]) if (!place(yaw + dy).hit) return;
+    const { to, hit } = place(yaw);
+    if (hit) camera.position.copy(controls.target).addScaledVector(to, Math.max(4, hit.distance - 1.5));
   };
   // 群れは区域の縁の何か所かに分かれるので、重心ではなく「15 m 以内の仲間が最も多い個体」に寄る
   const centroid = (sp: string) => {
@@ -476,7 +488,7 @@ async function boot(): Promise<void> {
     for (const l of lods) l.update(camera);
     water.update(t);
     shipView.update(t);
-    grass.update(t);
+    grass.update(t, camera.position);
     controls.update();
     renderer.info.autoReset = false;
     renderer.info.reset();

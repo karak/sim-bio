@@ -31,6 +31,8 @@ export function createWater(field: TerrainField, extent: number): Water {
   }
   geo.setAttribute('color', new BufferAttribute(col, 3));
   const mat = createToonMaterial({ vertexColors: true, transparent: true, opacity: 0.86, side: DoubleSide, rim: 0.25, rimColor: '#E8F6FF' });
+  // 半透明の両面は裏と表の 2 回描かれる。水面は下から見ないので 1 回で描く (M22-03)
+  mat.forceSinglePass = true;
   const uniforms = { uTime: { value: 0 } };
   const baseCompile = mat.onBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {

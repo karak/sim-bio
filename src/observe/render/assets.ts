@@ -1,6 +1,7 @@
 import { Mesh, MeshStandardMaterial, type Material, type Object3D } from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { toonFromStandard } from './toon';
+import { bakeMaterials } from './bake';
 
 /**
  * 観察画面の GLB (assets/models/observe/*.glb) を読む。材質は観察画面のトゥーンに置き換える (設計 §8)。
@@ -12,6 +13,8 @@ export async function loadGlb(url: string): Promise<GLTF | null> {
     if (!res.ok) return null;
     const gltf = await new GLTFLoader().loadAsync(url);
     toToon(gltf.scene);
+    // 材質ごとに分かれたメッシュを 1 つに焼き、draw call を減らす (M22-03)
+    bakeMaterials(gltf.scene);
     return gltf;
   } catch (e) {
     console.warn(`observe: ${url} を読めなかった`, e);

@@ -4,7 +4,8 @@ import { Group, InstancedMesh, Matrix4, type Mesh, type Object3D } from 'three';
  * 同じ形の静物 (鐘樹・株・草むら・岩) を、GLB のノードごとに InstancedMesh へまとめる (設計 §8 の draw call 予算)。
  * ノードの中のメッシュ 1 つにつき InstancedMesh 1 つ。置き場所の行列 × メッシュのノード内の行列 を各インスタンスに入れる。
  */
-export function instanceProps(node: Object3D, placements: Matrix4[]): Group {
+/** castShadow = false は小さな下草など、影を落としても見えないもの (影の draw call を増やさない) */
+export function instanceProps(node: Object3D, placements: Matrix4[], castShadow = true): Group {
   const group = new Group();
   if (placements.length === 0) return group;
   node.updateMatrixWorld(true);
@@ -18,7 +19,7 @@ export function instanceProps(node: Object3D, placements: Matrix4[]): Group {
     const inst = new InstancedMesh(mesh.geometry, mesh.material, placements.length);
     placements.forEach((p, i) => inst.setMatrixAt(i, m.multiplyMatrices(p, local)));
     inst.instanceMatrix.needsUpdate = true;
-    inst.castShadow = true;
+    inst.castShadow = castShadow;
     inst.receiveShadow = true;
     inst.computeBoundingSphere();
     group.add(inst);
