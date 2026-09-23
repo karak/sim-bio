@@ -41,6 +41,8 @@ describe('createScenarioRunner', () => {
     expect(eventsByYear[4]).toEqual(['狼の群れが北の谷に下りた']);
     const scheduled = r.timeline().filter((e) => e.kind === 'scheduled');
     expect(scheduled).toEqual([2, 4, 6].map((year) => ({ year, kind: 'scheduled', command: wave, text: '狼の群れが北の谷に下りた' })));
+    // 台詞は年表に scheduled として 1 行だけ。警告 (warning) の行としては重ねない
+    expect(r.timeline().filter((e) => e.kind === 'warning' && e.warning.kind === 'event')).toEqual([]);
   });
   it('everyYears があって untilYear が無い予定は予言の年まで繰り返す (M10R レビュー: 以前は 1 回しか撃たなかった)', () => {
     const w = fakeWorld({ deer: 1 });

@@ -362,7 +362,8 @@ export function createScenarioRunner(
         if (announced.length) { warnings = [...announced, ...warnings]; announced = []; }
         prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;
         for (const w of warnings) {
-          if (warned.has(w.key)) continue;
+          // text 付きの予定の台詞 (event) は fireDue が年表に scheduled として積んでいるので、警告としては重ねて積まない (手動受入で二重に出た)
+          if (w.kind === 'event' || warned.has(w.key)) continue;
           warned.add(w.key);
           timeline.push({ year, kind: 'warning', warning: w });
           opts.onWarning?.(w);
