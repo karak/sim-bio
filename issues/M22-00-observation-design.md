@@ -1,7 +1,7 @@
 ---
 id: M22-00
 title: 観察画面の設計(区域・個体層・カメラ・場面・アセット一覧・性能予算)
-status: todo
+status: review
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: []
