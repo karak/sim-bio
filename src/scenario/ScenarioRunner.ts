@@ -17,6 +17,8 @@ export type TimelineEvent =
   | { year: number; kind: 'civ_stage'; from: number; to: number }
   /** 文明の信仰が年をまたいで |Δ| >= 0.1 動いた (M9-01) */
   | { year: number; kind: 'civ_faith'; from: number; to: number }
+  /** 信仰の上限 (民の記憶) が年をまたいで |Δ| >= FAITH_TIMELINE_THRESHOLD 動いた (M10R-02) */
+  | { year: number; kind: 'civ_faith_cap'; from: number; to: number }
   /** 勅令の結果 (M9-03)。obeyed なら民が採掘を止めた/再開した、でなければ聞かなかった (faith はそのときの信仰) */
   | { year: number; kind: 'civ_edict'; edict: 'stop_mining' | 'resume_mining'; obeyed: boolean; faith: number }
   /** 文明の祈りが出た・応えられた・無視された (M9-02) */
@@ -28,7 +30,9 @@ export type TimelineEvent =
   /** 力が戻り、止まっていた気象塔が動き出した (M10-01) */
   | { year: number; kind: 'tower_resumed' }
   /** 迎撃 (M10-02): atYear 年目に予定されていた隕石を取り消した */
-  | { year: number; kind: 'intercepted'; atYear: number };
+  | { year: number; kind: 'intercepted'; atYear: number }
+  /** 夢喰いが集落に現れた・去った (M10R-03)。faithCap はそのときの信仰の上限 (石板の文言に使う) */
+  | { year: number; kind: 'dream_eater'; phase: 'appeared' | 'left'; faithCap: number };
 
 /** dispatch の戻り値は World の validate の結果 (M10 レビュー)。偽の world (テスト) は void でよく、その場合は受理とみなす */
 type RunnerWorld = { dispatch(cmd: Command, opts?: { fromStar?: boolean }): void | { ok: true } | { ok: false; reason: string }; snapshot(): WorldSnapshot };
@@ -133,6 +137,10 @@ export function createScenarioRunner(
   let lastCivStage = first.civ?.stage ?? 0;
   /** 直近に見た信仰の値。文明が無い・stage 0 のあいだは null (M9-01) */
   let lastCivFaith: number | null = first.civ?.faith ?? null;
+  /** 直近に見た信仰の上限。文明が無い・stage 0 のあいだは null (M10R-02) */
+  let lastCivFaithCap: number | null = first.civ?.faithCap ?? null;
+  /** 直近に見た夢喰いの有無 (M10R-03)。snapshot.dreamEater は World が年に一度更新するだけなので、ここでは有無の flip を見るだけでよい */
+  let lastDreamEater = first.dreamEater != null;
   /** 祈り (M9-02): 直近の年次評価で報告済みの issuedYear。同じ祈りを二重に issued 扱いしないための目印 */
   let lastPrayerIssuedYear: number | null = first.civ?.prayer?.issuedYear ?? null;
   /** 祈り (M9-02): 直近に見た祈りの種類。解決 (answered/ignored) された時点では civ.prayer が消えているので、
@@ -159,7 +167,9 @@ export function createScenarioRunner(
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
       if (cancelled.has(idx)) continue;
-      const last = sc.untilYear ?? sc.atYear;
+      // M10R レビュー: everyYears があって untilYear が無ければ予言の年まで繰り返す (以前は 1 回しか撃たず、
+      // 祈りに応えるなの「十二年ごとの狼」が 6 年目の 1 回だけになっていた)
+      const last = sc.untilYear ?? (sc.everyYears ? def.years : sc.atYear);
       for (let y = sc.atYear; y <= Math.min(year, last); y += sc.everyYears ?? Number.POSITIVE_INFINITY) {
         const key = `${idx}@${y}`;
         if (fired.has(key)) continue;
@@ -366,6 +376,19 @@ export function createScenarioRunner(
           timeline.push({ year, kind: 'civ_faith', from: lastCivFaith, to: civFaith });
         }
         if (civFaith !== undefined) lastCivFaith = civFaith;
+        // 信仰の上限 (民の記憶、M10R-02): civ_faith と同じ閾値・同じ扱い (発生前は積まない)
+        const civFaithCap = s.civ?.faithCap;
+        // M10R レビュー: 上限は無視 1 回でちょうど 0.1 動くが、二進小数では 0.0999… になり >= 0.1 を落とす。1e-9 の余裕を取る
+        if (civFaithCap !== undefined && lastCivFaithCap !== null && Math.abs(civFaithCap - lastCivFaithCap) >= FAITH_TIMELINE_THRESHOLD - 1e-9) {
+          timeline.push({ year, kind: 'civ_faith_cap', from: lastCivFaithCap, to: civFaithCap });
+        }
+        if (civFaithCap !== undefined) lastCivFaithCap = civFaithCap;
+        // 夢喰い (M10R-03): snapshot.dreamEater の有無が前年と変わっていれば現れた/去ったを年表に積む
+        const dreamEaterNow = s.dreamEater != null;
+        if (dreamEaterNow !== lastDreamEater) {
+          timeline.push({ year, kind: 'dream_eater', phase: dreamEaterNow ? 'appeared' : 'left', faithCap: s.civ?.faithCap ?? 0 });
+          lastDreamEater = dreamEaterNow;
+        }
         // 祈り (M9-02): 前年と比べて解決 (無視 → 応えた の順、World の内部順序に合わせる) → 発生の順で積む。
         // 解決の種類は civ.prayer が消えた後には残らないので、直近に見ていた種類 (lastPrayerKind) で補う
         const prayersIgnored = s.civ?.prayersIgnored ?? 0;

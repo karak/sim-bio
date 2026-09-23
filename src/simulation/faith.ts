@@ -32,6 +32,19 @@ export const FAITH_ANSWER = 0.15;
 export const FAITH_IGNORE = 0.15;
 
 /**
+ * 信仰の上限 (民の記憶、M10R-02)。docs/design/2026-09-22-level-design-faith-economy.md §3.1。
+ * 信仰そのものと違い、無視された祈りの記憶で下がり、応えた記憶・祈りの無い年の忘却で戻る。
+ * CivState.faithCap の初期値、および updateFaithCap の一律クランプ [0, FAITH_CAP_INITIAL] の上端
+ */
+export const FAITH_CAP_INITIAL = 1.0;
+/** 祈りを無視した (期限切れ) 1 件につき上限から引く量 (M10R-02)。LD §3.1 の据え置き値 */
+export const FAITH_CAP_IGNORE = 0.1;
+/** 祈りに応えた 1 件につき上限に足す量 (M10R-02)。LD §3.1 の据え置き値 */
+export const FAITH_CAP_ANSWER = 0.1;
+/** 祈りが無い年 (困りごとが無い) に上限へ戻す量 (M10R-02)。LD §3.1 の据え置き値 */
+export const FAITH_CAP_RECOVER = 0.01;
+
+/**
  * コマンドの「種類」のキー。信仰の更新で「同じ種類」「ばらつき」を数えるのに使う。
  * sink は滅びの進行(予定どおりの沈降)なので数えない (null)。
  */
@@ -92,6 +105,27 @@ export function updateFaith(prev: number, input: { recent: string[]; disasters: 
   faith += answered * FAITH_ANSWER - ignored * FAITH_IGNORE;
   faith *= 1 - FAITH_DECAY;
   return Math.min(1, Math.max(0, faith));
+}
+
+/**
+ * 信仰の上限 (民の記憶) を 1 年分更新する (M10R-02)。docs/design/2026-09-22-level-design-faith-economy.md §3.1。
+ * - answered: 今年、祈りに応えた回数
+ * - ignored: 今年、祈りを無視した (期限切れ) 回数
+ * - prayerPending: 今年の祈りの処理を終えた時点で、まだ有効な祈りが残っているか (取り下げ・無視・応えのどれでもなく続いている)
+ * 規則:
+ * (a) 無視した 1 回につき −FAITH_CAP_IGNORE
+ * (b) 応えた 1 回につき +FAITH_CAP_ANSWER
+ * (c) 祈りが無い年 (prayerPending が false かつ answered も ignored も 0、つまり今年は困りごと自体が無かった) だけ +FAITH_CAP_RECOVER
+ * (d) [0,1] にクランプ
+ * (a)(b)(c) は理屈上重ならない (無視・応えがあった年は必ず prayerPending か answered/ignored > 0 なので (c) は成り立たない) が、
+ * 念のため足し引きしてからまとめてクランプする
+ */
+export function updateFaithCap(prev: number, input: { answered: number; ignored: number; prayerPending: boolean }): number {
+  const { answered, ignored, prayerPending } = input;
+  let cap = prev;
+  cap += answered * FAITH_CAP_ANSWER - ignored * FAITH_CAP_IGNORE;
+  if (!prayerPending && answered === 0 && ignored === 0) cap += FAITH_CAP_RECOVER;
+  return Math.min(1, Math.max(0, cap));
 }
 
 /**

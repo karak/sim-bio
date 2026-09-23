@@ -15,8 +15,13 @@ export type PrayerState = { kind: PrayerKind; issuedYear: number; deadlineYear: 
 
 /** 祈りの期限 (年)。issuedYear からこの年数で無視した扱いになる */
 export const PRAYER_YEARS = 5;
-/** 祈りが解決してから次が出るまでの年数。同時に 1 つだけ */
-export const PRAYER_COOLDOWN = 3;
+/**
+ * 祈りが解決してから次が出るまでの年数。同時に 1 つだけ。
+ * 元は 3 (M9-02)。M10R-02 で 0 にした: 「困りごとが続く限り、翌年また祈る」(LD §3.1/§3.2)。
+ * 圧は間隔ではなく舞台装置 (狼の密度など) で作る。World 側は解決した年の翌年から次を出せるようにする
+ * (civPrayerCooldownUntil = year + PRAYER_COOLDOWN + 1 で、同じ年のうちには出ない)
+ */
+export const PRAYER_COOLDOWN = 0;
 
 /**
  * 「雨を」が出る閾値: 集落の支え半径 (SUPPORT_RADIUS) 内の草の密度平均がこれ未満。

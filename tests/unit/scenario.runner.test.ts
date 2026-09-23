@@ -10,7 +10,7 @@ const fakeWorld = (totals: Record<string, number>) => {
   const size = 4;
   const n = size * size;
   const snapshot = (): WorldSnapshot => ({
-    tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null, totals,
+    tick, year: Math.floor(tick / 360), dayOfYear: tick % 360, size, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null, dreamEater: null, totals,
     layers: { elevation: new Float32Array(n).fill(0.5), temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n) } },
   });
   return { dispatch: (c: Command) => { cmds.push(c); }, snapshot, step: (t: number) => { tick += t; }, cmds };
@@ -26,6 +26,14 @@ const def: ScenarioDef = {
 };
 
 describe('createScenarioRunner', () => {
+  it('everyYears があって untilYear が無い予定は予言の年まで繰り返す (M10R レビュー: 以前は 1 回しか撃たなかった)', () => {
+    const w = fakeWorld({ deer: 1 });
+    const d: ScenarioDef = { ...def, years: 7, schedule: [{ atYear: 2, everyYears: 2, command: { type: 'sink', amount: 0.01 } }] };
+    const r = createScenarioRunner(d, w);
+    for (let y = 0; y <= 7; y++) { r.update(w.snapshot()); w.step(360); }
+    // 2, 4, 6 年目の 3 回 (8 年目は予言の年を越える)
+    expect(w.cmds.filter((c) => c.type === 'sink')).toHaveLength(3);
+  });
   it('fires scheduled commands once at their year, resolves cell -1 to the center, and counts interventions', () => {
     const w = fakeWorld({ deer: 1 });
     const r = createScenarioRunner(def, w);

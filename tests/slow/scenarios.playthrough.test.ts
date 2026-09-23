@@ -372,6 +372,14 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
   const ritualFrom = (y0: number): Script => (r, s, y) => { if (y >= y0 && y % 2 === 0) r.intervene({ type: 'spawn_species', speciesId: 'grass', cell: s.civ!.home, amount: 0.5, radius: 3 }); };
   /** 備蓄が満ちたら撃つ */
   const fire: Script = (r, s) => { if ((s.civ?.works?.stock ?? 0) >= INTERCEPT_NEED) r.intervene({ type: 'intercept' }); };
+  /**
+   * 三度分の蓄えが成ったら「止めよ」(M10R-05)。星の工事も勅令で止まる。止めなければ脈が 10% を切って「星の砂を」が絶え間なく出て、
+   * 無視のたびに信仰の上限が削れ (5 年に −0.1)、工事の門 0.6 を切って止まる (LD §8.1)
+   */
+  const stopAtStock = (need: number): Script => (r, s) => {
+    const c = s.civ!;
+    if (c.stage === 7 && !c.miningStopped && (c.works?.stock ?? 0) >= need && (c.faith ?? 0) >= 0.6) r.intervene({ type: 'civ_edict', edict: 'stop_mining' });
+  };
   /** 塔で星の門 (群れ・信仰) が閉じている間は「止めよ」、開いたら「再開せよ」 */
   const edictLoop = (): Script => { let stopped = false; return (r, s) => {
     const c = s.civ!;
@@ -394,20 +402,26 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
     const v = playTower(def, seq(answerOnly, fire));
     expect(v.status).toBe('dead');
   });
-  it('naive late ritual without edict (儀式を 20 年目から、止めよ無し) → dead (塔で待つ間に脈を掘り、三度目の備蓄が足りない)', () => {
-    const v = playTower(def, seq(ritualFrom(20), fire));
-    expect(v.status).toBe('dead');
-    expect(v.reason).toContain('deer');
-  });
-  it('solution 1: late ritual + edict (儀式を 20 年目から、門が閉じている間は止めよ) → alive (三度砕く)', () => {
-    const v = playTower(def, seq(ritualFrom(20), edictLoop(), fire));
-    expect(v.status).toBe('alive');
-    expect(v.reason).toContain('星を 3 回砕いた');
-  });
-  it('solution 2: ritual from the start (儀式を最初から) → alive (塔で待たずに星へ)', () => {
+  it('naive ritual without edict (儀式を最初から、止めよ無し) → dead (脈を掘り尽くし「星の砂を」の無視で上限が削れ、工事が止まり内乱で崩れる)', () => {
     const v = playTower(def, seq(ritualFrom(0), fire));
+    expect(v.status).toBe('dead');
+    expect(v.reason).toContain('文明の段階 0');
+  });
+  it('solution 1: ritual + stop at three loads (儀式を最初から、備蓄 9 で止めよ) → alive (三度砕く)', () => {
+    const v = playTower(def, seq(ritualFrom(0), stopAtStock(9), fire));
     expect(v.status).toBe('alive');
     expect(v.reason).toContain('星を 3 回砕いた');
+  });
+  it('solution 2: ritual + stop at two loads (備蓄 6 で止めよ、残りは止める前の余りで) → alive', () => {
+    const v = playTower(def, seq(ritualFrom(0), stopAtStock(6), fire));
+    expect(v.status).toBe('alive');
+    expect(v.reason).toContain('星を 3 回砕いた');
+  });
+  it('naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (儀式が遅いと三度分を蓄える前に脈が 10% を切り、失望で工事が止まる)', () => {
+    // 計測 (M10R-05): 星に届くのが 36 年目、備蓄 9 は 84 年目。脈は 85 年目に 10% を切って「星の砂を」が絶え間なく出て、上限が 114 年目に 0.6 を割る
+    const v = playTower(def, seq(ritualFrom(20), edictLoop(), stopAtStock(9), fire));
+    expect(v.status, v.reason).toBe('dead');
+    expect(v.reason).toContain('文明の段階');
   });
 });
 

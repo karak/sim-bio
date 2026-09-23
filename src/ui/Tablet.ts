@@ -80,6 +80,9 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       return `文明が ${STAGE_NAMES[e.from]} → ${STAGE_NAMES[e.to]} に${e.to > e.from ? '上がった' : '下がった'}`;
     case 'civ_faith':
       return `信仰が ${formatFaith(e.from)} → ${formatFaith(e.to)} に${e.to > e.from ? '上がった' : '下がった'}`;
+    // 信仰の上限 (民の記憶、M10R-02): 下がる (無視の記憶) と上がる (応え・祈りの無い年の忘却) で言葉を変える
+    case 'civ_faith_cap':
+      return e.to < e.from ? `民は忘れない: 信仰の上限 ${formatFaith(e.to)}` : `民の記憶が薄れる: 信仰の上限 ${formatFaith(e.to)}`;
     case 'civ_edict': {
       if (!e.obeyed) return `民は聞かなかった(信仰 ${formatFaith(e.faith)}。${EDICT_FAITH} に足りない)`;
       return e.edict === 'stop_mining' ? '民は採掘を止めた' : '民は採掘を再開した';
@@ -100,6 +103,9 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
       return '力が尽き、気象塔が止まった';
     case 'tower_resumed':
       return '気象塔が動き出した';
+    // 夢喰い (M10R-03): 現れた・去った。信仰の上限 (faithCap) を添える (LD §3.3)
+    case 'dream_eater':
+      return e.phase === 'appeared' ? `夢喰いが集落に現れた(信仰の上限 ${formatFaith(e.faithCap)})` : `夢喰いが去った(信仰の上限 ${formatFaith(e.faithCap)})`;
   }
 }
 

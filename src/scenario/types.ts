@@ -29,6 +29,8 @@ export type Condition =
   | { type: 'intercepted'; min?: number; max?: number }
   /** 舟が飛び立ち、生きている種が minSpecies (省略時 1) 以上か (M10-03)。「空の舟」の escape / alive に使う */
   | { type: 'escaped'; minSpecies?: number }
+  /** 夢喰いが今、集落に現れているか (M10R-03)。「祈りに応えるな」の dead に使う (why は「夢喰いに食われた」) */
+  | { type: 'dream_eater' }
   | { type: 'year_reached'; year: number }
   | { type: 'no_intervention' }
   | { type: 'all'; of: Condition[] }

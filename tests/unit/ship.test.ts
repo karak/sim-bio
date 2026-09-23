@@ -3,16 +3,20 @@ import {
   timberAround,
   canLaunchShip,
   stepShip,
+  shipCrew,
   shipDone,
   aliveSpeciesCount,
   exportCargo,
   SHIP_STAGE,
+  SHIP_CREW,
   SHIP_FAITH,
   SHIP_FOREST_MIN,
   SHIP_CUT,
   SHIP_NEED,
   type ShipState,
 } from '../../src/simulation/ship';
+import { POP_NEED } from '../../src/simulation/civilizationLoad';
+import { populationAround } from '../../src/simulation/civilization';
 import type { CivState } from '../../src/simulation/civilization';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass, forest } from './helpers';
@@ -101,6 +105,20 @@ describe('空の舟 (M10-03): stepShip', () => {
   });
 });
 
+describe('乗せる民 (M10R-04): SHIP_CREW / shipCrew', () => {
+  it('SHIP_CREW は POP_NEED[SHIP_STAGE] (帆) と同値', () => {
+    expect(SHIP_CREW).toBe(POP_NEED[SHIP_STAGE]);
+  });
+  it('shipCrew は populationAround (SUPPORT_RADIUS) と同じ値を返す (populationFor が段階 帆 では populationAround に委ねるため)', () => {
+    const pops = new Float32Array(N).fill(0.2);
+    expect(shipCrew(pops, HOME, land, SIZE)).toBeCloseTo(populationAround(pops, HOME, land, SIZE), 6);
+    expect(shipCrew(pops, HOME, land, SIZE)).toBeGreaterThan(0);
+  });
+  it('home が未設定 (-1) なら 0', () => {
+    expect(shipCrew(new Float32Array(N).fill(0.2), -1, land, SIZE)).toBe(0);
+  });
+});
+
 describe('空の舟 (M10-03): shipDone', () => {
   it('進みが SHIP_NEED に達したかどうかを返す', () => {
     expect(shipDone({ startedYear: 0, progress: SHIP_NEED - 0.01 })).toBe(false);
@@ -115,7 +133,7 @@ const mkSnapshot = (totals: Record<string, number>): WorldSnapshot => {
   const pop = (t: number) => new Float32Array(n).fill(t / n);
   return {
     tick: 0, year: 3, dayOfYear: 0, size: 2, species: [grass, forest], meanTemperature: 10, co2: 280,
-    climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null,
+    climate: { tempOffset: 0, rainScale: 1 }, civ: null, volcanoCell: 0, towers: [], ship: null, dreamEater: null,
     totals,
     layers: {
       elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n),

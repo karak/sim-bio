@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CIV_VITALITY_LOW, FAITH_LOW, scenarioWarnings, speciesInCondition } from '../../src/scenario/warnings';
-import { SHIP_NEED } from '../../src/simulation/ship';
+import { SHIP_CREW, SHIP_NEED } from '../../src/simulation/ship';
 import type { ScenarioDef, StartStats } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
@@ -14,7 +14,7 @@ const snap = (over: { totals?: Record<string, number>; land?: number[]; civ?: { 
     ? { speciesId: 'deer', stage: over.civ.stage, progress: 0, home: -1, population: 0, ...(over.civ.fuel ? { fuel: { last: 0, shortYears: 0, ...over.civ.fuel } } : {}) }
     : null;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0, towers: [], ship: null,
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass, deer], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0, towers: [], ship: null, dreamEater: null,
     totals: over.totals ?? { grass: 10, deer: 4, wolf: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation: new Float32Array(n), vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: new Float32Array(n), deer: new Float32Array(n) } },
   };
@@ -131,6 +131,12 @@ describe('空の舟の警告 (M10-04): ship_stalled / ship_late', () => {
     expect(w.find((x) => x.kind === 'ship_stalled')!.text).toBe(`舟の進みが止まっている(材が無い。進み 36.8 / ${SHIP_NEED})`);
     expect(w.map((x) => x.kind)).not.toContain('ship_late');
   });
+  it('段階が帆に満たなければ ship_stalled の文言は「帆を失い」になり、材の文言や ship_late は出ない (M10R-05)', () => {
+    const s = { ...withShip(36.8), civ: { speciesId: 'deer', stage: 4, progress: 0, home: -1, population: 0, faith: 1 } };
+    const w = scenarioWarnings(escDef, s, start, null, null, { year: 160, prevProgress: 30 });
+    expect(w.find((x) => x.kind === 'ship_stalled')!.text).toBe(`帆を失い、舟は止まっている(段階 4 < 5。進み 36.8 / ${SHIP_NEED})`);
+    expect(w.map((x) => x.kind)).not.toContain('ship_late');
+  });
   it('進んでいても、今の速さでは残り年数で足りなければ ship_late。足りれば出ない。5 年未満は判定しない', () => {
     // 100 年で 30: 年 0.3、残り 100 年で 30 → 90 に足りない
     const late = scenarioWarnings(escDef, withShip(30, undefined, 100), start, null, null, { year: 100, prevProgress: 29.7 });
@@ -148,13 +154,24 @@ describe('空の舟の警告 (M10-04): ship_stalled / ship_late', () => {
 
 describe('空の舟の警告 (M10 レビュー): 成ったのに飛ばない舟は ship_waiting、止まった扱いにしない', () => {
   const escDef: ScenarioDef = { ...def, kind: 'escape', years: 200, escape: { type: 'escaped', minSpecies: 5 } };
-  const done = (faith: number) => ({ ...snap({ civ: { stage: 5 } }), year: 61, ship: { startedYear: 0, progress: SHIP_NEED }, civ: { speciesId: 'deer', stage: 5, progress: 0, home: -1, population: 0, faith } });
+  // populationShip (M10R-04) は既定で SHIP_CREW ちょうど (足りる) にしておき、信仰だけを動かすテストに影響しないようにする
+  const done = (faith: number, crew: number = SHIP_CREW) => ({
+    ...snap({ civ: { stage: 5 } }),
+    year: 61,
+    ship: { startedYear: 0, progress: SHIP_NEED },
+    civ: { speciesId: 'deer', stage: 5, progress: 0, home: -1, population: 0, faith, populationShip: crew },
+  });
   it('進みが満ちて信仰が SHIP_FAITH 未満なら ship_waiting (信仰つき)。ship_stalled は出ない', () => {
     const w = scenarioWarnings(escDef, done(0.42), start, null, null, { year: 61, prevProgress: SHIP_NEED });
     expect(w.map((x) => x.kind)).not.toContain('ship_stalled');
     expect(w.find((x) => x.kind === 'ship_waiting')!.text).toBe('舟は成ったが民が乗らない(信仰 0.42。0.5 に足りない)');
   });
-  it('進みが満ちて信仰も足りていれば何も出ない (その年のうちに飛ぶ)', () => {
+  it('進みが満ちて信仰は足りているが民 (populationShip) が SHIP_CREW 未満なら ship_waiting (民つき、M10R-04)', () => {
+    const w = scenarioWarnings(escDef, done(0.7, 0.42), start, null, null, { year: 61, prevProgress: SHIP_NEED });
+    expect(w.map((x) => x.kind)).not.toContain('ship_stalled');
+    expect(w.find((x) => x.kind === 'ship_waiting')!.text).toBe(`舟は成ったが民が足りない(民 0.42。${SHIP_CREW} に足りない)`);
+  });
+  it('進みが満ちて信仰も民も足りていれば何も出ない (その年のうちに飛ぶ)', () => {
     expect(scenarioWarnings(escDef, done(0.7), start, null, null, { year: 61, prevProgress: SHIP_NEED }).map((x) => x.kind)).not.toContain('ship_waiting');
   });
   it('ship_late は世界の年 (snapshot.year) で経過を測る: 石板の年と世界の年がずれていても速さが狂わない', () => {

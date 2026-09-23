@@ -2,6 +2,7 @@ import {
   AmbientLight,
   BoxGeometry,
   BufferAttribute,
+  CircleGeometry,
   Color,
   ConeGeometry,
   DirectionalLight,
@@ -23,6 +24,7 @@ import { SEA_LEVEL } from '../simulation/terrain';
 import { layerToColors, type LayerKind } from './layerToColors';
 import { scatterInstances } from './scatter';
 import { settlementInstances } from './settlement';
+import { dreamEaterShade } from './dreamEaterShade';
 import type { AssetTable } from './assetTable';
 
 /** 集落の箱 1 個の寸法。stage の数だけ縦に積む */
@@ -35,6 +37,8 @@ const VOLCANO_MARKER = { radius: 0.7, height: 1.6 };
 const TOWER_MARKER = { radius: 0.3, height: 1.1 };
 /** 同時に描ける気象塔の目印の上限 */
 const TOWER_MARKER_MAX = 32;
+/** 夢喰いの影 (M10R-03)。集落を覆う暗い半透明の円。地面のすぐ上に薄く浮かせる (Z ファイト防止) */
+const DREAM_EATER_SHADE = { color: '#1A0E22', opacity: 0.55, yOffset: 0.05 };
 
 export type SceneView = {
   /** 毎フレーム呼ぶ。tick かレイヤーが変わった時だけ頂点色とインスタンスを更新する */
@@ -126,6 +130,16 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   towerMarkerMesh.frustumCulled = false;
   scene.add(towerMarkerMesh);
 
+  // 夢喰いの影: 集落の支え半径を覆う暗い半透明の円。settlementMesh/towerMarkerMesh と同じく毎フレームでなく tick/civ が変わった時だけ置き直す (M10R-03)
+  const dreamEaterGeo = new CircleGeometry(1, 24);
+  dreamEaterGeo.rotateX(-Math.PI / 2);
+  const dreamEaterMesh = new Mesh(
+    dreamEaterGeo,
+    new MeshLambertMaterial({ color: DREAM_EATER_SHADE.color, transparent: true, opacity: DREAM_EATER_SHADE.opacity, side: DoubleSide, depthWrite: false }),
+  );
+  dreamEaterMesh.visible = false;
+  scene.add(dreamEaterMesh);
+
   let layer: LayerKind = 'terrain';
   let lastTick = -1;
   let lastLayer: LayerKind | null = null;
@@ -204,6 +218,15 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       }
       towerMarkerMesh.count = towerCount;
       towerMarkerMesh.instanceMatrix.needsUpdate = true;
+      // 夢喰いの影 (M10R-03): 現れていれば home の上に支え半径の円を置く。settlementInstances と同じ純粋関数の流儀
+      const shade = dreamEaterShade(s.dreamEater, s.civ, size);
+      dreamEaterMesh.visible = shade.visible;
+      if (shade.visible) {
+        const sx = shade.cell % size;
+        const sy = (shade.cell - sx) / size;
+        dreamEaterMesh.scale.setScalar(shade.radius);
+        dreamEaterMesh.position.set(sx - size / 2 + 0.5, s.layers.elevation[shade.cell] * hs + DREAM_EATER_SHADE.yOffset, sy - size / 2 + 0.5);
+      }
       lastTick = s.tick;
       lastLayer = layer;
     }
@@ -245,6 +268,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       settlementGeo.dispose();
       volcanoMarkerGeo.dispose();
       towerMarkerGeo.dispose();
+      dreamEaterGeo.dispose();
     },
   };
 }

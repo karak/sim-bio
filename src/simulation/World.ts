@@ -9,13 +9,14 @@ import { applyDisaster, forEachInRadius, stepFire } from './disaster';
 import { checkEmergence, cellDistance, EMERGE_CANDIDATE_MOVE, EMERGE_HISTORY_YEARS, MAX_STAGE, MINE_RADIUS, meanAround, SUPPORT_RADIUS, trackHomeCandidate, populationAround, stepMining, type CivState } from './civilization';
 import { applyLoad, canAscend, checkDecline, DECLINE_YEARS, LOAD_RADIUS, populationFor } from './civilizationLoad';
 import { collectFuel, FUEL_NEED, FUEL_STOCK_YEARS, FUEL_YEARS } from './civilizationFuel';
-import { commandKey, disasterHitsHome, updateFaith, FAITH_INITIAL, FAITH_HISTORY_YEARS } from './faith';
+import { commandKey, disasterHitsHome, updateFaith, updateFaithCap, FAITH_INITIAL, FAITH_HISTORY_YEARS, FAITH_CAP_INITIAL } from './faith';
 import { isAnswer, issuePrayer, prayerStillNeeded, PRAYER_BASELINE_MIN, PRAYER_BASELINE_YEARS, PRAYER_COOLDOWN, PRAYER_YEARS } from './prayer';
 import { computeVeinLoss, labelVeins, veinCellLists } from './vein';
 import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
+import { applyDreamEater, stepDreamEater, type DreamEaterState } from './dreamEater';
 import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
-import { aliveSpeciesCount, canLaunchShip, shipDone, stepShip, timberAround, SHIP_FAITH, type ShipState } from './ship';
+import { aliveSpeciesCount, canLaunchShip, shipDone, stepShip, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_STAGE, type ShipState } from './ship';
 import {
   canBuildTower,
   takeCrystal,
@@ -104,8 +105,14 @@ export class World {
    * 祈り (M9-02): 次の祈りを出してよい最初の年 (前回解決した年 + PRAYER_COOLDOWN)。
    * -Infinity のままなら (まだ一度も解決していなければ) クールダウンは無いのと同じ。civFaithHistory と同じく
    * セーブには含めない (restore 直後はクールダウン無しから再開する。値そのものの互換は civ.prayer が担う)
+   * M10R-02: PRAYER_COOLDOWN を 0 にしたので、+1 して「解決した年の翌年から」にする。でなければ同じ年の
+   * 無視/取り下げ直後に (year >= 解決した年 + 0 が真のまま) 同じ年のうちに次の祈りが出てしまう
    */
   private civPrayerCooldownUntil = -Infinity;
+  /** 祈りが解決 (応え・取り下げ・無視) した年に呼ぶ。次の祈りは翌年から (M10R レビュー: 3 か所にあった +1 を一本化) */
+  private markPrayerResolved(year: number): void {
+    this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN + 1;
+  }
   /** 祈りの基準 (M9-03): 年ごとの草の密度平均と捕食者比、直近 PRAYER_BASELINE_YEARS 年・古い順。セーブには含めない (restore 後は数え直す) */
   private civPrayerHistory: { grassMean: number; predatorRatio: number }[] = [];
   /** 内乱 (M9-03): 信仰が UNREST_FAITH 未満の年の連続数。セーブには含めない (restore 直後は数え直す) */
@@ -118,6 +125,8 @@ export class World {
   towers: WeatherTower[] = [];
   /** 空の舟の状態 (M10-03)。着工していなければ null */
   private ship: ShipState | null = null;
+  /** 夢喰いの状態 (M10R-03)。現れていなければ null。ship/towers と同じく舞台装置として World が持つ (CivState には持たせない) */
+  private dreamEater: DreamEaterState | null = null;
   /**
    * 塔の効果の per-cell 倍率・オフセット (M10-01)。towers が変わるたび recomputeTowerFactors で更新し、
    * stepClimate に ClimateState の rainFactor/tempFactor として渡す (塔が無ければ既定 1/0 のまま、既存の挙動と同じ)
@@ -252,6 +261,8 @@ export class World {
     // 空の舟 (M10-03): 古いセーブには無いので、その場合は constructor の既定 (null、start.shipProgress があればそれ) のまま
     // 空の舟 (M10 レビュー): セーブに舟が無ければ無い (constructor が start.shipProgress から作った舟を残さない。崩壊で失った舟が戻らないように)
     w.ship = save.ship ? { ...save.ship } : null;
+    // 夢喰い (M10R-03): 古いセーブには無いので、その場合は constructor の既定 (null、未出現) のまま
+    w.dreamEater = save.dreamEater ? { ...save.dreamEater } : null;
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
     const heat = Float32Array.from(w.heat);
@@ -290,7 +301,8 @@ export class World {
         this.civ.prayer = undefined;
         this.civ.prayersAnswered = (this.civ.prayersAnswered ?? 0) + 1;
         this.civYearAnswered++;
-        this.civPrayerCooldownUntil = Math.floor(this.tick / this.config.ticksPerYear) + PRAYER_COOLDOWN;
+        // M10R-02: +1 で「応えた年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
+        this.markPrayerResolved(Math.floor(this.tick / this.config.ticksPerYear));
         this.log('info', 'sim.civ.prayer', { year: Math.floor(this.tick / this.config.ticksPerYear), phase: 'answered', kind });
       }
     }
@@ -332,6 +344,7 @@ export class World {
       volcanoCell: this._volcanoCell,
       towers: this.towers.map((t) => ({ ...t })),
       ship: this.ship ? { ...this.ship } : null,
+      dreamEater: this.dreamEater ? { ...this.dreamEater } : null,
     };
   }
 
@@ -354,6 +367,7 @@ export class World {
       ...(this.civ ? { civ: { ...this.civ } } : {}),
       towers: this.towers.map((t) => ({ ...t })),
       ...(this.ship ? { ship: { ...this.ship } } : {}),
+      ...(this.dreamEater ? { dreamEater: { ...this.dreamEater } } : {}),
     };
   }
 
@@ -384,7 +398,9 @@ export class World {
       // 星 (7) へは半径 12 の民と信仰 0.8 が要る (M10-02、civilizationLoad.ts canAscend)
       const canAdvance = canAscend(this.civ);
       const { state } = stepMining(this.civ, this.crystal, this.elevation, size, canAdvance, { ids: this.veins, cells: this.veinCells });
-      this.civ = state;
+      // 夢喰い (M10R-03): 現れている間は掘る (stepMining は必ず呼ぶので輝石は crystal から減る) が、
+      // 進み・段階は足さない (LD §3.3「文明の進みを止める」)。採掘そのものは止めない (miningStopped と違う)
+      this.civ = this.dreamEater ? this.civ : state;
       if (this.civ.stage !== before) {
         this.log('info', 'sim.civ.stage', { from: before, to: this.civ.stage, year: Math.floor(this.tick / ticksPerYear) });
       }
@@ -427,6 +443,8 @@ export class World {
     civ.home = -1;
     civ.progress = 0;
     delete civ.faith;
+    // 信仰の上限 (民の記憶、M10R-02) も faith と同じく捨てる。残すと次に芽生えた文明が古い上限から始まる
+    delete civ.faithCap;
     delete civ.prayer;
     delete civ.crystalStart;
     delete civ.miningStopped;
@@ -444,6 +462,8 @@ export class World {
       this.ship = null;
       this.log('info', 'sim.ship.lost', {});
     }
+    // 夢喰い (M10R-03): 崩壊すれば影も消える (次に芽生えた文明に古い夢喰いを持ち越さない。faith/faithCap と同じ扱い)
+    this.dreamEater = null;
   }
 
   /**
@@ -483,6 +503,10 @@ export class World {
     }
     civ.population = populationAround(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     civ.populationStar = populationFor(MAX_STAGE, this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    // 乗せる民 (M10R-04): 舟に乗る民の量。populationFor は段階 帆 (< MAX_STAGE) では populationAround と同じ
+    // (SUPPORT_RADIUS) を返すので civ.population と同値になるが、SHIP_CREW の門は「舟の語彙」で読めるよう別名で持つ
+    // M10R レビュー: populationFor(帆) は支え半径 8 の平均で population と同じ値なので、走査を重ねず写す (shipCrew は純粋関数として残す)
+    civ.populationShip = civ.population;
     const year = Math.floor(this.tick / this.config.ticksPerYear);
     // 祈り (M9-02): 発生済み (stage >= 1、この年に発生した場合も含む) のときだけ扱う
     if (civ.stage >= 1) {
@@ -526,7 +550,8 @@ export class World {
         const kind = civ.prayer.kind;
         civ.prayer = undefined;
         civ.prayersWithdrawn = (civ.prayersWithdrawn ?? 0) + 1;
-        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
+        // M10R-02: +1 で「取り下げた年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
+        this.markPrayerResolved(year);
         this.log('info', 'sim.civ.prayer', { year, phase: 'withdrawn', kind });
       }
       if (civ.prayer && year >= civ.prayer.deadlineYear) {
@@ -534,7 +559,8 @@ export class World {
         civ.prayer = undefined;
         civ.prayersIgnored = (civ.prayersIgnored ?? 0) + 1;
         this.civYearIgnored++;
-        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN;
+        // M10R-02: +1 で「無視した年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
+        this.markPrayerResolved(year);
         this.log('info', 'sim.civ.prayer', { year, phase: 'ignored', kind });
       }
       if (!civ.prayer && year >= this.civPrayerCooldownUntil) {
@@ -560,6 +586,20 @@ export class World {
             answered: this.civYearAnswered,
             ignored: this.civYearIgnored,
           });
+      // 信仰の上限 (民の記憶、M10R-02): 無視/応え/祈りの無い年で毎年更新し、信仰はこれで抑える (min)。
+      // civ.faithCap が無ければ (faith と同じく発生した最初の年) FAITH_CAP_INITIAL を前の上限とみなす。
+      // prayerPending は今年の祈りの処理 (上のブロック) を終えた時点の civ.prayer の有無
+      const prevCap = civ.faithCap ?? FAITH_CAP_INITIAL;
+      civ.faithCap = updateFaithCap(prevCap, {
+        answered: this.civYearAnswered,
+        ignored: this.civYearIgnored,
+        prayerPending: !!civ.prayer,
+      });
+      civ.faith = Math.min(civ.faith, civ.faithCap);
+      const capDelta = civ.faithCap - prevCap;
+      if (Math.abs(capDelta) > 1e-9) {
+        this.log('info', 'sim.civ.faith_cap', { year, faithCap: civ.faithCap, delta: capDelta });
+      }
       const delta = civ.faith - (prevFaith ?? civ.faith);
       this.log('info', 'sim.civ.faith', { year, faith: civ.faith, delta });
       // 内乱 (M9-03): 信仰が低い年が UNREST_YEARS 続いたら、集落の民が半減し段階が 1 下がる。信仰は少し上へ戻す (連鎖させない)
@@ -570,7 +610,9 @@ export class World {
         const before = civ.stage;
         civ.stage -= 1;
         civ.progress = 0;
-        civ.faith = UNREST_FAITH_AFTER;
+        // 上限が下がっていれば、内乱の戻り (M10R-02: min(0.4, 上限)。民は上限より上へは戻らない)
+        // 上限が UNREST_FAITH (0.3) を切っていれば内乱は 3 年ごとに連鎖する。夢喰い (上限 < 0.3) が出る局面で、意図した滅びの螺旋 (M10R レビュー)
+        civ.faith = Math.min(UNREST_FAITH_AFTER, civ.faithCap);
         this.log('info', 'sim.civ.unrest', { year, from: before, to: civ.stage });
         this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'unrest', year });
         if (civ.stage === 0) {
@@ -578,11 +620,50 @@ export class World {
           this.log('info', 'sim.civ.collapsed', { reason: 'unrest' });
         }
       }
+      // 夢喰い (M10R-03): 信仰の上限が更新され、内乱の判定 (崩壊すれば dreamEater も消える) を終えた後に判定する (LD §3.3)。
+      // collapseCiv が呼ばれていれば dreamEater は既に null・civ.stage は 0 なので、ここでは出現しない
+      const de = stepDreamEater(this.dreamEater, civ, year);
+      this.dreamEater = de.state;
+      if (de.appeared) this.log('info', 'sim.civ.dream_eater', { year, phase: 'appeared', faithCap: civ.faithCap ?? 0 });
+      if (de.left) this.log('info', 'sim.civ.dream_eater', { year, phase: 'left', faithCap: civ.faithCap ?? 0 });
+      // 出現中は毎年、支え半径内の民を DREAM_EAT だけ減らす (内乱の一度きりの半減と違い、出現している間ずっと続く)
+      if (this.dreamEater) applyDreamEater(this.populations[civ.speciesId], civ.home, this.elevation, size);
     }
     this.civYearKeys = [];
     this.civYearDisasters = 0;
     this.civYearAnswered = 0;
     this.civYearIgnored = 0;
+    // 空の舟 (M10R-04): 民は舟を優先する。塔の燃料の徴収より先に置く。同じ徴収半径 (LOAD_RADIUS[civ.stage]) の
+    // 森・鐘樹をまず舟が SHIP_CUT だけ伐り、塔の燃料 (collectFuel、鐘樹の材が対象) はその残りから取る。
+    // 順序をここで固定する以外の依存は無い (fuel 側の計算は舟の有無を見ない) ので、ブロックを丸ごと前に動かすだけで済む
+    // 空の舟 (M10-03): 着工していて、まだ飛び立っていなければ年に一度、材を伐って進みに積む。
+    // 完成すれば信仰の門を再判定する (足りなければ「民は乗らない」で毎年待つ)
+    // 帆を失えば舟は止まる (M10R-05、LD §3.4): 段階 < 帆の年は伐らず、進まず、完成していても飛ばない (sim.ship.halted)。
+    // 舟の伐採で塔の燃料が尽きて帆が落ちる「舟か塔か」の天秤の受け皿。進みは残り、帆に戻れば再開する
+    if (civ.stage >= 1 && civ.stage < SHIP_STAGE && this.ship && this.ship.launchedYear === undefined) {
+      this.log('info', 'sim.ship.halted', { year, stage: civ.stage, progress: this.ship.progress });
+    }
+    if (civ.stage >= SHIP_STAGE && this.ship && this.ship.launchedYear === undefined) {
+      const forestPop = this.populations['forest'] ?? this.zeroForest;
+      const belltreePop = this.populations['belltree'];
+      const radius = LOAD_RADIUS[civ.stage] ?? 0;
+      const r = stepShip(this.ship, { forest: forestPop, belltree: belltreePop }, civ.home, radius, this.elevation, size);
+      this.ship = r.ship;
+      this.log('info', 'sim.ship.progress', { year, progress: this.ship.progress, cut: r.cut });
+      if (shipDone(this.ship)) {
+        // 乗せる民 (M10R-04): 完成しても信仰と SHIP_CREW の両方の門が要る。信仰を先に見る (canLaunchShip と同じ順)。
+        // 信仰は足りていて民だけ足りなければ reason: 'crew' (足りなければ毎年再判定するのは信仰の待ちと同じ)
+        const faith = civ.faith ?? 0;
+        const crew = civ.populationShip ?? 0;
+        if (faith >= SHIP_FAITH && crew >= SHIP_CREW) {
+          this.ship = { ...this.ship, launchedYear: year };
+          this.log('info', 'sim.ship.launched', { year, species: aliveSpeciesCount(this.snapshot()), crew });
+        } else {
+          const reason = faith < SHIP_FAITH ? 'faith' : 'crew';
+          this.log('info', 'sim.ship.waiting', { year, faith, crew, reason });
+        }
+      }
+    }
     // 塔の燃料 (M8-08): 決定判定より前に、毎年 1 度だけ集落半径内の熱・鐘樹の材から燃料を徴収する。
     // 足りない年が FUEL_YEARS 続いたら段階を 1 下げる (reason: 'fuel')。belltree レイヤーは M8-10 が
     // 追加するまで存在しないので、無い世界では熱だけが燃料源になる (collectFuel が省略時ガード)
@@ -625,24 +706,6 @@ export class World {
       this.civ = civ = r.civ;
       this.log('info', 'sim.civ.works', { year, stock: civ.works?.stock ?? 0, stopped: civ.works?.stopped ?? false, mined: r.mined });
       if (r.mined > 0) computeVeinLoss(this.crystal, this.crystal0, this.elevation, this.config.size, this.veinLoss, this.veins);
-    }
-    // 空の舟 (M10-03): 着工していて、まだ飛び立っていなければ年に一度、材を伐って進みに積む。
-    // 完成すれば信仰の門を再判定する (足りなければ「民は乗らない」で毎年待つ)
-    if (civ.stage >= 1 && this.ship && this.ship.launchedYear === undefined) {
-      const forestPop = this.populations['forest'] ?? this.zeroForest;
-      const belltreePop = this.populations['belltree'];
-      const radius = LOAD_RADIUS[civ.stage] ?? 0;
-      const r = stepShip(this.ship, { forest: forestPop, belltree: belltreePop }, civ.home, radius, this.elevation, size);
-      this.ship = r.ship;
-      this.log('info', 'sim.ship.progress', { year, progress: this.ship.progress, cut: r.cut });
-      if (shipDone(this.ship)) {
-        if ((civ.faith ?? 0) >= SHIP_FAITH) {
-          this.ship = { ...this.ship, launchedYear: year };
-          this.log('info', 'sim.ship.launched', { year, species: aliveSpeciesCount(this.snapshot()) });
-        } else {
-          this.log('info', 'sim.ship.waiting', { year, faith: civ.faith ?? 0 });
-        }
-      }
     }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
     if (civ.stage >= 1) {

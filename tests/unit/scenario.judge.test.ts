@@ -5,14 +5,14 @@ import type { Condition, ScenarioDef } from '../../src/scenario/types';
 import type { WorldSnapshot } from '../../src/simulation/types';
 import { grass } from './helpers';
 
-const snap = (over: Partial<{ totals: Record<string, number>; elevation: number[]; vegetation: number[]; civ: { stage: number } | null }> = {}): WorldSnapshot => {
+const snap = (over: Partial<{ totals: Record<string, number>; elevation: number[]; vegetation: number[]; civ: { stage: number } | null; dreamEater: { since: number } | null }> = {}): WorldSnapshot => {
   const elevation = Float32Array.from(over.elevation ?? [0.1, 0.5, 0.5, 0.5]);
   const vegetation = Float32Array.from(over.vegetation ?? [0, 0.5, 0.5, 1]);
   const n = elevation.length;
   // civ_stage のテスト用に、段階だけ指定できる簡易な CivState を組み立てる (他のフィールドは評価に使わないので既定値)
   const civ = over.civ ? { speciesId: 'deer', stage: over.civ.stage, progress: 0, home: -1, population: 0 } : null;
   return {
-    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0, towers: [], ship: null,
+    tick: 0, year: 0, dayOfYear: 0, size: 2, species: [grass], meanTemperature: 10, co2: 280, climate: { tempOffset: 0, rainScale: 1 }, civ, volcanoCell: 0, towers: [], ship: null, dreamEater: over.dreamEater ?? null,
     totals: over.totals ?? { grass: 10, deer: 5, wolf: 1 },
     layers: { elevation, temperature: new Float32Array(n), moisture: new Float32Array(n), vegetation, vitality: new Float32Array(n), litter: new Float32Array(n), crystal: new Float32Array(n), populations: { grass: vegetation } },
   };
@@ -219,6 +219,26 @@ describe('escaped (M10-03)', () => {
     const s0 = snap({ totals: { grass: 10 } });
     s0.ship = { startedYear: 0, progress: 10, launchedYear: 1 };
     expect(evaluate(c, input(s0)).ok).toBe(true);
+  });
+});
+
+describe('dream_eater (M10R-03)', () => {
+  it('snapshot.dreamEater の有無で真偽を判定する。真なら why は「夢喰いに食われた」', () => {
+    const c = { type: 'dream_eater' } as const;
+    expect(evaluate(c, input(snap()))).toEqual({ ok: false, why: '夢喰いはいない' });
+    expect(evaluate(c, input(snap({ dreamEater: { since: 5 } })))).toEqual({ ok: true, why: '夢喰いに食われた' });
+    // 古いスナップショット (dreamEater 欠落) は「いない」(M10R レビュー)
+    const legacy = snap(); delete (legacy as { dreamEater?: unknown }).dreamEater;
+    expect(evaluate(c, input(legacy))).toEqual({ ok: false, why: '夢喰いはいない' });
+  });
+  it('「祈りに応えるな」相当の dead (any) に足すと、夢喰いだけで dead になり理由に出る', () => {
+    const def: ScenarioDef = {
+      id: 'd', title: 'd', prophecy: '', kind: 'endure', years: 10, schedule: [],
+      alive: { type: 'civ_stage', min: 3 },
+      dead: { type: 'any', of: [{ type: 'civ_stage', max: 0 }, { type: 'dream_eater' }] },
+    };
+    const v = judgeScenario(def, input(snap({ civ: { stage: 3 }, dreamEater: { since: 5 } }), 5));
+    expect(v).toEqual({ status: 'dead', reason: '夢喰いに食われた' });
   });
 });
 

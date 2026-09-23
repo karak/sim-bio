@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { formatCiv, formatShipHint } from '../../src/ui/Hud';
 import type { CivState } from '../../src/simulation/civilization';
-import { SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
+import { SHIP_CREW, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
 
 describe('formatCiv (HUD の文明の 1 行)', () => {
   it('civ が null なら null (行を出さない)', () => {
@@ -28,6 +28,28 @@ describe('formatCiv (HUD の文明の 1 行)', () => {
   it('faith が undefined なら信仰の表示は出ない (M9-01)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 6, progress: 0.4, home: 10, population: 12 };
     expect(formatCiv(civ)).toBe('文明 塔(6) · 進み 13% · 民 1200');
+  });
+  it('faithCap があれば「信仰 0.50 / 上限 0.90」を出す (M10R-02)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6, faith: 0.5, faithCap: 0.9 };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360 · 信仰 0.50 / 上限 0.90');
+    expect(formatCiv(civ)).toContain('信仰 0.50 / 上限 0.90');
+  });
+  it('faithCap が undefined なら上限の表示は出ない (古いセーブ等、M10R-02)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0.126, home: 10, population: 3.6, faith: 0.62 };
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 7% · 民 360 · 信仰 0.62');
+  });
+});
+
+describe('formatCiv: 夢喰い (M10R-03)', () => {
+  it('dreamEater 引数が true なら信仰の直後に「· 夢喰い」を足す。省略時・false では出さない', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 10, population: 3.6, faith: 0.2, faithCap: 0.25 };
+    expect(formatCiv(civ, true)).toBe('文明 石(4) · 進み 0% · 民 360 · 信仰 0.20 / 上限 0.25 · 夢喰い');
+    expect(formatCiv(civ, false)).toBe('文明 石(4) · 進み 0% · 民 360 · 信仰 0.20 / 上限 0.25');
+    expect(formatCiv(civ)).toBe('文明 石(4) · 進み 0% · 民 360 · 信仰 0.20 / 上限 0.25');
+  });
+  it('信仰の後・生気/採掘の前に入る (M9-05 の vitality と併用)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 10, population: 1, faith: 0.2, vitality: 0.5, miningStopped: true };
+    expect(formatCiv(civ, true)).toBe('文明 石(4) · 進み 0% · 民 100 · 信仰 0.20 · 夢喰い · 生気 50% · 採掘 止');
   });
 });
 
@@ -66,13 +88,21 @@ describe('formatShipHint: #hud-ship の説明文 (M10-03)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.9 };
     expect(formatShipHint(civ, { startedYear: 0, progress: 4.25 })).toBe(`舟 進み 4.3 / ${SHIP_NEED}`);
   });
+  it('段階が帆に満たなければ「帆を失い止まっている」を添える (M10R-05)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 0, population: 1, faith: 0.9 };
+    expect(formatShipHint(civ, { startedYear: 0, progress: 40 })).toBe(`舟 進み 40.0 / ${SHIP_NEED} · 帆を失い止まっている(段階 4 < 5)`);
+  });
   it('完成しても信仰が SHIP_FAITH 未満なら「· 民は乗らない(信仰 0.XX)」を添える。毎年再判定なので進みも出す', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.3 };
     expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED} · 民は乗らない(信仰 0.30)`);
   });
-  it('完成し信仰も足りていれば「民は乗らない」は付かない', () => {
-    const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: SHIP_FAITH };
+  it('完成し信仰・民も足りていれば「民は乗らない」は付かない (M10R-04: populationShip も SHIP_CREW 以上)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: SHIP_FAITH, populationShip: SHIP_CREW };
     expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED}`);
+  });
+  it('完成し信仰は足りているが民 (populationShip) が SHIP_CREW 未満なら「· 民が乗るには足りない(民 0.42 / 0.6)」を添える (M10R-04)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: SHIP_FAITH, populationShip: 0.42 };
+    expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED} · 民が乗るには足りない(民 0.42 / ${SHIP_CREW})`);
   });
   it('飛び立っていれば「舟は飛び立った」', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.9 };

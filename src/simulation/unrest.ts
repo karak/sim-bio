@@ -13,6 +13,7 @@ export const UNREST_YEARS = 3;
 /** 内乱で集落 (支え半径) の民に掛ける倍率 */
 export const UNREST_SURVIVORS = 0.5;
 /** 内乱の後の信仰。3 年ごとに連鎖しないように、閾値より少し上へ戻す */
+// M10R-02: 戻り先は min(UNREST_FAITH_AFTER, 信仰の上限)。上限が 0.3 を切っていれば連鎖する (夢喰いが出る局面で、意図した滅びの螺旋)
 export const UNREST_FAITH_AFTER = 0.4;
 
 /**
@@ -25,10 +26,15 @@ export function stepUnrest(faith: number, streak: number): { streak: number; unr
   return { streak: next, unrest: false };
 }
 
-/** 内乱: home の支え半径内の陸セルにいるその種の密度を UNREST_SURVIVORS 倍にする (配列をその場で書き換える) */
-export function applyUnrest(pops: Float32Array, home: number, elevation: Float32Array, size: number): void {
+/** home の支え半径内の陸セルにいるその種の密度を factor 倍にする (配列をその場で書き換える)。内乱と夢喰い (M10R-03) が共用する */
+export function scalePopulationAround(pops: Float32Array, home: number, factor: number, elevation: Float32Array, size: number): void {
   if (home < 0) return;
   forEachInRadius(home, SUPPORT_RADIUS, size, (i) => {
-    if (elevation[i] >= SEA_LEVEL) pops[i] *= UNREST_SURVIVORS;
+    if (elevation[i] >= SEA_LEVEL) pops[i] *= factor;
   });
+}
+
+/** 内乱: home の支え半径内の陸セルにいるその種の密度を UNREST_SURVIVORS 倍にする (配列をその場で書き換える) */
+export function applyUnrest(pops: Float32Array, home: number, elevation: Float32Array, size: number): void {
+  scalePopulationAround(pops, home, UNREST_SURVIVORS, elevation, size);
 }

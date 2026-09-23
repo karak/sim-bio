@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
-import { updateFaith, FAITH_IGNORE, FAITH_ANSWER } from '../../src/simulation/faith';
+import { updateFaith, FAITH_IGNORE, FAITH_ANSWER, FAITH_CAP_INITIAL, FAITH_CAP_IGNORE } from '../../src/simulation/faith';
 import { PRAYER_YEARS, PRAYER_COOLDOWN, PRAYER_BASELINE_MIN } from '../../src/simulation/prayer';
+import { UNREST_FAITH, UNREST_FAITH_AFTER, UNREST_YEARS } from '../../src/simulation/unrest';
 import type { WorldConfig, SpeciesDef } from '../../src/simulation/types';
 import { testConfig, grass as helperGrass, forest, moss } from './helpers';
 
@@ -103,20 +104,17 @@ describe('World civilization prayer wiring (M9-02)', () => {
     expect(events[1]).toMatchObject({ phase: 'ignored', kind: 'wolves' });
   });
 
-  it('解決後 PRAYER_COOLDOWN 年は次の祈りが出ず、経過後に出る (同時に 1 つだけ)', () => {
+  it('祈りの間隔は 0 (M10R-02): 無視された年には次が出ず、翌年に困りごとが続いていれば出る', () => {
+    expect(PRAYER_COOLDOWN).toBe(0);
     const log = createMemorySink();
     const { w, home } = withWolfNeed({}, log);
-    for (let i = 0; i < PRAYER_YEARS; i++) { keepWolves(w, home); w.step(360); } // 無視で解決する年まで狼を保つ
-    expect(w.snapshot().civ?.prayer).toBeUndefined();
-    // 狼をさらに増やして困りごとを強めても、クールダウン中は出ない
-    const flood = () => w.dispatch({ type: 'spawn_species', speciesId: 'wolf', cell: home, amount: 1, radius: 4 });
-    for (let i = 0; i < PRAYER_COOLDOWN - 1; i++) {
-      flood();
-      w.step(360);
-      expect(w.snapshot().civ?.prayer).toBeUndefined();
-    }
-    // クールダウンが明けた年に新しい祈りが出る
-    flood();
+    for (let i = 0; i < PRAYER_YEARS - 1; i++) { keepWolves(w, home); w.step(360); } // 期限の前年まで、狼を保つ
+    keepWolves(w, home);
+    w.step(360); // 期限の年: 無視される
+    expect(w.snapshot().civ?.prayer).toBeUndefined(); // 同じ年のうちには出ない (間隔 0 でも即再発行しない)
+    expect(w.snapshot().civ?.prayersIgnored).toBe(1);
+    // 翌年、困りごと (狼) がまだ続いていれば新しい祈りが出る
+    keepWolves(w, home);
     w.step(360);
     expect(w.snapshot().civ?.prayer?.kind).toBe('wolves');
     const events = log.find('sim.civ.prayer');
@@ -212,5 +210,71 @@ describe('World civilization prayer wiring (M9-02)', () => {
 
   it('FAITH_IGNORE は正の値 (回帰防止)', () => {
     expect(FAITH_IGNORE).toBeGreaterThan(0);
+  });
+});
+
+describe('信仰の上限 = 民の記憶 (M10R-02)', () => {
+  it('無視した祈りで上限が FAITH_CAP_IGNORE だけ下がり、信仰は上限を超えない。ログ sim.civ.faith_cap が出る', () => {
+    const log = createMemorySink();
+    const { w, home } = withWolfNeed({}, log);
+    const capBefore = w.snapshot().civ?.faithCap as number;
+    expect(capBefore).toBeCloseTo(FAITH_CAP_INITIAL, 6);
+    for (let i = 0; i < PRAYER_YEARS - 1; i++) { keepWolves(w, home); w.step(360); } // 期限の前年まで、狼を保つ
+    keepWolves(w, home);
+    w.step(360); // 期限の年: 無視される
+    const civ = w.snapshot().civ;
+    expect(civ?.prayersIgnored).toBe(1);
+    expect(civ?.faithCap).toBeCloseTo(capBefore - FAITH_CAP_IGNORE, 6);
+    expect(civ?.faith as number).toBeLessThanOrEqual((civ?.faithCap as number) + 1e-9);
+    const capEvents = log.find('sim.civ.faith_cap');
+    expect(capEvents).toHaveLength(1);
+    expect(capEvents[0]).toMatchObject({ faithCap: civ?.faithCap });
+  });
+
+  it('儀式(同じ放流を 3 回)を続けても信仰は上限を超えない。無視の連続で上限が下がるほど 1.0 未満に張り付く', () => {
+    const log = createMemorySink();
+    const { w, home } = withWolfNeed({}, log);
+    const years = 16; // wolves の期限 5 年をまたいで無視サイクルが複数回起きる長さ
+    for (let i = 0; i < years; i++) {
+      keepWolves(w, home); // 困りごとを保ち、無視サイクルで上限を下げ続ける
+      // 同じ種類のコマンドを 3 回 (儀式、FAITH_UP) — 最後に dispatch するので recent の末尾がこれになる
+      w.dispatch({ type: 'spawn_species', speciesId: 'grass', cell: home, amount: 0.01 });
+      w.dispatch({ type: 'spawn_species', speciesId: 'grass', cell: home, amount: 0.01 });
+      w.dispatch({ type: 'spawn_species', speciesId: 'grass', cell: home, amount: 0.01 });
+      w.step(360);
+      const civ = w.snapshot().civ;
+      expect(civ?.faith as number).toBeLessThanOrEqual((civ?.faithCap as number) + 1e-9);
+    }
+    const civ = w.snapshot().civ;
+    // 無視サイクルで上限が下がり続けたので 1.0 未満、信仰はクランプされて上限のすぐ近くに留まる
+    expect(civ?.faithCap as number).toBeLessThan(FAITH_CAP_INITIAL);
+    expect(civ?.faith as number).toBeGreaterThan((civ?.faithCap as number) - 0.1);
+  });
+
+  it('内乱の後の信仰は min(UNREST_FAITH_AFTER, 上限) に戻る (M10R-02): 上限が低ければ上限までしか戻らない', () => {
+    const home = someLandCell();
+    const log = createMemorySink();
+    const w = World.create(prayerConfig({ civilization: { speciesId: 'deer', start: { stage: 3, home, faith: UNREST_FAITH - 0.05 } } }), { log });
+    const save = w.serialize();
+    save.civ!.faithCap = 0.2; // UNREST_FAITH_AFTER (0.4) より低い上限
+    const r = World.restore(save, { log });
+    r.step(360 * UNREST_YEARS);
+    expect(r.snapshot().civ?.stage).toBe(2);
+    const civ = r.snapshot().civ;
+    expect(civ?.faith as number).toBeLessThan(UNREST_FAITH_AFTER);
+    expect(civ?.faith).toBeCloseTo(civ?.faithCap as number, 6);
+  });
+
+  it('faithCap が serialize → restore で一致する', () => {
+    const log = createMemorySink();
+    const { w: a, home } = withWolfNeed({}, log);
+    for (let i = 0; i < PRAYER_YEARS; i++) { keepWolves(a, home); a.step(360); } // ignored まで進め、上限を動かした状態にする
+    const civA = a.snapshot().civ;
+    expect(civA?.faithCap).toBeTypeOf('number');
+    expect(civA?.faithCap).toBeLessThan(FAITH_CAP_INITIAL);
+    const save = a.serialize();
+    expect(save.civ?.faithCap).toBe(civA?.faithCap);
+    const b = World.restore(JSON.parse(JSON.stringify(save)), { log: createMemorySink() });
+    expect(b.snapshot().civ?.faithCap).toBe(civA?.faithCap);
   });
 });

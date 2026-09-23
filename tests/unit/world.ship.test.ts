@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
-import { SHIP_FAITH, SHIP_NEED, SHIP_STAGE } from '../../src/simulation/ship';
+import { SHIP_CREW, SHIP_FAITH, SHIP_NEED, SHIP_STAGE } from '../../src/simulation/ship';
 import { LOAD_RADIUS } from '../../src/simulation/civilizationLoad';
+import type { SpeciesDef } from '../../src/simulation/types';
 import { testConfig, grass, forest, moss } from './helpers';
 
 /** 舟の文明 (草、島中に森があるので材は足りる)。薪の蓄えで燃料切れを避ける */
@@ -149,6 +150,23 @@ describe('空の舟 (M10-03、World): 完成と信仰の門', () => {
   });
 });
 
+describe('空の舟 (M10R-05、World): 帆を失えば舟は止まる', () => {
+  it('段階が帆に満たない年は伐らず進まず、sim.ship.halted が出る。完成していても飛ばない', () => {
+    const { w, log } = mk({ stage: SHIP_STAGE - 1, faith: 1, shipProgress: 10 });
+    w.step(360);
+    expect(w.snapshot().ship).toEqual({ startedYear: 0, progress: 10 });
+    expect(log.find('sim.ship.progress')).toHaveLength(0);
+    const halted = log.find('sim.ship.halted');
+    expect(halted).toHaveLength(1);
+    expect(halted[0]).toMatchObject({ stage: SHIP_STAGE - 1, progress: 10 });
+    const done = mk({ stage: SHIP_STAGE - 1, faith: 1, shipProgress: SHIP_NEED });
+    done.w.step(360);
+    expect(done.w.snapshot().ship!.launchedYear).toBeUndefined();
+    expect(done.log.find('sim.ship.launched')).toHaveLength(0);
+    expect(done.log.find('sim.ship.halted')).toHaveLength(1);
+  });
+});
+
 describe('空の舟 (M10-03、World): 崩壊で失う', () => {
   it('未発進の舟は文明が崩壊 (段階 0) すると失われ、sim.ship.lost が出る', () => {
     const home = Math.floor(32 / 2) * 32 + Math.floor(32 / 2);
@@ -209,5 +227,72 @@ describe('舟の保存 (M10 レビュー): セーブに舟が無ければ復元�
     delete save.ship;
     const r = World.restore(save, { log: createMemorySink() });
     expect(r.snapshot().ship).toBeNull();
+  });
+});
+
+// M10R-04: 民は舟を優先する。舟が先に伐り、塔の燃料はその残りから取る
+describe('民は舟を優先する (M10R-04): 舟が先に鐘樹を伐り、塔の燃料はその残りから取る', () => {
+  // 鐘樹だけを材にする (森は initialDensity 0)。密度は乏しめにして燃料の蓄えの空き (room) で頭打ちにならないようにする
+  const belltree: SpeciesDef = {
+    id: 'belltree', name: '鐘樹', trophic: 'plant', growthRate: 0.01, mortality: 0.01,
+    tempRange: [-5, 35], moistureRange: [0, 1], diffusion: 0.01, assetId: 'belltree', color: '#c9a13b',
+    initialDensity: 0.1,
+  };
+  const mkFuelWorld = (shipProgress: number | undefined) => {
+    const home = Math.floor(32 / 2) * 32 + Math.floor(32 / 2);
+    const log = createMemorySink();
+    const w = World.create(
+      testConfig({
+        species: [grass, forestZero, belltree, moss],
+        civilization: { speciesId: 'grass', start: { stage: SHIP_STAGE, home, faith: 1, shipProgress } },
+      }),
+      { log },
+    );
+    return { w, log, home };
+  };
+  it('舟が建造中の年は、同じ年の塔の燃料 (civ.fuel.last) が舟の無い世界より少ない (舟が先に鐘樹を伐るため)', () => {
+    const withShip = mkFuelWorld(0);
+    const baseline = mkFuelWorld(undefined);
+    withShip.w.step(360);
+    baseline.w.step(360);
+    expect(withShip.w.snapshot().ship).not.toBeNull();
+    expect(baseline.w.snapshot().ship).toBeNull();
+    const sFuel = withShip.w.snapshot().civ!.fuel!.last;
+    const bFuel = baseline.w.snapshot().civ!.fuel!.last;
+    expect(bFuel).toBeGreaterThan(0);
+    expect(sFuel).toBeLessThan(bFuel);
+  });
+});
+
+describe('乗せる民 (M10R-04): 完成しても SHIP_CREW 未満なら待ち (reason: crew)、民が増えれば翌年飛ぶ', () => {
+  // 舟に乗る民の種 (grass) の密度を 0 にして、完成済みの舟を crew 不足のまま待たせる
+  const grassZero: SpeciesDef = { ...grass, initialDensity: 0 };
+  it('信仰は足りていても populationShip が SHIP_CREW 未満なら飛ばず sim.ship.waiting の reason は crew。民を放てば翌年 sim.ship.launched が出る', () => {
+    const home = Math.floor(32 / 2) * 32 + Math.floor(32 / 2);
+    const log = createMemorySink();
+    const w = World.create(
+      testConfig({
+        species: [grassZero, forest, moss],
+        civilization: { speciesId: 'grass', start: { stage: SHIP_STAGE, home, fuelStock: 900, faith: 1, shipProgress: SHIP_NEED - 0.01 } },
+      }),
+      { log },
+    );
+    w.step(360);
+    const ship1 = w.snapshot().ship!;
+    expect(ship1.progress).toBeGreaterThanOrEqual(SHIP_NEED);
+    expect(ship1.launchedYear).toBeUndefined();
+    const waiting = log.find('sim.ship.waiting');
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]).toMatchObject({ reason: 'crew' });
+    expect(Number(waiting[0].crew)).toBeLessThan(SHIP_CREW);
+    expect(log.find('sim.ship.launched')).toHaveLength(0);
+    // 集落半径いっぱいに民を放ち、SHIP_CREW を上回らせる (他のテストと同じ、spawn_species で直接密度を書く流儀)
+    w.dispatch({ type: 'spawn_species', speciesId: 'grass', cell: home, amount: 1, radius: 8 });
+    w.step(360);
+    const ship2 = w.snapshot().ship!;
+    expect(ship2.launchedYear).toBeDefined();
+    const launched = log.find('sim.ship.launched');
+    expect(launched).toHaveLength(1);
+    expect(Number(launched[0].crew)).toBeGreaterThanOrEqual(SHIP_CREW);
   });
 });

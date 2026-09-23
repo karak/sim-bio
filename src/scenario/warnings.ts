@@ -3,7 +3,7 @@ import { landRatio } from './judge';
 import { FUEL_YEARS } from '../simulation/civilizationFuel';
 import { UNREST_FAITH, UNREST_YEARS } from '../simulation/unrest';
 import { formatFaith } from '../simulation/faith';
-import { SHIP_FAITH, SHIP_NEED } from '../simulation/ship';
+import { SHIP_CREW, SHIP_FAITH, SHIP_NEED, SHIP_STAGE } from '../simulation/ship';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
 export type WarningKind = 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low' | 'ship_stalled' | 'ship_late' | 'ship_waiting';
@@ -105,9 +105,17 @@ export function scenarioWarnings(def: ScenarioDef, s: WorldSnapshot, start: Star
   // 2 回目のプレイで 100 年目に進み 30 / 120 でも警告が無く、160 年目からは進みが止まっているのも分からなかった
   if (def.escape && ship && s.ship && s.ship.launchedYear === undefined) {
     const p = s.ship.progress;
-    if (p >= SHIP_NEED) {
+    if ((s.civ?.stage ?? 0) < SHIP_STAGE) {
+      // 帆を失った (M10R-05): 材でも信仰でもなく、段階が帆に満たないので舟は止まっている
+      out.push({ kind: 'ship_stalled', key: 'ship_stalled', text: `帆を失い、舟は止まっている(段階 ${s.civ?.stage ?? 0} < ${SHIP_STAGE}。進み ${p.toFixed(1)} / ${SHIP_NEED})` });
+    } else if (p >= SHIP_NEED) {
       // 成ったのに飛ばないのは材ではなく信仰 (M10 レビュー: 止まっている扱いにしない)
-      if ((s.civ?.faith ?? 0) < SHIP_FAITH) out.push({ kind: 'ship_waiting', key: 'ship_waiting', text: `舟は成ったが民が乗らない(信仰 ${formatFaith(s.civ?.faith ?? 0)}。${SHIP_FAITH} に足りない)` });
+      if ((s.civ?.faith ?? 0) < SHIP_FAITH) {
+        out.push({ kind: 'ship_waiting', key: 'ship_waiting', text: `舟は成ったが民が乗らない(信仰 ${formatFaith(s.civ?.faith ?? 0)}。${SHIP_FAITH} に足りない)` });
+      } else if ((s.civ?.populationShip ?? 0) < SHIP_CREW) {
+        // 乗せる民 (M10R-04): 信仰は足りているが、徴収半径の民の平均が SHIP_CREW に足りない
+        out.push({ kind: 'ship_waiting', key: 'ship_waiting', text: `舟は成ったが民が足りない(民 ${(s.civ?.populationShip ?? 0).toFixed(2)}。${SHIP_CREW} に足りない)` });
+      }
     } else if (ship.prevProgress !== null && p <= ship.prevProgress) {
       out.push({ kind: 'ship_stalled', key: 'ship_stalled', text: `舟の進みが止まっている(材が無い。進み ${p.toFixed(1)} / ${SHIP_NEED})` });
     } else {
