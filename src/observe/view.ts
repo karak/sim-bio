@@ -255,7 +255,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
   let area = extractArea(s, home, AREA_R);
   const marks = landmarks(area);
-  const slip = marks.slipway;
+  // (M22-06 試作 2: 船台が 27 m になったので、船台の点 (外海に接する陸のセルの中心) から陸の側へ 6.5 m ずらし、
+  //  舳先の端が水際を 2 m ほど越えるところに置く。舟・丸太の山・切り開きはこの中心に合わせる)
+  const slip = { x: marks.slipway.x - marks.slipwayBow.x * 6.5, z: marks.slipway.z - marks.slipwayBow.z * 6.5 };
 
   // 鐘樹: 密度に比例して最大 OPT.trees 本。密度で段 (成木・若木・芽) を選ぶ。舟の材を伐った跡として船台の近くに株を置く
   const rng = mulberry32(11);
@@ -267,7 +269,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
     // 集落の広場と船台は民が切り開いた場所として木を置かない (本体の鐘樹は集落を中心に立つが、小屋が林に埋もれて見えない)
     // (M22-06: 船台の切り開きは南の固定位置 (0, 20) から目印の船台へ)
-    if (Math.hypot(x - slip.x, z - slip.z) < 13 || Math.hypot(x, z + 6) < 20) continue;
+    if (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20) continue;
     const d = bt ? field.layerAt(bt, x, z) : 0;
     if (rng() < d * 1.4) cands.push({ x, z, d });
   }
@@ -311,7 +313,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       const x = (rng() * 2 - 1) * AREA_R * CELL_M;
       const z = (rng() * 2 - 1) * AREA_R * CELL_M;
       if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
-      if (Math.hypot(x - slip.x, z - slip.z) < 13 || Math.hypot(x, z + 6) < 20) continue;
+      if (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20) continue;
       if (rng() >= field.layerAt(forest, x, z) * 1.6) continue;
       const k = 0.8 + rng() * 0.35;
       mats.push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.1, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(k, k, k)));
@@ -354,7 +356,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   };
   // (M22-06: 集落から船台への向きをやめ、船台から外海が最も開けた方位へ向ける)
   const toSea = Math.atan2(marks.slipwayBow.x, marks.slipwayBow.z);
-  place('slipway', marks.slipway.x, marks.slipway.z, toSea);
+  place('slipway', slip.x, slip.z, toSea);
   const c0 = marks.center;
   place('hut', c0.x - 14, c0.z - 8, 0.4);
   place('hut', c0.x + 12, c0.z - 12, -0.6);
@@ -372,8 +374,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   for (const [name, mats] of settlementPlacements) scene.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
   const pile = findNode(shipGlb, 'timber_pile');
   if (pile) {
-    const px = slip.x + side.x * 6 - marks.slipwayBow.x * 3;
-    const pz = slip.z + side.z * 6 - marks.slipwayBow.z * 3;
+    const px = slip.x + side.x * 9 - marks.slipwayBow.x * 3;
+    const pz = slip.z + side.z * 9 - marks.slipwayBow.z * 3;
     scene.add(instanceProps(pile, [new Matrix4().compose(new Vector3(px, field.heightAt(px, pz) - 0.05, pz), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), toSea + 0.3), new Vector3(1, 1, 1))]));
   }
   // 光の粒と灯りの溜まり (M22-07): 蛍は草地と林の低い所 (区域の陸からまばらに選ぶ)
@@ -497,7 +499,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   };
   const presets: Record<string, () => void> = {
     集落: () => lookFrom(marks.center.x, marks.center.z, 30, 10, 1.9),
-    船台: () => lookFrom(marks.slipway.x, marks.slipway.z, 22, 6, 0.9),
+    船台: () => lookFrom(slip.x, slip.z, 40, 9, 0.9),
     群れ: () => {
       const c = centroid('deer') ?? marks.center;
       lookFrom(c.x, c.z, 14, 2.6, 0.6);

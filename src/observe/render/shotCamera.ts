@@ -27,7 +27,7 @@ const FRAMES: Readonly<Record<ShotKind, Frame>> = {
   // 林を横移動: 目の高さで、林の縁に沿って横に動く
   groveTrack: { dist: 22, height: 2.2, fov: 38, orbit: 0, track: 0.8, aim: 2.5 },
   // 舟を見上げる: 低い所から、舟の帆柱の中ほどを狙う
-  shipLookUp: { dist: 21, height: 1.4, fov: 40, orbit: 0.01, track: 0, aim: 4.5 },
+  shipLookUp: { dist: 36, height: 1.6, fov: 40, orbit: 0.01, track: 0, aim: 7 },
   // 集落の俯瞰: 高い所からゆっくり回る
   settlementHigh: { dist: 46, height: 30, fov: 36, orbit: 0.025, track: 0, aim: 1 },
   // 狩りの追従: 追う側の斜め後ろから
