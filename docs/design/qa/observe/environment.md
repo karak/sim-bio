@@ -38,8 +38,8 @@ GLB の約束:
 |---|---:|---:|---|---|
 | `belltree_seedling` | 150 | — | 0.40 × 0.37 × 0.38 | soil, moss, bark, leaf, glow |
 | `belltree_sapling` | 468 | — | 1.47 × 1.45 × 2.95 | soil, moss, bark, leaf |
-| `belltree_mature` | 3,952 | ≤ 4,000 | 9.12 × 8.93 × 9.38 | bark, leaf, bell, bell_rim(鐘 30 個、M22-06 で裾を開いた) |
-| `belltree_mature_lod1` | 1,112 | ≤ 1,200 | 9.16 × 8.92 × 9.30 | bark, leaf, bell, bell_rim(鐘 30 個、位置は成木と同じ) |
+| `belltree_mature` | 3,917 | ≤ 4,000 | 8.74 × 8.86 × 9.52 | bark, leaf, bell, bell_rim(鐘 30 個、M22-06 で裾を開いた、M22-07 で樹冠を房 8 つに分けた) |
+| `belltree_mature_lod1` | 1,112 | ≤ 1,200 | 8.96 × 8.89 × 9.56 | bark, leaf, bell, bell_rim(鐘 30 個、位置は成木と同じ、M22-07 で房 8 つ) |
 | `belltree_stump` | 300 | — | 2.06 × 2.21 × 0.87 | soil, moss, bark, cut, cut_ring |
 | `belltree_logs` | 432 | — | 2.14 × 1.28 × 1.08 | cut, cut_ring, bark |
 | `hut` | 1,934 | 1,200〜2,000 | 4.73 × 4.12 × 3.85 | straw, stone, moss, wood, bark, vine |
@@ -126,3 +126,7 @@ bloom はかけていません。並べ図の右端の月鹿(`assets/models/deer
 
 舟の 6 段・丸太の山・衝立・L 字の石垣・森の木・羊歯・小花・穂の出た月草を足し、鐘樹の鐘と灯籠を直しました。三角形数・画像・自己評価は `keyitems.md` にあります。
 上の表の鐘樹の成木・lod1・灯り柱の数は直した後の実測に更新しました。上の「既知の課題」のうち、鐘が引きで円錐に見える点と、衝立を作っていない点は `keyitems.md` で対応済みです。
+
+## 追記(M22-07)
+
+鐘樹の成木と lod1 の樹冠を、光の筋のために離れた房 8 つに組み直しました。上の表の成木・lod1 の数は組み直した後の実測に更新しました。房の配置・日が抜ける割合・確かめの図(`canopy-gaps.png`)は `keyitems.md` の「追記(M22-07 光の筋のための樹冠の隙間)」にあります。

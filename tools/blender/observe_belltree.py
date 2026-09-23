@@ -98,19 +98,75 @@ def sapling():
 
 # ---------------------------------------------------------------- 成木 (lod 0 / 1)
 
+# (M22-07 光の筋のために追加) 樹冠を離れた房に分ける: (方位 度, 幹からの距離, 高さ, 半径, 枝の付け根の高さ)。
+# 下の輪 5 房と上の輪 3 房。上の輪は下の輪の房の内側の上に載せ、下の輪の房と房の間の隙間 (0.8〜1.1 m) が幹の近くまで抜ける。
+# 上の輪の真ん中にも隙間を残す (見上げると空が抜ける)。
+# 日の影の地図で影がまだらになり、隙間を通った日が光の筋になる (src/observe/render/atmosphere.ts)
+CLUSTERS = [
+    (10, 3.2, 6.05, 1.24, 3.3), (82, 3.05, 6.5, 1.16, 3.9), (150, 3.25, 5.95, 1.26, 3.5),
+    (222, 3.05, 6.4, 1.18, 4.2), (292, 3.2, 6.15, 1.22, 3.7),
+    (14, 1.5, 8.3, 0.98, 5.2), (150, 1.45, 8.45, 1.0, 5.8), (290, 1.55, 8.25, 0.96, 6.4),
+]
+
+
+def cluster_centers():
+    """(中心, 半径, 上の輪か, 枝の付け根の高さ)"""
+    out = []
+    for i, (a, d, z, r, z0) in enumerate(CLUSTERS):
+        a = math.radians(a)
+        out.append((Vector((d * math.cos(a), d * math.sin(a), z)), r, i >= 5, z0))
+    return out
+
+
+def cluster_lumps(c, r, upper, k):
+    """房 1 つを盛り上がった塊 3 つで作る: 真ん中の大きな塊、外の上へ盛った塊、横へ張り出した塊 (向きは房ごとに交互)。
+    上の輪の房は横へ張り出す代わりに上へ盛る (上から見て房どうしの間を空ける)"""
+    out = Vector((c.x, c.y, 0)).normalized()
+    side = Z.cross(out) * (1 if k % 2 else -1)
+    lumps = [(c, r)]
+    if upper:
+        lumps.append((c + out * 0.35 * r + Z * 0.3 * r, 0.68 * r))
+        lumps.append((c + Z * 0.45 * r - out * 0.2 * r + side * 0.2 * r, 0.62 * r))
+    else:
+        lumps.append((c + out * 0.45 * r + Z * 0.3 * r, 0.68 * r))
+        lumps.append((c + side * 0.55 * r + Z * 0.12 * r - out * 0.1 * r, 0.66 * r))
+    return lumps
+
+
 def canopy_clumps(lod):
     """(中心, 半径, 細かさ)。lod1 も同じ塊を粗く持つ (輪郭と鐘の位置を lod0 と揃える)"""
-    cl = [((0.0, 0.0, 7.05), 2.45, 2, 1), ((0.25, -0.35, 8.0), 1.55, 2, 1)]
-    for i in range(6):
-        a = math.radians(15 + 60 * i)
-        r = 2.75 + (0.25 if i % 2 else -0.1)
-        z = 6.05 + (0.35 if i % 2 else -0.1)
-        rad = 1.85 if i % 2 == 0 else 1.6
-        cl.append(((r * math.cos(a), r * math.sin(a), z), rad, 2 if i % 2 == 0 else 1, 1 if i % 2 == 0 else 0))
-    for i in range(3):
-        a = math.radians(75 + 120 * i)
-        cl.append(((1.75 * math.cos(a), 1.75 * math.sin(a), 7.85), 1.3, 1, 0))
-    return [(Vector(c), r, s0 if lod == 0 else s1) for c, r, s0, s1 in cl]
+    # (M22-07 光の筋のために変更: 一つにまとまった樹冠の塊 11 個をやめ、離れた房 8 つ (CLUSTERS) の塊を返す。
+    #  lod0 は房ごとに塊 3 つ (細かさ 1)、lod1 は房ごとに塊 1 つ (房の輪郭の重心に、少し大きく。下の輪は細かさ 1、上の輪は 0)。
+    #  隙間は lod1 でも残す (45 m より先でも影を落とすため))
+    cl = []
+    for k, (c, r, upper, _) in enumerate(cluster_centers()):
+        lumps = cluster_lumps(c, r, upper, k)
+        if lod == 0:
+            cl += [(lc, lr, 1) for lc, lr in lumps]
+        else:
+            g = sum((lc * lr ** 3 for lc, lr in lumps), Vector()) / sum(lr ** 3 for _, lr in lumps)
+            cl.append((g, r * 1.14, 0 if upper else 1))
+    return cl
+
+
+def trunk_at(spine, z):
+    """(M22-07 で追加) 幹の芯の折れ線の高さ z での点 (枝の付け根)"""
+    for a, b in zip(spine, spine[1:]):
+        if a.z <= z <= b.z:
+            return a.lerp(b, (z - a.z) / max(1e-6, b.z - a.z))
+    return spine[-1].copy()
+
+
+def shade_cluster(c, r):
+    """(M22-07 で追加) 房の陰り: 樹冠全体の上下の陰り (shade_canopy) に、房の下側を 0.78 まで暗くする乗数を掛ける"""
+    base = K.shade_canopy(CANOPY_C, 2.6, lo=0.55, hi=1.0, warm=0.2)
+
+    def f(co, nrm):
+        v = base(co, nrm)
+        t = min(1.0, max(0.0, 0.5 + (co.z - c.z) / (r * 1.2)))
+        k = 0.78 + 0.22 * t
+        return (v[0] * k, v[1] * k, v[2] * k)
+    return f
 
 
 def inside_other(p, clumps, skip):
@@ -181,21 +237,33 @@ def mature(lod=0):
         n.add(K.tube(pts, [0.36, 0.24, 0.06], n=5 if lod == 0 else 4, tip=True, cap_start=False), M["bark"],
               smooth=True, shade=bark_shade)
     clumps = canopy_clumps(lod)
-    branches = [(3.2, 30, 0), (3.6, 150, 1), (3.4, 270, 2), (4.2, 90, 3), (4.4, 210, 4)][: 5 if lod == 0 else 3]
-    ring = [c for c in clumps if abs(c[0].z - 6.0) < 0.6]
-    for z0, a, k in branches:
-        d = Vector((math.cos(math.radians(a)), math.sin(math.radians(a)), 0))
-        p0 = Vector((0.04, 0.06, z0))
-        target = min(ring, key=lambda c: (Vector((c[0].x, c[0].y, 0)).normalized() - d).length)[0] if ring else p0 + d * 2
-        p2 = p0.lerp(target, 0.85)
-        p1 = p0 + (p2 - p0) * 0.45 + d * 0.45 - Z * 0.35
-        n.add(K.tube([p0, p1, p2], [0.26, 0.16, 0.07], n=5 if lod == 0 else 4, tip=True, cap_start=False), M["bark"],
+    # (M22-07 光の筋のために変更: 太枝 5 本 (lod1 は 3 本) を下の輪の塊へ伸ばす形をやめ、房 8 つのそれぞれへ枝を 1 本ずつ伸ばす。
+    #  下の輪の枝は幹の 3.3〜4.2 m から外へ垂れてから上がり、上の輪の枝は幹の上 (5.2〜6.4 m) から立ち上がる。
+    #  枝の先は房の真ん中に入り、房の間と下から枝が見える。lod1 も同じ 8 本 (細い 4 角))
+    spine_v = [Vector(p) for p in spine]
+    for k, (c, r, upper, z0) in enumerate(cluster_centers()):
+        p0 = trunk_at(spine_v, z0)
+        d = Vector((c.x - p0.x, c.y - p0.y, 0)).normalized()
+        end = c - Z * 0.2 * r
+        sag = 0.25 if upper else 0.45
+        p1 = p0.lerp(end, 0.33) + d * sag * 0.8 - Z * sag * 0.6
+        p2 = p0.lerp(end, 0.68) + d * sag * 0.4 - Z * sag * 0.2
+        rad = [0.2, 0.14, 0.09, 0.05] if upper else [0.26, 0.18, 0.11, 0.06]
+        pts, rr = [p0, p1, p2, end], rad
+        if lod:
+            pts, rr = [p0, p1.lerp(p2, 0.5), end], [rad[0], rad[2], rad[3]]
+        n.add(K.tube(pts, rr, n=5 if lod == 0 else 4, tip=True, cap_start=False), M["bark"],
               smooth=True, shade=K.shade_const(0.92))
     rnd = random.Random(7)
+    per = 3 if lod == 0 else 1
+    centers = cluster_centers()
     for i, (c, r, s) in enumerate(clumps):
         src = K.ico((r, r, r * 0.82), subdiv=s, jitter=(0.03, 0.07, 0.1)[s], seed=10 + i, flat_bottom=0.3)
+        # (M22-07 光の筋のために変更: 柔らかい法線の基準を樹冠の中心から房の中心に替え、房ごとの丸い量感にする。
+        #  陰りは樹冠全体の上下に、房の下側の陰りを掛ける)
+        cc, cr = centers[i // per][0], centers[i // per][1]
         n.add(src, M["leaf"], matrix=K.trs(c, (0, 0, rnd.uniform(0, 360))), smooth=True,
-              shade=K.shade_canopy(CANOPY_C, 2.6, lo=0.55, hi=1.0, warm=0.2), soft=(CANOPY_C, 0.55))
+              shade=shade_cluster(cc, cr), soft=(cc + Z * 0.15 * cr, 0.55))
     bell_clumps = [(c, r, s) for c, r, s in canopy_clumps(0)]
     pts = bell_points(bell_clumps, 30, seed=11)
     print(f"  {name}: bells={len(pts)}")

@@ -8,6 +8,8 @@
   blender -b --factory-startup --python tools/blender/observe_render.py -- corner <out.png>
   blender -b --factory-startup --python tools/blender/observe_render.py -- ship-stages|ship|shipyard <out.png>
   (lineup は --yaw <度> で各ノードを回して並べる、--el <度> でカメラの仰角)
+  blender -b --factory-startup --python tools/blender/observe_render.py -- canopy-gaps <out.png>
+  (M22-07: 成木・森の木の樹冠の隙間を、日の仰角 90/60/45/30° の影で確かめ、日が抜ける割合を出す)
 """
 import math
 import os
@@ -506,6 +508,141 @@ def shipyard(out):
     render(out)
 
 
+# ---------------------------------------------------------------- 樹冠の隙間 (M22-07 光の筋)
+
+GAP_TREES = [("belltree", "belltree_mature"), ("belltree", "belltree_mature_lod1"),
+             ("flora", "forest_tree"), ("flora", "forest_tree_lod1")]
+GAP_ELEVATIONS = [90, 60, 45, 30]
+
+
+def sun_vector(el_deg, az_deg):
+    """地面から日へ向かう単位ベクトル (仰角・方位、方位 0 は +Y)"""
+    el, az = math.radians(el_deg), math.radians(az_deg)
+    return Vector((math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el)))
+
+
+def gap_fraction(o, el_deg, az_deg, step=0.12):
+    """日の方向の影で、樹冠の包み (葉の材質の頂点の凸包) の影のうち日が抜ける割合。地面の格子から日へ光線を飛ばして数える"""
+    import bmesh
+    from mathutils.bvhtree import BVHTree
+    dg = bpy.context.evaluated_depsgraph_get()
+    bm = bmesh.new()
+    bm.from_object(o, dg)
+    bm.transform(o.matrix_world)
+    tree = BVHTree.FromBMesh(bm)
+    hull = bmesh.new()
+    leaf = {i for i, m in enumerate(o.data.materials) if m and "leaf" in m.name}
+    for v in {v for f in bm.faces if f.material_index in leaf for v in f.verts}:
+        hull.verts.new(v.co)
+    bmesh.ops.convex_hull(hull, input=list(hull.verts))
+    htree = BVHTree.FromBMesh(hull)
+    L = sun_vector(el_deg, az_deg)
+    pts = [v.co - L * (v.co.z / L.z) for v in hull.verts]  # 凸包の頂点の影
+    x0, x1 = min(p.x for p in pts), max(p.x for p in pts)
+    y0, y1 = min(p.y for p in pts), max(p.y for p in pts)
+    inside = lit = 0
+    y = y0
+    while y <= y1:
+        x = x0
+        while x <= x1:
+            g = Vector((x, y, 0.02))
+            if htree.ray_cast(g, L)[0] is not None:
+                inside += 1
+                if tree.ray_cast(g, L)[0] is None:
+                    lit += 1
+            x += step
+        y += step
+    bm.free()
+    hull.free()
+    return lit / max(1, inside)
+
+
+def label(text, loc, size=1.2):
+    cu = bpy.data.curves.new("label", "FONT")
+    cu.body = text
+    cu.size = size
+    o = bpy.data.objects.new("label", cu)
+    o.location = loc
+    m = bpy.data.materials.new("label")
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    em = nt.nodes.new("ShaderNodeEmission")
+    em.inputs["Color"].default_value = (0.1, 0.1, 0.12, 1)
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(em.outputs[0], out.inputs["Surface"])
+    cu.materials.append(m)
+    o.visible_shadow = False
+    bpy.context.scene.collection.objects.link(o)
+    return o
+
+
+def canopy_gaps(out, az_deg=200.0):
+    """樹冠の隙間の確かめ: 成木・lod1・森の木・lod1 の日の影を真上から (正射影、木そのものは描かず影だけ)。
+    行は日の仰角 90° (真下から見上げた抜けと同じ)・60°・45°・30°。隙間の割合を全方位 (8 方向) で数えて出す"""
+    import numpy as np
+    tmp = []
+    stats = {}
+    spacing = 15.0
+    for row, el in enumerate(GAP_ELEVATIONS):
+        K.reset()
+        sc = setup_scene((1600, 560))
+        sc.eevee.taa_render_samples = 16
+        sun = bpy.data.objects["sun"]
+        sun.data.angle = math.radians(0.5)
+        sun.data.energy = 4.0
+        L = sun_vector(el, az_deg)
+        sun.rotation_euler = (-L).to_track_quat("-Z", "Y").to_euler()
+        sc.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.25
+        objs = []
+        for i, (glb, name) in enumerate(GAP_TREES):
+            o = next(t for t in import_glb(os.path.join(K.OUT_DIR, f"{glb}.glb")) if t.name == name)
+            for t in list(bpy.data.objects):
+                if t.parent is None and t.type == "MESH" and t is not o and t not in objs and t.name != "floor":
+                    bpy.data.objects.remove(t)
+            o.location = (i * spacing, 0, 0)
+            o.visible_camera = False
+            objs.append(o)
+        bpy.context.view_layer.update()
+        if row == 0:
+            for o in objs:
+                stats[o.name] = {e: [gap_fraction(o, e, a) for a in range(0, 360, 45)] for e in GAP_ELEVATIONS}
+        floor(400, "#F2F0EA")
+        toonify_all()
+        # 影は日と反対へ伸びる: 行ごとに影の中心 (樹冠 6.5 m の影) を画の真ん中に置く
+        shift = -Vector((L.x, L.y, 0)) * (6.5 / L.z)
+        cx = 1.5 * spacing + shift.x
+        cy = shift.y
+        for i, o in enumerate(objs):
+            label(o.name, (i * spacing + shift.x - 6.5, cy - 9.8, 0.01), size=0.9)
+        label(f"sun {el}", (cx - 1.5 * spacing - 7.3, cy + 9.0, 0.01), size=1.0)
+        cam = camera((cx, cy, 80), (cx, cy, 0), ortho=4 * spacing)
+        cam.rotation_euler = (0, 0, 0)
+        p = os.path.join(os.path.dirname(os.path.abspath(out)), f".canopy_gaps_{el}.png")
+        render(p)
+        tmp.append(p)
+    rows = []
+    for p in tmp:
+        im = bpy.data.images.load(p)
+        w, h = im.size
+        a = np.array(im.pixels[:], dtype=np.float32).reshape(h, w, 4)
+        rows.append(a)
+        bpy.data.images.remove(im)
+        os.remove(p)
+    full = np.concatenate(list(reversed(rows)), axis=0)  # Blender の画素は下の行から
+    H, W = full.shape[:2]
+    img = bpy.data.images.new("canopy_gaps", W, H, alpha=True)
+    img.pixels[:] = full.ravel()
+    img.filepath_raw = os.path.abspath(out)
+    img.file_format = "PNG"
+    img.save()
+    print(f"rendered {out}")
+    print("gap fraction (日が抜ける割合 = 1 - 影の面積 / 凸包の影の面積、方位 8 つの最小 / 平均 / 最大)")
+    for name, per in stats.items():
+        cells = "  ".join(f"{e}°: {min(v):.2f}/{sum(v) / len(v):.2f}/{max(v):.2f}" for e, v in per.items())
+        print(f"  {name:22s} {cells}")
+
+
 if __name__ == "__main__":
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     mode = argv[0]
@@ -528,3 +665,5 @@ if __name__ == "__main__":
         ship_views(argv[1])
     elif mode == "shipyard":
         shipyard(argv[1])
+    elif mode == "canopy-gaps":
+        canopy_gaps(argv[1])

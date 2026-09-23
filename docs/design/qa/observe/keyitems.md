@@ -54,13 +54,13 @@ blender -b --factory-startup --python tools/blender/observe_render.py -- lineup 
 | `woven_screen` | 360 | ≤ 400 | 2.14 × 0.30 × 2.07 | wood, weave, rope, vine, bell, bell_rim |
 | `stone_wall_corner` | 680 | ≤ 800 | 3.40 × 3.10 × 1.02 | stone, moss |
 | `lantern_post`(格子を足した) | 512(368 から) | ≤ 600 | 1.36 × 0.86 × 2.35 | stone, moss, rope, frame, lantern |
-| `forest_tree` | 1,740 | ≤ 2,000 | 5.43 × 5.32 × 7.64 | forest_bark, forest_leaf |
-| `forest_tree_lod1` | 579 | ≤ 600 | 5.37 × 5.16 × 7.62 | forest_bark, forest_leaf |
+| `forest_tree`(M22-07 で房 6 つに分けた) | 1,625(1,740 から) | ≤ 2,000 | 5.51 × 5.32 × 7.53 | forest_bark, forest_leaf |
+| `forest_tree_lod1`(M22-07 で房 6 つ) | 575(579 から) | ≤ 600 | 5.47 × 5.44 × 7.58 | forest_bark, forest_leaf |
 | `moongrass_tuft_seed` | 52 | ≤ 60 | 0.38 × 0.49 × 0.95 | moongrass, moonseed |
 | `fern` | 80 | ≤ 80 | 1.33 × 1.21 × 0.42 | fern |
 | `flower_patch` | 67 | ≤ 80 | 0.41 × 0.42 × 0.29 | stem, petal |
-| `belltree_mature`(鐘を直した) | 3,952(3,592 から) | ≤ 4,000 | 9.12 × 8.93 × 9.38 | bark, leaf, bell, bell_rim |
-| `belltree_mature_lod1`(鐘を直した) | 1,112(932 から) | ≤ 1,200 | 9.16 × 8.92 × 9.30 | bark, leaf, bell, bell_rim |
+| `belltree_mature`(鐘を直した、M22-07 で房 8 つ) | 3,917(3,952 から) | ≤ 4,000 | 8.74 × 8.86 × 9.52 | bark, leaf, bell, bell_rim |
+| `belltree_mature_lod1`(鐘を直した、M22-07 で房 8 つ) | 1,112 | ≤ 1,200 | 8.96 × 8.89 × 9.56 | bark, leaf, bell, bell_rim |
 
 `ship_keel` の奥行き 16.67 m は、船首と船尾の柱を支える斜めの支柱のぶんです。`stone_wall_corner` の原点は L の外側の角で、腕は +X に 3 m、−Z(glTF)に 2.4 m 伸びます。
 既存のノード(`hut`・`slipway`・`stone_wall`・`megalith`・草・苔・石・鐘樹の他の段)の三角形数は変わっていません。
@@ -149,3 +149,39 @@ blender -b --factory-startup --python tools/blender/observe_render.py -- lineup 
 - 丸太の山の立てかけた板が杭と少し重なっています。丸太は 6 角なので、寄ると角が見えます。
 - 羊歯は寄ると角ばりが目立ちます。寄りで使うなら葉のカード(UV とテクスチャ)が要ります。
 - UV は引き続き書き出していません(`environment.md` の既知の課題と同じ)。
+
+## 追記(M22-07 光の筋のための樹冠の隙間)
+
+光の筋(`src/observe/render/atmosphere.ts` が日の影の地図を視線に沿ってたどり、日の当たる空気を明るくする)は、樹冠の影に穴がないと生まれません。
+鐘樹の成木と森の木の樹冠を、一つにまとまった塊から、枝先に載った離れた房に組み直しました(`key-visuals/herd.png` の、房の間から射す日を目標に)。
+
+- 鐘樹の成木(`observe_belltree.py` の `CLUSTERS`): 下の輪 5 房(幹から 3.05〜3.25 m、高さ 5.95〜6.5 m、半径 1.16〜1.26 m)と、その内側の上に載せた上の輪 3 房(1.45〜1.55 m、8.25〜8.45 m、半径 0.96〜1.0 m)。
+  房は大きな塊・外の上へ盛った塊・横(上の輪は上)へ張り出した塊の 3 つで作り、白い枝を 1 本ずつ房の真ん中へ伸ばしました(下の輪は幹の 3.3〜4.2 m から、上の輪は 5.2〜6.4 m から)。
+  下の輪の房の間は 0.8〜1.1 m 空き、真上から見ると 5 本の隙間が幹の近くまで抜けます。鐘 30 個は房の下側に吊ったままです(位置は lod0・lod1 で同じ)。
+  lod1 は房ごとに塊 1 つ(房の輪郭の重心に 1.14 倍)で、枝も 8 本(4 角)残し、隙間は lod0 とほぼ同じです。
+- 森の木(`observe_flora.py` の `FOREST_CLUSTERS`): 下の輪 4 房と、房の間の上に載せた上の房 2 つ。房の間は 0.4〜0.6 m で鐘樹より詰まり、茶色の幹・濃い緑で鐘樹と見分けます。lod1 は房ごとに塊 1 つ(1.08 倍)。
+- 材質・ノード名・原点は変えていません。柔らかい法線の基準は樹冠の中心から房の中心に替え、房ごとの丸い量感にしました。
+
+日が抜ける割合(`observe_render.py -- canopy-gaps` の実測。葉の頂点の凸包の影のうち、日の当たる地面の割合。方位 8 つの最小〜最大):
+
+| ノード | 仰角 90°(真下から見上げたのと同じ) | 60° | 45° | 30° |
+|---|---:|---:|---:|---:|
+| `belltree_mature` | 0.32 | 0.23〜0.31 | 0.22〜0.29 | 0.22〜0.28 |
+| `belltree_mature_lod1` | 0.34 | 0.22〜0.30 | 0.20〜0.29 | 0.21〜0.25 |
+| `forest_tree` | 0.22 | 0.18〜0.23 | 0.18〜0.21 | 0.16〜0.21 |
+| `forest_tree_lod1` | 0.19 | 0.14〜0.19 | 0.14〜0.18 | 0.13〜0.17 |
+| (前の `forest_tree`、比較) | 0.07 | 0.04〜0.07 | 0.03〜0.06 | 0.04〜0.07 |
+
+```sh
+blender -b --factory-startup --python tools/blender/observe_render.py -- canopy-gaps docs/design/qa/observe/canopy-gaps.png
+```
+
+| 画像 | 中身 |
+|---|---|
+| `canopy-gaps.png` | 成木・成木 lod1・森の木・森の木 lod1 の日の影だけを真上から(正射影、木そのものは描かない)。行は日の仰角 90°・60°・45°・30°(方位 200°) |
+| `belltree.png` / `flora2.png` / `corner.png` / `shipyard.png` | 房に分けた樹冠で描き直したもの |
+
+残る課題:
+
+- 引いた場面(`shipyard.png`)では、房に分けた樹冠が傘や刈り込んだ木のように見え、基準画(`sheets/belltree.png`)の詰まった丸い樹冠より疎です。隙間を狭めるなら `CLUSTERS` の半径を上げます(隙間と引き換え)。
+- 光の筋が本体で実際に出るか(影の地図の解像度・範囲で房の間の 0.4〜1 m の隙間が潰れないか)は、Three.js の画面で確かめる必要があります。
