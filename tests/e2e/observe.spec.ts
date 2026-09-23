@@ -22,6 +22,20 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
   const tick = () => page.evaluate(() => (window as unknown as { __observeStats: { tick: number } }).__observeStats.tick);
   const t0 = await tick();
   await expect.poll(tick, { timeout: 10_000 }).toBeGreaterThan(t0);
+  // 下の帯が時間の流れとカメラを示し、帯の速さは操作画面の速さのボタンを押す
+  const bar = page.getByRole('toolbar', { name: '観察画面' });
+  await expect(bar.locator('.o-live')).toHaveText(/^観察中(自動カメラ|自由カメラ|個体を追って)/);
+  await expect(bar.getByRole('button', { name: '10x' })).toHaveClass(/on/);
+  await bar.getByRole('button', { name: '一時停止' }).click();
+  await expect(page.locator('#speed-0')).toHaveClass(/on/);
+  await expect(bar.locator('.o-live')).toHaveText(/^一時停止中/);
+  await bar.getByRole('button', { name: '10x' }).click();
+  await expect(page.locator('#speed-10')).toHaveClass(/on/);
+  // Esc でも戻れる
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#observe-layer')).toBeHidden();
+  await open.click();
+  await expect(page.locator('#observe-layer')).toBeVisible();
   await page.getByRole('button', { name: '操作画面へ戻る' }).click();
   await expect(page.locator('#observe-layer')).toBeHidden();
   await expect(open).toBeVisible();
@@ -37,6 +51,7 @@ test('observe view: clicking an animal follows it, and the speed stays in the ga
   await page.getByRole('button', { name: '3D で見る' }).click();
   await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^\d+ 年 · \d+ fps/, { timeout: 90_000 });
   // 観察画面では速さのボタンを出さない (操作画面の速さに従う)
+  // (下の帯で変更: 速さは帯のボタンが操作画面の速さのボタンを押す。寄せ先の列には出さない)
   await expect(page.locator('#observe-layer .o-shots').getByRole('button', { name: '10x' })).toHaveCount(0);
   // 群れの寄せ先で画面の中の個体を 1 つ選び、その位置を押す
   await page.locator('#observe-layer .o-shots').getByRole('button', { name: '群れ' }).click();

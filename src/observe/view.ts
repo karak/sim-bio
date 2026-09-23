@@ -8,6 +8,8 @@ import {
   HemisphereLight,
   IcosahedronGeometry,
   BoxGeometry,
+  Box3,
+  Sphere,
   Matrix4,
   Mesh,
   Object3D,
@@ -25,7 +27,7 @@ import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import { describeEvent } from '../ui/Tablet';
 import { mulberry32 } from '../simulation/rng';
-import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh } from './render/terrain';
+import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh, groundLayers, wearTerrain, type Worn } from './render/terrain';
 import { createWater } from './render/water';
 import { createGrass } from './render/grass';
 import { createGrade } from './render/grade';
@@ -36,7 +38,7 @@ import { instanceProps, lodProps, type LodProps } from './render/instancer';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
-import { createShotCamera, frameBlocked, inFoliage } from './render/shotCamera';
+import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
@@ -61,7 +63,8 @@ const OPT = {
   deer: num('deer', 0),
   trees: num('trees', 140),
   near: num('near', 40),
-  grass: num('grass', 25000),
+  // (草の磨き上げ: 房を 36 三角形に減らした分、25,000 から 30,000 房に増やして草の絨毯を密にする)
+  grass: num('grass', 30000),
   grade: flag('grade'),
   bloom: flag('bloom'),
   shadow: flag('shadow'),
@@ -189,6 +192,8 @@ export type ObservationView = {
   setSnapshot(s: WorldSnapshot, timeline?: readonly TimelineEvent[]): void;
   start(): void;
   stop(): void;
+  /** 今のカメラ: 自動 (自然記録調)・自由 (触ったあと、20 秒で自動に戻る)・個体を追う */
+  cameraMode(): 'auto' | 'free' | 'follow';
 };
 
 export async function createObservationView(host: ObserveHost): Promise<ObservationView> {
@@ -254,8 +259,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     loadGlb('/models/observe/rabbit.glb'),
     loadGlb('/models/observe/ship.glb'),
   ]);
-  const tuft = findNode(floraGlb, 'grass_tuft') as Mesh | null;
-  const grass = createGrass(field, { grass: s.layers.populations['grass'], moss: s.layers.populations['moss'] }, OPT.grass, 7, tuft?.geometry, (AREA_R + 1) * CELL_M);
+  // (草の磨き上げ: 房の形は grass.ts の carpetTuft を使う (flora.glb の grass_tuft は星形に開いて判を押したように見えた)。地面と同じ層で色を決める)
+  const grass = createGrass(field, groundLayers(s), OPT.grass, 7, undefined, (AREA_R + 1) * CELL_M);
   scene.add(grass.mesh);
 
   // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
@@ -264,6 +269,15 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-06 試作 2: 船台が 27 m になったので、船台の点 (外海に接する陸のセルの中心) から陸の側へ 6.5 m ずらし、
   //  舳先の端が水際を 2 m ほど越えるところに置く。舟・丸太の山・切り開きはこの中心に合わせる)
   const slip = { x: marks.slipway.x - marks.slipwayBow.x * 6.5, z: marks.slipway.z - marks.slipwayBow.z * 6.5 };
+  // (草の磨き上げ) 集落の広場・小屋の戸口への道・船台への道を踏み固めた土にし、そこの草を減らす (小屋の位置は下の集落の一角と同じ)
+  const plaza = { x: marks.center.x, z: marks.center.z - 6 };
+  const worn: Worn[] = [
+    { ax: plaza.x, az: plaza.z, bx: plaza.x, bz: plaza.z, r: 9 },
+    { ax: plaza.x, az: plaza.z, bx: slip.x, bz: slip.z, r: 2.6 },
+    ...[[-14, -8], [12, -12], [-4, -20]].map(([hx, hz]) => ({ ax: plaza.x, az: plaza.z, bx: marks.center.x + hx, bz: marks.center.z + hz, r: 2.2 })),
+  ];
+  wearTerrain(terrain, worn);
+  grass.trample(worn);
 
   // 鐘樹: 密度に比例して最大 OPT.trees 本。密度で段 (成木・若木・芽) を選ぶ。舟の材を伐った跡として船台の近くに株を置く
   const rng = mulberry32(11);
@@ -414,7 +428,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   place('woven_screen', c0.x + 9, c0.z - 7, -0.6);
   place('stone_wall_corner', c0.x - 22, c0.z - 18, 0.8);
   const side = { x: marks.slipwayBow.z, z: -marks.slipwayBow.x };
-  for (const [name, mats] of settlementPlacements) scene.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
+  // 小屋・巨石・石垣もカメラの遮りに数える (舟の見上げのカメラが集落の中に立って巨石が画を覆ったため)。自動カメラは舟も数える (集落の俯瞰が舟の甲板の上に立ったため)
+  const settlement = new Group();
+  scene.add(settlement);
+  for (const [name, mats] of settlementPlacements) settlement.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
   const pile = findNode(shipGlb, 'timber_pile');
   if (pile) {
     const px = slip.x + side.x * 9 - marks.slipwayBow.x * 3;
@@ -514,7 +531,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     controls.target.set(tx, ty + 1.2, tz);
     // (M22-03: 林の置き方が変わると寄せ先のカメラが樹冠に入るので、狙いとの間に木があれば向きを少しずつ振って見通しの良い所を探す。
     // どの向きも塞がっていれば、最初の向きで木の手前に寄せる)
-    const blockers = lods.map((l) => l.group);
+    const blockers = [...lods.map((l) => l.group), settlement];
     const place = (yw: number) => {
       const cx = tx + Math.sin(yw) * dist;
       const cz = tz + Math.cos(yw) * dist;
@@ -576,7 +593,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     shots.appendChild(b);
   }
   // 自動カメラ (M22-08): 場面の引き金・狩り・民・群れ・風景からショットを選び、触れば自由カメラ、20 秒触らなければ戻る
-  const shotCam = createShotCamera(camera, field.heightAt, () => lods.map((l) => l.group), AREA_R * CELL_M, mulberry32(31));
+  // 舟の見上げ以外は、舟を狙いより手前に映さない (集落の俯瞰が帆柱の真上に立ったため)
+  const shipBox = new Box3();
+  const shipBall = new Sphere();
+  const shipAvoid = (shot: Shot): AvoidZone[] => {
+    if (!shipView.node() || shot.kind === 'shipLookUp') return [];
+    shipBox.setFromObject(shipView.group);
+    if (shipBox.isEmpty()) return [];
+    shipBox.getBoundingSphere(shipBall);
+    return [{ x: shipBall.center.x, y: shipBall.center.y, z: shipBall.center.z, r: shipBall.radius }];
+  };
+  const shotCam = createShotCamera(camera, field.heightAt, () => [...lods.map((l) => l.group), settlement, shipView.group], AREA_R * CELL_M, mulberry32(31), shipAvoid);
   let director = initialDirector();
   let prevFrame: SceneFrame | null = null;
   let touched = !OPT.auto;
@@ -656,6 +683,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     if (kind === 'sprout') playScene({ kind, year: snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
     else if (kind === 'mist') playScene({ kind, year: snap.year, cell: home, at, radius: 4 });
     else playScene({ kind, year: snap.year });
+  };
+  // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__observeLook('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
+  (window as unknown as { __observeLook: unknown }).__observeLook = (at: string | { x: number; z: number }, dist = 6, height = 1.2, yaw = 0) => {
+    const c = typeof at === 'string' ? centroid(at) : at;
+    if (c) lookFrom(c.x, c.z, dist, height, yaw);
   };
   const direct = (dt: number) => {
     const frame = sceneFrame(snap, area);
@@ -794,7 +826,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       if (host.debug === false) stats.textContent = `${st.year} 年`;
@@ -825,6 +857,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     stop() {
       running = false;
       cancelAnimationFrame(handle);
+    },
+    cameraMode() {
+      if (director.mode === 'auto') return 'auto';
+      return followId !== null ? 'follow' : 'free';
     },
   };
 }
