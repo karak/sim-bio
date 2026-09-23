@@ -235,7 +235,8 @@ function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, max
           const clip = rig.clip(a, find);
           if (herdClip.get(a.id) !== clip || herdClip.get(-1 - k) !== String(a.id)) {
             // fall は倒れた瞬間 (t − a.t) にフレーム 0 になるよう位相を合わせる (VAT はループするので、2 秒で fallHold に移る前提)
-            for (const h of herds) h.setClip(k, clip, clip === 'fall' ? a.t - t : (a.id * 0.37) % 5);
+            // (月鹿の graze が 10 s になったので、位相は 0〜10 s に散らす)
+            for (const h of herds) h.setClip(k, clip, clip === 'fall' ? a.t - t : (a.id * 0.37) % 10);
             herdClip.set(a.id, clip);
             herdClip.set(-1 - k, String(a.id));
           }
