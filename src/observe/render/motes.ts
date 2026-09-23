@@ -23,9 +23,9 @@ import type { Agent } from '../agents';
 const DUST = 700;
 const DUST_BOX = 36;
 const FIREFLIES = 260;
-const VITALITY = 600;
+const VITALITY = 1200;
 const VITALITY_LIFE = 2.6;
-const VITALITY_RATE = 14;
+const VITALITY_RATE = 32;
 
 const pointVertex = /* glsl */ `
   attribute float aSeed;
@@ -142,7 +142,7 @@ export function createMotes(input: MotesInput): Motes {
     alpha[i] = 0.6 + rng() * 0.4;
   });
 
-  const vitMat = pointMaterial('#8FF5E6', 2.6, 0.12, 2);
+  const vitMat = pointMaterial('#9CF7D8', 3.2, 0.2, 2);
   const vit = points(VITALITY, vitMat, (_i, _p, seed, alpha) => {
     alpha[_i] = 0;
     seed[_i] = 0;

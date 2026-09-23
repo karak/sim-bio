@@ -48,6 +48,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * URL: ?deer=300&trees=200&near=40&grass=20000&grade=1&bloom=1&shadow=1
  * (個体層をつないだ後: deer は区域の鹿の目標頭数。K を密度の合計から逆算する。0 なら本体の密度 × K_DEFAULT のまま。near は使わない)
  * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
+ * (M22-08: speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  */
 const params = new URLSearchParams(location.search);
@@ -64,6 +65,7 @@ const OPT = {
   forest: num('forest', 80),
   ship: params.has('ship') ? num('ship', 0) : null,
   launched: params.get('launched') === '1',
+  speed: num('speed', 1),
   air: flag('air'),
   time: num('time', 0.16),
   day: num('day', DAY_CYCLE_S),
@@ -230,7 +232,7 @@ async function boot(): Promise<void> {
   scene.add(grass.mesh);
 
   // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
-  const area = extractArea(s, home, AREA_R);
+  let area = extractArea(s, home, AREA_R);
   const marks = landmarks(area);
   const slip = marks.slipway;
 
@@ -379,7 +381,7 @@ async function boot(): Promise<void> {
     const sum = area.cells.reduce((acc, c) => acc + (c.isLand ? (c.density['deer'] ?? 0) : 0), 0);
     if (sum > 0) K = { ...K, deer: OPT.deer / sum };
   }
-  const targets = targetCounts(area, K, folk);
+  let targets = targetCounts(area, K, folk);
   const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50));
   scene.add(creatures.group);
   let agents: AgentWorld = { agents: [], nextId: 1 };
@@ -390,7 +392,25 @@ async function boot(): Promise<void> {
     const plan = reconcile(agents.agents, targets, 1e6, 1, arng, 0);
     agents = applyPlan(agents, plan);
   }
-  const building = !!s.ship && s.ship.launchedYear === undefined && (s.civ?.stage ?? 0) >= 5;
+  let building = !!s.ship && s.ship.launchedYear === undefined && (s.civ?.stage ?? 0) >= 5;
+  // 本体の時間 (M22-08): 速度 speed のとき実時間 1 秒に speed tick 進める (操作画面と同じ。1 年 = 360 tick)。
+  // 進んだら区域の密度から目標頭数を引き直す。目印 (船台・林) は最初に決めたまま動かさない (船台は着工の年に決めて動かさない)
+  let simSpeed = OPT.freeze ? 0 : OPT.speed;
+  let simAcc = 0;
+  let snap = s;
+  const advance = (dt: number) => {
+    if (simSpeed <= 0) return;
+    simAcc += dt * simSpeed;
+    const n = Math.min(Math.floor(simAcc), 50);
+    if (n <= 0) return;
+    simAcc -= n;
+    world.step(n);
+    snap = world.snapshot();
+    area = extractArea(snap, home, AREA_R);
+    targets = targetCounts(area, K, folkRuleFor(snap.civ, 3));
+    building = !!snap.ship && snap.ship.launchedYear === undefined && (snap.civ?.stage ?? 0) >= 5;
+    if (OPT.ship === null && !OPT.launched) shipView.set(snap.ship);
+  };
 
   const air = OPT.air ? new AtmospherePass(camera, sun) : null;
   const grade = createGrade(renderer, scene, camera, air ? [air] : []);
@@ -465,6 +485,13 @@ async function boot(): Promise<void> {
     b.addEventListener('click', go);
     shots.appendChild(b);
   }
+  // 本体の速さ (M22-08 の仮。観察画面では 100x を選べない)
+  for (const v of [0, 1, 10]) {
+    const b = document.createElement('button');
+    b.textContent = v === 0 ? '⏸' : `${v}x`;
+    b.addEventListener('click', () => (simSpeed = v));
+    shots.appendChild(b);
+  }
   const first = params.get('shot');
   if (first && presets[first]) setTimeout(presets[first], 1500);
   const stats = document.getElementById('stats')!;
@@ -480,6 +507,7 @@ async function boot(): Promise<void> {
     t += dt;
     // 試作の徘徊: 目的地へ歩き、着いたら食むか待つ (M22-04 の個体層に置き換える)
     // (置き換えた: 以下は個体層の 1 フレーム。出入りの計画 → 状態機械 → 描画)
+    advance(dt);
     const plan = reconcile(agents.agents, targets, BUDGET_PER_SECOND, dt, arng, credit);
     credit = plan.credit;
     agents = applyPlan(agents, plan);
@@ -516,10 +544,10 @@ async function boot(): Promise<void> {
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
-      stats.textContent = `${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
+      stats.textContent = `${st.year} 年 · ${simSpeed === 0 ? '⏸' : `${simSpeed}x`} · ${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
     }
     requestAnimationFrame(loop);
   };
