@@ -315,7 +315,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const node = findNode(treeGlb, `belltree_${kind}`) ?? placeholderTree(kind as 'mature' | 'sapling' | 'seedling' | 'stump');
     const lod1 = kind === 'mature' ? findNode(treeGlb, 'belltree_mature_lod1') : null;
     if (lod1) {
-      const l = lodProps(node, lod1, mats, 45, OPT.trees);
+      const l = lodProps(node, lod1, mats, 38, OPT.trees);
       lods.push(l);
       belltreeSets[kind] = l;
       scene.add(l.group);
