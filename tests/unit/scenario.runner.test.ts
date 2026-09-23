@@ -44,6 +44,28 @@ describe('createScenarioRunner', () => {
     // 台詞は年表に scheduled として 1 行だけ。警告 (warning) の行としては重ねない
     expect(r.timeline().filter((e) => e.kind === 'warning' && e.warning.kind === 'event')).toEqual([]);
   });
+  it('text 付きの spawn_species の予定は警告 (event) に id (種 id) を持たせ、石板が種レイヤーへの案内チップを出せるようにする (M21-02 D5)', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 2, schedule: [{ atYear: 1, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    const events = r.warnings().filter((x) => x.kind === 'event');
+    expect(events).toEqual([{ kind: 'event', key: 'event:0@1', text: '狼の群れが北の谷に下りた', id: 'wolf' }]);
+  });
+  it('spawn_species でない予定 (text 付き) の警告には id を持たせない', () => {
+    const w = fakeWorld({ deer: 1 });
+    const cmd: Command = { type: 'disaster', kind: 'meteor', cell: -1, radius: 1 };
+    const d: ScenarioDef = { ...def, years: 2, schedule: [{ atYear: 1, text: '星が近づいている', command: cmd }] };
+    const r = createScenarioRunner(d, w);
+    r.update(w.snapshot());
+    w.step(360);
+    r.update(w.snapshot());
+    const events = r.warnings().filter((x) => x.kind === 'event');
+    expect(events).toEqual([{ kind: 'event', key: 'event:0@1', text: '星が近づいている', id: undefined }]);
+  });
   it('everyYears があって untilYear が無い予定は予言の年まで繰り返す (M10R レビュー: 以前は 1 回しか撃たなかった)', () => {
     const w = fakeWorld({ deer: 1 });
     const d: ScenarioDef = { ...def, years: 7, schedule: [{ atYear: 2, everyYears: 2, command: { type: 'sink', amount: 0.01 } }] };

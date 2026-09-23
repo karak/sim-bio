@@ -182,7 +182,8 @@ export function createScenarioRunner(
         // ただし text のある予定 (M10R-07: 狼の波) は繰り返しでも年表と警告に出す (星が気づいて動くための台詞)
         if (!sc.everyYears) timeline.push({ year: y, kind: 'scheduled', command: sc.command });
         else if (sc.text) timeline.push({ year: y, kind: 'scheduled', command: sc.command, text: sc.text });
-        if (sc.text) announced.push({ kind: 'event', key: `event:${idx}@${y}`, text: sc.text });
+        // 警告から種レイヤーを開ける (M21-02 D5): spawn_species の予定なら id を種 id にする (species_low と同じ規約)
+        if (sc.text) announced.push({ kind: 'event', key: `event:${idx}@${y}`, text: sc.text, ...(sc.command.type === 'spawn_species' ? { id: sc.command.speciesId } : {}) });
         if (!sc.everyYears) break;
       }
     }
