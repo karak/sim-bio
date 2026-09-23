@@ -150,6 +150,44 @@ def tspan(a, b, n):
 # ---------------------------------------------------------------- 部品
 
 CURL = 1.8  # (M22-06 試作 2 で足した) 船首の巻きと船尾の柱の伸びの拡大率
+# (試作 3 の判断で変更: 船首の巻きは下の渦巻き (VOLUTE_*) に替えたので、CURL は船首には使わない)
+
+# (試作 3 の判断で足した) 船首の柱の先の大きな渦巻き (基準画 sheets/ship.png・key-visuals/departure.png の巻いた船首)。
+# 角度は YZ 面内で 0 が前 (−Y)、90 が上、180 が船尾側。柱の傾きのまま前へ上がり、前の外周を上って頂で船尾側へ返り、
+# 半径を VOLUTE_R0 から VOLUTE_R1 へ縮めながら 1.5 巻きして、目 (中心) の飾りの横で終わる
+VOLUTE_REACH = 0.8             # 柱の先 (舷縁の高さ) から巻き始めまでの長さ
+VOLUTE_R0, VOLUTE_R1 = 1.75, 0.4  # 巻き始めと巻き終わりの半径
+VOLUTE_A0, VOLUTE_STEP, VOLUTE_SEGS = -45.0, 22.5, 25  # 巻き始めの角度・刻み・刻みの数 (−45° から 517.5° まで)
+VOLUTE_W0, VOLUTE_W1 = 0.32, 0.1  # 材の太さ (巻き始め → 巻き終わり)
+
+
+def volute(top_b, d):
+    """(試作 3 の判断で足した) 船首の渦巻きの芯の点と太さ。top_b は船首の柱の先、d は柱の向き"""
+    d = Vector((0, d.y, d.z)).normalized()
+    start = top_b + d * VOLUTE_REACH
+    a0 = math.radians(VOLUTE_A0)
+    a1 = math.radians(VOLUTE_A0 + VOLUTE_STEP * VOLUTE_SEGS)
+    k = math.log(VOLUTE_R1 / VOLUTE_R0) / (a1 - a0)
+
+    def off(a):
+        return Vector((0, -math.cos(a), math.sin(a))) * (VOLUTE_R0 * math.exp(k * (a - a0)))
+    c = start - off(a0)
+    pts, radii = [], []
+    for i in range(VOLUTE_SEGS + 1):
+        u = i / VOLUTE_SEGS
+        pts.append(c + off(a0 + (a1 - a0) * u))
+        radii.append(VOLUTE_W0 + (VOLUTE_W1 - VOLUTE_W0) * u ** 0.8)
+    return pts, radii, c
+
+
+def volute_front(pts):
+    """(試作 3 の判断で足した) 船首の渦巻きの最も前の点 (船首の鐘の腕の付け根)"""
+    return min(pts[-(VOLUTE_SEGS + 1):], key=lambda p: p.y)
+
+
+def volute_top(pts):
+    """(試作 3 の判断で足した) 船首の渦巻きの頂 (前の支えと三角の帆を張る所。最も前の点へ張ると縄が渦巻きを貫くため)"""
+    return max(pts[-(VOLUTE_SEGS + 1):], key=lambda p: p.z)
 
 
 def keel(node, curl=True):
@@ -164,13 +202,18 @@ def keel(node, curl=True):
         nrm = Vector((0, -d.z, d.y))  # 輪郭の外向き (YZ 面内)
         pts.append(Vector((0, p.y, p.z)) + nrm * KEEL_R * 0.7)
     top_b, top_s = pts[-1], pts[0]
+    prof_pt_before_top = pts[-2]  # (試作 3 で足した) 船首の柱の向き (渦巻きの巻き始めを柱の傾きに揃える)
     radii = [KEEL_R] * len(pts)
     if curl:
         # (M22-06 試作 2 の判断で変更: 巻きを CURL 倍にし、船尾の柱は船尾楼の欄干より高く伸ばす)
         pts = [top_s + Vector((0, 0.6, 2.6)), top_s + Vector((0, 0.35, 1.3))] + pts
-        pts += [top_b + Vector((0, -0.28, 0.5)) * CURL, top_b + Vector((0, -0.42, 1.0)) * CURL,
-                top_b + Vector((0, -0.25, 1.4)) * CURL, top_b + Vector((0, 0.02, 1.52)) * CURL]
-        radii = [0.2, 0.28] + radii + [0.3, 0.25, 0.19, 0.12]
+        # (試作 3 の判断で変更: 船首の先の四角い小さな鉤 (top_b から CURL 倍で 4 点、太さ 0.3〜0.12) をやめ、大きな渦巻きにする。
+        #  渦巻きの目には丸く削った飾りを置く。竜骨の段から飛び立ちまで同じ形)
+        vol, vol_r, eye = volute(top_b, top_b - prof_pt_before_top)
+        pts += vol
+        radii = [0.2, 0.28] + radii + vol_r
+        node.add(K.ico((0.2, 0.3, 0.3), subdiv=1, seed=3), M["timber"], matrix=K.trs(eye), smooth=True,
+                 shade=K.shade_const(0.92))
     node.add(K.tube(pts, radii, n=4, phase=math.pi / 4), M["timber"], smooth=False,
              shade=K.shade_height(0.0, 2.0, 0.78, 1.0))
     return pts
@@ -642,7 +685,7 @@ def rail(node, bells=True):
 
 def bow_bell(node, pts):
     """(M22-06 試作 2 で足した) 船首の巻いた柱の最も前の点から前へ腕を出し、大きな鐘を吊る"""
-    p = pts[-3]
+    p = volute_front(pts)  # (試作 3 の判断で変更: pts[-3] → 渦巻きの最も前の点)
     arm = p + Vector((0, -0.9, -0.1))
     node.add(K.tube([p + Vector((0, 0.1, 0)), arm], [0.09, 0.07], n=4), M["timber"], shade=K.shade_const(0.9))
     node.add(K.tube([arm, arm - Z * 0.35], [0.03, 0.03], n=3, cap_start=False, cap_end=False), M["rope"])
@@ -686,7 +729,8 @@ def stage(name):
     i = STAGES.index(name)
     pts = keel(n)
     # (M22-06 試作 2 の判断で変更: 前の支えは船首の巻きの最も前の点へ張る)
-    bow_top, stern_top = pts[-3], pts[0]
+    # (試作 3 の判断で変更: 渦巻きにしたので、前の支えは渦巻きの頂へ張る。最も前の点へ張ると縄が渦巻きを貫く)
+    bow_top, stern_top = volute_top(pts), pts[0]
     if name != "ship_flying":
         cradle(n, random.Random(21), posts=(i == 0))
     if i == 1:
