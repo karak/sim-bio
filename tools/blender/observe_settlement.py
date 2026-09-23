@@ -6,6 +6,7 @@ slipway (舟を組む石の船台、~16 m) / stone_wall (低い空積みの石�
 予算: hut 1,200〜2,000 / lantern_post ≤600 / slipway ≤1,500 / stone_wall ≤600 / megalith ≤800 三角形。
 M22-06 で足したノード: woven_screen (二本の柱に張った編み繊維の衝立、≤400) / stone_wall_corner (L 字の空積みの石垣、≤800、
 原点は L の外側の角)。lantern_post の灯籠に木の格子 (各面に X) を足した。
+(M22-06 試作 2 の判断「船は大きく、立派な感じがほしい」で slipway を 27 × 7.6 m に広げた (≤2,500 三角形)。他のノードは変えない。
 
 実行: blender -b --factory-startup --python tools/blender/observe_settlement.py
 """
@@ -194,17 +195,23 @@ def lantern_post():
 
 # ---------------------------------------------------------------- 船台
 
-SLIP_L, SLIP_W = 16.0, 4.4
+# (M22-06 試作 2 の判断「船は大きく、立派な感じがほしい」で変更: 舟 (全長 ≈ 25 m、幅 7 m) に合わせて 16 × 4.4 → 27 × 7.6 m、
+#  上がり 0.9 → 1.5 m (傾き atan(1.5/27) ≈ 3.2°、船首側 (−Y、glTF の +Z) が下は同じ)。盤木は 0.28 → 0.4 m の高さで 8 つ、
+#  前後位置は observe_ship.py の CRADLE_YS (内側の 6 つ) と同じ。中央の盤木の上面 (SLIP_TOP) は 0.2 + 0.75 + 0.01 + 0.4 = 1.36 m)
+SLIP_L, SLIP_W = 27.0, 7.6
+SLIP_RISE = 1.5
+SLIP_BLOCK_H = 0.4
+SLIP_BLOCK_YS = (-10.15, -7.25, -4.35, -1.45, 1.45, 4.35, 7.25, 10.15)
 
 
 def slip_z(y):
-    return 0.25 + (y + SLIP_L / 2) / SLIP_L * 0.9
+    return 0.2 + (y + SLIP_L / 2) / SLIP_L * SLIP_RISE  # (M22-06 試作 2 の判断で変更: 0.25 + … × 0.9 → 0.2 + … × SLIP_RISE)
 
 
 def slipway():
     n = K.Node("slipway")
     rnd = random.Random(303)
-    ang = math.degrees(math.atan2(0.9, SLIP_L))
+    ang = math.degrees(math.atan2(SLIP_RISE, SLIP_L))  # (M22-06 試作 2 の判断で変更: 0.9 → SLIP_RISE)
     # 土台の楔
     import bmesh
     bm = bmesh.new()
@@ -216,30 +223,33 @@ def slipway():
         bm.faces.new([v[i] for i in f])
     n.add(bm, M["stone"], shade=K.shade_const(0.62))
     # 敷石 (8 列 × 3)
-    rows = 8
+    # (M22-06 試作 2 の判断で変更: 13 列 × 5、敷石は 1.1 m 幅)
+    rows = 13
     for r in range(rows):
         y = -hl + (r + 0.5) * SLIP_L / rows
-        for c, x in enumerate((-1.05, 0.0, 1.05)):
-            xx = x + rnd.uniform(-0.04, 0.04) + (0.2 if r % 2 and c == 1 else 0)
-            stone(n, rnd, (xx, y, slip_z(y) - 0.06), (1.0, SLIP_L / rows - 0.08, 0.18), yaw=rnd.uniform(-1.5, 1.5),
+        for c, x in enumerate((-2.3, -1.15, 0.0, 1.15, 2.3)):
+            xx = x + rnd.uniform(-0.04, 0.04) + (0.2 if r % 2 and c in (1, 3) else 0)
+            stone(n, rnd, (xx, y, slip_z(y) - 0.06), (1.05, SLIP_L / rows - 0.08, 0.18), yaw=rnd.uniform(-1.5, 1.5),
                   tilt=(ang, 0), bevel=0.0, jitter=0.025, moss=0.06, z1=1.4)
     # 両脇の縁石 (6 個ずつ) と上端の柱石・壁
+    # (M22-06 試作 2 の判断で変更: 縁石は 9 個ずつ、幅 0.9 m。上面 (slip_z + 0.33) に舟の舷側の支柱の足が載る。柱石は 2.6 m)
     for sx in (-1, 1):
-        for k in range(6):
-            y = -hl + (k + 0.5) * SLIP_L / 6
-            stone(n, rnd, (sx * (SLIP_W / 2 - 0.1), y, slip_z(y) + 0.02), (0.6, SLIP_L / 6 - 0.1, 0.62), yaw=rnd.uniform(-2, 2),
+        for k in range(9):
+            y = -hl + (k + 0.5) * SLIP_L / 9
+            stone(n, rnd, (sx * (SLIP_W / 2 - 0.45), y, slip_z(y) + 0.02), (0.9, SLIP_L / 9 - 0.1, 0.62), yaw=rnd.uniform(-2, 2),
                   tilt=(ang, rnd.uniform(-2, 2)), bevel=0.08, jitter=0.03, moss=0.3, z1=1.6)
-        stone(n, rnd, (sx * (SLIP_W / 2 - 0.1), hl + 0.1, 0), (0.85, 0.85, 1.75), yaw=rnd.uniform(-4, 4), bevel=0.08,
-              jitter=0.03, taper=0.88, moss=0.9, base_z=True, z1=1.6)
-    for x in (-0.8, 0.8):
-        stone(n, rnd, (x, hl + 0.2, 0), (1.5, 0.6, 1.2), yaw=rnd.uniform(-3, 3), bevel=0.07, moss=0.5, base_z=True, z1=1.4)
+        stone(n, rnd, (sx * (SLIP_W / 2 - 0.3), hl + 0.15, 0), (1.2, 1.2, 2.6), yaw=rnd.uniform(-4, 4), bevel=0.1,
+              jitter=0.03, taper=0.88, moss=0.9, base_z=True, z1=2.4)
+    for x in (-1.9, -0.6, 0.7, 2.0):
+        stone(n, rnd, (x, hl + 0.3, 0), (1.3, 0.7, 1.9), yaw=rnd.uniform(-3, 3), bevel=0.07, moss=0.5, base_z=True, z1=1.8)
     # 竜骨を受ける木の盤木と、左右の滑り材
-    for k in range(6):
-        y = -hl + 1.6 + k * 2.55
-        n.add(K.box((0.9, 0.45, 0.28), bevel=0.0, jitter=0.015, seed=k), M["wood"],
-              matrix=K.trs((0, y, slip_z(y) + 0.15), (ang, 0, rnd.uniform(-3, 3))), shade=K.shade_const(rnd.uniform(0.8, 0.95)))
-    for x in (-0.75, 0.75):
-        n.add(K.tube([(x, -hl + 0.4, slip_z(-hl + 0.4) + 0.12), (x, hl - 0.4, slip_z(hl - 0.4) + 0.12)], [0.1, 0.1], n=6),
+    # (M22-06 試作 2 の判断で変更: 盤木は 1.5 × 0.7 × 0.4 m を SLIP_BLOCK_YS の 8 か所、滑り材は ±1.1 m)
+    for k, y in enumerate(SLIP_BLOCK_YS):
+        n.add(K.box((1.5, 0.7, SLIP_BLOCK_H), bevel=0.0, jitter=0.015, seed=k), M["wood"],
+              matrix=K.trs((0, y, slip_z(y) + 0.01 + SLIP_BLOCK_H / 2), (ang, 0, rnd.uniform(-3, 3))),
+              shade=K.shade_const(rnd.uniform(0.8, 0.95)))
+    for x in (-1.1, 1.1):
+        n.add(K.tube([(x, -hl + 0.4, slip_z(-hl + 0.4) + 0.14), (x, hl - 0.4, slip_z(hl - 0.4) + 0.14)], [0.13, 0.13], n=6),
               M["wood"], smooth=True, shade=K.shade_const(0.85))
     return n
 

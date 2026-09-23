@@ -52,3 +52,4 @@ M22-02
 - 比較画: `docs/design/qa/observe/{ship,ship-stages,shipyard}.png`、記録は `docs/design/qa/observe/keyitems.md`。ゲーム側の段の切り替え・浮上・灯りが消える演出は未着手。
 - 2026-09-24 船台の規則を実装: 集落に最も近い、外海(地図の縁から塗り広げた海)に接する陸。舳先は外海が区域の中で最も長く続く 8 方位(af4a55d、`tests/unit/observe.area.test.ts`)。
 - 2026-09-24 試作に配線: 舟は進みで段を切り替えて船台に載せる(`src/observe/render/ship.ts`、URL の ship=進み・launched=1)。飛び立った舟は船台の上 7 m に浮かべて揺らす。丸太の山は船台の横、衝立は小屋の脇、L 字の石垣は集落の北の角(2d811b8)。飛び去る動き・帆を失うと灯りが消える演出は M22-08 の場面で。
+- 2026-09-24 試作 2 の判断「船は大きく、立派な感じがほしい」で舟を作り直し: 全長 ≈ 26 m・幅 7 m・主帆柱 22 m、深い丸い船体・高く巻いた船首・欄干つきの船尾楼・帆柱 3 本(飛び立ちは四角い帆 5 枚 + 三角の帆)・舷の鐘 28 + 船尾楼・船首の鐘、飛び立ちに舷側のシアンの象嵌と船首の六角の紋。各段 ≤ 12,000(`ship_sails` 10,348 / `ship_flying` 10,781)。船台 `slipway` を 27 × 7.6 m(1,982)に広げ、`ship.ts` を SLIP_TOP 1.36・BLOCK_DROP 0.5・SLIP_TILT atan(1.5/27)・HOVER 11 に。記録と比較画は `docs/design/qa/observe/keyitems.md`・`{ship,ship-stages,shipyard}.png`。

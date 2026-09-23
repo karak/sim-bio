@@ -19,10 +19,13 @@ const NODE: Record<ShipStage, string> = {
 };
 const FLYING = 'ship_flying';
 /** 船台の盤木の上面 (船台の中央、地面から) と、舟の原点から盤木の下端まで */
-const SLIP_TOP = 0.99;
-const BLOCK_DROP = 0.35;
-const SLIP_TILT = Math.atan(0.9 / 16);
-const HOVER = 7;
+// (M22-06 試作 2 の判断「船は大きく、立派な感じがほしい」で変更: 舟は全長 ≈ 26 m・幅 7 m・主帆柱 22 m、船台は 27 × 7.6 m。
+//  盤木の上面 0.99 → 1.36、盤木の下端 0.35 → 0.5、船台の傾き atan(0.9/16) → atan(1.5/27) (≈ 3.2° のまま)、
+//  浮かべる高さ 7 → 11 m (竜骨の下の光の輪が原点の 2.6 m 下まで下がるので、船台の柱石 2.6 m の上に輪が離れて見える高さ))
+const SLIP_TOP = 1.36;
+const BLOCK_DROP = 0.5;
+const SLIP_TILT = Math.atan(1.5 / 27);
+const HOVER = 11;
 
 export type ShipView = { group: Group; set(ship: ShipState | null): void; update(t: number): void; node(): string | null };
 

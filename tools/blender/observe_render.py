@@ -385,7 +385,10 @@ def corner(out):
 
 # ---------------------------------------------------------------- 舟と造船場 (M22-06)
 
-CRADLE_H_SHIP = 0.35  # observe_ship.py の CRADLE_H (盤木の底を地面に置く高さ)
+CRADLE_H_SHIP = 0.5  # observe_ship.py の CRADLE_H (盤木の底を地面に置く高さ) (M22-06 試作 2 の判断で変更: 0.35 → 0.5)
+# (M22-06 試作 2 で足した) 船台の中央の盤木の上面と傾き (observe_settlement.py の slipway、ゲーム側 src/observe/render/ship.ts と同じ)
+SLIP_TOP = 1.36
+SLIP_ANG = math.degrees(math.atan2(1.5, 27.0))
 SHIP_STAGES = ["ship_keel", "ship_ribs", "ship_planks", "ship_mast", "ship_sails", "ship_flying"]
 
 
@@ -408,7 +411,8 @@ def placer(lib):
         o.hide_render = False
         sc.collection.objects.link(o)
         o.location = (loc[0], loc[1], loc[2] if len(loc) > 2 else 0.0)
-        o.rotation_mode = "ZXY"  # 先に船台の傾き (X)、その後に向き (Z)
+        o.rotation_mode = "XYZ"  # 先に船台の傾き (X)、その後に向き (Z)
+        # (M22-06 試作 2 で変更: "ZXY" は向き (Z) を先に回していたので、傾きが舟の横へ漏れていた。Blender の "XYZ" が X を先に回す)
         o.rotation_euler = (math.radians(pitch), 0, math.radians(yaw))
         o.scale = (scale, scale, scale)
         return o
@@ -417,52 +421,72 @@ def placer(lib):
 
 def ship_stages(out):
     """建造の 6 段を 2 列 × 3 で、左舷の斜め上から (船首は右)"""
+    # (M22-06 試作 2 の判断で変更: 各段を船台に載せ (飛び立ちは船台の上に浮かべる)、左手前に小屋と月鹿を物差しに置く)
     K.reset()
     setup_scene((1600, 900))
-    place = placer(library(["ship"]))
+    place = placer(library(["ship", "settlement"]))
     for i, name in enumerate(SHIP_STAGES):
         r, c = divmod(i, 3)
-        z = 2.2 if name == "ship_flying" else CRADLE_H_SHIP
-        place(name, (c * 19.0, r * 17.0, z), yaw=90)
+        loc = (c * 34.0, r * 40.0)
+        place("slipway", loc, yaw=90)
+        if name == "ship_flying":
+            place(name, (loc[0], loc[1], SLIP_TOP + CRADLE_H_SHIP + 5.0), yaw=90)
+        else:
+            place(name, (loc[0], loc[1], SLIP_TOP + CRADLE_H_SHIP), yaw=90, pitch=SLIP_ANG)
+    place("hut", (-21.0, 2.0), yaw=20)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (-13.0, -4.0, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-160))
     floor(400)
     toonify_all()
-    camera((19.0 - 30.0, 9.5 - 60.0, 4.5 + 40.0), (19.0, 9.5, 4.5), ortho=62)
+    camera((30.0 - 50.0, 22.0 - 100.0, 14.0 + 66.0), (30.0, 22.0, 10.0), ortho=128)
     render(out)
 
 
 def ship_views(out):
     """完成 (帆を畳む) と飛び立ち (帆を広げる) の寄り、丸太の山と月鹿を物差しに"""
+    # (M22-06 試作 2 の判断で変更: 完成は船台に載せ、小屋も物差しに置く。飛び立ちは奥に高く浮かべる)
     K.reset()
     sc = setup_scene((1600, 900))
-    place = placer(library(["ship"]))
-    place("ship_sails", (0, 0, CRADLE_H_SHIP), yaw=62)
-    place("ship_flying", (16.5, 11.0, 3.4), yaw=25)
-    place("timber_pile", (-4.5, -6.0), yaw=20)
+    place = placer(library(["ship", "settlement"]))
+    place("slipway", (0, 0), yaw=62)
+    place("ship_sails", (0, 0, SLIP_TOP + CRADLE_H_SHIP), yaw=62, pitch=SLIP_ANG)
+    place("ship_flying", (40.0, 26.0, 13.0), yaw=25)
+    place("timber_pile", (-2.0, -9.5), yaw=20)
+    place("hut", (-17.0, -12.0), yaw=-20)
     for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
         if o.type == "MESH":
-            o.location = (-1.5, -7.5, 0)
+            o.location = (-6.0, -11.0, 0)
             o.rotation_mode = "XYZ"
             o.rotation_euler = (0, 0, math.radians(-150))
     floor(400)
     toonify_all()
     sc.world.node_tree.nodes["Background.001"].inputs["Color"].default_value = (0.78, 0.82, 0.86, 1)
-    camera((-8.0, -30.0, 9.0), (7.0, 3.5, 4.8), lens=30)
+    camera((-18.0, -60.0, 12.0), (12.0, 8.0, 10.0), lens=30)
     render(out)
 
 
 def shipyard(out):
     """造船場: 船台の上に肋の段の舟、丸太の山、灯り柱 2、編んだ衝立、小屋、鐘樹 2、奥に森の木、手前に羊歯と花と草"""
+    # (M22-06 試作 2 の判断で変更: 船台 27 m と大きな舟に合わせて、船台を奥右へ寄せ、舟は板張りの段 (キービジュアルの
+    #  肋の頭が覗く船体) にし、丸太の山は船台の横 (ゲームと同じく舷側 6 m)、月鹿をもう 1 頭船台の脇に置き、カメラを引く)
     K.reset()
     sc = setup_scene((1600, 900))
     place = placer(library(["belltree", "settlement", "flora", "ship"]))
     rnd = random.Random(8)
     slip_yaw = -58
-    slip_c = Vector((6.0, 9.0, 0))
-    ang = math.degrees(math.atan2(0.9, 16.0))
+    slip_c = Vector((12.0, 15.0, 0))
+    ang = SLIP_ANG
     place("slipway", slip_c, yaw=slip_yaw)
     # 船台の盤木の上面 (y=0 で slip_z(0)+0.29 ≈ 0.99) に舟の盤木の底を載せる
-    place("ship_ribs", (slip_c.x, slip_c.y, 0.99 + CRADLE_H_SHIP), yaw=slip_yaw, pitch=ang)
-    place("timber_pile", (-0.5, 3.0), yaw=-20)
+    # (M22-06 試作 2 の判断で変更: 上面は SLIP_TOP = 1.36)
+    place("ship_planks", (slip_c.x, slip_c.y, SLIP_TOP + CRADLE_H_SHIP), yaw=slip_yaw, pitch=ang)
+    along = Vector((-math.sin(math.radians(slip_yaw)), math.cos(math.radians(slip_yaw)), 0))  # 船台の長さ方向 (ローカル Y)
+    across = Vector((along.y, -along.x, 0))
+    pile_c = slip_c + across * 6.5 + along * 3.0
+    place("timber_pile", pile_c, yaw=slip_yaw + 20)
     place("lantern_post", (1.6, 0.2), yaw=-30)
     place("lantern_post", (11.8, 3.2), yaw=150)
     place("woven_screen", (-2.6, 6.2), yaw=-15)
@@ -472,14 +496,12 @@ def shipyard(out):
     place("belltree_mature", (0.5, 23.0), yaw=160)
     for i, (x, y) in enumerate(((-20, 30), (-9, 33), (3, 38), (14, 33), (24, 27), (-26, 22), (30, 20), (9, 42), (-16, 40))):
         place("forest_tree" if i < 6 else "forest_tree_lod1", (x, y), yaw=rnd.uniform(0, 360), scale=rnd.uniform(0.9, 1.25))
-    occupied = [(-7.5, 9.5, 3.0), (-13, 16, 1.4), (0.5, 23, 1.4), (-0.5, 3.0, 1.9),
+    occupied = [(-7.5, 9.5, 3.0), (-13, 16, 1.4), (0.5, 23, 1.4), (pile_c.x, pile_c.y, 1.9),
                 (1.6, 0.2, 0.6), (11.8, 3.2, 0.6), (-2.6, 6.2, 1.1)]
-    along = Vector((-math.sin(math.radians(slip_yaw)), math.cos(math.radians(slip_yaw)), 0))  # 船台の長さ方向 (ローカル Y)
-    across = Vector((along.y, -along.x, 0))
 
     def free(x, y, pad=0.0):
         d = Vector((x, y, 0)) - slip_c
-        if abs(d.dot(along)) < 9.0 + pad and abs(d.dot(across)) < 3.2 + pad:
+        if abs(d.dot(along)) < 14.0 + pad and abs(d.dot(across)) < 4.4 + pad:
             return False
         return all(math.hypot(x - a, y - b) > r + pad for a, b, r in occupied)
     for i in range(650):
@@ -501,10 +523,16 @@ def shipyard(out):
             o.location = (3.4, 1.2, 0)
             o.rotation_mode = "XYZ"
             o.rotation_euler = (0, 0, math.radians(-150))
+    deer2 = slip_c + across * 5.2 - along * 5.0  # (M22-06 試作 2 で足した) 船台の脇の月鹿 (舟の大きさの物差し)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (deer2.x, deer2.y, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(slip_yaw + 180))
     floor(400, "#7F9A4C")
     toonify_all()
     sc.world.node_tree.nodes["Background.001"].inputs["Color"].default_value = (0.78, 0.82, 0.86, 1)
-    camera((-4.0, -12.5, 4.2), (3.0, 10.0, 2.2), lens=24)
+    camera((-9.0, -20.0, 6.0), (8.0, 13.0, 5.0), lens=24)  # (M22-06 試作 2 の判断で変更: (-4, -12.5, 4.2) → 引いて高く)
     render(out)
 
 
