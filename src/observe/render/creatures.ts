@@ -20,6 +20,8 @@ import { createToonMaterial } from './toon';
  * 個体層 (src/observe/agents.ts) の個体を描く (設計 §8)。
  * 月鹿はカメラに近い NEAR 頭だけ SkinnedMesh (lod0、約 3,000 三角形)、残りは VAT の InstancedMesh (lod1、約 900 三角形)。
  * どの個体を近くで描くかは 0.25 秒ごとに振り分け直す。狼と兎はモデルができるまで仮の形で描く。
+ * (M22-05: 狼・兎も同じ作りにした。種ごとの違いは RIGS の表 (ノード名・近くで描く頭数・状態 → クリップ) に置く。
+ * GLB が無い種だけ仮の形で描く)
  */
 const NEAR = 12;
 
@@ -46,6 +48,51 @@ export function clipFor(state: AgentState, t: number): string {
   }
 }
 
+/** 狼に飛びかかりを見せる、獲物までの距離 (m) */
+const POUNCE_M = 3;
+
+/** 灰狼: 忍び寄りは stalk、追う途中で獲物に POUNCE_M まで迫ったら pounce。他は月鹿と同じ */
+export function wolfClip(a: Agent, find: (id: number) => Agent | undefined): string {
+  if (a.state === 'stalk') return 'stalk';
+  if (a.state === 'chase' && a.target && 'agent' in a.target) {
+    const prey = find(a.target.agent);
+    if (prey && Math.hypot(prey.x - a.x, prey.z - a.z) < POUNCE_M) return 'pounce';
+  }
+  return clipFor(a.state, a.t);
+}
+
+/** 土兎: 歩く代わりに跳ねる (hop)。立ち止まった個体の 3 頭に 1 頭は耳を立てて見張る (alert) */
+export function rabbitClip(a: Agent): string {
+  const c = clipFor(a.state, a.t);
+  if (c === 'walk') return 'hop';
+  if (c === 'idle' && a.id % 3 === 0) return 'alert';
+  return c;
+}
+
+type SpeciesRig = {
+  /** lod0 の見た目の違い (雄・雌など)。同じ骨に重なって入っていて、個体ごとに 1 つだけ見せる */
+  lod0: readonly string[];
+  lod1: string;
+  /** カメラに近い何頭を SkinnedMesh で描くか (draw call は 頭数 × 材質 × 影 で増える) */
+  near: number;
+  clip(a: Agent, find: (id: number) => Agent | undefined): string;
+  variant(a: Agent): number;
+  placeholder: { color: string; radius: number; length: number };
+};
+
+export const RIGS: Record<AgentSpecies, SpeciesRig> = {
+  deer: {
+    lod0: ['deer', 'deer_doe'],
+    lod1: 'deer_lod1',
+    near: NEAR,
+    clip: (a) => clipFor(a.state, a.t),
+    variant: (a) => (a.id % 2 === 0 ? 1 : 0),
+    placeholder: { color: '#D2A04E', radius: 0.35, length: 1.0 },
+  },
+  wolf: { lod0: ['wolf'], lod1: 'wolf_lod1', near: 4, clip: wolfClip, variant: () => 0, placeholder: { color: '#E07A55', radius: 0.3, length: 0.9 } },
+  rabbit: { lod0: ['rabbit'], lod1: 'rabbit_lod1', near: 6, clip: rabbitClip, variant: () => 0, placeholder: { color: '#D6B85E', radius: 0.16, length: 0.25 } },
+};
+
 /** 還る個体は RETURN_S かけて地面に沈み、小さくなる (生気の光の粒は M22-07 の演出で足す) */
 function sinkOf(a: Agent): number {
   return a.state === 'return' ? Math.min(1, a.t / RETURN_S) : 0;
@@ -55,11 +102,32 @@ type Placeholder = { mesh: InstancedMesh };
 
 export type CreatureView = { group: Group; update(agents: readonly Agent[], camera: { position: Vector3 }, heightAt: (x: number, z: number) => number, t: number, dt: number): void };
 
-export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number): CreatureView {
+type SpeciesView = {
+  update(own: readonly Agent[], find: (id: number) => Agent | undefined, camera: { position: Vector3 }, heightAt: (x: number, z: number) => number, t: number, dt: number): void;
+};
+
+export function createCreatureView(glbs: Partial<Record<AgentSpecies, GLTF | null>>, maxPerSpecies: number): CreatureView {
   const group = new Group();
-  const clips: AnimationClip[] = deerGlb?.animations ?? [];
+  const species = Object.keys(RIGS) as AgentSpecies[];
+  const views = new Map(species.map((sp) => [sp, createSpeciesView(group, sp, glbs[sp] ?? null, maxPerSpecies)]));
+  return {
+    group,
+    update(agents, camera, heightAt, t, dt) {
+      const byId = new Map(agents.map((a) => [a.id, a]));
+      const find = (id: number) => byId.get(id);
+      for (const sp of species) {
+        const own = agents.filter((a) => a.species === sp && a.state !== 'board');
+        views.get(sp)!.update(own, find, camera, heightAt, t, dt);
+      }
+    },
+  };
+}
+
+function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, maxPerSpecies: number): SpeciesView {
+  const rig = RIGS[sp];
+  const clips: AnimationClip[] = glb?.animations ?? [];
   // 群れ LOD は材質ごとの子に分かれているので、子ごとに VAT の群れを作り、同じ行列・クリップで動かす
-  const bakes = deerGlb && clips.length ? bakeVatAll(deerGlb.scene, 'deer_lod1', clips) : [];
+  const bakes = glb && clips.length ? bakeVatAll(glb.scene, rig.lod1, clips) : [];
   const herds: VatHerd[] = bakes.map(({ bake, material }) => {
     // 倒れたあとの姿勢 = fall の最後の 1 フレームを、ループしない 1 フレームのクリップとして足す
     const fall = bake.clips.find((c) => c.name === 'fall');
@@ -72,31 +140,28 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
     return h;
   });
   const herd = herds.length > 0;
-  type NearSlot = { obj: Object3D; stag: Object3D | null; doe: Object3D | null; mixer: AnimationMixer; agent: number; clip: string };
+  type NearSlot = { obj: Object3D; variants: (Object3D | null)[]; mixer: AnimationMixer; agent: number; clip: string };
   const pool: NearSlot[] = [];
-  if (deerGlb && clips.length) {
-    for (let i = 0; i < NEAR; i++) {
-      const obj = cloneSkinned(deerGlb.scene);
-      const l = obj.getObjectByName('deer_lod1');
+  if (glb && clips.length) {
+    for (let i = 0; i < rig.near; i++) {
+      const obj = cloneSkinned(glb.scene);
+      const l = obj.getObjectByName(rig.lod1);
       if (l) l.visible = false;
       obj.visible = false;
       group.add(obj);
       // GLB には雄 (deer) と雌 (deer_doe) が同じ骨で重なって入っている。個体ごとにどちらか一方だけ見せる
-      pool.push({ obj, stag: obj.getObjectByName('deer') ?? null, doe: obj.getObjectByName('deer_doe') ?? null, mixer: new AnimationMixer(obj), agent: -1, clip: '' });
+      pool.push({ obj, variants: rig.lod0.map((n) => obj.getObjectByName(n) ?? null), mixer: new AnimationMixer(obj), agent: -1, clip: '' });
     }
   }
-  const placeholders: Partial<Record<AgentSpecies, Placeholder>> = {};
-  const colors: Record<AgentSpecies, string> = { deer: '#D2A04E', wolf: '#E07A55', rabbit: '#D6B85E' };
-  const sizes: Record<AgentSpecies, [number, number]> = { deer: [0.35, 1.0], wolf: [0.3, 0.9], rabbit: [0.16, 0.25] };
-  for (const sp of ['deer', 'wolf', 'rabbit'] as AgentSpecies[]) {
-    if (sp === 'deer' && herd) continue;
-    const [r, l] = sizes[sp];
-    const mesh = new InstancedMesh(new CapsuleGeometry(r, l, 3, 6), createToonMaterial({ color: colors[sp] }), maxPerSpecies);
+  let placeholder: Placeholder | null = null;
+  if (!herd) {
+    const { color, radius, length } = rig.placeholder;
+    const mesh = new InstancedMesh(new CapsuleGeometry(radius, length, 3, 6), createToonMaterial({ color }), maxPerSpecies);
     mesh.count = 0;
     mesh.castShadow = true;
     mesh.frustumCulled = false;
     group.add(mesh);
-    placeholders[sp] = { mesh };
+    placeholder = { mesh };
   }
   const herdClip = new Map<number, string>();
   const m = new Matrix4();
@@ -108,16 +173,14 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
   let nearIds = new Set<number>();
   let lastAssign = -1;
   let clock = 0;
-  const findClip = (name: string) => clips.find((c) => c.name === name);
+  const findClip = (name: string) => clips.find((c) => c.name === name) ?? clips.find((c) => c.name === 'idle');
   return {
-    group,
-    update(agents, camera, heightAt, t, dt) {
+    update(own, find, camera, heightAt, t, dt) {
       clock += dt;
-      const deer = agents.filter((a) => a.species === 'deer' && a.state !== 'board');
       // 近くで描く個体の振り分け (0.25 秒ごと)
       if (pool.length && clock - lastAssign > 0.25) {
         lastAssign = clock;
-        const byDist = [...deer].sort((a, b) => Math.hypot(a.x - camera.position.x, a.z - camera.position.z) - Math.hypot(b.x - camera.position.x, b.z - camera.position.z));
+        const byDist = [...own].sort((a, b) => Math.hypot(a.x - camera.position.x, a.z - camera.position.z) - Math.hypot(b.x - camera.position.x, b.z - camera.position.z));
         nearIds = new Set(byDist.slice(0, pool.length).map((a) => a.id));
         const free = pool.filter((sl) => !nearIds.has(sl.agent));
         const held = new Set(pool.filter((sl) => nearIds.has(sl.agent)).map((sl) => sl.agent));
@@ -133,14 +196,13 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
           sl.obj.visible = false;
         }
       }
-      const byId = new Map(agents.map((a) => [a.id, a]));
       for (const sl of pool) {
-        const a = sl.agent >= 0 ? byId.get(sl.agent) : undefined;
+        const a = sl.agent >= 0 ? find(sl.agent) : undefined;
         if (!a || a.state === 'board') {
           sl.obj.visible = false;
           continue;
         }
-        const clip = clipFor(a.state, a.t);
+        const clip = rig.clip(a, find);
         if (clip !== sl.clip) {
           sl.clip = clip;
           sl.mixer.stopAllAction();
@@ -160,18 +222,17 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
         const sink = sinkOf(a);
         sl.obj.visible = true;
         // 雌は偶数の id (群れ LOD は雄しか無いので、遠くでは雄に見える。M22-05 で雌の群れ LOD を足す)
-        const isDoe = !!sl.doe && a.id % 2 === 0;
-        if (sl.stag) sl.stag.visible = !isDoe;
-        if (sl.doe) sl.doe.visible = isDoe;
+        const v = rig.variant(a);
+        sl.variants.forEach((o, i) => o && (o.visible = i === v));
         sl.obj.position.set(a.x, heightAt(a.x, a.z) - sink * 0.8, a.z);
         sl.obj.rotation.y = a.heading;
         sl.obj.scale.setScalar(1 - sink * 0.4);
       }
       if (herd) {
         let k = 0;
-        for (const a of deer) {
+        for (const a of own) {
           if (nearIds.has(a.id) && pool.length) continue;
-          const clip = clipFor(a.state, a.t);
+          const clip = rig.clip(a, find);
           if (herdClip.get(a.id) !== clip || herdClip.get(-1 - k) !== String(a.id)) {
             // fall は倒れた瞬間 (t − a.t) にフレーム 0 になるよう位相を合わせる (VAT はループするので、2 秒で fallHold に移る前提)
             for (const h of herds) h.setClip(k, clip, clip === 'fall' ? a.t - t : (a.id * 0.37) % 5);
@@ -191,25 +252,22 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
           h.update(t);
         }
       }
-      for (const sp of ['deer', 'wolf', 'rabbit'] as AgentSpecies[]) {
-        const ph = placeholders[sp];
-        if (!ph) continue;
+      if (placeholder) {
         let k = 0;
-        const r = sizes[sp][0];
-        for (const a of agents) {
-          if (a.species !== sp || a.state === 'board') continue;
-          if (sp === 'deer' && nearIds.has(a.id) && pool.length) continue;
+        const r = rig.placeholder.radius;
+        for (const a of own) {
+          if (nearIds.has(a.id) && pool.length) continue;
           const lying = a.state === 'fall' || a.state === 'return';
           const sink = sinkOf(a);
           // カプセルは縦 (Y) なので、X 軸まわりに 90° 倒して体の向き (+Z) に寝かせる。倒れた個体はさらに横倒し
           q.setFromAxisAngle(up, a.heading).multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2));
           if (lying) q.multiply(new Quaternion().setFromAxisAngle(side, Math.PI / 2));
           s.setScalar(1 - sink * 0.5);
-          ph.mesh.setMatrixAt(k, m.compose(p.set(a.x, heightAt(a.x, a.z) + (lying ? r : r * 2.6) - sink, a.z), q, s));
+          placeholder.mesh.setMatrixAt(k, m.compose(p.set(a.x, heightAt(a.x, a.z) + (lying ? r : r * 2.6) - sink, a.z), q, s));
           k++;
         }
-        ph.mesh.count = k;
-        ph.mesh.instanceMatrix.needsUpdate = true;
+        placeholder.mesh.count = k;
+        placeholder.mesh.instanceMatrix.needsUpdate = true;
       }
     },
   };

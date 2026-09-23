@@ -192,11 +192,13 @@ async function boot(): Promise<void> {
   const water = createWater(field, 3000);
   scene.add(water.mesh);
 
-  const [deerGlb, treeGlb, settleGlb, floraGlb] = await Promise.all([
+  const [deerGlb, treeGlb, settleGlb, floraGlb, wolfGlb, rabbitGlb] = await Promise.all([
     loadGlb('/models/observe/deer.glb'),
     loadGlb('/models/observe/belltree.glb'),
     loadGlb('/models/observe/settlement.glb'),
     loadGlb('/models/observe/flora.glb'),
+    loadGlb('/models/observe/wolf.glb'),
+    loadGlb('/models/observe/rabbit.glb'),
   ]);
   const tuft = findNode(floraGlb, 'grass_tuft') as Mesh | null;
   const grass = createGrass(field, { grass: s.layers.populations['grass'], moss: s.layers.populations['moss'] }, OPT.grass, 7, tuft?.geometry, (AREA_R + 1) * CELL_M);
@@ -283,7 +285,7 @@ async function boot(): Promise<void> {
     if (sum > 0) K = { ...K, deer: OPT.deer / sum };
   }
   const targets = targetCounts(area, K, folk);
-  const creatures = createCreatureView(deerGlb, Math.max(400, targets.totals.deer * 2 + 50));
+  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50));
   scene.add(creatures.group);
   let agents: AgentWorld = { agents: [], nextId: 1 };
   let credit = 0;
@@ -389,7 +391,7 @@ async function boot(): Promise<void> {
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb } };
+      const st = { fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       stats.textContent = `${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
