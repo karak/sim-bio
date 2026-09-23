@@ -11,7 +11,7 @@ import {
   Matrix4,
   Mesh,
   Object3D,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   Quaternion,
   Scene,
@@ -157,10 +157,11 @@ async function boot(): Promise<void> {
   const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
   renderer.shadowMap.enabled = OPT.shadow;
-  renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.shadowMap.type = PCFShadowMap;
   const scene = new Scene();
   scene.background = skyTexture();
-  scene.fog = new Fog(new Color('#DCE3DA'), 70, 190);
+  // 霧の色は空の地平の帯に合わせ、水面の端 (区域の外の遠景) を地平に溶かす
+  scene.fog = new Fog(new Color('#D9E4E2'), 80, 320);
   const camera = new PerspectiveCamera(42, 1, 0.2, 800);
   camera.position.set(-26, field.heightAt(-26, 44) + 6, 44);
   const controls = new OrbitControls(camera, canvas);
@@ -188,7 +189,7 @@ async function boot(): Promise<void> {
   status.textContent = '地形を組んでいます…';
   const terrain = createTerrainMesh(s, field);
   scene.add(terrain);
-  const water = createWater(field, WINDOW * 2 * CELL_M + 400);
+  const water = createWater(field, 3000);
   scene.add(water.mesh);
 
   const [deerGlb, treeGlb, settleGlb, floraGlb] = await Promise.all([
@@ -249,12 +250,12 @@ async function boot(): Promise<void> {
   // 集落の一角 (個体層の目印に合わせる): 船台は集落に最も近い海辺のセルに、海へ向けて置く。小屋・灯り・巨石・石垣は集落の周り
   const area = extractArea(s, home, AREA_R);
   const marks = landmarks(area);
+  // 同じ部品はまとめてインスタンス化する (小屋・灯り柱を 1 つずつ複製すると部品 × 材質 × 影の draw call になる)
+  const settlementPlacements = new Map<string, Matrix4[]>();
   const place = (name: string, x: number, z: number, ry = 0) => {
-    const o = instanceOf(settleGlb, name, () => placeholderSettlement(name));
-    o.position.set(x, field.heightAt(x, z) - 0.15, z);
-    o.rotation.y = ry;
-    scene.add(o);
-    return o;
+    const list = settlementPlacements.get(name) ?? [];
+    list.push(new Matrix4().compose(new Vector3(x, field.heightAt(x, z) - 0.15, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), ry), new Vector3(1, 1, 1)));
+    settlementPlacements.set(name, list);
   };
   const toSea = Math.atan2(marks.slipway.x - marks.center.x, marks.slipway.z - marks.center.z);
   place('slipway', marks.slipway.x, marks.slipway.z, toSea);
@@ -267,6 +268,7 @@ async function boot(): Promise<void> {
   place('megalith', c0.x + 16, c0.z + 2, -0.2);
   place('stone_wall', c0.x - 20, c0.z - 2, 1.2);
   place('stone_wall', c0.x + 20, c0.z - 4, -1.1);
+  for (const [name, mats] of settlementPlacements) scene.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
 
   // 月鹿: 近い OPT.near 頭は SkinnedMesh、残りは VAT の InstancedMesh (設計 §8 の群れの LOD)
   // (M22-04 の後: 近くの振り分けと VAT は render/creatures.ts に移し、頭数は個体層が決める)
@@ -330,7 +332,7 @@ async function boot(): Promise<void> {
     return best;
   };
   const presets: Record<string, () => void> = {
-    集落: () => lookFrom(marks.center.x, marks.center.z, 34, 9, 2.4),
+    集落: () => lookFrom(marks.center.x, marks.center.z, 30, 10, 1.9),
     船台: () => lookFrom(marks.slipway.x, marks.slipway.z, 22, 6, 0.9),
     群れ: () => {
       const c = centroid('deer') ?? marks.center;
@@ -341,7 +343,9 @@ async function boot(): Promise<void> {
       const c = centroid('wolf') ?? marks.center;
       lookFrom(c.x, c.z, 16, 3.5, 2.0);
     },
-    海岸: () => lookFrom(marks.coast.x, marks.coast.z, 40, 12, 3.6),
+    // 海岸は林の上から見下ろす (低いと手前の鐘樹の樹冠に入る)
+    海岸: () => lookFrom(marks.coast.x, marks.coast.z, 55, 24, 3.6),
+
   };
   for (const [label, go] of Object.entries(presets)) {
     const b = document.createElement('button');

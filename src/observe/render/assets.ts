@@ -29,7 +29,8 @@ function convert(m: Material): Material {
     color: s.color,
     map: s.map,
     emissive: s.emissive,
-    emissiveIntensity: s.emissiveIntensity,
+    // Blender の書き出しは発光を強く持つ (KHR_materials_emissive_strength) ので、bloom が角を白く飛ばさない強さに抑える
+    emissiveIntensity: Math.min(s.emissiveIntensity ?? 1, 0.45),
     vertexColors: s.vertexColors,
     name: s.name,
     transparent: s.transparent,

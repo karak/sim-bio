@@ -30,6 +30,28 @@ export function bakeVat(source: Object3D, skinnedName: string, clips: AnimationC
   const root = cloneSkinned(source);
   const skinned = root.getObjectByName(skinnedName) as SkinnedMesh | undefined;
   if (!skinned || !(skinned as SkinnedMesh).isSkinnedMesh) return null;
+  return bakeSkinned(root, skinned, clips);
+}
+
+/**
+ * 材質が複数あるメッシュは glTF で「名前のグループ + 材質ごとの SkinnedMesh の子」になる (月鹿の群れ LOD は 5 材質)。
+ * 子ごとに焼いて、材質ごとの VAT を返す
+ */
+export function bakeVatAll(source: Object3D, nodeName: string, clips: AnimationClip[]): { bake: VatBake; material: Material | Material[] }[] {
+  const root = cloneSkinned(source);
+  const node = root.getObjectByName(nodeName);
+  if (!node) return [];
+  const out: { bake: VatBake; material: Material | Material[] }[] = [];
+  node.traverse((o) => {
+    const sk = o as SkinnedMesh;
+    if (!sk.isSkinnedMesh) return;
+    const bake = bakeSkinned(root, sk, clips);
+    out.push({ bake, material: sk.material });
+  });
+  return out;
+}
+
+function bakeSkinned(root: Object3D, skinned: SkinnedMesh, clips: AnimationClip[]): VatBake {
   const mixer = new AnimationMixer(root);
   const vcount = skinned.geometry.getAttribute('position').count;
   const plan: VatClip[] = [];

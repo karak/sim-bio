@@ -7,15 +7,13 @@ import {
   Quaternion,
   Vector3,
   type AnimationClip,
-  type Material,
   type Object3D,
-  type SkinnedMesh,
 } from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Agent, AgentSpecies, AgentState } from '../agents';
 import { RETURN_S } from '../agents';
-import { bakeVat, createVatHerd, type VatHerd } from './vat';
+import { bakeVatAll, createVatHerd, type VatHerd } from './vat';
 import { createToonMaterial } from './toon';
 
 /**
@@ -23,7 +21,7 @@ import { createToonMaterial } from './toon';
  * 月鹿はカメラに近い NEAR 頭だけ SkinnedMesh (lod0、約 3,000 三角形)、残りは VAT の InstancedMesh (lod1、約 900 三角形)。
  * どの個体を近くで描くかは 0.25 秒ごとに振り分け直す。狼と兎はモデルができるまで仮の形で描く。
  */
-const NEAR = 24;
+const NEAR = 12;
 
 /** 状態 → アニメのクリップ。倒れた個体は fall を 1 回流し、あとは最後の姿勢で止める (fallHold) */
 export function clipFor(state: AgentState, t: number): string {
@@ -60,18 +58,21 @@ export type CreatureView = { group: Group; update(agents: readonly Agent[], came
 export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number): CreatureView {
   const group = new Group();
   const clips: AnimationClip[] = deerGlb?.animations ?? [];
-  const lod1 = deerGlb?.scene.getObjectByName('deer_lod1') as SkinnedMesh | undefined;
-  const bake = deerGlb && lod1 && clips.length ? bakeVat(deerGlb.scene, 'deer_lod1', clips) : null;
-  let herd: VatHerd | null = null;
-  if (bake && lod1) {
+  // 群れ LOD は材質ごとの子に分かれているので、子ごとに VAT の群れを作り、同じ行列・クリップで動かす
+  const bakes = deerGlb && clips.length ? bakeVatAll(deerGlb.scene, 'deer_lod1', clips) : [];
+  const herds: VatHerd[] = bakes.map(({ bake, material }) => {
     // 倒れたあとの姿勢 = fall の最後の 1 フレームを、ループしない 1 フレームのクリップとして足す
     const fall = bake.clips.find((c) => c.name === 'fall');
     if (fall) bake.clips.push({ name: 'fallHold', start: fall.start + fall.frames - 1, frames: 1 });
-    herd = createVatHerd(bake, lod1.material as Material | Material[], maxPerSpecies);
-    herd.mesh.count = 0;
-    group.add(herd.mesh);
-  }
-  type NearSlot = { obj: Object3D; mixer: AnimationMixer; agent: number; clip: string };
+    const h = createVatHerd(bake, material, maxPerSpecies);
+    h.mesh.count = 0;
+    // 影の描画は VAT を知らない (束ねた姿勢のまま影が落ちる) ので、遠い群れは影を落とさない
+    h.mesh.castShadow = false;
+    group.add(h.mesh);
+    return h;
+  });
+  const herd = herds.length > 0;
+  type NearSlot = { obj: Object3D; stag: Object3D | null; doe: Object3D | null; mixer: AnimationMixer; agent: number; clip: string };
   const pool: NearSlot[] = [];
   if (deerGlb && clips.length) {
     for (let i = 0; i < NEAR; i++) {
@@ -80,7 +81,8 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
       if (l) l.visible = false;
       obj.visible = false;
       group.add(obj);
-      pool.push({ obj, mixer: new AnimationMixer(obj), agent: -1, clip: '' });
+      // GLB には雄 (deer) と雌 (deer_doe) が同じ骨で重なって入っている。個体ごとにどちらか一方だけ見せる
+      pool.push({ obj, stag: obj.getObjectByName('deer') ?? null, doe: obj.getObjectByName('deer_doe') ?? null, mixer: new AnimationMixer(obj), agent: -1, clip: '' });
     }
   }
   const placeholders: Partial<Record<AgentSpecies, Placeholder>> = {};
@@ -157,6 +159,10 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
         sl.mixer.update(dt);
         const sink = sinkOf(a);
         sl.obj.visible = true;
+        // 雌は偶数の id (群れ LOD は雄しか無いので、遠くでは雄に見える。M22-05 で雌の群れ LOD を足す)
+        const isDoe = !!sl.doe && a.id % 2 === 0;
+        if (sl.stag) sl.stag.visible = !isDoe;
+        if (sl.doe) sl.doe.visible = isDoe;
         sl.obj.position.set(a.x, heightAt(a.x, a.z) - sink * 0.8, a.z);
         sl.obj.rotation.y = a.heading;
         sl.obj.scale.setScalar(1 - sink * 0.4);
@@ -168,19 +174,22 @@ export function createCreatureView(deerGlb: GLTF | null, maxPerSpecies: number):
           const clip = clipFor(a.state, a.t);
           if (herdClip.get(a.id) !== clip || herdClip.get(-1 - k) !== String(a.id)) {
             // fall は倒れた瞬間 (t − a.t) にフレーム 0 になるよう位相を合わせる (VAT はループするので、2 秒で fallHold に移る前提)
-            herd.setClip(k, clip, clip === 'fall' ? a.t - t : (a.id * 0.37) % 5);
+            for (const h of herds) h.setClip(k, clip, clip === 'fall' ? a.t - t : (a.id * 0.37) % 5);
             herdClip.set(a.id, clip);
             herdClip.set(-1 - k, String(a.id));
           }
           const sink = sinkOf(a);
           q.setFromAxisAngle(up, a.heading);
           s.setScalar(1 - sink * 0.4);
-          herd.mesh.setMatrixAt(k, m.compose(p.set(a.x, heightAt(a.x, a.z) - sink * 0.8, a.z), q, s));
+          m.compose(p.set(a.x, heightAt(a.x, a.z) - sink * 0.8, a.z), q, s);
+          for (const h of herds) h.mesh.setMatrixAt(k, m);
           k++;
         }
-        herd.mesh.count = k;
-        herd.mesh.instanceMatrix.needsUpdate = true;
-        herd.update(t);
+        for (const h of herds) {
+          h.mesh.count = k;
+          h.mesh.instanceMatrix.needsUpdate = true;
+          h.update(t);
+        }
       }
       for (const sp of ['deer', 'wolf', 'rabbit'] as AgentSpecies[]) {
         const ph = placeholders[sp];

@@ -54,7 +54,7 @@ export function createGrade(renderer: WebGLRenderer, scene: Scene, camera: Camer
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   // シアンの発光 (ムーの遺産の光) と鐘の灯りだけが滲むよう、閾値を高めにする
-  const bloom = new UnrealBloomPass(new Vector2(1, 1), 0.55, 0.6, 0.92);
+  const bloom = new UnrealBloomPass(new Vector2(1, 1), 0.4, 0.5, 0.92);
   composer.addPass(bloom);
   const grade = new ShaderPass(GradeShader);
   composer.addPass(grade);

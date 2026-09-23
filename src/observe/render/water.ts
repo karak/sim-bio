@@ -13,7 +13,8 @@ const FOAM = new Color('#F4F7EF');
 export type Water = { mesh: Mesh; update(t: number): void };
 
 export function createWater(field: TerrainField, extent: number): Water {
-  const segs = 160;
+  // 区域の近くは細かく、遠くは地平まで伸ばすので分割を増やしすぎない (1 辺 240 分割)
+  const segs = 240;
   const geo = new PlaneGeometry(extent, extent, segs, segs);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.getAttribute('position');
