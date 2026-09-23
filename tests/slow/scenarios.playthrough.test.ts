@@ -417,10 +417,11 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
     expect(v.status).toBe('alive');
     expect(v.reason).toContain('星を 3 回砕いた');
   });
-  it('solution 3: late ritual + edict loop + stop at three loads (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → alive', () => {
+  it('naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (儀式が遅いと三度分を蓄える前に脈が 10% を切り、失望で工事が止まる)', () => {
+    // 計測 (M10R-05): 星に届くのが 36 年目、備蓄 9 は 84 年目。脈は 85 年目に 10% を切って「星の砂を」が絶え間なく出て、上限が 114 年目に 0.6 を割る
     const v = playTower(def, seq(ritualFrom(20), edictLoop(), stopAtStock(9), fire));
-    expect(v.status, v.reason).toBe('alive');
-    expect(v.reason).toContain('星を 3 回砕いた');
+    expect(v.status, v.reason).toBe('dead');
+    expect(v.reason).toContain('文明の段階');
   });
 });
 
