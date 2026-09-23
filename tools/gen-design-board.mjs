@@ -10,13 +10,15 @@
  *   node tools/gen-design-board.mjs --force sheet-deer
  *   GEMINI_IMAGE_MODEL=... で モデルを変更 (既定: gemini-2.5-flash-image)。動物の基準画 (creature) は GEMINI_CREATURE_MODEL (既定: gemini-3-pro-image-preview)
  * 出力: assets/textures/board/<id>.png (--variants=N なら <id>-v1..vN.png)。既にあればスキップ
+ * (M22-01 で変更: 出力先は assets/textures/board/drafts/ になった。drafts/ はコミットしない。
+ *  承認した絵だけを assets/textures/board/{key-visuals,creatures,sheets}/ に手で移す。assets/textures/board/README.md)
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = resolve(root, 'assets/textures/board');
+const outDir = resolve(root, 'assets/textures/board/drafts');
 
 function loadEnv() {
   const p = resolve(root, '.env');

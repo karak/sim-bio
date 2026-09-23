@@ -37,3 +37,6 @@ test-results/
 
 # Python
 __pycache__/
+
+# デザインボードの生成途中の絵 (承認したものだけ assets/textures/board/ の下へ移す)
+assets/textures/board/drafts/
