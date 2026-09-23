@@ -26,6 +26,11 @@ const FIREFLIES = 260;
 const VITALITY = 1200;
 const VITALITY_LIFE = 2.6;
 const VITALITY_RATE = 32;
+/** 芽吹き (M22-08、sheets/effects の 3): 植えた所の地面から金色の粒が立つ。雨 (5): カメラの周りに降る筋 */
+const SPROUT = 500;
+const SPROUT_LIFE = 5;
+const RAIN = 3000;
+const RAIN_BOX = 30;
 
 const pointVertex = /* glsl */ `
   attribute float aSeed;
@@ -45,6 +50,11 @@ const pointVertex = /* glsl */ `
       p += vec3(0.35, 0.05, 0.18) * uTime + vec3(sin(uTime * 0.3 + aSeed * 6.0), sin(uTime * 0.23 + aSeed * 9.0), cos(uTime * 0.27 + aSeed * 4.0)) * 0.6;
       p = mod(p - uOrigin + uBox * 0.5, uBox) + uOrigin - uBox * 0.5;
       a *= 0.55 + 0.45 * sin(uTime * 1.7 + aSeed * 30.0);
+    } else if (uMode == 3) {
+      // 雨: カメラの周りの箱の中を落ち続ける (塵と同じく折り返す)
+      p.y -= uTime * 11.0;
+      p.x += uTime * 1.2;
+      p = mod(p - uOrigin + uBox * 0.5, uBox) + uOrigin - uBox * 0.5;
     } else if (uMode == 1) {
       // 蛍: 元の場所の周りをゆっくり巡り、ときどき灯る
       p += vec3(sin(uTime * 0.37 + aSeed * 11.0) * 1.6, sin(uTime * 0.51 + aSeed * 7.0) * 0.45, cos(uTime * 0.29 + aSeed * 5.0) * 1.6);
@@ -60,10 +70,13 @@ const pointVertex = /* glsl */ `
 const pointFragment = /* glsl */ `
   uniform vec3 uColor;
   uniform float uAmount;
+  uniform float uStreak;
   varying float vAlpha;
   void main() {
     float d = length(gl_PointCoord - 0.5);
     float soft = smoothstep(0.5, 0.0, d);
+    // 雨の粒は縦の細い筋にする
+    if (uStreak > 0.5) soft = smoothstep(0.06, 0.0, abs(gl_PointCoord.x - 0.5)) * smoothstep(0.5, 0.2, abs(gl_PointCoord.y - 0.5));
     float a = soft * soft * vAlpha * uAmount;
     if (a < 0.003) discard;
     gl_FragColor = vec4(uColor * a, a);
@@ -81,6 +94,7 @@ function pointMaterial(color: string, intensity: number, size: number, mode: num
       uBox: { value: DUST_BOX },
       uColor: { value: new Color(color).multiplyScalar(intensity) },
       uAmount: { value: 1 },
+      uStreak: { value: mode === 3 ? 1 : 0 },
     },
     vertexShader: pointVertex,
     fragmentShader: pointFragment,
@@ -117,7 +131,14 @@ const poolFragment = /* glsl */ `
 `;
 
 export type MotesInput = { rng: () => number; heightAt(x: number, z: number): number; lanterns: { x: number; z: number }[]; fireflyAt: { x: number; z: number }[] };
-export type Motes = { group: Group; update(t: number, dt: number, night: number, camera: { position: Vector3 }, target: Vector3, agents: readonly Agent[]): void };
+export type Motes = {
+  group: Group;
+  update(t: number, dt: number, night: number, camera: { position: Vector3 }, target: Vector3, agents: readonly Agent[]): void;
+  /** 芽吹き: at を中心に半径 radiusM の地面から金色の粒を立てる */
+  sprout(at: { x: number; z: number }, radiusM: number): void;
+  /** 雨の強さ (0〜1) */
+  setRain(amount: number): void;
+};
 
 export function createMotes(input: MotesInput): Motes {
   const { rng, heightAt } = input;
@@ -176,7 +197,27 @@ export function createMotes(input: MotesInput): Motes {
     m.renderOrder = 1;
     group.add(m);
   }
-  group.add(dust, flies, vit);
+  const sproutMat = pointMaterial('#FFD27A', 2.8, 0.16, 2);
+  const sprouts = points(SPROUT, sproutMat, (i, _p, seed, alpha) => {
+    alpha[i] = 0;
+    seed[i] = 0;
+  });
+  const sPos = sprouts.geometry.getAttribute('position') as BufferAttribute;
+  const sAlpha = sprouts.geometry.getAttribute('aAlpha') as BufferAttribute;
+  const sLife = new Float32Array(SPROUT);
+  const sQueue: { x: number; z: number; r: number; left: number }[] = [];
+  let sNext = 0;
+
+  const rainMat = pointMaterial('#E4EEF4', 1.8, 0.55, 3);
+  rainMat.uniforms.uBox.value = RAIN_BOX;
+  rainMat.uniforms.uAmount.value = 0;
+  const rain = points(RAIN, rainMat, (i, p, seed, alpha) => {
+    p.set([rng() * RAIN_BOX, rng() * RAIN_BOX, rng() * RAIN_BOX], i * 3);
+    seed[i] = rng();
+    alpha[i] = 0.5 + rng() * 0.4;
+  });
+  rain.visible = false;
+  group.add(dust, flies, vit, sprouts, rain);
 
   const up = new Vector3();
   return {
@@ -188,6 +229,42 @@ export function createMotes(input: MotesInput): Motes {
         m.uniforms.uScale.value = scale;
       }
       (dustMat.uniforms.uOrigin.value as Vector3).copy(target);
+      (rainMat.uniforms.uOrigin.value as Vector3).copy(camera.position);
+      rainMat.uniforms.uTime.value = t;
+      rainMat.uniforms.uScale.value = scale;
+      sproutMat.uniforms.uScale.value = scale;
+      // 芽吹き: 植えた円の中から 2 秒かけて粒を出し、ゆっくり立ちのぼらせる
+      for (const q of sQueue) {
+        let n = Math.round((SPROUT / 2.4) * Math.min(dt, q.left));
+        q.left -= dt;
+        while (n-- > 0) {
+          const k = sNext;
+          sNext = (sNext + 1) % SPROUT;
+          const r = Math.sqrt(rng()) * q.r;
+          const ang = rng() * Math.PI * 2;
+          const x = q.x + Math.cos(ang) * r;
+          const z = q.z + Math.sin(ang) * r;
+          sPos.setXYZ(k, x, heightAt(x, z) + rng() * 0.3, z);
+          sLife[k] = SPROUT_LIFE * (0.6 + rng() * 0.4);
+        }
+      }
+      for (let i = sQueue.length - 1; i >= 0; i--) if (sQueue[i].left <= 0) sQueue.splice(i, 1);
+      let sAny = false;
+      for (let k = 0; k < SPROUT; k++) {
+        if (sLife[k] <= 0) {
+          if (sAlpha.getX(k) !== 0) sAlpha.setX(k, 0);
+          continue;
+        }
+        sAny = true;
+        sLife[k] -= dt;
+        const f = Math.max(0, sLife[k] / SPROUT_LIFE);
+        sPos.setY(k, sPos.getY(k) + dt * (0.35 + 0.2 * Math.sin(k)));
+        sAlpha.setX(k, Math.min(1, (1 - f) * 4) * f);
+      }
+      if (sAny || sQueue.length) {
+        sPos.needsUpdate = true;
+        sAlpha.needsUpdate = true;
+      }
       dustMat.uniforms.uAmount.value = 1 - night;
       flyMat.uniforms.uAmount.value = Math.max(0, night - 0.3) / 0.7;
       poolMat.uniforms.uAmount.value = night;
@@ -232,6 +309,13 @@ export function createMotes(input: MotesInput): Motes {
         vPos.needsUpdate = true;
         vAlpha.needsUpdate = true;
       }
+    },
+    sprout(at, radiusM) {
+      sQueue.push({ x: at.x, z: at.z, r: Math.max(4, Math.min(30, radiusM)), left: 2.4 });
+    },
+    setRain(amount) {
+      rainMat.uniforms.uAmount.value = amount;
+      rain.visible = amount > 0.01;
     },
   };
 }

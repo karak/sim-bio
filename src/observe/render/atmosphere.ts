@@ -7,6 +7,7 @@ import {
   SphereGeometry,
   Vector2,
   Vector3,
+  Vector4,
   type DirectionalLight,
   type PerspectiveCamera,
   type Texture,
@@ -110,6 +111,9 @@ const AirShader = {
     uResolution: { value: new Vector2(1, 1) },
     uSunUv: { value: new Vector2(0.5, 0.5) },
     uSunVis: { value: 0 },
+    uMistAt: { value: new Vector4(0, 0, 0, 1) },
+    uMistAmt: { value: 0 },
+    uMistColor: { value: new Color('#8C8298') },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -135,6 +139,9 @@ const AirShader = {
     uniform float uTime;
     uniform vec2 uSunUv;
     uniform float uSunVis;
+    uniform vec4 uMistAt;
+    uniform float uMistAmt;
+    uniform vec3 uMistColor;
     varying vec2 vUv;
 
     float vnoise(vec2 p) {
@@ -197,6 +204,38 @@ const AirShader = {
         float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * mu, 1.5) / 12.566;
         outc += uLightColor * lit * hg * uShafts * (1.0 - exp(-maxD * 0.025)) * (sky ? 0.8 : 2.4);
       }
+      // 疫病の霧 (M22-08、sheets/effects の 2): 地を這う平たい楕円体の中を視線が通る長さだけ、紫がかった灰の霧を掛け、渦を巻かせる
+      if (uMistAmt > 0.0) {
+        vec3 sc = vec3(uMistAt.w, uMistAt.w * 0.22, uMistAt.w);
+        vec3 o = (uCamPos - uMistAt.xyz) / sc;
+        vec3 dd = rd / sc;
+        float a = dot(dd, dd);
+        float b = dot(o, dd);
+        float c = dot(o, o) - 1.0;
+        float disc = b * b - a * c;
+        if (disc > 0.0) {
+          float sq = sqrt(disc);
+          float t0 = max((-b - sq) / a, 0.0);
+          float t1 = min((-b + sq) / a, dist);
+          if (t1 > t0) {
+            // 楕円体の中を 8 点で数える。渦の筋は高い周波数の雑音を尖らせて作り、地面から離れるほど薄くする
+            float seg = (t1 - t0) / 8.0;
+            float m = 0.0;
+            vec2 flow = vec2(sin(uTime * 0.13), cos(uTime * 0.09)) * 3.0 + uTime * vec2(0.05, 0.02);
+            for (int i = 0; i < 8; i++) {
+              vec3 p = uCamPos + rd * (t0 + (float(i) + 0.5) * seg);
+              vec2 q = p.xz - uMistAt.xz;
+              float ang = atan(q.y, q.x) + length(q) * 0.05 - uTime * 0.04;
+              float swirl = fbm(vec2(ang * 2.5, length(q) * 0.12) + flow);
+              float band = smoothstep(0.38, 0.72, swirl);
+              float low = exp(-max(p.y - uMistAt.y, 0.0) * 0.3);
+              m += band * low * seg;
+            }
+            float Tm = exp(-m * 0.22 * uMistAmt);
+            outc = outc * Tm + uMistColor * (1.0 - Tm);
+          }
+        }
+      }
       // 光芒 (M22-07、試作 2 の判断「光の筋があるとさらによい」): 日の画面上の位置へ向かって深度を辿り、空が見える所を数える。
       // 木の輪郭と樹冠の隙間から日の方へ放射状に伸びる筋になる (上の体積光は奥行きの明るさ、こちらは絵としての筋)
       if (uSunVis > 0.0) {
@@ -232,6 +271,12 @@ export class AtmospherePass extends Pass {
     super();
     this.mat = new ShaderMaterial({ uniforms: AirShader.uniforms, vertexShader: AirShader.vertexShader, fragmentShader: AirShader.fragmentShader, depthTest: false, depthWrite: false });
     this.quad = new FullScreenQuad(this.mat);
+  }
+
+  /** 疫病の霧の中心 (m) と半径 (m)、濃さ (0 で消える) */
+  setMist(at: { x: number; y: number; z: number }, radiusM: number, amount: number): void {
+    (this.mat.uniforms.uMistAt.value as Vector4).set(at.x, at.y, at.z, radiusM);
+    this.mat.uniforms.uMistAmt.value = amount;
   }
 
   setDay(day: Daylight, t: number): void {

@@ -1,4 +1,5 @@
 import type { WorldSnapshot } from '../simulation/types';
+import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import type { ObservationView } from './view';
 
 /**
@@ -8,8 +9,8 @@ import type { ObservationView } from './view';
  * 入れるのは文明の集落があるとき (区域は集落を中心に切り出すので)。
  */
 export type ObserveEntry = {
-  /** 操作画面の毎フレームの snapshot。入っていれば観察画面へ渡し、入るボタンの可否を決める */
-  push(s: WorldSnapshot): void;
+  /** 操作画面の毎フレームの snapshot。入っていれば観察画面へ渡し、入るボタンの可否を決める。timeline は石板の年表 (介入の場面に使う) */
+  push(s: WorldSnapshot, timeline?: readonly TimelineEvent[]): void;
   active(): boolean;
   enter(): Promise<void>;
   exit(): void;
@@ -47,6 +48,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
   let loading: Promise<void> | null = null;
   let isActive = false;
   let latest: WorldSnapshot | null = null;
+  let latestTimeline: readonly TimelineEvent[] | undefined;
 
   const build = async (s: WorldSnapshot) => {
     const l = document.createElement('div');
@@ -62,10 +64,11 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
   };
 
   const entry: ObserveEntry = {
-    push(s) {
+    push(s, timeline) {
       latest = s;
+      latestTimeline = timeline;
       open.disabled = !s.civ || s.civ.home < 0;
-      if (isActive && view) view.setSnapshot(s);
+      if (isActive && view) view.setSnapshot(s, timeline);
     },
     active: () => isActive,
     async enter() {
@@ -79,8 +82,8 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
       }
       if (!isActive || !layer || !view) return;
       layer.hidden = false;
-      view.setSnapshot(latest);
       view.start();
+      view.setSnapshot(latest, latestTimeline);
     },
     exit() {
       if (!isActive) return;

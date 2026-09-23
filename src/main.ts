@@ -118,7 +118,7 @@ async function boot(): Promise<void> {
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
-        observe.push(s);
+        observe.push(s, runner?.timeline());
         if (!observe.active()) view.update(s);
         hud.update(s);
         // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)

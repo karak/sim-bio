@@ -22,6 +22,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { WorldSnapshot } from '../simulation/types';
+import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import { mulberry32 } from '../simulation/rng';
 import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh } from './render/terrain';
 import { createWater } from './render/water';
@@ -36,7 +37,7 @@ import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
 import { createShotCamera } from './render/shotCamera';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
-import { detectScenes, sceneFrame, type SceneFrame } from './scenes';
+import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks } from './area';
@@ -178,8 +179,8 @@ export type ObserveHost = {
 };
 
 export type ObservationView = {
-  /** 本体が進んだ snapshot を渡す (clock の無いとき) */
-  setSnapshot(s: WorldSnapshot): void;
+  /** 本体が進んだ snapshot を渡す (clock の無いとき)。timeline は石板の年表 (介入の場面を引くため、全体を渡してよい) */
+  setSnapshot(s: WorldSnapshot, timeline?: readonly TimelineEvent[]): void;
   start(): void;
   stop(): void;
 };
@@ -534,9 +535,45 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   shots.addEventListener('click', () => (touched = true));
   const drng = mulberry32(37);
   const baseFov = camera.fov;
+  // 介入の場面 (M22-08): 芽吹きの金の粒・疫病の霧・雨。霧と雨は実時間で薄れる
+  let newEvents: TimelineEvent[] = [];
+  let seenEvents = 0;
+  // 入った (start した) あとの最初の年表は、見る前の出来事として既読にするだけ (入るたびに昔の介入を再生しない)
+  let baseline = true;
+  let mist = 0;
+  let mistAt = { x: 0, y: 0, z: 0 };
+  let mistR = 20;
+  let rain = 0;
+  let rainLeft = 0;
+  const MIST_S = 90;
+  const RAIN_S = 45;
+  const playScene = (e: SceneEvent) => {
+    if (e.kind === 'sprout') motes.sprout(e.at, Math.max(1, e.radius) * CELL_M);
+    else if (e.kind === 'mist') {
+      mist = 1;
+      mistR = Math.max(12, e.radius * CELL_M);
+      mistAt = { x: e.at.x, y: field.heightAt(e.at.x, e.at.z), z: e.at.z };
+    } else if (e.kind === 'rain') rainLeft = RAIN_S;
+  };
+  const fx = (dt: number) => {
+    mist = Math.max(0, mist - dt / MIST_S);
+    air?.setMist(mistAt, mistR, mist);
+    rainLeft = Math.max(0, rainLeft - dt);
+    rain += ((rainLeft > 0 ? 1 : 0) - rain) * Math.min(1, dt / 4);
+    motes.setRain(rain);
+  };
+  // 調整用: 開発者ツールから場面を起こす (__observeFx('sprout' | 'mist' | 'rain'))
+  (window as unknown as { __observeFx: unknown }).__observeFx = (kind: 'sprout' | 'mist' | 'rain') => {
+    const at = marks.grove ?? marks.center;
+    if (kind === 'sprout') playScene({ kind, year: snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
+    else if (kind === 'mist') playScene({ kind, year: snap.year, cell: home, at, radius: 4 });
+    else playScene({ kind, year: snap.year });
+  };
   const direct = (dt: number) => {
     const frame = sceneFrame(snap, area);
-    const scenes = detectScenes(prevFrame, frame, [], area);
+    const scenes = detectScenes(prevFrame, frame, newEvents, area);
+    newEvents = [];
+    for (const e of scenes) playScene(e);
     prevFrame = frame;
     const was = director.mode;
     director = stepDirector(director, directorContext(agents.agents, marks), { dt, scenes, userInput: touched }, drng);
@@ -592,7 +629,15 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       // 夜は灯り・鐘の口・ムーの光を強める (焼いた材質の発光に共通で掛かる)
       glow.value = 1 + day.night * 1.1;
       rimLight.value.set(day.lightColor).multiplyScalar(day.lightIntensity / 2.6);
+      // 雨の間は日が陰り、空気が濃くなる
+      if (rain > 0.01) {
+        sun.intensity *= 1 - rain * 0.5;
+        hemi.intensity *= 1 - rain * 0.2;
+        air.mat.uniforms.uHaze.value *= 1 + rain * 1.8;
+        air.mat.uniforms.uShafts.value *= 1 - rain * 0.8;
+      }
     }
+    fx(dt);
     agents = stepAgents(agents, { area, marks, night: day.night > 0.6, building, launched: false, targets }, dt, arng);
     creatures.update(agents.agents, camera, field.heightAt, t, dt);
     motes.update(t, dt, day.night, camera, controls.target, agents.agents);
@@ -622,12 +667,19 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let running = false;
   let handle = 0;
   return {
-    setSnapshot(next) {
+    setSnapshot(next, timeline) {
+      if (timeline) {
+        if (timeline.length < seenEvents) seenEvents = 0;
+        if (!baseline) newEvents.push(...timeline.slice(seenEvents));
+        seenEvents = timeline.length;
+        baseline = false;
+      }
       if (next.tick !== snap.tick) onSnapshot(next);
     },
     start() {
       if (running) return;
       running = true;
+      baseline = true;
       last = performance.now();
       resize();
       handle = requestAnimationFrame(loop);
