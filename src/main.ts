@@ -13,6 +13,7 @@ import { resolveCivilizationStart } from './simulation/civilization';
 import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
+import { createObserveEntry } from './observe/entry';
 
 async function boot(): Promise<void> {
   const [base, species, scenarios] = await Promise.all([
@@ -108,11 +109,17 @@ async function boot(): Promise<void> {
     Object.fromEntries(species.map((d) => [d.id, d.name])),
     (id) => hud.showSpeciesLayer(id),
   );
+  // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
+  const observe = createObserveEntry(app, {
+    getSpeed: () => loop.getSpeed(),
+    setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
+  });
   const loop = createRunner(
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
-        view.update(s);
+        observe.push(s);
+        if (!observe.active()) view.update(s);
         hud.update(s);
         // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)
         hud.setNextMeteor(runner ? runner.nextMeteorYear() : null);
