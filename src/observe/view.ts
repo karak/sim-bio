@@ -180,6 +180,8 @@ export type ObserveHost = {
   clock?: { step(n: number): void; snapshot(): WorldSnapshot };
   /** 種 id → 名前 (知らせの帯の文に使う) */
   names?: Record<string, string>;
+  /** 計測の行と寄せ先のボタンを出す (試作のページ)。操作画面から入ったときは年だけを出す (設計 §7「UI は極力消す」) */
+  debug?: boolean;
 };
 
 export type ObservationView = {
@@ -521,7 +523,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     海岸: () => lookFrom(marks.coast.x, marks.coast.z, 55, 24, 3.6),
 
   };
-  for (const [label, go] of Object.entries(presets)) {
+  for (const [label, go] of host.debug === false ? [] : Object.entries(presets)) {
     const b = document.createElement('button');
     b.textContent = label;
     b.addEventListener('click', go);
@@ -757,7 +759,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
-      stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
+      if (host.debug === false) stats.textContent = `${st.year} 年`;
+      else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
     }
     if (running) handle = requestAnimationFrame(loop);
   };

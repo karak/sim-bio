@@ -62,7 +62,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
     const q = (sel: string) => l.querySelector(sel) as HTMLElement;
     q('.o-status').textContent = '観察画面を組んでいます…';
     const { createObservationView } = await import('./view');
-    view = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names });
+    view = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names, debug: new URLSearchParams(location.search).has('observeDebug') });
   };
 
   const entry: ObserveEntry = {

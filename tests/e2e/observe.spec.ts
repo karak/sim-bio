@@ -17,7 +17,7 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
   await expect(page.locator('#speed-10')).toHaveClass(/on/);
   await expect(page.locator('#speed-100')).not.toHaveClass(/on/);
   const stats = page.locator('#observe-layer .o-stats');
-  await expect(stats).toHaveText(/^\d+ 年 · \d+ fps/, { timeout: 90_000 });
+  await expect(stats).toHaveText(/^\d+ 年$/, { timeout: 90_000 });
   // 観察画面の中でも本体の時間が進む (観察画面は操作画面の runner の snapshot を描く)
   const tick = () => page.evaluate(() => (window as unknown as { __observeStats: { tick: number } }).__observeStats.tick);
   const t0 = await tick();
@@ -32,7 +32,8 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
 
 test('observe view: clicking an animal follows it, and the speed stays in the game controls', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto('/?scenario=sky-ship');
+  // 寄せ先のボタンは試作用なので、observeDebug で出す
+  await page.goto('/?scenario=sky-ship&observeDebug');
   await page.getByRole('button', { name: '3D で見る' }).click();
   await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^\d+ 年 · \d+ fps/, { timeout: 90_000 });
   // 観察画面では速さのボタンを出さない (操作画面の速さに従う)
