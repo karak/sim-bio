@@ -192,6 +192,7 @@ FOREST_C = Vector((0, 0, 5.1))  # 森の木の樹冠の中心
 
 def forest_tree(lod=0):
     """森の広葉樹: 茶色の幹が 3 本の太枝に分かれ、濃い緑の丸い葉の塊をまとめた樹冠。鐘は無い (鐘樹と見分ける)"""
+    # (M22-07 光の筋のために変更: 太枝は房ごとに 6 本、樹冠は離れた房 6 つ。下の FOREST_CLUSTERS を参照)
     name = "forest_tree" if lod == 0 else "forest_tree_lod1"
     n = K.Node(name)
     rnd = random.Random(41)
@@ -208,25 +209,56 @@ def forest_tree(lod=0):
             d = Vector((math.cos(a), math.sin(a), 0))
             n.add(K.tube([d * 0.15 + Z * 0.6, d * 0.45 + Z * 0.14, d * 0.78 + Z * -0.03], [0.17, 0.1, 0.03], n=4,
                          tip=True, cap_start=False), M["forest_bark"], smooth=True, shade=bark)
-    for i in range(3):
-        a = math.radians(40 + 120 * i)
-        d = Vector((math.cos(a), math.sin(a), 0))
-        p0 = Vector((0, 0, 2.6 + 0.2 * i))
-        n.add(K.tube([p0, p0 + d * 0.7 + Z * 0.9, p0 + d * 1.3 + Z * 1.9], [0.15, 0.1, 0.05], n=5 if lod == 0 else 4,
-                     tip=True, cap_start=False), M["forest_bark"], smooth=True, shade=K.shade_const(0.8))
-    clumps = [((0.0, 0.0, 5.2), 1.9, 2, 1), ((0.25, -0.15, 6.35), 1.4, 2, 1)]
-    for i in range(5):
-        a = math.radians(10 + 72 * i)
-        r = 1.55
-        clumps.append(((r * math.cos(a), r * math.sin(a), 4.55 + 0.25 * (i % 2)), 1.2, 2 if i in (0, 2) else 1,
-                       1 if i < 3 else 0))
-    clumps.append(((-0.6, 0.7, 6.1), 1.1, 1, 1))
-    for i, (c, r, s0, s1) in enumerate(clumps):
-        sub = s0 if lod == 0 else s1
-        n.add(K.ico((r, r, r * 0.88), subdiv=sub, jitter=(0.05, 0.09, 0.1)[sub], seed=50 + i, flat_bottom=0.25),
-              M["forest_leaf"], matrix=K.trs(c, (0, 0, rnd.uniform(0, 360))), smooth=True,
-              shade=K.shade_canopy(FOREST_C, 2.2, lo=0.5, hi=1.0, warm=0.12), soft=(FOREST_C, 0.6))
+    # (M22-07 光の筋のために変更: 3 本の太枝の先に大きな塊 8 つを重ねた樹冠をやめ、房 6 つ (FOREST_CLUSTERS) に
+    #  1 本ずつ枝を伸ばす。房と房の間 (0.4〜0.6 m) が抜け、日の影の地図で影がまだらになる。lod1 も隙間を残す)
+    trunk_top = Vector(spine[-1])
+    for k, (c, r, upper, z0) in enumerate(forest_clusters()):
+        p0 = Vector((0, 0, min(z0, trunk_top.z)))
+        d = Vector((c.x, c.y, 0)).normalized()
+        end = c - Z * 0.2 * r
+        p1 = p0.lerp(end, 0.4) + d * 0.25 - Z * 0.2
+        rad = [0.12, 0.08, 0.04] if upper else [0.15, 0.1, 0.05]
+        n.add(K.tube([p0, p1, end], rad, n=5 if lod == 0 else 4, tip=True, cap_start=False), M["forest_bark"],
+              smooth=True, shade=K.shade_const(0.8))
+    for k, (c, r, upper, _) in enumerate(forest_clusters()):
+        lumps = forest_lumps(c, r, upper)
+        if lod:
+            g = sum((lc * lr ** 3 for lc, lr in lumps), Vector()) / sum(lr ** 3 for _, lr in lumps)
+            lumps = [(g, r * 1.08)]
+        for j, (lc, lr) in enumerate(lumps):
+            n.add(K.ico((lr, lr, lr * 0.88), subdiv=1, jitter=0.09, seed=50 + 3 * k + j, flat_bottom=0.25),
+                  M["forest_leaf"], matrix=K.trs(lc, (0, 0, rnd.uniform(0, 360))), smooth=True,
+                  shade=K.shade_canopy(FOREST_C, 2.2, lo=0.5, hi=1.0, warm=0.12), soft=(c + Z * 0.15 * r, 0.6))
     return n
+
+
+# (M22-07 光の筋のために追加) 森の木の房: (方位 度, 幹からの距離, 高さ, 半径, 枝の付け根の高さ)。
+# 下の輪 4 房と、下の輪の房の間の上に載せた上の房 2 つ。鐘樹より房が詰まり、隙間は狭い (0.4〜0.6 m)
+FOREST_CLUSTERS = [
+    (20, 1.8, 4.45, 1.0, 2.6), (110, 1.75, 4.7, 0.98, 2.8), (200, 1.85, 4.5, 1.0, 2.7), (290, 1.75, 4.75, 0.96, 2.9),
+    (70, 0.7, 6.35, 1.0, 3.0), (245, 0.75, 6.55, 0.98, 3.0),
+]
+
+
+def forest_clusters():
+    """(中心, 半径, 上の房か, 枝の付け根の高さ)"""
+    out = []
+    for i, (a, d, z, r, z0) in enumerate(FOREST_CLUSTERS):
+        a = math.radians(a)
+        out.append((Vector((d * math.cos(a), d * math.sin(a), z)), r, i >= 4, z0))
+    return out
+
+
+def forest_lumps(c, r, upper):
+    """房 1 つを塊 3 つで: 真ん中、外の上へ盛った塊、上の房は上へ・下の輪は内の上へ盛った塊 (横へは張り出さず、房の間を空ける)"""
+    out = Vector((c.x, c.y, 0)).normalized()
+    side = Z.cross(out)
+    lumps = [(c, r), (c + out * 0.4 * r + Z * 0.3 * r, 0.68 * r)]
+    if upper:
+        lumps.append((c + Z * 0.45 * r - out * 0.2 * r + side * 0.2 * r, 0.64 * r))
+    else:
+        lumps.append((c - out * 0.3 * r + Z * 0.35 * r + side * 0.15 * r, 0.64 * r))
+    return lumps
 
 
 if __name__ == "__main__":
