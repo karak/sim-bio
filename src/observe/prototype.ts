@@ -36,6 +36,9 @@ import { instanceProps, lodProps, type LodProps } from './render/instancer';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
+import { createShotCamera } from './render/shotCamera';
+import { directorContext, initialDirector, stepDirector, type Shot } from './director';
+import { detectScenes, sceneFrame, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks } from './area';
@@ -48,7 +51,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * URL: ?deer=300&trees=200&near=40&grass=20000&grade=1&bloom=1&shadow=1
  * (個体層をつないだ後: deer は区域の鹿の目標頭数。K を密度の合計から逆算する。0 なら本体の密度 × K_DEFAULT のまま。near は使わない)
  * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
- * (M22-08: speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
+ * (M22-08: auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  */
 const params = new URLSearchParams(location.search);
@@ -66,6 +69,7 @@ const OPT = {
   ship: params.has('ship') ? num('ship', 0) : null,
   launched: params.get('launched') === '1',
   speed: num('speed', 1),
+  auto: params.get('auto') !== '0' && !params.has('shot'),
   air: flag('air'),
   time: num('time', 0.16),
   day: num('day', DAY_CYCLE_S),
@@ -492,6 +496,42 @@ async function boot(): Promise<void> {
     b.addEventListener('click', () => (simSpeed = v));
     shots.appendChild(b);
   }
+  // 自動カメラ (M22-08): 場面の引き金・狩り・民・群れ・風景からショットを選び、触れば自由カメラ、20 秒触らなければ戻る
+  const shotCam = createShotCamera(camera, field.heightAt, () => lods.map((l) => l.group), AREA_R * CELL_M, mulberry32(31));
+  let director = initialDirector();
+  let prevFrame: SceneFrame | null = null;
+  let touched = !OPT.auto;
+  let shownShot: Shot | null = null;
+  controls.addEventListener('start', () => (touched = true));
+  shots.addEventListener('click', () => (touched = true));
+  const drng = mulberry32(37);
+  const baseFov = camera.fov;
+  const direct = (dt: number) => {
+    const frame = sceneFrame(snap, area);
+    const scenes = detectScenes(prevFrame, frame, [], area);
+    prevFrame = frame;
+    const was = director.mode;
+    director = stepDirector(director, directorContext(agents.agents, marks), { dt, scenes, userInput: touched }, drng);
+    // auto=0 のあいだは自動に戻らない
+    if (!OPT.auto) director = { ...director, mode: 'free', shot: null, idle: 0 };
+    touched = false;
+    if (director.mode === 'auto' && director.shot) {
+      if (director.shot !== shownShot) {
+        shownShot = director.shot;
+        shotCam.start(director.shot, agents.agents);
+      }
+      shotCam.update(dt, agents.agents);
+      return;
+    }
+    if (was === 'auto') {
+      // 自由カメラに移る: 今の狙いを操作の中心にし、画角を戻す
+      controls.target.copy(shotCam.target());
+      camera.fov = baseFov;
+      camera.updateProjectionMatrix();
+      shownShot = null;
+    }
+    controls.update();
+  };
   const first = params.get('shot');
   if (first && presets[first]) setTimeout(presets[first], 1500);
   const stats = document.getElementById('stats')!;
@@ -532,7 +572,7 @@ async function boot(): Promise<void> {
     water.update(t);
     shipView.update(t);
     grass.update(t, camera.position);
-    controls.update();
+    direct(dt);
     renderer.info.autoReset = false;
     renderer.info.reset();
     grade.render(dt);
@@ -544,7 +584,7 @@ async function boot(): Promise<void> {
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       stats.textContent = `${st.year} 年 · ${simSpeed === 0 ? '⏸' : `${simSpeed}x`} · ${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
