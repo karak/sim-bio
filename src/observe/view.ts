@@ -189,6 +189,8 @@ export type ObservationView = {
   setSnapshot(s: WorldSnapshot, timeline?: readonly TimelineEvent[]): void;
   start(): void;
   stop(): void;
+  /** 今のカメラ: 自動 (自然記録調)・自由 (触ったあと、20 秒で自動に戻る)・個体を追う */
+  cameraMode(): 'auto' | 'free' | 'follow';
 };
 
 export async function createObservationView(host: ObserveHost): Promise<ObservationView> {
@@ -825,6 +827,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     stop() {
       running = false;
       cancelAnimationFrame(handle);
+    },
+    cameraMode() {
+      if (director.mode === 'auto') return 'auto';
+      return followId !== null ? 'follow' : 'free';
     },
   };
 }
