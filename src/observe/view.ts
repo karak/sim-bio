@@ -27,7 +27,7 @@ import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import { describeEvent } from '../ui/Tablet';
 import { mulberry32 } from '../simulation/rng';
-import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh } from './render/terrain';
+import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh, groundLayers, wearTerrain, type Worn } from './render/terrain';
 import { createWater } from './render/water';
 import { createGrass } from './render/grass';
 import { createGrade } from './render/grade';
@@ -63,7 +63,8 @@ const OPT = {
   deer: num('deer', 0),
   trees: num('trees', 140),
   near: num('near', 40),
-  grass: num('grass', 25000),
+  // (草の磨き上げ: 房を 36 三角形に減らした分、25,000 から 30,000 房に増やして草の絨毯を密にする)
+  grass: num('grass', 30000),
   grade: flag('grade'),
   bloom: flag('bloom'),
   shadow: flag('shadow'),
@@ -258,8 +259,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     loadGlb('/models/observe/rabbit.glb'),
     loadGlb('/models/observe/ship.glb'),
   ]);
-  const tuft = findNode(floraGlb, 'grass_tuft') as Mesh | null;
-  const grass = createGrass(field, { grass: s.layers.populations['grass'], moss: s.layers.populations['moss'] }, OPT.grass, 7, tuft?.geometry, (AREA_R + 1) * CELL_M);
+  // (草の磨き上げ: 房の形は grass.ts の carpetTuft を使う (flora.glb の grass_tuft は星形に開いて判を押したように見えた)。地面と同じ層で色を決める)
+  const grass = createGrass(field, groundLayers(s), OPT.grass, 7, undefined, (AREA_R + 1) * CELL_M);
   scene.add(grass.mesh);
 
   // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
@@ -268,6 +269,15 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-06 試作 2: 船台が 27 m になったので、船台の点 (外海に接する陸のセルの中心) から陸の側へ 6.5 m ずらし、
   //  舳先の端が水際を 2 m ほど越えるところに置く。舟・丸太の山・切り開きはこの中心に合わせる)
   const slip = { x: marks.slipway.x - marks.slipwayBow.x * 6.5, z: marks.slipway.z - marks.slipwayBow.z * 6.5 };
+  // (草の磨き上げ) 集落の広場・小屋の戸口への道・船台への道を踏み固めた土にし、そこの草を減らす (小屋の位置は下の集落の一角と同じ)
+  const plaza = { x: marks.center.x, z: marks.center.z - 6 };
+  const worn: Worn[] = [
+    { ax: plaza.x, az: plaza.z, bx: plaza.x, bz: plaza.z, r: 9 },
+    { ax: plaza.x, az: plaza.z, bx: slip.x, bz: slip.z, r: 2.6 },
+    ...[[-14, -8], [12, -12], [-4, -20]].map(([hx, hz]) => ({ ax: plaza.x, az: plaza.z, bx: marks.center.x + hx, bz: marks.center.z + hz, r: 2.2 })),
+  ];
+  wearTerrain(terrain, worn);
+  grass.trample(worn);
 
   // 鐘樹: 密度に比例して最大 OPT.trees 本。密度で段 (成木・若木・芽) を選ぶ。舟の材を伐った跡として船台の近くに株を置く
   const rng = mulberry32(11);
@@ -673,6 +683,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     if (kind === 'sprout') playScene({ kind, year: snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
     else if (kind === 'mist') playScene({ kind, year: snap.year, cell: home, at, radius: 4 });
     else playScene({ kind, year: snap.year });
+  };
+  // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__observeLook('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
+  (window as unknown as { __observeLook: unknown }).__observeLook = (at: string | { x: number; z: number }, dist = 6, height = 1.2, yaw = 0) => {
+    const c = typeof at === 'string' ? centroid(at) : at;
+    if (c) lookFrom(c.x, c.z, dist, height, yaw);
   };
   const direct = (dt: number) => {
     const frame = sceneFrame(snap, area);

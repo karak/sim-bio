@@ -60,6 +60,8 @@ def tuft(name, mat, blades, height, width, spread, bend, seed, lo=0.5, warm=0.12
     return n
 
 
+# (草の磨き上げ: 観察画面は src/observe/render/grass.ts の carpetTuft を草の房に使う。この grass_tuft は星形に開き、
+#  引きで判を押したように見えたため。flora.glb には残す)
 def grass_tuft():
     return tuft("grass_tuft", "grass", blades=8, height=0.45, width=0.1, spread=0.1, bend=0.55, seed=1)
 
