@@ -25,3 +25,6 @@ M22-04
 - [ ] UI が極力消えている(手動で確認)
 
 ## 作業ログ
+- 2026-09-24 本体の時間を流す(a885ad1)。自動の自然記録調カメラ(a833550、`src/observe/render/shotCamera.ts`)。観察画面を `view.ts` の createObservationView にし(8764fc7)、操作画面の「3D で見る」から入る/戻る(0e2dda6、E2E `tests/e2e/observe.spec.ts`)。
+- 2026-09-24 場面: 沈降は海面の上がり(a21b1b0)、芽吹き・疫病の霧・雨(e3479ca)、飛び立ちと追うカメラ(07e9b04)。寄せ先・自動カメラは手前の木に塞がれない向きを選ぶ(f2d339c)。美観チェック https://claude.ai/artifact/LT6NoPbaBMqoopNHnQwDgH
+- 残り: 個体を押して追う、帆を失うと灯りが消える、警告と祈りの控えめな帯、E2E の速度・個体を追う。
