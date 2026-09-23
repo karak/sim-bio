@@ -606,6 +606,11 @@ code-review の指摘 10 件を直した。
   空の舟は薪の蓄え 0、予言と節目を「舟か塔か」「陰で群れが痩せる」に書き換えた。
 - **ファイル**: `src/simulation/works.ts`、`src/simulation/World.ts`、`src/scenario/warnings.ts`、`assets/data/scenarios.json`、
   `tests/unit/works.test.ts`、`tests/unit/world.ship.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/slow/scenarios.playthrough.test.ts`。
+- **レビューの修正**(M10R、7eff673): 上限の年表の閾値に 1e-9 の余裕(無視 1 回の 0.1 が二進小数で落ちていた)。`everyYears` は `untilYear`
+  省略時に予言の年まで繰り返す(以前は 1 回だけ。既存の「祈りに応えるな」の狼も 6 年目の 1 回だった)。`dreamEater` 欠落のスナップショットは
+  「いない」(`!= null`)。内乱と夢喰いの民の減らし方を `scalePopulationAround` に共用。祈りの解決を `markPrayerResolved` に一本化。
+  帆を失った舟の HUD 文言。`populationShip` は `population` を写す(同じ半径の平均で、走査を重ねない)。内乱の戻り min(0.4, 上限) は
+  上限 < 0.3 で連鎖する(夢喰いの局面の意図した螺旋、unrest.ts に注記)。
 
 ## 6. マイルストーンと受入基準
 
