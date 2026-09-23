@@ -32,6 +32,7 @@ import { createToonMaterial } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { instanceProps, lodProps, type LodProps } from './render/instancer';
 import { createCreatureView } from './render/creatures';
+import { createShipView } from './render/ship';
 import { AtmospherePass, createSky } from './render/atmosphere';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks } from './area';
@@ -43,6 +44,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * 本体は読むだけ。個体の動きは試作用の単純な徘徊で、M22-04 の個体層に置き換える。
  * URL: ?deer=300&trees=200&near=40&grass=20000&grade=1&bloom=1&shadow=1
  * (個体層をつないだ後: deer は区域の鹿の目標頭数。K を密度の合計から逆算する。0 なら本体の密度 × K_DEFAULT のまま。near は使わない)
+ * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  */
 const params = new URLSearchParams(location.search);
@@ -56,6 +58,9 @@ const OPT = {
   grade: flag('grade'),
   bloom: flag('bloom'),
   shadow: flag('shadow'),
+  forest: num('forest', 80),
+  ship: params.has('ship') ? num('ship', 0) : null,
+  launched: params.get('launched') === '1',
   air: flag('air'),
   time: num('time', 0.16),
   day: num('day', DAY_CYCLE_S),
@@ -208,17 +213,23 @@ async function boot(): Promise<void> {
   const water = createWater(field, 3000);
   scene.add(water.mesh);
 
-  const [deerGlb, treeGlb, settleGlb, floraGlb, wolfGlb, rabbitGlb] = await Promise.all([
+  const [deerGlb, treeGlb, settleGlb, floraGlb, wolfGlb, rabbitGlb, shipGlb] = await Promise.all([
     loadGlb('/models/observe/deer.glb'),
     loadGlb('/models/observe/belltree.glb'),
     loadGlb('/models/observe/settlement.glb'),
     loadGlb('/models/observe/flora.glb'),
     loadGlb('/models/observe/wolf.glb'),
     loadGlb('/models/observe/rabbit.glb'),
+    loadGlb('/models/observe/ship.glb'),
   ]);
   const tuft = findNode(floraGlb, 'grass_tuft') as Mesh | null;
   const grass = createGrass(field, { grass: s.layers.populations['grass'], moss: s.layers.populations['moss'] }, OPT.grass, 7, tuft?.geometry, (AREA_R + 1) * CELL_M);
   scene.add(grass.mesh);
+
+  // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
+  const area = extractArea(s, home, AREA_R);
+  const marks = landmarks(area);
+  const slip = marks.slipway;
 
   // 鐘樹: 密度に比例して最大 OPT.trees 本。密度で段 (成木・若木・芽) を選ぶ。舟の材を伐った跡として船台の近くに株を置く
   const rng = mulberry32(11);
@@ -229,7 +240,8 @@ async function boot(): Promise<void> {
     const z = (rng() * 2 - 1) * AREA_R * CELL_M;
     if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
     // 集落の広場と船台は民が切り開いた場所として木を置かない (本体の鐘樹は集落を中心に立つが、小屋が林に埋もれて見えない)
-    if (Math.hypot(x, z - 20) < 13 || Math.hypot(x, z + 6) < 20) continue;
+    // (M22-06: 船台の切り開きは南の固定位置 (0, 20) から目印の船台へ)
+    if (Math.hypot(x - slip.x, z - slip.z) < 13 || Math.hypot(x, z + 6) < 20) continue;
     const d = bt ? field.layerAt(bt, x, z) : 0;
     if (rng() < d * 1.4) cands.push({ x, z, d });
   }
@@ -248,8 +260,8 @@ async function boot(): Promise<void> {
   }
   for (let i = 0; i < 6; i++) {
     const a = rng() * Math.PI * 2;
-    const x = Math.cos(a) * (15 + rng() * 6);
-    const z = 20 + Math.sin(a) * (15 + rng() * 6);
+    const x = slip.x + Math.cos(a) * (15 + rng() * 6);
+    const z = slip.z + Math.sin(a) * (15 + rng() * 6);
     byKind.stump.push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.05, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(1, 1, 1)));
   }
   const lods: LodProps[] = [];
@@ -263,11 +275,50 @@ async function boot(): Promise<void> {
     } else scene.add(instanceProps(node, mats));
   }
 
+  // 森の木 (M22-03): 本体の forest の密度に比例して最大 OPT.forest 本。鐘樹と同じく集落の広場と船台は切り開く
+  const forest = s.layers.populations['forest'];
+  const forestNode = findNode(floraGlb, 'forest_tree');
+  const forestLod = findNode(floraGlb, 'forest_tree_lod1');
+  if (forest && forestNode && forestLod) {
+    const mats: Matrix4[] = [];
+    for (let i = 0; i < OPT.forest * 10 && mats.length < OPT.forest; i++) {
+      const x = (rng() * 2 - 1) * AREA_R * CELL_M;
+      const z = (rng() * 2 - 1) * AREA_R * CELL_M;
+      if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
+      if (Math.hypot(x - slip.x, z - slip.z) < 13 || Math.hypot(x, z + 6) < 20) continue;
+      if (rng() >= field.layerAt(forest, x, z) * 1.6) continue;
+      const k = 0.8 + rng() * 0.35;
+      mats.push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.1, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(k, k, k)));
+    }
+    const l = lodProps(forestNode, forestLod, mats, 45);
+    lods.push(l);
+    scene.add(l.group);
+  }
+
+  // 下草 (M22-03): 羊歯は木の陰 (鐘樹と森の密度)、小花は草地、穂の出た月草は草地にまばら
+  const under: Record<string, Matrix4[]> = { fern: [], flower_patch: [], moongrass_tuft_seed: [] };
+  const grassLayer = s.layers.populations['grass'];
+  for (let i = 0; i < 9000; i++) {
+    const x = (rng() * 2 - 1) * (AREA_R + 1) * CELL_M;
+    const z = (rng() * 2 - 1) * (AREA_R + 1) * CELL_M;
+    if (Math.hypot(x, z) > (AREA_R + 1) * CELL_M || field.heightAt(x, z) < 1.0 || Math.hypot(x - slip.x, z - slip.z) < 9) continue;
+    const shade = (bt ? field.layerAt(bt, x, z) : 0) + (forest ? field.layerAt(forest, x, z) : 0);
+    const open = grassLayer ? field.layerAt(grassLayer, x, z) : 0;
+    const r = rng();
+    const kind = r < shade * 0.5 ? 'fern' : r < shade * 0.5 + open * 0.08 ? 'flower_patch' : r < shade * 0.5 + open * 0.1 ? 'moongrass_tuft_seed' : null;
+    if (!kind || under[kind].length >= 600) continue;
+    const k = 0.8 + rng() * 0.6;
+    under[kind].push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.03, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(k, k, k)));
+  }
+  for (const [name, mats] of Object.entries(under)) {
+    const node = findNode(floraGlb, name);
+    if (node && mats.length) scene.add(instanceProps(node, mats));
+  }
+
   // 集落の一角: 船台は南の海岸へ向け、小屋・灯り・巨石・石垣で囲む
   // (M22-04 の後: 南の固定位置をやめ、個体層の目印に合わせる)
   // 集落の一角 (個体層の目印に合わせる): 船台は集落に最も近い海辺のセルに、海へ向けて置く。小屋・灯り・巨石・石垣は集落の周り
-  const area = extractArea(s, home, AREA_R);
-  const marks = landmarks(area);
+  // (M22-06: 区域と目印は鐘樹の前で決めた)
   // 同じ部品はまとめてインスタンス化する (小屋・灯り柱を 1 つずつ複製すると部品 × 材質 × 影の draw call になる)
   const settlementPlacements = new Map<string, Matrix4[]>();
   const place = (name: string, x: number, z: number, ry = 0) => {
@@ -287,7 +338,23 @@ async function boot(): Promise<void> {
   place('megalith', c0.x + 16, c0.z + 2, -0.2);
   place('stone_wall', c0.x - 20, c0.z - 2, 1.2);
   place('stone_wall', c0.x + 20, c0.z - 4, -1.1);
+  // (M22-06: 衝立は小屋の脇、L 字の石垣は集落の北の角、丸太の山は船台の横)
+  place('woven_screen', c0.x - 10, c0.z - 12, 0.4);
+  place('woven_screen', c0.x + 9, c0.z - 7, -0.6);
+  place('stone_wall_corner', c0.x - 22, c0.z - 18, 0.8);
+  const side = { x: marks.slipwayBow.z, z: -marks.slipwayBow.x };
   for (const [name, mats] of settlementPlacements) scene.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
+  const pile = findNode(shipGlb, 'timber_pile');
+  if (pile) {
+    const px = slip.x + side.x * 6 - marks.slipwayBow.x * 3;
+    const pz = slip.z + side.z * 6 - marks.slipwayBow.z * 3;
+    scene.add(instanceProps(pile, [new Matrix4().compose(new Vector3(px, field.heightAt(px, pz) - 0.05, pz), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), toSea + 0.3), new Vector3(1, 1, 1))]));
+  }
+  // 空の舟 (M22-06): 進みで段を切り替えて船台に載せる
+  const shipView = createShipView(shipGlb, slip, toSea, field.heightAt(slip.x, slip.z) - 0.15);
+  const shipState = s.ship ? { ...s.ship, ...(OPT.ship !== null ? { progress: OPT.ship } : {}), ...(OPT.launched ? { launchedYear: s.year } : {}) } : null;
+  shipView.set(shipState);
+  scene.add(shipView.group);
 
   // 月鹿: 近い OPT.near 頭は SkinnedMesh、残りは VAT の InstancedMesh (設計 §8 の群れの LOD)
   // (M22-04 の後: 近くの振り分けと VAT は render/creatures.ts に移し、頭数は個体層が決める)
@@ -408,6 +475,7 @@ async function boot(): Promise<void> {
     creatures.update(agents.agents, camera, field.heightAt, t, dt);
     for (const l of lods) l.update(camera);
     water.update(t);
+    shipView.update(t);
     grass.update(t);
     controls.update();
     renderer.info.autoReset = false;
@@ -421,7 +489,7 @@ async function boot(): Promise<void> {
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       stats.textContent = `${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
