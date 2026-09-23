@@ -1,0 +1,1127 @@
+"""観察画面 (M22) の月鹿: Switch 世代の 3D ポケモン程度の密度で、丸めた形・スキン・5 つのアニメを持つモデルを組む。
+
+使い方:
+  ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/observe_deer.py -- assets/models/observe
+出力: <out_dir>/deer.glb と deer.blend
+  - メッシュ `deer` (近 LOD、~3,000 三角形)、`deer_lod1` (群れ LOD、~900)、`deer_doe` (角の無い雌、近 LOD と同じ密度)。3 つとも同じアーマチュア `deer_rig` にスキン
+  - アクション idle (4 s)・walk (1.2 s)・run (0.6 s)・graze (5 s)・fall (2 s、ループしない)。30 fps、その場 (root は動かさない)
+  - 材質 deer_body (頂点色で腹・喉・耳の内側を淡く) / deer_plate / deer_hoof / deer_antler_base / deer_glow (発光 #8FF5E6)
+基準画: assets/textures/board/creatures/deer.png (承認済み)。造形の元は assets/textures/concept/deer-angular.png と tools/blender/deer.py (ローポリ版)。
+検証: tools/blender/observe_deer_render.py で基準画と同じ向きを撮り、docs/design/qa/observe/ に並べる。
+
+寸法: 単位 m、Blender では Z up・正面 -Y (glTF では Y up・正面 +Z)。き甲 (肩) の高さ 1.4 m、角の先まで ~2.95 m、原点は四つの蹄の間の地面。
+作り方:
+  - 胴・首・頭・脚は断面リングのロフト (Catmull-Rom で断面を補間して丸める)。スムーズシェード。LOD は断面数と周方向の頂点数だけを変える
+  - 装甲板は胴の表面へ放射状に投影した縁取りから、縁 → 面取り → 頂の 3 段の殻にする。縁は硬いエッジ (丸めた角ばり)。光る継ぎ目は板の外側に貼る帯
+  - 腹の線と胸の V 字は胴の表面に沿わせた細い帯 (発光)
+  - スキンの重みは部品ごとに候補の骨を決め、骨の線分までの距離の逆 4 乗で配る (上位 3 本)
+  - 脚のアニメは 2D の解析 IK (肩・腰の関節から球節まで)。蹄は立脚中は地面に固定し、遊脚で持ち上げて手首・飛節を曲げる
+"""
+import math
+import os
+import sys
+
+import bmesh
+import bpy
+from mathutils import Euler, Matrix, Quaternion, Vector
+from mathutils.bvhtree import BVHTree
+
+argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+OUT_DIR = argv[0] if argv else "assets/models/observe"
+FPS = 30
+X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
+
+
+# ---------------------------------------------------------------- 色と材質
+def srgb_to_linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def lin(h):
+    h = h.lstrip("#")
+    return tuple(srgb_to_linear(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4))
+
+
+def mix(a, b, t):
+    t = max(0.0, min(1.0, t))
+    return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+
+def smoothstep(e0, e1, x):
+    t = max(0.0, min(1.0, (x - e0) / (e1 - e0)))
+    return t * t * (3 - 2 * t)
+
+
+# 基準画 (creatures/deer.png) の塗りから拾った代表色 (sRGB)
+PAL = {k: lin(v) for k, v in {
+    "fur": "#CB9C5E",       # 黄褐色の地
+    "fur_back": "#B5854F",  # 背と脚の下のわずかに濃い面
+    "belly": "#F0DAAA",     # 腹・喉・顎の下の淡い色
+    "muzzle": "#E4C288",
+    "ear_in": "#EFCFA8",
+    "plate": "#3A766E",
+    "hoof": "#1F4B47",
+    "antler_base": "#24514C",
+    "glow": "#8FF5E6",
+}.items()}
+WHITE = (1.0, 1.0, 1.0)
+
+BODY, PLATE, HOOF, ABASE, GLOW = range(5)
+MAT_NAMES = ["deer_body", "deer_plate", "deer_hoof", "deer_antler_base", "deer_glow"]
+
+
+def make_materials():
+    mats = []
+    for name in MAT_NAMES:
+        m = bpy.data.materials.new(name)
+        m.use_nodes = True
+        nt = m.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        bsdf.inputs["Roughness"].default_value = 0.8
+        bsdf.inputs["Specular IOR Level"].default_value = 0.0
+        key = {"deer_body": "fur", "deer_plate": "plate", "deer_hoof": "hoof", "deer_antler_base": "antler_base", "deer_glow": "glow"}[name]
+        rgb = PAL[key]
+        bsdf.inputs["Base Color"].default_value = (*rgb, 1)
+        m.diffuse_color = (*rgb, 1)
+        if name == "deer_body":
+            # 腹・喉の淡い色は頂点色 (COLOR_0) で持つ。Three.js 側は vertexColors で掛ける
+            vc = nt.nodes.new("ShaderNodeVertexColor")
+            vc.layer_name = "Col"
+            nt.links.new(vc.outputs["Color"], bsdf.inputs["Base Color"])
+        if name == "deer_glow":
+            bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
+            bsdf.inputs["Emission Strength"].default_value = 1.0
+        mats.append(m)
+    return mats
+
+
+# ---------------------------------------------------------------- 骨 (頭・尾・親)。rest の位置は形の寸法と共有する
+FRONT_X, HIND_X = 0.12, 0.13
+BONES = {
+    "root": ((0, 0, 0), (0, -0.3, 0), None),
+    "pelvis": ((0, 0.50, 1.18), (0, 0.08, 1.21), "root"),
+    "spine1": ((0, 0.08, 1.21), (0, -0.30, 1.23), "pelvis"),
+    "chest": ((0, -0.30, 1.23), (0, -0.58, 1.22), "spine1"),
+    "neck1": ((0, -0.62, 1.15), (0, -0.645, 1.45), "chest"),
+    "neck2": ((0, -0.645, 1.45), (0, -0.665, 1.74), "neck1"),
+    "head": ((0, -0.665, 1.78), (0, -1.12, 1.74), "neck2"),
+    "jaw": ((0, -0.80, 1.74), (0, -1.12, 1.70), "head"),
+    "tail1": ((0, 0.80, 1.20), (0, 0.87, 1.30), "pelvis"),
+    "tail2": ((0, 0.87, 1.30), (0, 0.90, 1.40), "tail1"),
+}
+for s, sx in (("L", -1), ("R", 1)):
+    BONES[f"ear_{s}"] = ((sx * 0.13, -0.60, 1.96), (sx * 0.40, -0.47, 1.99), "head")
+    fx, hx = sx * FRONT_X, sx * HIND_X
+    # 前脚: 肩関節 → 肘 (後ろ下) → 手首 (前下) → 球節 → 蹄の先
+    fl = [(fx, -0.46, 1.12), (fx, -0.33, 0.75), (fx, -0.44, 0.40), (fx, -0.45, 0.12), (fx, -0.51, 0.0)]
+    # 後脚: 股関節 → 膝 (前下) → 飛節 (後ろ下) → 球節 → 蹄の先
+    hl = [(hx, 0.52, 1.12), (hx, 0.36, 0.70), (hx, 0.64, 0.44), (hx, 0.60, 0.12), (hx, 0.55, 0.0)]
+    for pre, pts, par, names in (("fl", fl, "chest", ("upper", "fore", "cannon", "hoof")), ("hl", hl, "pelvis", ("thigh", "shin", "cannon", "hoof"))):
+        prev = par
+        for i, nm in enumerate(names):
+            bn = f"{pre}_{nm}_{s}"
+            BONES[bn] = (pts[i], pts[i + 1], prev)
+            prev = bn
+BONES = {k: (Vector(h), Vector(t), p) for k, (h, t, p) in BONES.items()}
+LEG_BONES = {f"{pre}_{s}": [f"{pre}_{nm}_{s}" for nm in names]
+             for s in "LR" for pre, names in (("fl", ("upper", "fore", "cannon", "hoof")), ("hl", ("thigh", "shin", "cannon", "hoof")))}
+
+
+def joint(name, i):
+    """脚の関節 i (0 = 肩/股、4 = 蹄の先) の rest 位置"""
+    bones = LEG_BONES[name]
+    return BONES[bones[i]][0] if i < 4 else BONES[bones[3]][1]
+
+
+# ---------------------------------------------------------------- 形の道具
+def catmull(p0, p1, p2, p3, t):
+    return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
+
+
+def resample(keys, count):
+    """キー断面の列を Catmull-Rom で count 断面に補間する (各成分を独立に)"""
+    n = len(keys)
+    out = []
+    for i in range(count):
+        s = i * (n - 1) / (count - 1)
+        k = min(int(s), n - 2)
+        t = s - k
+        p0, p1, p2, p3 = keys[max(k - 1, 0)], keys[k], keys[k + 1], keys[min(k + 2, n - 1)]
+        out.append(tuple(catmull(a, b, c, d, t) for a, b, c, d in zip(p0, p1, p2, p3)))
+    return out
+
+
+def resample_path(pts, count):
+    return [Vector(p) for p in resample([tuple(p) for p in pts], count)]
+
+
+def ring(bm, center, ux, uy, rx, ry_top, ry_bot, n, pinch=0.0, sq=2.0, phase=0.0):
+    """ux/uy 平面の超楕円リング。+uy 側の半径 ry_top、-uy 側 ry_bot、pinch で -uy 側の幅を絞る (胸の竜骨・顎)"""
+    vs = []
+    for i in range(n):
+        a = 2 * math.pi * i / n + phase
+        c, s = math.cos(a), math.sin(a)
+        cx = math.copysign(abs(c) ** (2 / sq), c)
+        sy = math.copysign(abs(s) ** (2 / sq), s)
+        ry = ry_top if s > 0 else ry_bot
+        w = rx * (1 - pinch * max(0.0, -s))
+        vs.append(bm.verts.new(center + ux * (w * cx) + uy * (ry * sy)))
+    return vs
+
+
+def loft(bm, rings, mat=BODY, mats=None):
+    """リング (または先端の 1 点) の列を面で繋ぐ。mats[i] で i 番目の帯の材質を指定できる"""
+    faces = []
+    for idx, (a, b) in enumerate(zip(rings, rings[1:])):
+        m = mats[idx] if mats else mat
+        new = []
+        if isinstance(a, list) and isinstance(b, list):
+            n = len(a)
+            for i in range(n):
+                new.append(bm.faces.new((a[i], a[(i + 1) % n], b[(i + 1) % n], b[i])))
+        elif isinstance(a, list):
+            n = len(a)
+            for i in range(n):
+                new.append(bm.faces.new((a[i], a[(i + 1) % n], b)))
+        else:
+            n = len(b)
+            for i in range(n):
+                new.append(bm.faces.new((a, b[(i + 1) % n], b[i])))
+        for f in new:
+            f.material_index = m
+        faces += new
+    return faces
+
+
+def cap(bm, rng, mat=BODY):
+    f = bm.faces.new(rng)
+    f.material_index = mat
+    return f
+
+
+def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
+    """折れ線に沿ったチューブ (角・枝・尾)。tip=True で最後を 1 点に収束。flat で断面を横 (X) 方向に潰す"""
+    rings = []
+    for i, (p, r) in enumerate(zip(pts, radii)):
+        if tip and i == len(pts) - 1:
+            rings.append(bm.verts.new(p))
+            continue
+        d = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        u = (Z.cross(d) if abs(d.z) < 0.9 else X.cross(d)).normalized()
+        v = d.cross(u).normalized()
+        rings.append(ring(bm, p, u, v, r * flat, r, r, n, phase=phase))
+    faces = loft(bm, rings, mat=mat, mats=mats)
+    faces.append(cap(bm, list(reversed(rings[0])), mats[0] if mats else mat))
+    if not tip:
+        faces.append(cap(bm, rings[-1], mats[-1] if mats else mat))
+    return faces
+
+
+# ---------------------------------------------------------------- LOD の密度
+HERO = dict(name="hero", body=(15, 16), neck=(7, 12), head=(10, 12), leg=(12, 8), hoof=8, antler=(12, 6), tine=(3, 6),
+            ear=(4, 8), tail=(3, 6), plate_chaikin=True, ribbon_seg=12, eye=10, sq=2.4)
+LOD1 = dict(name="lod1", body=(7, 10), neck=(4, 8), head=(6, 8), leg=(6, 5), hoof=0, antler=(6, 4), tine=(2, 4),
+            ear=(2, 4), tail=(2, 4), plate_chaikin=False, ribbon_seg=4, eye=4, sq=2.2)
+
+# 胴 (尻 → 胸): (y, 背の高さ, 腹の高さ, 半幅, 腹側の絞り)
+BODY_KEYS = [
+    (0.86, 1.22, 1.02, 0.06, 0.0),
+    (0.80, 1.30, 0.92, 0.16, 0.10),
+    (0.66, 1.355, 0.84, 0.22, 0.18),
+    (0.45, 1.365, 0.83, 0.23, 0.24),
+    (0.18, 1.36, 0.80, 0.23, 0.30),
+    (-0.12, 1.37, 0.765, 0.235, 0.34),
+    (-0.38, 1.41, 0.745, 0.235, 0.38),
+    (-0.58, 1.40, 0.78, 0.21, 0.40),
+    (-0.72, 1.36, 0.86, 0.175, 0.40),
+    (-0.81, 1.27, 0.95, 0.10, 0.30),
+]
+
+def body_zc(y):
+    ks = BODY_KEYS
+    if y >= ks[0][0]:
+        return (ks[0][1] + ks[0][2]) / 2
+    for a, b in zip(ks, ks[1:]):
+        if a[0] >= y >= b[0]:
+            t = (a[0] - y) / (a[0] - b[0])
+            return ((a[1] + a[2]) / 2) * (1 - t) + ((b[1] + b[2]) / 2) * t
+    return (ks[-1][1] + ks[-1][2]) / 2
+
+
+def build_body(bm, lod):
+    nsec, n = lod["body"]
+    secs = resample(BODY_KEYS, nsec)
+    rings = [ring(bm, Vector((0, y, (top + bot) / 2)), X, Z, hw, (top - bot) / 2, (top - bot) / 2, n, pinch, sq=lod["sq"], phase=math.pi / 2)
+             for y, top, bot, hw, pinch in secs]
+    rear = bm.verts.new((0, secs[0][0] + 0.025, (secs[0][1] + secs[0][2]) / 2))
+    front = bm.verts.new((0, secs[-1][0] - 0.02, (secs[-1][1] + secs[-1][2]) / 2))
+    loft(bm, [rear] + rings + [front])
+
+
+# 首: 胸の中から頭の下へ。(y, z, 横半径, 喉側, 鬣側)
+NECK_KEYS = [(-0.60, 1.06, 0.17, 0.17, 0.16), (-0.635, 1.25, 0.20, 0.215, 0.18), (-0.655, 1.50, 0.185, 0.20, 0.155),
+             (-0.665, 1.72, 0.165, 0.175, 0.135), (-0.665, 1.88, 0.14, 0.14, 0.12)]
+
+def build_neck(bm, lod):
+    nsec, n = lod["neck"]
+    secs = resample(NECK_KEYS, nsec)
+    pts = [Vector((0, s[0], s[1])) for s in secs]
+    rings = []
+    for i, (y, z, rx, rf, rb) in enumerate(secs):
+        d = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        uy = X.cross(d).normalized()  # 首の前 (喉) 側
+        rings.append(ring(bm, pts[i], X, uy, rx, rf, rb, n, phase=math.pi / 2))
+    loft(bm, rings)
+    cap(bm, list(reversed(rings[0])))
+    cap(bm, rings[-1])
+
+
+# 頭 (後頭部 → 鼻先): (y, 中心 z, 横半径, 上, 下, 下側の絞り)
+HEAD_KEYS = [
+    (-0.50, 1.865, 0.06, 0.06, 0.06, 0.0),
+    (-0.545, 1.865, 0.15, 0.15, 0.15, 0.10),
+    (-0.64, 1.855, 0.178, 0.16, 0.18, 0.20),
+    (-0.76, 1.84, 0.17, 0.15, 0.175, 0.30),
+    (-0.88, 1.81, 0.138, 0.125, 0.15, 0.35),
+    (-0.98, 1.78, 0.105, 0.10, 0.12, 0.35),
+    (-1.07, 1.755, 0.085, 0.085, 0.09, 0.30),
+    (-1.13, 1.745, 0.07, 0.07, 0.065, 0.20),
+    (-1.165, 1.74, 0.04, 0.04, 0.036, 0.10),
+]
+NOSE_Y = -1.152
+
+def build_head(bm, lod):
+    nsec, n = lod["head"]
+    secs = resample(HEAD_KEYS, nsec)
+    rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rt, rb, n, pinch, sq=2.2, phase=math.pi / 2) for y, zc, rx, rt, rb, pinch in secs]
+    back = bm.verts.new((0, secs[0][0] + 0.012, secs[0][1]))
+    tip = bm.verts.new((0, secs[-1][0] - 0.012, secs[-1][1]))
+    faces = loft(bm, [back] + rings + [tip])
+    for f in faces:
+        if f.calc_center_median().y < NOSE_Y:
+            f.material_index = HOOF  # 鼻 (基準画では暗い)
+
+
+def build_ears(bm, lod, side):
+    nsec, n = lod["ear"]
+    base = Vector((side * 0.12, -0.60, 1.955))
+    axis = Vector((side * 0.88, 0.38, 0.22)).normalized()
+    front = Vector((0, -1, 0.35))
+    front = (front - axis * front.dot(axis)).normalized()  # 耳の開き (前向き)
+    w = axis.cross(front).normalized()
+    keys = [(0.0, 0.05, 0.035), (0.08, 0.095, 0.03), (0.17, 0.105, 0.025), (0.26, 0.07, 0.018), (0.32, 0.025, 0.01)]
+    secs = resample(keys, nsec + 1)
+    rings = []
+    for t, wd, th in secs[:-1]:
+        c = base + axis * t
+        vs = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            ca, sa = math.cos(a), math.sin(a)
+            # 前面 (耳の内側) を浅くくぼませる
+            dz = th * sa * (0.35 if sa > 0 else 1.0)
+            vs.append(bm.verts.new(c + w * (wd * ca) + front * dz))
+        rings.append(vs)
+    tip = bm.verts.new(base + axis * (secs[-1][0] + 0.03))
+    loft(bm, rings + [tip])
+    cap(bm, list(reversed(rings[0])))
+    return front
+
+
+# 基準画の側面・正面から: 深緑の根元は頭頂から外へ、発光する主幹は外・後ろへ張り出してから上がり、先は前・内へ巻く三日月。
+# 眉枝 (前・内へ出て上を向く) と中ほどの枝 (上へ)。左 (-X) を正で書き、x に side を掛ける
+ANTLER_BEAM = [(0.07, -0.71, 1.98), (0.20, -0.62, 2.03), (0.33, -0.50, 2.075),
+               (0.47, -0.35, 2.14), (0.60, -0.15, 2.22), (0.665, 0.02, 2.36), (0.665, 0.08, 2.52), (0.62, 0.05, 2.68), (0.54, -0.05, 2.81), (0.45, -0.19, 2.90)]
+ANTLER_R = [0.058, 0.056, 0.055, 0.058, 0.06, 0.06, 0.056, 0.05, 0.036, 0.008]
+ANTLER_BASE_T = 0.28  # 主幹のうち根元 (深緑) の割合
+ANTLER_TINES = [[(0.37, -0.46, 2.095), (0.27, -0.66, 2.14), (0.18, -0.84, 2.24), (0.13, -0.91, 2.44)],
+                [(0.54, -0.33, 2.19), (0.48, -0.37, 2.35), (0.41, -0.41, 2.52)]]
+ANTLER_TINE_R = [[0.052, 0.046, 0.036, 0.0], [0.052, 0.04, 0.0]]
+
+def antler_fit(p):
+    return Vector(p)
+
+
+def build_antler(bm, lod, side):
+    nb, n = lod["antler"]
+    pts = [antler_fit((side * x, y, z)) for x, y, z in ANTLER_BEAM]
+    dense = resample_path(pts, nb)
+    radii = [r for (r,) in resample([(r,) for r in ANTLER_R], nb)]
+    radii[-1] = 0.0
+    mats = [ABASE if (i + 0.5) / (nb - 1) < ANTLER_BASE_T else GLOW for i in range(nb - 1)]
+    faces = tube(bm, dense, radii, n, mats=mats)
+    nt, tn = lod["tine"]
+    for tpts, trr in zip(ANTLER_TINES, ANTLER_TINE_R):
+        cnt = nt + len(tpts) - 3
+        tp = resample_path([antler_fit((side * x, y, z)) for x, y, z in tpts], cnt)
+        rr = [r for (r,) in resample([(r,) for r in trr], cnt)]
+        rr[-1] = 0.0
+        faces += tube(bm, tp, rr, tn, mat=GLOW)
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
+
+
+# 脚の断面: (関節 i から i+1 への位置 t, 横半径, 前後半径)
+FRONT_LEG = [(0.1, 0.11, 0.19), (0.55, 0.10, 0.17), (1.0, 0.07, 0.11), (1.3, 0.062, 0.09), (1.75, 0.046, 0.06), (2.0, 0.046, 0.054),
+             (2.4, 0.034, 0.04), (2.85, 0.032, 0.038), (3.0, 0.04, 0.046), (3.35, 0.037, 0.042)]
+HIND_LEG = [(0.1, 0.12, 0.23), (0.5, 0.115, 0.21), (0.85, 0.09, 0.16), (1.0, 0.08, 0.14), (1.35, 0.066, 0.12), (1.7, 0.05, 0.085),
+            (2.0, 0.045, 0.066), (2.4, 0.034, 0.042), (2.85, 0.032, 0.038), (3.0, 0.04, 0.046), (3.35, 0.037, 0.042)]
+
+def leg_point(name, t):
+    i = min(int(t), 3)
+    a, b = joint(name, i), joint(name, i + 1)
+    return a + (b - a) * (t - i)
+
+
+def build_leg(bm, lod, name):
+    nsec, n = lod["leg"]
+    keys = FRONT_LEG if name.startswith("fl") else HIND_LEG
+    if lod["hoof"] == 0:
+        keys = keys + [(3.7, 0.05, 0.058), (3.95, 0.055, 0.064)]  # 群れ LOD は蹄も脚のロフトで作る
+    secs = resample(keys, nsec)
+    pts = [leg_point(name, t) for t, _, _ in secs]
+    if lod["hoof"] == 0:
+        pts[-1] = Vector((pts[-1].x, pts[-1].y, 0.0))
+        pts[-2] = Vector((pts[-2].x, pts[-2].y, 0.05))
+    rings = []
+    for i, (t, rx, ry) in enumerate(secs):
+        d = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        if lod["hoof"] == 0 and i >= len(secs) - 2:
+            d = Vector((0, 0, -1))  # 群れ LOD の蹄の断面は水平に (地面より下へはみ出さない)
+        uy = X.cross(d).normalized()
+        rings.append(ring(bm, pts[i], X, uy, rx, ry, ry, n, phase=math.pi / 2))
+    faces = loft(bm, rings)
+    cap(bm, list(reversed(rings[0])))
+    cap(bm, rings[-1], HOOF if lod["hoof"] == 0 else BODY)
+    if lod["hoof"] == 0:
+        for f in faces:
+            if f.calc_center_median().z < 0.085:
+                f.material_index = HOOF
+
+
+def build_hoof(bm, lod, name):
+    n = lod["hoof"]
+    fet = joint(name, 3)
+    x = fet.x
+    keys = [(0.10, 0.038, 0.042, -0.01), (0.06, 0.047, 0.055, -0.028), (0.014, 0.052, 0.064, -0.045), (0.0, 0.049, 0.06, -0.045)]
+    rings = [ring(bm, Vector((x, fet.y + dy, z)), X, -Y, rx, ry, ry * 0.85, n, phase=math.pi / 2) for z, rx, ry, dy in keys]
+    loft(bm, rings, mat=HOOF)
+    cap(bm, list(reversed(rings[0])), HOOF)
+    bot = bm.verts.new((x, fet.y - 0.045, 0.0))
+    loft(bm, [rings[-1], bot], mat=HOOF)
+
+
+def build_tail(bm, lod):
+    nsec, n = lod["tail"]
+    pts = resample_path([(0, 0.79, 1.19), (0, 0.87, 1.30), (0, 0.905, 1.42)], nsec)
+    radii = [r for (r,) in resample([(0.065,), (0.05,), (0.0,)], nsec)]
+    tube(bm, pts, radii, n, mat=BODY, flat=0.8)
+
+
+# ---------------------------------------------------------------- 胴の表面への投影 (装甲板と光る線)
+def surf(bvh, y, z, side, off, phi=0.0):
+    """側面図の座標 (y, z) を表面へ投影し、法線方向へ off 浮かせる。
+    視線は横 (side 側) から、上下に外れた点ほど体の中心へ向けて傾ける。phi (度) で前 (-Y) へ回す (胸の V 字)"""
+    ph = math.radians(phi)
+    zc = body_zc(y)
+    for k in range(40):
+        zz = z + (zc - z) * k / 40
+        tilt = max(-1.0, min(1.0, (zz - zc) / 0.35)) * 0.8
+        d = Vector((side * math.cos(ph), -math.sin(ph), tilt)).normalized()
+        q = Vector((0, y, zz))
+        loc, nrm, _, _ = bvh.ray_cast(q + d * 2.0, -d)
+        if loc is not None:
+            break
+    else:
+        raise RuntimeError(f"surface miss y={y} z={z}")
+    if nrm.dot(d) < 0:
+        nrm = -nrm
+    return loc + nrm * off, nrm
+
+
+def split_edges(poly, glow):
+    """閉じた多角形の各辺の中点に頂点を足す (角は立てたまま、胴の丸みに沿わせる)。glow[i] は辺 i (i → i+1) が光る継ぎ目か"""
+    out, g = [], []
+    k = len(poly)
+    for i in range(k):
+        a, b = poly[i], poly[(i + 1) % k]
+        out += [a, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)]
+        g += [glow[i], glow[i]]
+    return out, g
+
+
+def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024):
+    """装甲板: 縁 (表面 +4 mm) → 縁の上 → 面取り (中心へ 74%) → 頂。光る辺には外側に帯を貼り、縁の壁も光らせる。
+    outline は左側面から見た (y, z)。縁と面取りの境は硬いエッジ、頂はなめらか (丸めた角ばり)"""
+    poly = list(outline)
+    glow = [i in glow_edges for i in range(len(poly))]
+    if lod["plate_chaikin"]:
+        poly, glow = split_edges(poly, glow)
+    k = len(poly)
+    cy = sum(p[0] for p in poly) / k
+    cz = sum(p[1] for p in poly) / k
+
+    def P(p, off):
+        return bm.verts.new(surf(bvh, p[0], p[1], side, off)[0])
+
+    def scaled(p, f):
+        return (cy + (p[0] - cy) * f, cz + (p[1] - cz) * f)
+
+    r1 = [P(p, 0.004) for p in poly]
+    r2 = [P(p, thick * 0.6) for p in poly]
+    rings = [r1, r2]
+    if lod["plate_chaikin"]:
+        rings.append([P(scaled(p, 0.74), thick) for p in poly])
+    center = P((cy, cz), thick * 1.12)
+    faces = []
+    for ri, (a, b) in enumerate(zip(rings, rings[1:])):
+        for i in range(k):
+            f = bm.faces.new((a[i], a[(i + 1) % k], b[(i + 1) % k], b[i]))
+            f.material_index = GLOW if (ri == 0 and glow[i]) else PLATE
+            faces.append(f)
+    for f in faces:
+        f.smooth = False
+    for i in range(k):
+        f = bm.faces.new((rings[-1][i], rings[-1][(i + 1) % k], center))
+        f.material_index = PLATE
+        f.smooth = True
+        faces.append(f)
+    # 光る帯: 辺の外側 (多角形の外向き法線方向) へ band だけ広げた点を表面に落とす
+    area = sum(poly[i][0] * poly[(i + 1) % k][1] - poly[(i + 1) % k][0] * poly[i][1] for i in range(k))
+    orient = 1 if area > 0 else -1
+    outer = {}
+
+    def out_pt(i):
+        if i not in outer:
+            a, b, c = poly[(i - 1) % k], poly[i], poly[(i + 1) % k]
+            n1 = Vector((a[1] - b[1], b[0] - a[0])) * orient  # 辺 a→b の内向き
+            n2 = Vector((b[1] - c[1], c[0] - b[0])) * orient
+            nn = (n1.normalized() + n2.normalized()).normalized()
+            outer[i] = P((b[0] - nn.x * band, b[1] - nn.y * band), 0.005)
+        return outer[i]
+
+    for i in range(k):
+        if glow[i]:
+            j = (i + 1) % k
+            f = bm.faces.new((out_pt(i), out_pt(j), r1[j], r1[i]))
+            f.material_index = GLOW
+            f.smooth = True
+            faces.append(f)
+    # 向きを揃える (頂の扇が外を向くように)
+    ref_n = surf(bvh, cy, cz, side, 0)[1]
+    fan = faces[-1 - sum(1 for g in glow if g)]
+    fan.normal_update()
+    if fan.normal.dot(ref_n) < 0:
+        bmesh.ops.reverse_faces(bm, faces=faces)
+    sharp = [r1, r2] + ([rings[2]] if len(rings) > 2 else [])
+    for r in sharp:
+        rs = set(r)
+        for e in {e for v in r for e in v.link_edges}:
+            if all(v in rs for v in e.verts):
+                e.smooth = False  # 板の縁と面取りの境は硬いエッジ (丸めた角ばり)
+
+
+def build_ribbon(bm, bvh, lod, path, side, width=0.026):
+    """胴に沿う光る線。path は (y, z, phi)。断面は 3 点の低い山 (近 LOD) / 平らな帯 (群れ LOD)"""
+    nseg = lod["ribbon_seg"]
+    dense = resample([tuple(p) for p in path], nseg + 1)
+    hits = [surf(bvh, y, z, side, 0.0, phi) for y, z, phi in dense]
+    prev = None
+    faces = []
+    for i, (loc, n) in enumerate(hits):
+        d = (hits[min(i + 1, len(hits) - 1)][0] - hits[max(i - 1, 0)][0]).normalized()
+        sv = n.cross(d).normalized() * (width / 2)
+        if lod["plate_chaikin"]:
+            cur = [bm.verts.new(loc - sv + n * 0.004), bm.verts.new(loc + n * 0.012), bm.verts.new(loc + sv + n * 0.004)]
+        else:
+            cur = [bm.verts.new(loc - sv + n * 0.007), bm.verts.new(loc + sv + n * 0.007)]
+        if prev:
+            for j in range(len(cur) - 1):
+                f = bm.faces.new((prev[j], prev[j + 1], cur[j + 1], cur[j]))
+                f.material_index = GLOW
+                f.smooth = True
+                f.normal_update()
+                if f.normal.dot(n) < 0:
+                    f.normal_flip()
+                faces.append(f)
+        prev = cur
+    return faces
+
+def build_eye(bm, bvh_head, lod, side):
+    loc, n, _, _ = bvh_head.ray_cast(Vector((side * 1.0, -0.84, 1.865)), Vector((-side, 0, 0)))
+    if n.dot(Vector((side, 0, 0))) < 0:
+        n = -n
+    u = Vector((0, -1, -0.12))
+    u = (u - n * u.dot(n)).normalized()  # 目の長軸 (鼻先へ少し下がる)
+    v = n.cross(u).normalized()
+    k = lod["eye"]
+
+    def disc(L, H, off, bulge, mat):
+        c = bm.verts.new(loc + n * (off + bulge))
+        vs = []
+        for i in range(k):
+            a = 2 * math.pi * i / k
+            ca, sa = math.cos(a), math.sin(a)
+            # アーモンド形: 目尻 (後ろ) を尖らせる
+            sharp = 1.0 - 0.35 * max(0.0, -ca)
+            p = loc + u * (L * ca) + v * (H * sa * sharp) + n * off
+            best = bvh_head.find_nearest(p)
+            p = best[0] + n * off if best[0] is not None else p
+            vs.append(bm.verts.new(p))
+        for i in range(k):
+            f = bm.faces.new((vs[i], vs[(i + 1) % k], c))
+            f.material_index = mat
+            f.normal_update()
+            if f.normal.dot(n) < 0:
+                f.normal_flip()
+
+    if lod["name"] == "hero":
+        disc(0.064, 0.04, 0.003, 0.004, ABASE)
+    disc(0.052, 0.03, 0.006, 0.01, GLOW)
+
+
+# ---------------------------------------------------------------- 頂点色と重み
+def color_for(part, co, n):
+    if part in ("body",):
+        c = mix(PAL["fur"], PAL["fur_back"], smoothstep(0.55, 0.95, n.z) * 0.6)
+        c = mix(c, PAL["belly"], smoothstep(-0.25, -0.8, n.z))
+        c = mix(c, PAL["belly"], smoothstep(-0.2, -0.8, n.y) * smoothstep(-0.55, -0.75, co.y))  # 胸の前 (首の喉から続く)
+        return c
+    if part == "neck":
+        return mix(PAL["fur"], PAL["belly"], smoothstep(-0.1, -0.7, n.y) * (0.55 + 0.45 * smoothstep(1.85, 1.4, co.z)))
+    if part == "head":
+        c = mix(PAL["fur"], PAL["muzzle"], smoothstep(-0.95, -1.1, co.y))
+        c = mix(c, PAL["belly"], smoothstep(-0.2, -0.7, n.z))
+        return c
+    if part.startswith("ear"):
+        return PAL["ear_in"] if n.dot(EAR_FRONT[part]) > 0.25 else PAL["fur"]
+    if part.startswith("leg"):
+        side = 1 if co.x > 0 else -1
+        c = mix(PAL["fur"], PAL["fur_back"], smoothstep(0.7, 0.25, co.z) * 0.8)
+        return mix(c, PAL["belly"], smoothstep(0.2, 0.8, -n.x * side) * smoothstep(0.35, 0.8, co.z) * 0.8)
+    if part == "tail":
+        return mix(PAL["fur"], PAL["belly"], smoothstep(0.0, 0.7, n.y))
+    return WHITE
+
+
+EAR_FRONT = {}
+
+
+def seg_dist(p, a, b):
+    ab = b - a
+    t = max(0.0, min(1.0, (p - a).dot(ab) / ab.length_squared))
+    return (p - (a + ab * t)).length
+
+
+def body_cands(co):
+    c = [("pelvis", 1.0), ("spine1", 1.0), ("chest", 1.0), ("neck1", 0.4)]
+    side = "L" if co.x < 0 else "R"
+    if abs(co.x) > 0.03 and co.z < 1.12:
+        c += [(f"fl_upper_{side}", 0.15), (f"hl_thigh_{side}", 0.15)]
+    return c
+
+
+def weights_for(co, cands):
+    ws = []
+    for bone, fac in cands:
+        h, t, _ = BONES[bone]
+        ws.append((bone, fac / (seg_dist(co, h, t) + 0.03) ** 4))
+    ws.sort(key=lambda x: -x[1])
+    ws = ws[:3]
+    s = sum(w for _, w in ws)
+    ws = [(b, w / s) for b, w in ws if w / s > 0.03]
+    s = sum(w for _, w in ws)
+    return [(b, w / s) for b, w in ws]
+
+
+MOUTH = (Vector((0, -0.90, 1.79)), Vector((0, -1.20, 1.745)))
+
+
+def head_weights(co):
+    a, b = MOUTH
+    t = (co.y - a.y) / (b.y - a.y)
+    zl = a.z + (b.z - a.z) * t
+    wj = smoothstep(0.0, 0.025, zl - co.z) * smoothstep(-0.86, -0.93, co.y)
+    wn = smoothstep(-0.66, -0.60, co.y) * 0.5  # 後頭部は首へ少し
+    out = [("head", max(0.0, 1.0 - wj - wn))]
+    if wj > 0.02:
+        out.append(("jaw", wj))
+    if wn > 0.02:
+        out.append(("neck2", wn))
+    s = sum(w for _, w in out)
+    return [(bb, w / s) for bb, w in out if w > 0]
+
+
+# ---------------------------------------------------------------- メッシュの組み立て
+PLATES = [
+    # (左側面から見た輪郭 (y, z)、光る辺 i (i → i+1))。基準画の側面 (creatures/deer.png 左上) の画素から 0.00795 m/px で起こした
+    ([(-0.24, 1.30), (-0.44, 1.335), (-0.56, 1.22), (-0.59, 1.02), (-0.51, 0.86), (-0.33, 0.85), (-0.25, 1.00)], {1, 2, 3}),  # 肩の大きな板
+    ([(-0.24, 1.335), (-0.28, 1.43), (-0.44, 1.47), (-0.57, 1.42), (-0.555, 1.35), (-0.44, 1.35)], {3, 4, 5}),               # 肩の上 (き甲) の板
+    ([(0.40, 1.25), (0.58, 1.265), (0.70, 1.16), (0.715, 0.98), (0.62, 0.83), (0.45, 0.83), (0.34, 0.96), (0.33, 1.12)], {5, 6, 7}),  # 腰の板
+]
+BELLY_LINE = [(-0.34, 0.875, 0), (-0.10, 0.845, 0), (0.15, 0.845, 0), (0.345, 0.93, 0)]
+CHEST_V = [(-0.575, 1.21, 0), (-0.64, 1.12, 35), (-0.66, 1.03, 65), (-0.66, 0.97, 90)]
+
+def make_part(name, bm, part, cands, mats, recalc=True):
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    if recalc:
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    if part != "plate":
+        for f in bm.faces:
+            f.smooth = True  # 装甲板は build_plate が面ごとに決める (面取りは平ら、頂はなめらか)
+    me = bpy.data.meshes.new(name)
+    bm.normal_update()
+    bm.to_mesh(me)
+    bm.free()
+    for m in mats:
+        me.materials.append(m)
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(ob)
+    col = me.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
+    groups = {}
+    for v in me.vertices:
+        c = color_for(part, v.co, v.normal)
+        col.data[v.index].color = (*c, 1.0)
+        ws = cands(v.co) if callable(cands) else weights_for(v.co, cands)
+        for b, w in ws:
+            if b not in groups:
+                groups[b] = ob.vertex_groups.new(name=b)
+            groups[b].add([v.index], w, "REPLACE")
+    return ob
+
+
+def build_lod(lod, obj_name, mats, antlers=True):
+    parts = []
+    shell_v, shell_f = [], []  # 装甲板の投影先 (胴・首・脚の付け根)
+
+    def add_shell(bm):
+        bm.verts.index_update()
+        o = len(shell_v)
+        shell_v.extend(v.co.copy() for v in bm.verts)
+        shell_f.extend([o + v.index for v in f.verts] for f in bm.faces)
+
+    bm = bmesh.new()
+    build_body(bm, lod)
+    add_shell(bm)
+    parts.append(make_part(obj_name + "_body", bm, "body", lambda co: weights_for(co, body_cands(co)), mats))
+    bm = bmesh.new()
+    build_neck(bm, lod)
+    add_shell(bm)
+    parts.append(make_part(obj_name + "_neck", bm, "neck", [("chest", 0.6), ("neck1", 1), ("neck2", 1), ("head", 0.5)], mats))
+    bm = bmesh.new()
+    build_head(bm, lod)
+    bm.normal_update()
+    bvh_head = BVHTree.FromBMesh(bm)
+    parts.append(make_part(obj_name + "_head", bm, "head", head_weights, mats))
+    for side, s in ((-1, "L"), (1, "R")):
+        bm = bmesh.new()
+        EAR_FRONT[f"ear_{s}"] = build_ears(bm, lod, side)
+        parts.append(make_part(f"{obj_name}_ear_{s}", bm, f"ear_{s}", [(f"ear_{s}", 1.0), ("head", 0.25)], mats))
+        bm = bmesh.new()
+        build_eye(bm, bvh_head, lod, side)
+        if antlers:
+            build_antler(bm, lod, side)
+        parts.append(make_part(f"{obj_name}_headgear_{s}", bm, "rigid", lambda co: [("head", 1.0)], mats, recalc=False))
+        for pre in ("fl", "hl"):
+            name = f"{pre}_{s}"
+            bones = LEG_BONES[name]
+            parent = "chest" if pre == "fl" else "pelvis"
+            bm = bmesh.new()
+            build_leg(bm, lod, name)
+            add_shell(bm)
+            parts.append(make_part(f"{obj_name}_leg_{name}", bm, f"leg_{name}", [(b, 1.0) for b in bones] + [(parent, 0.5)], mats))
+            if lod["hoof"]:
+                bm = bmesh.new()
+                build_hoof(bm, lod, name)
+                parts.append(make_part(f"{obj_name}_hoof_{name}", bm, "rigid", lambda co, b=bones[3]: [(b, 1.0)], mats))
+    bvh = BVHTree.FromPolygons(shell_v, shell_f)
+    for side, s in ((-1, "L"), (1, "R")):
+        bm = bmesh.new()
+        for outline, glow in PLATES:
+            build_plate(bm, bvh, lod, outline, glow, side)
+        build_ribbon(bm, bvh, lod, BELLY_LINE, side)
+        build_ribbon(bm, bvh, lod, CHEST_V, side)
+        parts.append(make_part(f"{obj_name}_plates_{s}", bm, "plate", lambda co: weights_for(co, body_cands(co)), mats, recalc=False))
+    bm = bmesh.new()
+    build_tail(bm, lod)
+    parts.append(make_part(obj_name + "_tail", bm, "tail", [("tail1", 1), ("tail2", 1), ("pelvis", 0.3)], mats))
+
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
+    for o in parts:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
+    bpy.ops.object.join()
+    ob = bpy.context.active_object
+    ob.name = ob.data.name = obj_name
+    col = ob.data.color_attributes["Col"]
+    ob.data.color_attributes.active_color = col
+    ob.data.color_attributes.render_color_index = ob.data.color_attributes.active_color_index
+    return ob
+
+
+# ---------------------------------------------------------------- アーマチュア
+def build_rig():
+    arm = bpy.data.armatures.new("deer_rig")
+    rig = bpy.data.objects.new("deer_rig", arm)
+    bpy.context.scene.collection.objects.link(rig)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    for name, (h, t, par) in BONES.items():
+        eb = arm.edit_bones.new(name)
+        eb.head, eb.tail = h, t
+        d = (t - h).normalized()
+        eb.align_roll(X.cross(d))  # ローカル X = ワールド X (脚・背骨の曲げはローカル X 回り)
+        eb.use_deform = name != "root"
+    for name, (h, t, par) in BONES.items():
+        if par:
+            eb = arm.edit_bones[name]
+            eb.parent = arm.edit_bones[par]
+            eb.use_connect = (BONES[par][1] - h).length < 1e-4
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for pb in rig.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    bad = [b.name for b in arm.bones if b.x_axis.dot(X) < 0.9 and abs(b.head_local.x) < 0.05]
+    print("bones:", len(arm.bones), "x-axis off:", bad)
+    return rig
+
+
+# ---------------------------------------------------------------- アニメーション
+ORDER = []
+
+
+def bone_order(rig):
+    out = []
+
+    def walk(b):
+        out.append(b.name)
+        for c in b.children:
+            walk(c)
+    for b in rig.data.bones:
+        if b.parent is None:
+            walk(b)
+    return out
+
+
+def rest(rig, name):
+    return rig.data.bones[name].matrix_local
+
+
+def posed(rig, basis):
+    P = {}
+    for name in ORDER:
+        b = rig.data.bones[name]
+        M = basis.get(name, Matrix.Identity(4))
+        if b.parent:
+            P[name] = P[b.parent.name] @ (b.parent.matrix_local.inverted() @ b.matrix_local) @ M
+        else:
+            P[name] = b.matrix_local @ M
+    return P
+
+
+def ang(v):
+    return math.atan2(v[1], v[0])  # (y, z) 平面の角度 (ローカル X 回りの回転で増える向き)
+
+
+def yz(v):
+    return Vector((v.y, v.z))
+
+
+def solve_leg(rig, basis, leg, F, dth_c, dth_h, lift_ok=True):
+    """前後の脚 1 本の 2D IK。F: 球節の目標 (アーマチュア空間)。dth_c / dth_h: 管骨・蹄の rest からの角度差 (ワールド)"""
+    bones = LEG_BONES[leg]
+    parent = rig.data.bones[bones[0]].parent.name
+    P = posed(rig, basis)
+    T = P[parent] @ rest(rig, parent).inverted()
+    Ti = T.inverted()
+    Fr = Ti @ F
+    rot_par = ang(yz(T.to_3x3() @ Vector((0, 1, 0))))  # 親の回り込み (ピッチ)
+    j = [yz(joint(leg, i)) for i in range(5)]
+    th0 = [ang(j[i + 1] - j[i]) for i in range(4)]
+    L = [(j[i + 1] - j[i]).length for i in range(4)]
+    th_c = th0[2] + dth_c - rot_par
+    th_h = th0[3] + dth_h - rot_par
+    A = j[0]
+    C = yz(Fr) - Vector((math.cos(th_c), math.sin(th_c))) * L[2]
+    AC = C - A
+    d = max(abs(L[0] - L[1]) + 1e-4, min(L[0] + L[1] - 1e-4, AC.length))
+    phi = ang(AC)
+    beta = math.acos(max(-1, min(1, (L[0] ** 2 + d * d - L[1] ** 2) / (2 * L[0] * d))))
+    rest_sign = (j[2] - j[0]).x * (j[1] - j[0]).y - (j[2] - j[0]).y * (j[1] - j[0]).x
+    best = None
+    for sg in (1, -1):
+        J = A + Vector((math.cos(phi + sg * beta), math.sin(phi + sg * beta))) * L[0]
+        cr = AC.x * (J - A).y - AC.y * (J - A).x
+        if (cr > 0) == (rest_sign > 0):
+            best = J
+    Cn = A + AC.normalized() * d
+    th = [ang(best - A), ang(Cn - best), th_c, th_h]
+    acc = 0.0
+    for i, bn in enumerate(bones):
+        delta = th[i] - th0[i] - acc
+        acc += delta
+        basis[bn] = Matrix.Rotation(delta, 4, "X")
+
+
+# 符号: どの骨もローカル X = ワールド X なので、ex > 0 は「骨の向きを前・下へ倒す」。
+# 首 (上向きの骨) は前へ倒れ、頭・背骨 (前向きの骨) は先が下がる。ez は首の横曲げ、ey は頭の横倒し (ロール)
+def rot_basis(ex=0.0, ey=0.0, ez=0.0):
+    return Euler((ex, ey, ez), "XYZ").to_matrix().to_4x4()
+
+
+def pelvis_basis(rig, dloc=None, wrot=None, local=None):
+    """骨盤をワールドで dloc 動かし、wrot (ワールドの回転、骨盤の頭が中心) と local (ローカル回転) を掛ける"""
+    R = rest(rig, "pelvis")
+    h = R.translation
+    W = Matrix.Translation(h + (dloc if dloc is not None else Vector())) @ (wrot.to_matrix().to_4x4() if wrot else Matrix.Identity(4)) @ Matrix.Translation(-h)
+    return R.inverted() @ W @ R @ (local or Matrix.Identity(4))
+
+
+D = math.radians
+
+
+def leg_rest_F(leg):
+    return joint(leg, 3).copy()
+
+
+def gait(leg, u, off, duty, stride, lift, flex, curl, reach=0.0):
+    """立脚 (u' < duty) は蹄を地面に固定して後ろへ、遊脚は持ち上げて前へ戻す。戻り値 (F, 管骨の角度差, 蹄の角度差)"""
+    F0 = leg_rest_F(leg)
+    up = (u - off) % 1.0
+    front = leg.startswith("fl")
+    hip = joint(leg, 0)
+    if up < duty:
+        s = up / duty
+        y = F0.y - stride / 2 - reach + (stride + reach) * s
+        z = F0.z
+        fl = 0.0
+        cu = 0.0
+    else:
+        s = (up - duty) / (1 - duty)
+        e = s * s * (3 - 2 * s)
+        y = F0.y + stride / 2 - (stride + reach) * e
+        z = F0.z + lift * math.sin(math.pi * s) ** 0.8
+        fl = flex * math.sin(math.pi * min(1.0, s * 1.15))
+        cu = curl * math.sin(math.pi * s)
+    alpha = math.atan2(y - hip.y, hip.z - z) - math.atan2(F0.y - hip.y, hip.z - F0.z)
+    dth_c = alpha + (fl if front else -fl)
+    # 蹄: 立脚中は地面に平ら (rest の角度)。遊脚では管骨に付いて回り、さらに巻き込む。両端で立脚の角度に戻る
+    dth_h = dth_c * math.sin(math.pi * s) + cu if up >= duty else 0.0
+    return Vector((F0.x, y, z)), dth_c, dth_h
+
+
+def planted(leg, dy=0.0):
+    F = leg_rest_F(leg)
+    F.y += dy
+    return F, 0.0, 0.0
+
+
+def pose_idle(rig, t):
+    T = 4.0
+    ph = 2 * math.pi * t / T
+    b = {}
+    breath = math.sin(2 * ph)
+    b["pelvis"] = pelvis_basis(rig, Vector((0, 0, -0.006 + 0.006 * breath)))
+    b["spine1"] = rot_basis(D(0.6) * breath)
+    b["chest"] = rot_basis(-D(0.8) * breath)
+    look = math.sin(ph)
+    b["neck1"] = rot_basis(D(1.5) * math.sin(2 * ph), D(4) * look)
+    b["neck2"] = rot_basis(D(-1.0) * math.sin(2 * ph), D(4) * look)
+    b["head"] = rot_basis(D(2) * math.sin(ph + 1.0), 0, D(-5) * look)
+
+    def flick(t0, dur=0.35):
+        x = (t - t0) / dur
+        return math.sin(math.pi * x) ** 2 if 0 <= x <= 1 else 0.0
+    b["ear_L"] = rot_basis(D(-25) * flick(1.0), 0, D(20) * flick(1.0))
+    b["ear_R"] = rot_basis(D(-25) * flick(2.7), 0, D(-20) * flick(2.7))
+    tf = flick(2.0, 0.5) - 0.6 * flick(2.3, 0.4)
+    b["tail1"] = rot_basis(D(20) * tf, 0, D(15) * tf)
+    b["tail2"] = rot_basis(D(15) * tf)
+    for leg in LEG_BONES:
+        solve_leg(rig, b, leg, *planted(leg))
+    return b
+
+
+def pose_walk(rig, t):
+    T = 1.2
+    u = t / T
+    ph = 2 * math.pi * u
+    b = {}
+    b["pelvis"] = pelvis_basis(rig, Vector((0, 0, -0.012 + 0.012 * math.cos(2 * ph))), local=rot_basis(D(1.2) * math.sin(2 * ph)))
+    b["spine1"] = rot_basis(-D(0.8) * math.sin(2 * ph))
+    b["chest"] = rot_basis(0, D(1.5) * math.sin(ph))
+    b["neck1"] = rot_basis(D(3) * math.sin(2 * ph + 0.8))
+    b["neck2"] = rot_basis(D(-2) * math.sin(2 * ph + 0.8))
+    b["head"] = rot_basis(D(-2) * math.sin(2 * ph + 1.2))
+    b["tail1"] = rot_basis(D(6), 0, D(8) * math.sin(ph))
+    b["tail2"] = rot_basis(D(4) * math.sin(2 * ph))
+    b["ear_L"] = rot_basis(D(-4) * math.sin(2 * ph))
+    b["ear_R"] = rot_basis(D(-4) * math.sin(2 * ph + 0.5))
+    offs = {"hl_L": 0.0, "fl_L": 0.25, "hl_R": 0.5, "fl_R": 0.75}
+    for leg, o in offs.items():
+        front = leg.startswith("fl")
+        solve_leg(rig, b, leg, *gait(leg, u, o, 0.64, 0.50, 0.10 if front else 0.08, D(62) if front else D(28), D(35)))
+    return b
+
+
+def pose_run(rig, t):
+    T = 0.6
+    u = t / T
+    ph = 2 * math.pi * u
+    b = {}
+    # 回転ギャロップ: 右後 → 左後 → 右前 → 左前、その後に宙に浮く
+    b["pelvis"] = pelvis_basis(rig, Vector((0, 0, -0.03 + 0.05 * math.sin(ph - 0.6))), local=rot_basis(D(7) * math.sin(ph + 0.3)))
+    b["spine1"] = rot_basis(-D(6) * math.sin(ph + 0.3))
+    b["chest"] = rot_basis(-D(3) * math.sin(ph + 0.8))
+    b["neck1"] = rot_basis(D(16) + D(8) * math.sin(ph + 1.6))
+    b["neck2"] = rot_basis(D(6) + D(5) * math.sin(ph + 1.9))
+    b["head"] = rot_basis(-D(16) - D(6) * math.sin(ph + 2.1))
+    b["ear_L"] = rot_basis(D(30), 0, D(-18))
+    b["ear_R"] = rot_basis(D(30), 0, D(18))
+    b["tail1"] = rot_basis(D(25) + D(10) * math.sin(ph))
+    b["tail2"] = rot_basis(D(15) * math.sin(ph + 0.5))
+    offs = {"hl_R": 0.0, "hl_L": 0.1, "fl_R": 0.36, "fl_L": 0.46}
+    for leg, o in offs.items():
+        front = leg.startswith("fl")
+        solve_leg(rig, b, leg, *gait(leg, u, o, 0.36, 0.78, 0.26 if front else 0.2, D(105) if front else D(55), D(45), reach=0.0))
+    return b
+
+
+def ease(a, b, t):
+    return smoothstep(a, b, t)
+
+
+def pose_graze(rig, t):
+    # 0-1.2 s 頭を下げる、1.2-3.8 s 食む (顎を 3 回/秒)、3.8-5 s 上げる
+    down = ease(0.0, 1.2, t) * (1 - ease(3.8, 5.0, t))
+    chew = ease(1.2, 1.5, t) * (1 - ease(3.5, 3.8, t))
+    b = {}
+    # 胸を 10° 前へ下げ、首の付け根で 115°・中ほどで 30° 倒し、頭は -60° 起こして鼻先を地面へ (鼻先の高さ ~0.1 m)
+    b["pelvis"] = pelvis_basis(rig, Vector((0, 0, -0.03 * down)), local=rot_basis(D(2) * down))
+    b["spine1"] = rot_basis(D(3) * down)
+    b["chest"] = rot_basis(D(5) * down)
+    nod = math.sin(2 * math.pi * 1.5 * t) * chew
+    b["neck1"] = rot_basis(D(115) * down, D(3) * math.sin(2 * math.pi * t / 5 * 2) * down)
+    b["neck2"] = rot_basis(D(30) * down - D(2) * nod)
+    b["head"] = rot_basis(-D(60) * down + D(3) * nod)
+    b["jaw"] = rot_basis(D(7) * max(0.0, math.sin(2 * math.pi * 3 * t)) * chew)
+    fl = math.sin(math.pi * max(0.0, min(1.0, (t - 2.4) / 0.35))) ** 2
+    b["ear_L"] = rot_basis(D(-15) * down, 0, D(12) * down + D(15) * fl)
+    b["ear_R"] = rot_basis(D(-15) * down, 0, D(-12) * down)
+    b["tail1"] = rot_basis(D(5) * math.sin(2 * math.pi * t / 2.5))
+    for leg in LEG_BONES:
+        solve_leg(rig, b, leg, *planted(leg))
+    return b
+
+
+def pose_fall(rig, t):
+    # 0-0.6 s 前膝が折れて胸が落ちる、0.5-1.4 s 横倒し、1.3-2 s 頭が地に落ちて静まる
+    k1 = ease(0.0, 0.6, t)
+    k2 = ease(0.45, 1.4, t)
+    k3 = ease(1.2, 2.0, t)
+    b = {}
+    roll = Quaternion(Vector((0, 1, 0)), D(88) * k2)  # +Y 軸回り (体の右側を下に)
+    drop = Vector((0.0, 0.0, -0.2 * k1 - 0.68 * k2)) + Vector((0.2, 0, 0)) * k2
+    b["pelvis"] = pelvis_basis(rig, drop, wrot=roll, local=rot_basis(D(12) * k1 * (1 - k2) - D(3) * k2))
+    b["spine1"] = rot_basis(D(4) * k1, 0, 0)
+    b["chest"] = rot_basis(D(6) * k1 * (1 - k2))
+    # 横倒しの後は首を地面側 (体の右 = ローカル -Z 回り) へ曲げ、頭は起こし気味にロールして角が地面に刺さらないようにする
+    b["neck1"] = rot_basis(D(25) * k1 - D(5) * k2, 0, -D(28) * k3)
+    b["neck2"] = rot_basis(D(10) * k1 + D(10) * k3, 0, -D(22) * k3)
+    b["head"] = rot_basis(-D(10) * k1 - D(15) * k3, D(70) * k3, 0)
+    b["jaw"] = rot_basis(D(4) * k3)
+    b["ear_L"] = rot_basis(D(20) * k3, 0, D(-15) * k3)
+    b["ear_R"] = rot_basis(D(20) * k3, 0, D(15) * k3)
+    b["tail1"] = rot_basis(-D(15) * k3)
+    fold_f = [D(25), -D(70), D(95), D(40)]   # 前脚: 肘・手首を折る
+    fold_h = [-D(30), D(55), -D(60), D(40)]  # 後脚
+    relax_f = [D(35), -D(25), D(30), D(25)]  # 横倒し後: 軽く曲げて投げ出す
+    relax_h = [-D(40), D(20), -D(25), D(25)]
+    for leg, bones in LEG_BONES.items():
+        front = leg.startswith("fl")
+        fold, relax = (fold_f, relax_f) if front else (fold_h, relax_h)
+        kk = k1 if front else ease(0.2, 0.8, t)
+        for i, bn in enumerate(bones):
+            a = fold[i] * kk * (1 - k2) + relax[i] * k2
+            b[bn] = Matrix.Rotation(a, 4, "X")
+    return b
+
+
+ACTIONS = [("idle", 4.0, pose_idle, True), ("walk", 1.2, pose_walk, True), ("run", 0.6, pose_run, True),
+           ("graze", 5.0, pose_graze, True), ("fall", 2.0, pose_fall, False)]
+
+
+def bake_actions(rig):
+    global ORDER
+    ORDER = bone_order(rig)
+    rig.animation_data_create()
+    acts = []
+    for name, dur, fn, loop in ACTIONS:
+        act = bpy.data.actions.new(name)
+        act.use_fake_user = True
+        rig.animation_data.action = act
+        nf = round(dur * FPS)
+        last = {}
+        for f in range(nf + 1):
+            t = f / FPS
+            basis = fn(rig, t if (f < nf or not loop) else 0.0)  # ループはの最後のフレームを最初と同じにする
+            for bn in ORDER:
+                pb = rig.pose.bones[bn]
+                M = basis.get(bn, Matrix.Identity(4))
+                loc, q, _ = M.decompose()
+                if bn in last and last[bn].dot(q) < 0:
+                    q.negate()
+                last[bn] = q
+                pb.location = loc
+                pb.rotation_quaternion = q
+                pb.keyframe_insert("location", frame=f, group=bn)
+                pb.keyframe_insert("rotation_quaternion", frame=f, group=bn)
+        act.use_frame_range = True
+        act.frame_start, act.frame_end = 0, nf
+        act.use_cyclic = loop
+        acts.append(act)
+        print(f"action {name}: {nf} frames ({dur} s){' loop' if loop else ''}")
+    rig.animation_data.action = None
+    for act in acts:
+        tr = rig.animation_data.nla_tracks.new()
+        tr.name = act.name
+        st = tr.strips.new(act.name, 0, act)
+        st.name = act.name
+        tr.mute = True
+    for pb in rig.pose.bones:
+        pb.location = (0, 0, 0)
+        pb.rotation_quaternion = (1, 0, 0, 0)
+    return acts
+
+
+# ---------------------------------------------------------------- 本体
+def main():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.context.scene
+    scene.render.fps = FPS
+    scene.frame_start, scene.frame_end = 0, 150
+    os.makedirs(OUT_DIR, exist_ok=True)
+    mats = make_materials()
+    rig = build_rig()
+    meshes = [build_lod(HERO, "deer", mats), build_lod(LOD1, "deer_lod1", mats), build_lod(HERO, "deer_doe", mats, antlers=False)]
+    for ob in meshes:
+        # アーマチュアの子にしない (glTF ではスキンのメッシュをルートに置く。親の変換はスキンに効かないため)
+        mod = ob.modifiers.new("Armature", "ARMATURE")
+        mod.object = rig
+        tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
+        print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
+    bake_actions(rig)
+    scene.frame_set(0)
+    for o in scene.objects:
+        o.select_set(True)
+    blend = os.path.abspath(os.path.join(OUT_DIR, "deer.blend"))
+    glb = os.path.abspath(os.path.join(OUT_DIR, "deer.glb"))
+    bpy.ops.wm.save_as_mainfile(filepath=blend)
+    bpy.ops.export_scene.gltf(filepath=glb, export_format="GLB", use_selection=False, export_animation_mode="ACTIONS",
+                              export_force_sampling=True, export_frame_step=1, export_skins=True, export_influence_nb=4,
+                              export_vertex_color="ACTIVE", export_yup=True, export_apply=False, export_def_bones=False,
+                              export_optimize_animation_size=True, export_anim_slide_to_zero=True, export_rest_position_armature=True)
+    print("saved", blend)
+    print("saved", glb)
+
+
+main()
