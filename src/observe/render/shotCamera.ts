@@ -1,4 +1,4 @@
-import { Raycaster, Vector3, type Object3D, type PerspectiveCamera } from 'three';
+import { Raycaster, Vector2, Vector3, type Object3D, type PerspectiveCamera } from 'three';
 import type { Agent } from '../agents';
 import type { Point } from '../area';
 import type { Shot, ShotKind } from '../director';
@@ -43,6 +43,33 @@ export type ShotCamera = {
   target(): Vector3;
 };
 
+const AROUND = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, -1, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)];
+
+/** カメラの位置が樹冠の中か (6 方向 2.5 m 以内に木が 3 方向以上ある)。樹冠を房に分けたので、狙いとの見通しだけでは樹冠の中に入ることがある */
+export function inFoliage(at: Vector3, blockers: Object3D[]): boolean {
+  let n = 0;
+  for (const d of AROUND) if (new Raycaster(at, d, 0, 2.5).intersectObjects(blockers, true).length > 0) n++;
+  return n >= 3;
+}
+
+const GRID = [-0.5, 0, 0.5].flatMap((x) => [-0.5, 0, 0.5].map((y) => new Vector2(x, y)));
+
+/**
+ * 画の手前 NEAR_M 以内を木が塞いでいるか。画面の 3 × 3 の点から光線を出し、3 本以上が近くの木に当たれば塞がれている
+ * (狙いとの見通しが樹冠の隙間を抜けても、手前の木が画を覆うことがあるため)。camera は位置と向きを決めてから渡す
+ */
+export function frameBlocked(camera: PerspectiveCamera, blockers: Object3D[], nearM = 10): boolean {
+  camera.updateMatrixWorld();
+  const rc = new Raycaster();
+  rc.far = nearM;
+  let n = 0;
+  for (const p of GRID) {
+    rc.setFromCamera(p, camera);
+    if (rc.intersectObjects(blockers, true).length > 0) n++;
+  }
+  return n >= 3;
+}
+
 export function createShotCamera(camera: PerspectiveCamera, heightAt: (x: number, z: number) => number, blockers: () => Object3D[], maxR: number, rng: () => number): ShotCamera {
   let shot: Shot | null = null;
   let frame: Frame = FRAMES.settlementHigh;
@@ -77,7 +104,16 @@ export function createShotCamera(camera: PerspectiveCamera, heightAt: (x: number
     place(p, y, 0, want);
     const to = want.clone().sub(from);
     const len = to.length();
-    return new Raycaster(from, to.normalize(), 0, len).intersectObjects(blockers(), true).length === 0;
+    if (new Raycaster(from, to.normalize(), 0, len).intersectObjects(blockers(), true).length > 0 || inFoliage(want, blockers())) return false;
+    // 手前の木が画を覆わないか、実際の向きで確かめる
+    const keep = camera.position.clone();
+    const keepQ = camera.quaternion.clone();
+    camera.position.copy(want);
+    camera.lookAt(from);
+    const blocked = frameBlocked(camera, blockers());
+    camera.position.copy(keep);
+    camera.quaternion.copy(keepQ);
+    return !blocked;
   };
   return {
     start(s, agents) {

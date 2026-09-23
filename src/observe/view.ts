@@ -35,7 +35,7 @@ import { instanceProps, lodProps, type LodProps } from './render/instancer';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
-import { createShotCamera } from './render/shotCamera';
+import { createShotCamera, frameBlocked, inFoliage } from './render/shotCamera';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
@@ -478,7 +478,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       camera.position.set(cx, Math.max(ty + height, field.heightAt(cx, cz) + 1.6), cz);
       const to = camera.position.clone().sub(controls.target);
       const len = to.length();
-      return { to: to.normalize(), hit: new Raycaster(controls.target.clone(), to, 0, len).intersectObjects(blockers, true)[0] };
+      const hit = new Raycaster(controls.target.clone(), to.clone().normalize(), 0, len).intersectObjects(blockers, true)[0];
+      // (M22-07 の樹冠の隙間で、見通しは通っても樹冠の中に入ることがあるので、カメラの周りも見る)
+      camera.lookAt(controls.target);
+      const near = inFoliage(camera.position, blockers) || frameBlocked(camera, blockers);
+      return { to: to.normalize(), hit: hit ?? (near ? { distance: len * 0.6 } : undefined) };
     };
     for (const dy of [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4]) if (!place(yaw + dy).hit) return;
     const { to, hit } = place(yaw);
