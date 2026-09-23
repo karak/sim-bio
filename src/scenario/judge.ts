@@ -150,7 +150,8 @@ export function evaluate(c: Condition, input: JudgeInput): { ok: boolean; why: s
     }
     // 夢喰い (M10R-03): 今、集落に現れているか。「祈りに応えるな」の dead に使うので、why は成り立ったとき「夢喰いに食われた」
     case 'dream_eater': {
-      const present = s.dreamEater !== null;
+      // != null: 古いスナップショット (dreamEater 欠落) を「いる」と読まない (M10R レビュー)
+      const present = s.dreamEater != null;
       return { ok: present, why: present ? '夢喰いに食われた' : '夢喰いはいない' };
     }
     case 'civ_vitality': {

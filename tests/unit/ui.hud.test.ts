@@ -88,6 +88,10 @@ describe('formatShipHint: #hud-ship の説明文 (M10-03)', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.9 };
     expect(formatShipHint(civ, { startedYear: 0, progress: 4.25 })).toBe(`舟 進み 4.3 / ${SHIP_NEED}`);
   });
+  it('段階が帆に満たなければ「帆を失い止まっている」を添える (M10R-05)', () => {
+    const civ: CivState = { speciesId: 'deer', stage: 4, progress: 0, home: 0, population: 1, faith: 0.9 };
+    expect(formatShipHint(civ, { startedYear: 0, progress: 40 })).toBe(`舟 進み 40.0 / ${SHIP_NEED} · 帆を失い止まっている(段階 4 < 5)`);
+  });
   it('完成しても信仰が SHIP_FAITH 未満なら「· 民は乗らない(信仰 0.XX)」を添える。毎年再判定なので進みも出す', () => {
     const civ: CivState = { speciesId: 'deer', stage: 5, progress: 0, home: 0, population: 1, faith: 0.3 };
     expect(formatShipHint(civ, { startedYear: 0, progress: SHIP_NEED })).toBe(`舟 進み ${SHIP_NEED.toFixed(1)} / ${SHIP_NEED} · 民は乗らない(信仰 0.30)`);

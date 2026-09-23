@@ -9,6 +9,8 @@ import { resolveCivilizationStart } from '../../src/simulation/civilization';
 import { forEachInRadius } from '../../src/simulation/disaster';
 import { suitability } from '../../src/simulation/vegetation';
 import { INTERCEPT_NEED } from '../../src/simulation/works';
+import { LOAD_RADIUS } from '../../src/simulation/civilizationLoad';
+import { timberAround, SHIP_FOREST_MIN } from '../../src/simulation/ship';
 
 /**
  * 5 本のシナリオを「放置」と「台本どおりの介入」で回し、
@@ -378,6 +380,12 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
     const c = s.civ!;
     if (c.stage === 7 && !c.miningStopped && (c.works?.stock ?? 0) >= need && (c.faith ?? 0) >= 0.6) r.intervene({ type: 'civ_edict', edict: 'stop_mining' });
   };
+  /** 塔で星の門 (群れ・信仰) が閉じている間は「止めよ」、開いたら「再開せよ」 */
+  const edictLoop = (): Script => { let stopped = false; return (r, s) => {
+    const c = s.civ!;
+    if (c.stage === 6 && !stopped && (c.faith ?? 0) >= 0.6 && ((c.populationStar ?? 0) < 4.5 || (c.faith ?? 0) < 0.8)) { r.intervene({ type: 'civ_edict', edict: 'stop_mining' }); stopped = true; }
+    if (stopped && (c.populationStar ?? 0) >= 4.5 && (c.faith ?? 0) >= 0.8) { r.intervene({ type: 'civ_edict', edict: 'resume_mining' }); stopped = false; }
+  }; };
   /** 祈りにだけ応える (儀式はしない): 狼には疫病、雨には草 */
   const answerOnly: Script = (r, s) => {
     const p = s.civ?.prayer;
@@ -409,6 +417,11 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
     expect(v.status).toBe('alive');
     expect(v.reason).toContain('星を 3 回砕いた');
   });
+  it('solution 3: late ritual + edict loop + stop at three loads (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → alive', () => {
+    const v = playTower(def, seq(ritualFrom(20), edictLoop(), stopAtStock(9), fire));
+    expect(v.status, v.reason).toBe('alive');
+    expect(v.reason).toContain('星を 3 回砕いた');
+  });
 });
 
 /**
@@ -422,6 +435,9 @@ describe('sky-ship scenario playthroughs (size 64)', { timeout: 900_000 }, () =>
   /** 集落の周りに同じ種を every 年ごとに放つ (儀式を兼ねる) */
   const ring = (id: string, radius: number, amount: number, every: number): Script => (r, s, y) => { if (y % every === 0) r.intervene({ type: 'spawn_species', speciesId: id, cell: s.civ!.home, amount, radius }); };
   const launchAt = (y0: number): Script => (r, _s, y) => { if (y === y0) r.intervene({ type: 'launch_ship' }); };
+  const timber = (s: WorldSnapshot) => timberAround({ forest: s.layers.populations.forest, belltree: s.layers.populations.belltree }, s.civ!.home, LOAD_RADIUS[Math.max(1, s.civ!.stage)], s.layers.elevation, SIZE);
+  /** 材と信仰が門を越えたら着工 */
+  const launchWhenReady: Script = (r, s) => { if (!s.ship && timber(s) >= SHIP_FOREST_MIN && (s.civ?.faith ?? 0) >= 0.5) r.intervene({ type: 'launch_ship' }); };
   const seq = (...fs: Script[]): Script => (r, s, y) => { for (const f of fs) f(r, s, y); };
   it('idle → dead (蓄えが無く帆が三年で落ち、舟は作れない)', () => {
     const v = playTower(def, null);
@@ -430,6 +446,10 @@ describe('sky-ship scenario playthroughs (size 64)', { timeout: 900_000 }, () =>
   it('naive thin planting (鐘樹の環 3 を 2 年ごと、30 年目に着工) → dead (舟が先に伐って塔が飢え、帆を失って舟が止まる)', () => {
     const v = playTower(def, seq(ring('belltree', 3, 0.5, 2), launchAt(30)));
     expect(v.status).toBe('dead');
+  });
+  it('naive rush (鐘樹の環 3 を 2 年ごと、材と信仰が門を越えた年に着工) → dead (塔を養う前に伐り始めて帆を失う)', () => {
+    const v = playTower(def, seq(ring('belltree', 3, 0.5, 2), launchWhenReady));
+    expect(v.status, v.reason).toBe('dead');
   });
   it('naive tiny ring (環 2 を毎年) → dead (燃料が足りず帆に戻れない)', () => {
     const v = playTower(def, seq(ring('belltree', 2, 0.5, 1), launchAt(40)));

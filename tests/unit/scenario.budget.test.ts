@@ -364,6 +364,16 @@ describe('文明の年表 (civ_faith_cap = 民の記憶, M10R-02)', () => {
     ]);
   });
 
+  it('無視 1 回分のちょうど 0.1 (二進小数では 0.0999…) でも積む (M10R レビュー: 1.0 → 0.9 で「民は忘れない」が出なかった)', () => {
+    const w = fakeWorld({ civStage: 4, civFaithCap: 1 });
+    const r = createScenarioRunner(base, w);
+    r.update(w.snapshot());
+    w.step(360);
+    w.setCivFaithCap(0.9);
+    r.update(w.snapshot());
+    expect(r.timeline().filter((e) => e.kind === 'civ_faith_cap')).toEqual([{ year: 1, kind: 'civ_faith_cap', from: 1, to: 0.9 }]);
+  });
+
   it('|Δ| < 0.1 なら積まない (祈りの無い年の +0.01 回復など)', () => {
     const w = fakeWorld({ civStage: 4, civFaithCap: 0.9 });
     const r = createScenarioRunner(base, w);

@@ -140,7 +140,7 @@ export function createScenarioRunner(
   /** 直近に見た信仰の上限。文明が無い・stage 0 のあいだは null (M10R-02) */
   let lastCivFaithCap: number | null = first.civ?.faithCap ?? null;
   /** 直近に見た夢喰いの有無 (M10R-03)。snapshot.dreamEater は World が年に一度更新するだけなので、ここでは有無の flip を見るだけでよい */
-  let lastDreamEater = first.dreamEater !== null;
+  let lastDreamEater = first.dreamEater != null;
   /** 祈り (M9-02): 直近の年次評価で報告済みの issuedYear。同じ祈りを二重に issued 扱いしないための目印 */
   let lastPrayerIssuedYear: number | null = first.civ?.prayer?.issuedYear ?? null;
   /** 祈り (M9-02): 直近に見た祈りの種類。解決 (answered/ignored) された時点では civ.prayer が消えているので、
@@ -167,7 +167,9 @@ export function createScenarioRunner(
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
       if (cancelled.has(idx)) continue;
-      const last = sc.untilYear ?? sc.atYear;
+      // M10R レビュー: everyYears があって untilYear が無ければ予言の年まで繰り返す (以前は 1 回しか撃たず、
+      // 祈りに応えるなの「十二年ごとの狼」が 6 年目の 1 回だけになっていた)
+      const last = sc.untilYear ?? (sc.everyYears ? def.years : sc.atYear);
       for (let y = sc.atYear; y <= Math.min(year, last); y += sc.everyYears ?? Number.POSITIVE_INFINITY) {
         const key = `${idx}@${y}`;
         if (fired.has(key)) continue;
@@ -376,12 +378,13 @@ export function createScenarioRunner(
         if (civFaith !== undefined) lastCivFaith = civFaith;
         // 信仰の上限 (民の記憶、M10R-02): civ_faith と同じ閾値・同じ扱い (発生前は積まない)
         const civFaithCap = s.civ?.faithCap;
-        if (civFaithCap !== undefined && lastCivFaithCap !== null && Math.abs(civFaithCap - lastCivFaithCap) >= FAITH_TIMELINE_THRESHOLD) {
+        // M10R レビュー: 上限は無視 1 回でちょうど 0.1 動くが、二進小数では 0.0999… になり >= 0.1 を落とす。1e-9 の余裕を取る
+        if (civFaithCap !== undefined && lastCivFaithCap !== null && Math.abs(civFaithCap - lastCivFaithCap) >= FAITH_TIMELINE_THRESHOLD - 1e-9) {
           timeline.push({ year, kind: 'civ_faith_cap', from: lastCivFaithCap, to: civFaithCap });
         }
         if (civFaithCap !== undefined) lastCivFaithCap = civFaithCap;
         // 夢喰い (M10R-03): snapshot.dreamEater の有無が前年と変わっていれば現れた/去ったを年表に積む
-        const dreamEaterNow = s.dreamEater !== null;
+        const dreamEaterNow = s.dreamEater != null;
         if (dreamEaterNow !== lastDreamEater) {
           timeline.push({ year, kind: 'dream_eater', phase: dreamEaterNow ? 'appeared' : 'left', faithCap: s.civ?.faithCap ?? 0 });
           lastDreamEater = dreamEaterNow;

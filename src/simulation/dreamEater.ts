@@ -4,9 +4,7 @@
  * レベルデザイン docs/design/2026-09-22-level-design-faith-economy.md §3.3。World には依存しない純粋関数群。
  * 係数はすべてこのファイルの定数にまとめ、校正はここだけを触れば済むようにする (unrest.ts / works.ts と同じ流儀)。
  */
-import { forEachInRadius } from './disaster';
-import { SEA_LEVEL } from './terrain';
-import { SUPPORT_RADIUS } from './civilization';
+import { scalePopulationAround } from './unrest';
 
 /** 出現: 信仰の上限 (faithCap) がこれ未満 */
 export const DREAM_CAP = 0.3;
@@ -42,8 +40,5 @@ export function stepDreamEater(
 
 /** 出現中: home の支え半径内の陸セルにいるその種の密度を (1 − DREAM_EAT) 倍にする (配列をその場で書き換える。applyUnrest と同じ流儀) */
 export function applyDreamEater(pops: Float32Array, home: number, elevation: Float32Array, size: number): void {
-  if (home < 0) return;
-  forEachInRadius(home, SUPPORT_RADIUS, size, (i) => {
-    if (elevation[i] >= SEA_LEVEL) pops[i] *= 1 - DREAM_EAT;
-  });
+  scalePopulationAround(pops, home, 1 - DREAM_EAT, elevation, size);
 }

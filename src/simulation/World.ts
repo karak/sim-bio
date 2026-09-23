@@ -16,7 +16,7 @@ import { applyUnrest, stepUnrest, UNREST_FAITH_AFTER } from './unrest';
 import { applyDreamEater, stepDreamEater, type DreamEaterState } from './dreamEater';
 import { applyIntercept, canIntercept, stepWorks } from './works';
 import { applyEdict } from './edict';
-import { aliveSpeciesCount, canLaunchShip, shipCrew, shipDone, stepShip, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_STAGE, type ShipState } from './ship';
+import { aliveSpeciesCount, canLaunchShip, shipDone, stepShip, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_STAGE, type ShipState } from './ship';
 import {
   canBuildTower,
   takeCrystal,
@@ -109,6 +109,10 @@ export class World {
    * 無視/取り下げ直後に (year >= 解決した年 + 0 が真のまま) 同じ年のうちに次の祈りが出てしまう
    */
   private civPrayerCooldownUntil = -Infinity;
+  /** 祈りが解決 (応え・取り下げ・無視) した年に呼ぶ。次の祈りは翌年から (M10R レビュー: 3 か所にあった +1 を一本化) */
+  private markPrayerResolved(year: number): void {
+    this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN + 1;
+  }
   /** 祈りの基準 (M9-03): 年ごとの草の密度平均と捕食者比、直近 PRAYER_BASELINE_YEARS 年・古い順。セーブには含めない (restore 後は数え直す) */
   private civPrayerHistory: { grassMean: number; predatorRatio: number }[] = [];
   /** 内乱 (M9-03): 信仰が UNREST_FAITH 未満の年の連続数。セーブには含めない (restore 直後は数え直す) */
@@ -298,7 +302,7 @@ export class World {
         this.civ.prayersAnswered = (this.civ.prayersAnswered ?? 0) + 1;
         this.civYearAnswered++;
         // M10R-02: +1 で「応えた年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
-        this.civPrayerCooldownUntil = Math.floor(this.tick / this.config.ticksPerYear) + PRAYER_COOLDOWN + 1;
+        this.markPrayerResolved(Math.floor(this.tick / this.config.ticksPerYear));
         this.log('info', 'sim.civ.prayer', { year: Math.floor(this.tick / this.config.ticksPerYear), phase: 'answered', kind });
       }
     }
@@ -501,7 +505,8 @@ export class World {
     civ.populationStar = populationFor(MAX_STAGE, this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
     // 乗せる民 (M10R-04): 舟に乗る民の量。populationFor は段階 帆 (< MAX_STAGE) では populationAround と同じ
     // (SUPPORT_RADIUS) を返すので civ.population と同値になるが、SHIP_CREW の門は「舟の語彙」で読めるよう別名で持つ
-    civ.populationShip = shipCrew(this.populations[civ.speciesId], civ.home, this.elevation, this.config.size);
+    // M10R レビュー: populationFor(帆) は支え半径 8 の平均で population と同じ値なので、走査を重ねず写す (shipCrew は純粋関数として残す)
+    civ.populationShip = civ.population;
     const year = Math.floor(this.tick / this.config.ticksPerYear);
     // 祈り (M9-02): 発生済み (stage >= 1、この年に発生した場合も含む) のときだけ扱う
     if (civ.stage >= 1) {
@@ -546,7 +551,7 @@ export class World {
         civ.prayer = undefined;
         civ.prayersWithdrawn = (civ.prayersWithdrawn ?? 0) + 1;
         // M10R-02: +1 で「取り下げた年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
-        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN + 1;
+        this.markPrayerResolved(year);
         this.log('info', 'sim.civ.prayer', { year, phase: 'withdrawn', kind });
       }
       if (civ.prayer && year >= civ.prayer.deadlineYear) {
@@ -555,7 +560,7 @@ export class World {
         civ.prayersIgnored = (civ.prayersIgnored ?? 0) + 1;
         this.civYearIgnored++;
         // M10R-02: +1 で「無視した年の翌年から」にする (civPrayerCooldownUntil のコメント参照)
-        this.civPrayerCooldownUntil = year + PRAYER_COOLDOWN + 1;
+        this.markPrayerResolved(year);
         this.log('info', 'sim.civ.prayer', { year, phase: 'ignored', kind });
       }
       if (!civ.prayer && year >= this.civPrayerCooldownUntil) {
@@ -606,6 +611,7 @@ export class World {
         civ.stage -= 1;
         civ.progress = 0;
         // 上限が下がっていれば、内乱の戻り (M10R-02: min(0.4, 上限)。民は上限より上へは戻らない)
+        // 上限が UNREST_FAITH (0.3) を切っていれば内乱は 3 年ごとに連鎖する。夢喰い (上限 < 0.3) が出る局面で、意図した滅びの螺旋 (M10R レビュー)
         civ.faith = Math.min(UNREST_FAITH_AFTER, civ.faithCap);
         this.log('info', 'sim.civ.unrest', { year, from: before, to: civ.stage });
         this.log('info', 'sim.civ.stage', { from: before, to: civ.stage, reason: 'unrest', year });

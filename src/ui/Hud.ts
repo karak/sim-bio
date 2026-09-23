@@ -10,7 +10,7 @@ import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
 import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
-import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState } from '../simulation/ship';
+import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import './hud.css';
 
@@ -53,6 +53,8 @@ export function formatCiv(civ: CivState | null, dreamEater = false): string | nu
 export function formatShipHint(civ: CivState | null, ship: ShipState | null): string {
   if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。材を伐って ${SHIP_NEED} まで進む`;
   if (ship.launchedYear !== undefined) return '舟は飛び立った';
+  // 帆を失えば舟は止まる (M10R-05): 段階が帆に満たない年は理由を添える (warnings.ts の「帆を失い」と同じ)
+  if ((civ?.stage ?? 0) < SHIP_STAGE) return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED} · 帆を失い止まっている(段階 ${civ?.stage ?? 0} < ${SHIP_STAGE})`;
   const faith = civ?.faith ?? 0;
   const done = shipDone(ship);
   const faithWaiting = done && faith < SHIP_FAITH;
@@ -371,7 +373,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       $('temp-offset-v').textContent = (s.climate.tempOffset >= 0 ? '+' : '') + s.climate.tempOffset.toFixed(1);
     }
     $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
-    const civText = formatCiv(s.civ, s.dreamEater !== null);
+    const civText = formatCiv(s.civ, s.dreamEater != null);
     const civEl = $('hud-civ');
     civEl.hidden = civText === null;
     if (civText !== null) civEl.textContent = civText;

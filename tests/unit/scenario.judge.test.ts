@@ -227,6 +227,9 @@ describe('dream_eater (M10R-03)', () => {
     const c = { type: 'dream_eater' } as const;
     expect(evaluate(c, input(snap()))).toEqual({ ok: false, why: '夢喰いはいない' });
     expect(evaluate(c, input(snap({ dreamEater: { since: 5 } })))).toEqual({ ok: true, why: '夢喰いに食われた' });
+    // 古いスナップショット (dreamEater 欠落) は「いない」(M10R レビュー)
+    const legacy = snap(); delete (legacy as { dreamEater?: unknown }).dreamEater;
+    expect(evaluate(c, input(legacy))).toEqual({ ok: false, why: '夢喰いはいない' });
   });
   it('「祈りに応えるな」相当の dead (any) に足すと、夢喰いだけで dead になり理由に出る', () => {
     const def: ScenarioDef = {
