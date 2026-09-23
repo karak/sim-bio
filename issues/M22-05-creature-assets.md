@@ -1,11 +1,11 @@
 ---
 id: M22-05
 title: 動物アセット(月鹿・灰狼・土兎、民の飾り)
-status: todo
+status: review
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-02]
-evidence: []
+evidence: ["wolf/rabbit glb + RIGS 9243491, 美観チェック https://claude.ai/artifact/WBv6Vh5J6G24AhFGc2nQVr"]
 ---
 
 # 動物アセット(月鹿・灰狼・土兎、民の飾り)
