@@ -34,6 +34,15 @@ describe('createScenarioRunner', () => {
     // 2, 4, 6 年目の 3 回 (8 年目は予言の年を越える)
     expect(w.cmds.filter((c) => c.type === 'sink')).toHaveLength(3);
   });
+  it('atYear 0 の予定は最初の update で無料で発火し、timeline に scheduled として残る (M10R-08、空の舟の民の林)', () => {
+    const w = fakeWorld({ deer: 1 });
+    const cmd: Command = { type: 'spawn_species', speciesId: 'grass', cell: 5, amount: 0.6, radius: 4 };
+    const d: ScenarioDef = { ...def, schedule: [{ atYear: 0, command: cmd }] };
+    const r = createScenarioRunner(d, w);
+    r.update(w.snapshot()); // まだ 1 tick も進めていない最初の update (year 0)
+    expect(w.cmds).toEqual([cmd]);
+    expect(r.timeline()).toEqual([{ year: 0, kind: 'scheduled', command: cmd }]);
+  });
   it('fires scheduled commands once at their year, resolves cell -1 to the center, and counts interventions', () => {
     const w = fakeWorld({ deer: 1 });
     const r = createScenarioRunner(def, w);
