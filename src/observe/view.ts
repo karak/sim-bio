@@ -39,6 +39,7 @@ import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
 import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
+import { triangleBreakdown } from './render/breakdown';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
@@ -737,6 +738,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const down = { x: 0, y: 0 };
   const proj = new Vector3();
   // 試験用 (E2E): 個体の画面上の位置 (canvas の左上から px)。画面の外・カメラの後ろなら null
+  // 軽量化の試算用: 区分ごとの三角形の内訳 (render/breakdown.ts)。__observeBreakdown() を開発者ツールから呼ぶ
+  (window as unknown as { __observeBreakdown: unknown }).__observeBreakdown = () =>
+    triangleBreakdown(camera, { terrain: [terrain], water: [water.mesh], grass: [grass.mesh], belltree: lods.filter((l) => l !== forestSet).map((l) => l.group), forest: forestSet ? [forestSet.group] : [], settlement: [settlement], ship: [shipView.group], creatures: [creatures.group] }, scene);
   (window as unknown as { __observeScreen: unknown }).__observeScreen = (id: number) => {
     const a = agents.agents.find((g) => g.id === id);
     if (!a) return null;
