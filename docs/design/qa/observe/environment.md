@@ -44,7 +44,7 @@ GLB の約束:
 | `belltree_logs` | 432 | — | 2.14 × 1.28 × 1.08 | cut, cut_ring, bark |
 | `hut` | 1,934 | 1,200〜2,000 | 4.73 × 4.12 × 3.85 | straw, stone, moss, wood, bark, vine |
 | `lantern_post` | 512 | ≤ 600 | 1.36 × 0.86 × 2.35 | stone, moss, rope, frame, lantern(M22-06 で灯籠に X の格子) |
-| `slipway` | 1,114 | ≤ 1,500 | 5.11 × 16.54 × 1.81 | stone, moss, wood |
+| `slipway` | 1,982(1,114 から) | ≤ 2,500(≤ 1,500 から) | 8.24 × 27.78 × 2.74(5.11 × 16.54 × 1.81 から) | stone, moss, wood(M22-06 試作 2 の判断で大きな舟に合わせて 27 × 7.6 m に広げた。`keyitems.md`) |
 | `stone_wall` | 440 | ≤ 600 | 4.04 × 0.67 × 0.96 | stone, moss |
 | `megalith` | 596 | ≤ 800 | 1.98 × 1.79 × 3.78 | glyph, stone, moss |
 | `grass_tuft` | 40 | ≤ 40 | 0.51 × 0.57 × 0.35 | grass |
@@ -82,10 +82,10 @@ bloom はかけていません。並べ図の右端の月鹿(`assets/models/deer
 |---|---|
 | `belltree.png` | 芽・若木・成木・成木 lod1・株・丸太・月鹿 |
 | `belltree_small.png` | 芽・若木・株・丸太・月鹿の寄り |
-| `settlement.png` | 小屋・灯り柱・船台・石垣・巨石・月鹿 |
+| `settlement.png` | 小屋・灯り柱・船台・石垣・巨石・月鹿(船台は 16 m の旧版。広げた船台は `ship.png`・`shipyard.png`) |
 | `settlement_small.png` | 船台を除いた寄り |
 | `flora.png` | 草・月草・胞子苔・石 |
-| `corner.png` | 集落の一角(小屋、灯り柱 2、船台、石垣、巨石、成木 3、株、丸太、若木、芽、散らした草・月草・苔・石、月鹿)を低い斜めから |
+| `corner.png` | 集落の一角(小屋、灯り柱 2、船台、石垣、巨石、成木 3、株、丸太、若木、芽、散らした草・月草・苔・石、月鹿)を低い斜めから(船台は 16 m の旧版のまま描き直していない) |
 
 ## 基準画との照合(自己評価)
 
