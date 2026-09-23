@@ -25,3 +25,6 @@ M22-02
 - [ ] 予算内
 
 ## 作業ログ
+
+- 2026-09-24 土兎: `assets/models/observe/rabbit.glb`(近 LOD `rabbit` 1,574 / 群れ LOD `rabbit_lod1` 502 三角形、骨 24、idle/hop/run/graze/alert/fall)。
+  比較画 `docs/design/qa/observe/rabbit-compare.png`、記録 `docs/design/qa/observe/rabbit.md`。撮影・比較画・検証は種ごとの設定を持つ `tools/blender/observe_creature_{render,sheet,check}.py` に一般化(月鹿も同じ結果)。美観チェック待ち
