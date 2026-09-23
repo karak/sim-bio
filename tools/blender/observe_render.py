@@ -9,6 +9,7 @@
   blender -b --factory-startup --python tools/blender/observe_render.py -- ship-stages|ship|shipyard <out.png>
   (lineup は --yaw <度> で各ノードを回して並べる、--el <度> でカメラの仰角)
   blender -b --factory-startup --python tools/blender/observe_render.py -- canopy-gaps <out.png>
+  (集落の建物の作り直しで追加) pieces|settlement-ship|hut <out.png>: 作り直した部品を基準画の並びで / 舟の前に / 小屋の寄り
   (M22-07: 成木・森の木の樹冠の隙間を、日の仰角 90/60/45/30° の影で確かめ、日が抜ける割合を出す)
 """
 import math
@@ -308,7 +309,7 @@ def render(path):
 
 
 ORDER = ["belltree_seedling", "belltree_sapling", "belltree_mature", "belltree_mature_lod1", "belltree_stump", "belltree_logs",
-         "hut", "lantern_post", "slipway", "stone_wall", "megalith",
+         "hut", "hut_lod1", "lantern_post", "slipway", "stone_wall", "megalith",
          "grass_tuft", "moongrass_tuft", "moss_clump", "rock",
          "woven_screen", "stone_wall_corner",
          "forest_tree", "forest_tree_lod1", "moongrass_tuft_seed", "fern", "flower_patch",
@@ -583,6 +584,73 @@ def shipyard(out):
     render(out)
 
 
+# ---------------------------------------------------------------- 集落の建物 (集落の建物の作り直しで追加)
+
+def pieces(out):
+    """作り直した集落の部品を、基準画 sheets/settlement.png と同じ並び (小屋・灯り柱・L 字の石垣・衝立) と近い角度で。
+    右に月鹿を物差しに置く"""
+    K.reset()
+    setup_scene((1600, 900))
+    place = placer(library(["settlement"]))
+    place("hut", (-6.0, 1.2), yaw=-28)
+    place("lantern_post", (-1.6, 1.6), yaw=-10)
+    place("stone_wall_corner", (0.5, -0.8), yaw=-12)
+    place("woven_screen", (5.6, 1.8), yaw=-8)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (8.3, 0.2, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-150))
+    floor(200)
+    toonify_all()
+    camera((-0.3, -20.0, 8.6), (-0.3, 1.0, 1.4), lens=38)
+    render(out)
+
+
+def settlement_ship(out):
+    """作り直した集落の部品を、完成の舟 (船台に載せた ship_sails) の前に並べる (大きさと作り込みの比べ)"""
+    K.reset()
+    sc = setup_scene((1600, 900))
+    place = placer(library(["ship", "settlement"]))
+    place("slipway", (6.0, 14.0), yaw=62)
+    place("ship_sails", (6.0, 14.0, SLIP_TOP + CRADLE_H_SHIP), yaw=62, pitch=SLIP_ANG)
+    place("hut", (-13.0, -4.0), yaw=-30)
+    place("hut_lod1", (-19.5, 2.0), yaw=-30)
+    place("lantern_post", (-7.8, -6.0), yaw=-20)
+    place("stone_wall_corner", (-6.0, -2.4), yaw=-15)
+    place("woven_screen", (-1.6, -5.2), yaw=-12)
+    place("stone_wall", (2.8, -6.8), yaw=-8)
+    place("timber_pile", (6.5, -3.5), yaw=20)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (-4.2, -8.2, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-150))
+    floor(400)
+    toonify_all()
+    sc.world.node_tree.nodes["Background.001"].inputs["Color"].default_value = (0.78, 0.82, 0.86, 1)
+    camera((-17.0, -31.0, 8.0), (-3.0, 5.0, 6.5), lens=28)
+    render(out)
+
+
+def hut_close(out):
+    """作り直した小屋の寄り (斜め前から、ゲームの寄りの 15 m ほど) と、遠景用の hut_lod1"""
+    K.reset()
+    setup_scene((1600, 900))
+    place = placer(library(["settlement"]))
+    place("hut", (0.0, 0.0), yaw=-35)
+    place("hut_lod1", (8.5, 6.0), yaw=-35)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (2.6, -3.6, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-140))
+    floor(200, "#8FA35A")
+    toonify_all()
+    camera((-6.5, -13.0, 5.0), (2.2, 1.0, 1.9), lens=35)
+    render(out)
+
+
 # ---------------------------------------------------------------- 樹冠の隙間 (M22-07 光の筋)
 
 GAP_TREES = [("belltree", "belltree_mature"), ("belltree", "belltree_mature_lod1"),
@@ -781,5 +849,11 @@ if __name__ == "__main__":
         ship_views(argv[1])
     elif mode == "shipyard":
         shipyard(argv[1])
+    elif mode == "pieces":  # (集落の建物の作り直しで追加)
+        pieces(argv[1])
+    elif mode == "settlement-ship":  # (集落の建物の作り直しで追加)
+        settlement_ship(argv[1])
+    elif mode == "hut":  # (集落の建物の作り直しで追加)
+        hut_close(argv[1])
     elif mode == "canopy-gaps":
         canopy_gaps(argv[1])

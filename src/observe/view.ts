@@ -35,6 +35,7 @@ import { createToonMaterial, rimLight } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { glow } from './render/bake';
 import { instanceProps, lodProps, type LodProps } from './render/instancer';
+import { hutPlacements } from './settlementLayout';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
@@ -274,7 +275,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const worn: Worn[] = [
     { ax: plaza.x, az: plaza.z, bx: plaza.x, bz: plaza.z, r: 9 },
     { ax: plaza.x, az: plaza.z, bx: slip.x, bz: slip.z, r: 2.6 },
-    ...[[-14, -8], [12, -12], [-4, -20]].map(([hx, hz]) => ({ ax: plaza.x, az: plaza.z, bx: marks.center.x + hx, bz: marks.center.z + hz, r: 2.2 })),
+    ...hutPlacements(marks.center, plaza, field.heightAt).map((h) => ({ ax: plaza.x, az: plaza.z, bx: h.x, bz: h.z, r: 2.2 })),
   ];
   wearTerrain(terrain, worn);
   grass.trample(worn);
@@ -406,18 +407,22 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-06: 区域と目印は鐘樹の前で決めた)
   // 同じ部品はまとめてインスタンス化する (小屋・灯り柱を 1 つずつ複製すると部品 × 材質 × 影の draw call になる)
   const settlementPlacements = new Map<string, Matrix4[]>();
-  const place = (name: string, x: number, z: number, ry = 0) => {
+  // (集落の建物の作り直しで変更: y を渡すとその高さに置く (小屋は戸口の外の地面に合わせる、敷石は斜面に沿わせる))
+  const place = (name: string, x: number, z: number, ry = 0, y = field.heightAt(x, z) - 0.15) => {
     const list = settlementPlacements.get(name) ?? [];
-    list.push(new Matrix4().compose(new Vector3(x, field.heightAt(x, z) - 0.15, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), ry), new Vector3(1, 1, 1)));
+    list.push(new Matrix4().compose(new Vector3(x, y, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), ry), new Vector3(1, 1, 1)));
     settlementPlacements.set(name, list);
   };
   // (M22-06: 集落から船台への向きをやめ、船台から外海が最も開けた方位へ向ける)
   const toSea = Math.atan2(marks.slipwayBow.x, marks.slipwayBow.z);
   place('slipway', slip.x, slip.z, toSea);
   const c0 = marks.center;
-  place('hut', c0.x - 14, c0.z - 8, 0.4);
-  place('hut', c0.x + 12, c0.z - 12, -0.6);
-  place('hut', c0.x - 4, c0.z - 20, 0.1);
+  // (集落の建物の作り直しで変更: 小屋は戸口を広場へ向ける (元は 0.4 / −0.6 / 0.1 の向き)。位置は settlementLayout.ts の HUT_OFFSETS)
+  const huts = hutPlacements(c0, plaza, field.heightAt);
+  for (const h of huts) {
+    place('hut', h.x, h.z, h.ry, h.y);
+    for (const st of h.steps) place('stepping_stone', st.x, st.z, st.ry, field.heightAt(st.x, st.z) - 0.03);
+  }
   for (const l of marks.lanterns.slice(0, 5)) place('lantern_post', l.x + 3, l.z + 3, 0);
   place('megalith', c0.x - 12, c0.z + 6, 0.3);
   place('megalith', c0.x + 16, c0.z + 2, -0.2);
@@ -445,7 +450,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const z = (rng() * 2 - 1) * AREA_R * CELL_M;
     if (Math.hypot(x, z) <= AREA_R * CELL_M && field.heightAt(x, z) > 1.2) fireflyAt.push({ x, z });
   }
-  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), fireflyAt });
+  // (集落の建物の作り直しで変更: 小屋の炉にも灯りの溜まりを置く (夜に戸口から火の明かりがこぼれる。帆を失うと灯りと一緒に消える))
+  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: [...marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), ...huts.map((h) => h.hearth)], fireflyAt });
   scene.add(motes.group);
   // 空の舟 (M22-06): 進みで段を切り替えて船台に載せる
   const shipView = createShipView(shipGlb, slip, toSea, field.heightAt(slip.x, slip.z) - 0.15);
