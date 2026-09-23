@@ -8,6 +8,8 @@
       html, body { margin: 0; height: 100%; background: #CFE0E4; overflow: hidden; font-family: system-ui, sans-serif; }
       #observe { display: block; width: 100%; height: 100%; }
       #stats { position: absolute; left: 12px; bottom: 10px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: #1F2621; background: rgba(244, 246, 241, 0.72); padding: 4px 8px; border-radius: 3px; }
+      #shots { position: absolute; right: 12px; top: 10px; display: flex; gap: 6px; }
+      #shots button { font: 12px system-ui, sans-serif; padding: 4px 10px; border: 1px solid #9FA79A; background: rgba(244, 246, 241, 0.8); border-radius: 3px; cursor: pointer; }
       #status { position: absolute; left: 50%; top: 45%; transform: translateX(-50%); color: #1F2621; font-size: 14px; }
     </style>
   </head>
@@ -15,6 +17,7 @@
     <canvas id="observe"></canvas>
     <div id="status"></div>
     <div id="stats"></div>
+    <div id="shots"></div>
     <script type="module" src="/src/observe/prototype.ts"></script>
   </body>
 </html>

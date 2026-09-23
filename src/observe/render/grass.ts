@@ -27,7 +27,7 @@ function placeholderTuft(): Geo {
   return g;
 }
 
-export function createGrass(field: TerrainField, layers: { grass?: Float32Array; moss?: Float32Array }, max: number, seed: number, tuft?: Geo): Grass {
+export function createGrass(field: TerrainField, layers: { grass?: Float32Array; moss?: Float32Array }, max: number, seed: number, tuft?: Geo, radiusM?: number): Grass {
   const geo = tuft ?? placeholderTuft();
   const mat = createToonMaterial({ color: '#FFFFFF', rim: 0.2, side: 2 });
   const uniforms = { uTime: { value: 0 } };
@@ -49,7 +49,8 @@ export function createGrass(field: TerrainField, layers: { grass?: Float32Array;
   };
   const mesh = new InstancedMesh(geo, mat, max);
   const rng = mulberry32(seed);
-  const half = field.window * 10;
+  // 草は区域 (半径 radiusM) の中に密に置く。縁の外は地面の色だけで遠景に溶かす
+  const half = radiusM ?? field.window * 10;
   const m = new Matrix4();
   const q = new Quaternion();
   const p = new Vector3();
@@ -63,14 +64,14 @@ export function createGrass(field: TerrainField, layers: { grass?: Float32Array;
     const x = (rng() * 2 - 1) * half;
     const z = (rng() * 2 - 1) * half;
     const h = field.heightAt(x, z);
-    if (h < 1.0) continue;
+    if (h < 1.0 || Math.hypot(x, z) > half) continue;
     const g = layers.grass ? field.layerAt(layers.grass, x, z) : 0.3;
     const mo = layers.moss ? field.layerAt(layers.moss, x, z) : 0;
     const want = Math.min(1, g * 2.2 + mo * 0.35 + 0.08);
     if (rng() > want) continue;
     p.set(x, h - 0.02, z);
     q.setFromAxisAngle(new Vector3(0, 1, 0), rng() * Math.PI * 2);
-    const s = 0.7 + rng() * 0.7;
+    const s = 1.4 + rng() * 1.2;
     sc.set(s, s * (0.8 + g), s);
     m.compose(p, q, sc);
     mesh.setMatrixAt(k, m);
