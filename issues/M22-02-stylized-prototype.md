@@ -1,11 +1,11 @@
 ---
 id: M22-02
 title: デフォルメ試作(Switch 世代の密度のモデルと組み立て一式)
-status: review
+status: done
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-01]
-evidence: []
+evidence: ["13bc446 fd2b309 359a104 c53d6bd observe.html src/observe/render/*", "docs/design/qa/observe/{deer,environment}.md proto-*.png", "美観チェック 2026-09-23 23:44: 方向性とてもよい、Blender で続ける"]
 ---
 
 # デフォルメ試作(Switch 世代の密度のモデルと組み立て一式)
