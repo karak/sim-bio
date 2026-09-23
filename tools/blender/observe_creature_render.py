@@ -33,8 +33,9 @@ SPECIES = {
         views={"side": ("deer", 8, 6, None, 0), "front": ("deer", 90, 6, None, 0), "q34": ("deer", 38, 10, None, 0),
                "rear34": ("deer", 218, 10, None, 0)},
         extra={"lod1-side": ("deer_lod1", 8, 6, None, 0), "lod1-q34": ("deer_lod1", 38, 10, None, 0), "doe-q34": ("deer_doe", 38, 10, None, 0)},
-        anim=[("idle", 33), ("walk", 9), ("run", 4), ("graze", 75), ("fall", 60)], anim_az=(20, 14), seq_az=(0, 4),
-        seq=[("walk", range(0, 36, 6)), ("run", range(0, 18, 3)), ("graze", range(0, 150, 25)), ("fall", range(0, 61, 12))]),
+        # (M22-05 残りの手直しで変更: graze は 10 s (300 f) になったので 30 f ごと、見せ場は 3.3 s の食むところ。fall は 10 f ごと)
+        anim=[("idle", 33), ("walk", 9), ("run", 4), ("graze", 100), ("fall", 60)], anim_az=(20, 14), seq_az=(0, 4),
+        seq=[("walk", range(0, 36, 6)), ("run", range(0, 18, 3)), ("graze", range(0, 300, 30)), ("fall", range(0, 61, 10))]),
     # 土兎の基準画 (creatures/rabbit.png) は顔が左向き: 側面・斜め前・立ち上がりは +X 側から、採食だけ右向き (-X 側から)
     "rabbit": dict(
         meshes=["rabbit", "rabbit_lod1"],

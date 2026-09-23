@@ -152,12 +152,13 @@ shoot("lod1-q34.png", *VIEWS["q34"])
 show("deer_doe")
 shoot("doe-q34.png", *VIEWS["q34"])
 show("deer")
-ANIM = [("idle", 33), ("walk", 9), ("run", 4), ("graze", 75), ("fall", 60)]
+ANIM = [("idle", 33), ("walk", 9), ("run", 4), ("graze", 100), ("fall", 60)]  # (M22-05 残りの手直しで変更: graze 75 → 100 f、10 s の食むところ)
 for name, f in ANIM:
     set_action(name, f)
     shoot(f"anim-{name}.png", 20, 14, pad=1.1)
 # 歩きと走りは側面の連続 (脚の順序を見る)
-for name, frames in (("walk", range(0, 36, 6)), ("run", range(0, 18, 3)), ("graze", range(0, 150, 25)), ("fall", range(0, 61, 12))):
+# (M22-05 残りの手直しで変更: graze は 10 s (300 f) なので 30 f ごと、fall は 10 f ごと)
+for name, frames in (("walk", range(0, 36, 6)), ("run", range(0, 18, 3)), ("graze", range(0, 300, 30)), ("fall", range(0, 61, 10))):
     for f in frames:
         set_action(name, f)
         shoot(f"seq-{name}-{f:03d}.png", 0, 4, pad=1.08)
