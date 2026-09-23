@@ -185,12 +185,13 @@ const AirShader = {
           vec4 sc = uShadowMatrix * vec4(p, 1.0);
           vec3 c = sc.xyz / sc.w;
           float l = (c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0 || c.z > 1.0) ? 1.0 : texture(tShadow, vec3(c.xy, c.z));
-          lit += l * exp(-max(p.y - uFogHeight, 0.0) * 0.05);
+          // 光の筋を見せる空気は目の高さの少し上までに溜める (上空まで数えると日の方向の空が白く飛び、林の下の筋が埋もれる)
+          lit += l * exp(-max(p.y - uCamPos.y - 2.0, 0.0) * 0.18);
         }
         lit /= 24.0;
         float g = 0.6;
         float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * mu, 1.5) / 12.566;
-        outc += uLightColor * lit * hg * uShafts * (1.0 - exp(-maxD * 0.025)) * 0.9;
+        outc += uLightColor * lit * hg * uShafts * (1.0 - exp(-maxD * 0.025)) * (sky ? 0.8 : 2.4);
       }
       gl_FragColor = vec4(outc, col.a);
     }

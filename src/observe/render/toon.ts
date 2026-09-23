@@ -19,6 +19,9 @@ function ramp(): DataTexture {
 
 export type ToonOptions = MeshToonMaterialParameters & { rim?: number; rimColor?: string };
 
+/** 縁の光に全体で掛ける色 (M22-07)。昼は白、夜は月の青く弱い光にして、夜に縁だけ白く浮かないようにする */
+export const rimLight = { value: new Color(1, 1, 1) };
+
 export function createToonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
   const { rim = 0.35, rimColor = '#FFF1D6', ...params } = opts;
   const m = new MeshToonMaterial({ gradientMap: ramp(), ...params });
@@ -26,13 +29,14 @@ export function createToonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uRim = { value: rim };
     shader.uniforms.uRimColor = { value: rimC };
+    shader.uniforms.uRimLight = rimLight;
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uRim;\nuniform vec3 uRimColor;')
+      .replace('#include <common>', '#include <common>\nuniform float uRim;\nuniform vec3 uRimColor;\nuniform vec3 uRimLight;')
       .replace(
         '#include <dithering_fragment>',
         [
           'float rimTerm = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.0);',
-          'gl_FragColor.rgb += uRimColor * rimTerm * uRim;',
+          'gl_FragColor.rgb += uRimColor * uRimLight * rimTerm * uRim;',
           '#include <dithering_fragment>',
         ].join('\n'),
       );

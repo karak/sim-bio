@@ -29,11 +29,13 @@ import { CELL_M, createTerrainField, createTerrainMesh } from './render/terrain'
 import { createWater } from './render/water';
 import { createGrass } from './render/grass';
 import { createGrade } from './render/grade';
-import { createToonMaterial } from './render/toon';
+import { createToonMaterial, rimLight } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
+import { glow } from './render/bake';
 import { instanceProps, lodProps, type LodProps } from './render/instancer';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
+import { createMotes } from './render/motes';
 import { AtmospherePass, createSky } from './render/atmosphere';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks } from './area';
@@ -351,6 +353,15 @@ async function boot(): Promise<void> {
     const pz = slip.z + side.z * 6 - marks.slipwayBow.z * 3;
     scene.add(instanceProps(pile, [new Matrix4().compose(new Vector3(px, field.heightAt(px, pz) - 0.05, pz), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), toSea + 0.3), new Vector3(1, 1, 1))]));
   }
+  // 光の粒と灯りの溜まり (M22-07): 蛍は草地と林の低い所 (区域の陸からまばらに選ぶ)
+  const fireflyAt: { x: number; z: number }[] = [];
+  for (let i = 0; i < 400 && fireflyAt.length < 60; i++) {
+    const x = (rng() * 2 - 1) * AREA_R * CELL_M;
+    const z = (rng() * 2 - 1) * AREA_R * CELL_M;
+    if (Math.hypot(x, z) <= AREA_R * CELL_M && field.heightAt(x, z) > 1.2) fireflyAt.push({ x, z });
+  }
+  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), fireflyAt });
+  scene.add(motes.group);
   // 空の舟 (M22-06): 進みで段を切り替えて船台に載せる
   const shipView = createShipView(shipGlb, slip, toSea, field.heightAt(slip.x, slip.z) - 0.15);
   const shipState = s.ship ? { ...s.ship, ...(OPT.ship !== null ? { progress: OPT.ship } : {}), ...(OPT.launched ? { launchedYear: s.year } : {}) } : null;
@@ -482,9 +493,13 @@ async function boot(): Promise<void> {
       sun.color.set(day.lightColor);
       sun.intensity = day.lightIntensity;
       sun.position.set(day.lightDir.x * 120, day.lightDir.y * 120, day.lightDir.z * 120);
+      // 夜は灯り・鐘の口・ムーの光を強める (焼いた材質の発光に共通で掛かる)
+      glow.value = 1 + day.night * 1.1;
+      rimLight.value.set(day.lightColor).multiplyScalar(day.lightIntensity / 2.6);
     }
     agents = stepAgents(agents, { area, marks, night: day.night > 0.6, building, launched: false, targets }, dt, arng);
     creatures.update(agents.agents, camera, field.heightAt, t, dt);
+    motes.update(t, dt, day.night, camera, controls.target, agents.agents);
     for (const l of lods) l.update(camera);
     water.update(t);
     shipView.update(t);
