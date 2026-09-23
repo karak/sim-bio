@@ -10,7 +10,7 @@ describe('UI の 1 クリック (M21-01)', () => {
 
   it('通し実行の台本は放流と災害を UI の 1 クリックでしか打たない (手で再現できない想定解を作らない)', () => {
     const dir = 'tests/slow';
-    const offenders = readdirSync(dir)
+    const offenders = readdirSync(dir, { recursive: true, encoding: 'utf8' })
       .filter((f) => f.endsWith('.ts'))
       .flatMap((f) => readFileSync(`${dir}/${f}`, 'utf8').split('\n').map((line, i) => ({ at: `${dir}/${f}:${i + 1}`, line })))
       .filter(({ line }) => /type:\s*'(spawn_species|disaster)'/.test(line))
