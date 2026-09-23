@@ -1,11 +1,11 @@
 ---
 id: M22-06
 title: 集落と舟(5 段階・飛び立ち)
-status: todo
+status: review
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-02]
-evidence: []
+evidence: ["2d811b8 段の切り替え・07e9b04 飛び立ち・734c9c3 帆を失うと灯りが消える・c173c75 大きな舟と船首の渦"]
 ---
 
 # 集落と舟(5 段階・飛び立ち)

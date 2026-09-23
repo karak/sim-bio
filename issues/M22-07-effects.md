@@ -1,11 +1,11 @@
 ---
 id: M22-07
 title: 演出(芽吹き・疫病の霧・生気・灯り・海面・昼夜と天気)
-status: todo
+status: review
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-03, M22-04]
-evidence: []
+evidence: ["4948ec5 空気と昼夜・3e00713 光の粒・831e045 光芒・e3479ca 介入の場面・a21b1b0 沈降"]
 ---
 
 # 演出(芽吹き・疫病の霧・生気・灯り・海面・昼夜と天気)

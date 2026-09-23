@@ -1,11 +1,11 @@
 ---
 id: M22-03
 title: 観察区域の地形・海岸・植生
-status: todo
+status: review
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-02]
-evidence: []
+evidence: ["4366402 植え直し・a21b1b0 沈降・6ac8e56 予算(三角形 105〜141 万、draw call 78〜99、75fps)"]
 ---
 
 # 観察区域の地形・海岸・植生
