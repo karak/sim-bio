@@ -89,9 +89,10 @@ for act in acts:
         mats = [b.matrix.copy() for b in arm.pose.bones]
         first = first or mats
         last = mats
-        if hero:
+        # (M22-05 残りの手直しで変更: 近 LOD だけでなく全メッシュ (雌・群れ LOD) の一番低い頂点を見る)
+        for o in meshes:
             dg = bpy.context.evaluated_depsgraph_get()
-            ev = hero.evaluated_get(dg)
+            ev = o.evaluated_get(dg)
             me = ev.to_mesh()
             minz = min(minz, min((ev.matrix_world @ v.co).z for v in me.vertices))
             ev.to_mesh_clear()

@@ -16,6 +16,12 @@
   - 腹の線と胸の V 字は胴の表面に沿わせた細い帯 (発光)
   - スキンの重みは部品ごとに候補の骨を決め、骨の線分までの距離の逆 4 乗で配る (上位 3 本)
   - 脚のアニメは 2D の解析 IK (肩・腰の関節から球節まで)。蹄は立脚中は地面に固定し、遊脚で持ち上げて手首・飛節を曲げる
+M22-05 残りの手直し (2026-09-24):
+  - 装甲板の輪郭を基準画の側面から測り直し (尖った前の角を持つ六角・平行四辺形のき甲の板)、面取りを一定幅の内側オフセット、頂を平らな面の扇にした。
+    光る継ぎ目は板の縁から少し離して胴に沿わせる帯 (build_seam、角は立てたまま) にした
+  - 目は両端の尖ったアーモンド形 (前の目頭が下がる)、暗い縁は上まぶたと目頭で太く
+  - graze は 10 s: 頭を下ろしたまま食み、前足を曲げて前半身を沈め、ときどき一歩出る。頭を上げて見回すのは 1 回、ゆっくり
+  - fall は頭を世界に対して起こしたまま首を前へ伸ばして地面に置き、倒れる途中は地面より下へ出た分だけ体を持ち上げる (GROUND_CLAMP)
 """
 import math
 import os
@@ -219,7 +225,7 @@ def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
 
 # ---------------------------------------------------------------- LOD の密度
 HERO = dict(name="hero", body=(15, 16), neck=(7, 12), head=(10, 12), leg=(12, 8), hoof=8, antler=(12, 6), tine=(3, 6),
-            ear=(4, 8), tail=(3, 6), plate_chaikin=True, ribbon_seg=12, eye=10, sq=2.4)
+            ear=(4, 8), tail=(3, 6), plate_chaikin=True, ribbon_seg=12, eye=12, sq=2.4)  # (M22-05 残りの手直しで変更: eye 10 → 12、目尻の尖りを出す)
 LOD1 = dict(name="lod1", body=(7, 10), neck=(4, 8), head=(6, 8), leg=(6, 5), hoof=0, antler=(6, 4), tine=(2, 4),
             ear=(2, 4), tail=(2, 4), plate_chaikin=False, ribbon_seg=4, eye=4, sq=2.2)
 
@@ -418,17 +424,28 @@ def build_tail(bm, lod):
 
 
 # ---------------------------------------------------------------- 胴の表面への投影 (装甲板と光る線)
-def surf(bvh, y, z, side, off, phi=0.0):
+def surf(bvh, y, z, side, off, phi=0.0, flat=False):
     """側面図の座標 (y, z) を表面へ投影し、法線方向へ off 浮かせる。
-    視線は横 (side 側) から、上下に外れた点ほど体の中心へ向けて傾ける。phi (度) で前 (-Y) へ回す (胸の V 字)"""
+    視線は横 (side 側) から、上下に外れた点ほど体の中心へ向けて傾ける。phi (度) で前 (-Y) へ回す (胸の V 字)
+    (M22-05 残りの手直しで追加: flat=True は先に真横の視線を試し、面をかすめない (法線の横成分 0.3 以上) なら採る。
+    側面図の輪郭が真横から見てそのまま出る。外れたら従来の傾けた視線で、背の線の向こう側 (反対の側面) へは回り込ませない)"""
     ph = math.radians(phi)
     zc = body_zc(y)
+    if flat:
+        d = Vector((side, 0, 0))
+        loc, nrm, _, _ = bvh.ray_cast(Vector((side * 2.0, y, z)), -d)
+        if loc is not None and abs(nrm.x) > 0.3:
+            if nrm.dot(d) < 0:
+                nrm = -nrm
+            return loc + nrm * off, nrm
     for k in range(40):
         zz = z + (zc - z) * k / 40
         tilt = max(-1.0, min(1.0, (zz - zc) / 0.35)) * 0.8
         d = Vector((side * math.cos(ph), -math.sin(ph), tilt)).normalized()
         q = Vector((0, y, zz))
         loc, nrm, _, _ = bvh.ray_cast(q + d * 2.0, -d)
+        if loc is not None and flat and loc.x * side < 0.035:
+            continue
         if loc is not None:
             break
     else:
@@ -449,9 +466,33 @@ def split_edges(poly, glow):
     return out, g
 
 
-def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024):
+def inset(poly, d):
+    """凸多角形 (y, z) を各辺から d だけ内側へ寄せる (面取りの幅を一定にする)。M22-05 残りの手直しで追加"""
+    k = len(poly)
+    area = sum(poly[i][0] * poly[(i + 1) % k][1] - poly[(i + 1) % k][0] * poly[i][1] for i in range(k))
+    orient = 1 if area > 0 else -1
+    out = []
+    for i in range(k):
+        a, b, c = Vector(poly[(i - 1) % k]), Vector(poly[i]), Vector(poly[(i + 1) % k])
+        n1 = Vector((a.y - b.y, b.x - a.x)).normalized() * orient  # 辺 a→b の内向き
+        n2 = Vector((b.y - c.y, c.x - b.x)).normalized() * orient
+        nn = (n1 + n2).normalized()
+        s = d / max(0.35, nn.dot(n1))
+        out.append((b.x + nn.x * s, b.y + nn.y * s))
+    return out
+
+
+def outside(poly, i, d):
+    """多角形 (y, z) の角 i を、隣り合う 2 辺の外側へ d だけ離した点 (継ぎ目の帯の通り道)。M22-05 残りの手直しで追加"""
+    p = inset(poly, -d)
+    return p[i % len(poly)]
+
+
+def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024, seam_band=False):
     """装甲板: 縁 (表面 +4 mm) → 縁の上 → 面取り (中心へ 74%) → 頂。光る辺には外側に帯を貼り、縁の壁も光らせる。
-    outline は左側面から見た (y, z)。縁と面取りの境は硬いエッジ、頂はなめらか (丸めた角ばり)"""
+    outline は左側面から見た (y, z)。縁と面取りの境は硬いエッジ、頂はなめらか (丸めた角ばり)
+    (M22-05 残りの手直しで変更: 面取りは中心へ縮めるのでなく辺から一定幅 (bevel) の内側オフセット、頂は平らな面の扇 (フラットシェード) にして
+    宝石のように面を立てる。光る継ぎ目は build_seam の帯に移し、ここの帯と光る縁の壁は seam_band=True のときだけ作る)"""
     poly = list(outline)
     glow = [i in glow_edges for i in range(len(poly))]
     if lod["plate_chaikin"]:
@@ -461,30 +502,65 @@ def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024
     cz = sum(p[1] for p in poly) / k
 
     def P(p, off):
-        return bm.verts.new(surf(bvh, p[0], p[1], side, off)[0])
+        return bm.verts.new(surf(bvh, p[0], p[1], side, off, flat=True)[0])  # (M22-05 残りの手直しで変更: 真横から投影)
 
     def scaled(p, f):
         return (cy + (p[0] - cy) * f, cz + (p[1] - cz) * f)
 
     r1 = [P(p, 0.004) for p in poly]
-    r2 = [P(p, thick * 0.6) for p in poly]
+    r2 = [P(p, thick * 0.55) for p in poly]  # (M22-05 残りの手直しで変更: 縁の壁 0.6 → 0.55)
     rings = [r1, r2]
     if lod["plate_chaikin"]:
-        rings.append([P(scaled(p, 0.74), thick) for p in poly])
-    center = P((cy, cz), thick * 1.12)
+        # (M22-05 残りの手直しで変更: 中心へ 74% に縮める scaled(p, 0.74) から、辺から 3 cm の一定幅の面取りへ)
+        rings.append([P(p, thick) for p in inset(poly, 0.03)])
     faces = []
     for ri, (a, b) in enumerate(zip(rings, rings[1:])):
         for i in range(k):
             f = bm.faces.new((a[i], a[(i + 1) % k], b[(i + 1) % k], b[i]))
-            f.material_index = GLOW if (ri == 0 and glow[i]) else PLATE
+            f.material_index = GLOW if (ri == 0 and glow[i] and seam_band) else PLATE
             faces.append(f)
     for f in faces:
         f.smooth = False
+    # (M22-05 残りの手直しで変更: 頂を中心の 1 点への扇 (なめらか) から、横に通した稜線で上下 2 枚の平らな面に割る形へ。
+    # 基準画の板は上の面が明るく下の面が暗い宝石の切り子。上下それぞれの面の頂点を稜線を含む平面へ寄せて平らにする。
+    # 中心の 1 点 center は作らない)
+    top = rings[-1]
+    top2d = inset(poly, 0.03) if lod["plate_chaikin"] else poly
+    ys = [p[0] for p in poly]
+    h_ridge = thick * (1.05 if lod["plate_chaikin"] else 0.85)
+    cb = P((cy + 0.4 * (max(ys) - cy), cz), h_ridge)
+    cf = P((cy - 0.4 * (cy - min(ys)), cz), h_ridge)
+    upper = [p[1] > cz for p in top2d]
+
+    def near(i):
+        return cb if top2d[i][0] > cy else cf
+
+    top_faces = []
     for i in range(k):
-        f = bm.faces.new((rings[-1][i], rings[-1][(i + 1) % k], center))
-        f.material_index = PLATE
-        f.smooth = True
-        faces.append(f)
+        j = (i + 1) % k
+        ci, cj = near(i), near(j)
+        tris = [(top[i], top[j], ci)] if ci is cj else [(top[i], top[j], cj), (top[i], cj, ci)]
+        for t in tris:
+            f = bm.faces.new(t)
+            f.material_index = PLATE
+            f.smooth = False
+            top_faces.append(f)
+    if lod["plate_chaikin"]:
+        e = (cf.co - cb.co).normalized()
+        for want in (True, False):
+            vs = [(top[i], top2d[i]) for i in range(k) if upper[i] == want]
+            if not vs:
+                continue
+            w = Vector()
+            for v, _ in vs:
+                d = v.co - cb.co
+                w += d - e * d.dot(e)
+            n = e.cross(w).normalized()
+            for v, p2 in vs:
+                s = surf(bvh, p2[0], p2[1], side, 0, flat=True)[1]
+                t = -n.dot(v.co - cb.co) / (n.dot(s) if abs(n.dot(s)) > 0.2 else 1.0)
+                v.co += s * max(-thick * 0.4, min(thick * 0.4, t))
+    faces += top_faces
     # 光る帯: 辺の外側 (多角形の外向き法線方向) へ band だけ広げた点を表面に落とす
     area = sum(poly[i][0] * poly[(i + 1) % k][1] - poly[(i + 1) % k][0] * poly[i][1] for i in range(k))
     orient = 1 if area > 0 else -1
@@ -500,15 +576,15 @@ def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024
         return outer[i]
 
     for i in range(k):
-        if glow[i]:
+        if glow[i] and seam_band:  # (M22-05 残りの手直しで変更: 既定では作らない。継ぎ目は build_seam)
             j = (i + 1) % k
             f = bm.faces.new((out_pt(i), out_pt(j), r1[j], r1[i]))
             f.material_index = GLOW
             f.smooth = True
             faces.append(f)
     # 向きを揃える (頂の扇が外を向くように)
-    ref_n = surf(bvh, cy, cz, side, 0)[1]
-    fan = faces[-1 - sum(1 for g in glow if g)]
+    ref_n = surf(bvh, cy, cz, side, 0, flat=True)[1]
+    fan = top_faces[-1]  # (M22-05 残りの手直しで変更: 頂の面の最後の 1 枚で向きを見る)
     fan.normal_update()
     if fan.normal.dot(ref_n) < 0:
         bmesh.ops.reverse_faces(bm, faces=faces)
@@ -520,9 +596,10 @@ def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024
                 e.smooth = False  # 板の縁と面取りの境は硬いエッジ (丸めた角ばり)
 
 
-def build_ribbon(bm, bvh, lod, path, side, width=0.026):
-    """胴に沿う光る線。path は (y, z, phi)。断面は 3 点の低い山 (近 LOD) / 平らな帯 (群れ LOD)"""
-    nseg = lod["ribbon_seg"]
+def build_ribbon(bm, bvh, lod, path, side, width=0.026, nseg=None):
+    """胴に沿う光る線。path は (y, z, phi)。断面は 3 点の低い山 (近 LOD) / 平らな帯 (群れ LOD)
+    (M22-05 残りの手直しで追加: nseg で近 LOD の区切りの数を線ごとに減らせる。群れ LOD は lod の値のまま)"""
+    nseg = min(nseg, lod["ribbon_seg"]) if nseg else lod["ribbon_seg"]
     dense = resample([tuple(p) for p in path], nseg + 1)
     hits = [surf(bvh, y, z, side, 0.0, phi) for y, z, phi in dense]
     prev = None
@@ -546,16 +623,68 @@ def build_ribbon(bm, bvh, lod, path, side, width=0.026):
         prev = cur
     return faces
 
+
+def build_seam(bm, bvh, lod, path, side, width=0.022, step=0.05):
+    """装甲板の縁に沿う光る継ぎ目 (M22-05 残りの手直しで追加)。path は側面図の (y, z) の折れ線。
+    build_ribbon と違って曲線で丸めず、直線で刻んで角を立てたまま胴へ投影する (基準画の継ぎ目は板の角で折れる)。
+    断面は 3 点の低い山 (近 LOD) / 平らな帯 (群れ LOD)。群れ LOD は角と長い辺の中点だけ"""
+    pts = []
+    st = step if lod["plate_chaikin"] else 0.15
+    for a, b in zip(path, path[1:]):
+        a, b = Vector(a), Vector(b)
+        cnt = max(1, math.ceil((b - a).length / st))
+        pts += [a + (b - a) * (i / cnt) for i in range(cnt)]
+    pts.append(Vector(path[-1]))
+    hits = [surf(bvh, p.x, p.y, side, 0.0, flat=True) for p in pts]
+    prev = None
+    faces = []
+    for i, (loc, n) in enumerate(hits):
+        d = (hits[min(i + 1, len(hits) - 1)][0] - hits[max(i - 1, 0)][0]).normalized()
+        sv = n.cross(d).normalized() * (width / 2)
+        if lod["plate_chaikin"]:
+            cur = [bm.verts.new(loc - sv + n * 0.006), bm.verts.new(loc + n * 0.014), bm.verts.new(loc + sv + n * 0.006)]
+        else:
+            cur = [bm.verts.new(loc - sv + n * 0.009), bm.verts.new(loc + sv + n * 0.009)]
+        if prev:
+            for j in range(len(cur) - 1):
+                f = bm.faces.new((prev[j], prev[j + 1], cur[j + 1], cur[j]))
+                f.material_index = GLOW
+                f.smooth = True
+                f.normal_update()
+                if f.normal.dot(n) < 0:
+                    f.normal_flip()
+                faces.append(f)
+        prev = cur
+    return faces
+
+
+def lens(k, lf, lb, ht, hb, pf=0.2, pb=1.2, lift=0.0, dx=0.0):
+    """目の形 (M22-05 残りの手直しで追加)。(前 (目頭) へ +, 上へ +) の 2D 点を k 個、i = 0 が目頭、k/2 が目尻。
+    lf / lb は目頭 / 目尻までの長さ、ht / hb は上 / 下まぶたの高さ。pf / pb は目頭 / 目尻の尖り (0 で楕円、1 で放物線の尖った角)。
+    lift は目尻を上まぶたの高さに対して持ち上げる割合 (基準画の目は目尻が上がって尖り、目頭は丸い)、dx は前へずらす量"""
+    out = []
+    for i in range(k):
+        a = 2 * math.pi * i / k
+        ca, sa = math.cos(a), math.sin(a)
+        x = ca * (lf if ca > 0 else lb)
+        y = sa * (ht if sa > 0 else hb) * abs(sa) ** (pf if ca > 0 else pb)
+        y += lift * ht * max(0.0, -ca) ** 2
+        out.append((x + dx, y))
+    return out
+
+
 def build_eye(bm, bvh_head, lod, side):
     loc, n, _, _ = bvh_head.ray_cast(Vector((side * 1.0, -0.84, 1.865)), Vector((-side, 0, 0)))
     if n.dot(Vector((side, 0, 0))) < 0:
         n = -n
-    u = Vector((0, -1, -0.12))
+    u = Vector((0, -1, -0.25))  # (M22-05 残りの手直しで変更: -0.12 → -0.25。頭の面の傾きと合わせて、真横から目頭が 20° ほど下がって見える)
     u = (u - n * u.dot(n)).normalized()  # 目の長軸 (鼻先へ少し下がる)
     v = n.cross(u).normalized()
+    if v.z < 0:
+        v = -v  # (M22-05 残りの手直しで追加: 上下で形が違うので v を上向きに揃える)
     k = lod["eye"]
 
-    def disc(L, H, off, bulge, mat):
+    def disc(L, H, off, bulge, mat, shape=None):
         c = bm.verts.new(loc + n * (off + bulge))
         vs = []
         for i in range(k):
@@ -564,6 +693,8 @@ def build_eye(bm, bvh_head, lod, side):
             # アーモンド形: 目尻 (後ろ) を尖らせる
             sharp = 1.0 - 0.35 * max(0.0, -ca)
             p = loc + u * (L * ca) + v * (H * sa * sharp) + n * off
+            if shape:  # (M22-05 残りの手直しで追加: lens() の形。目頭・目尻とも尖らせ、上下のまぶたの丸みを変える)
+                p = loc + u * shape[i][0] + v * shape[i][1] + n * off
             best = bvh_head.find_nearest(p)
             p = best[0] + n * off if best[0] is not None else p
             vs.append(bm.verts.new(p))
@@ -574,9 +705,10 @@ def build_eye(bm, bvh_head, lod, side):
             if f.normal.dot(n) < 0:
                 f.normal_flip()
 
+    # (M22-05 残りの手直しで変更: 楕円から lens() の形へ。暗い縁は目尻を後ろ上へ尖らせて伸ばし、目頭は丸く。光る瞳は丸みを残して前へ寄せる)
     if lod["name"] == "hero":
-        disc(0.064, 0.04, 0.003, 0.004, ABASE)
-    disc(0.052, 0.03, 0.006, 0.01, GLOW)
+        disc(0.064, 0.04, 0.003, 0.002, ABASE, shape=lens(k, 0.054, 0.066, 0.026, 0.032, pf=0.9, pb=1.2, lift=0.7))
+    disc(0.052, 0.03, 0.006, 0.005, GLOW, shape=lens(k, 0.036, 0.034, 0.017, 0.022, pf=0.2, pb=0.4, dx=0.006))
 
 
 # ---------------------------------------------------------------- 頂点色と重み
@@ -652,14 +784,38 @@ def head_weights(co):
 
 
 # ---------------------------------------------------------------- メッシュの組み立て
-PLATES = [
+PLATES_V1 = [  # (M22-05 残りの手直しで PLATES から改名。試作 1 の輪郭、比較のために残す)
     # (左側面から見た輪郭 (y, z)、光る辺 i (i → i+1))。基準画の側面 (creatures/deer.png 左上) の画素から 0.00795 m/px で起こした
     ([(-0.24, 1.30), (-0.44, 1.335), (-0.56, 1.22), (-0.59, 1.02), (-0.51, 0.86), (-0.33, 0.85), (-0.25, 1.00)], {1, 2, 3}),  # 肩の大きな板
     ([(-0.24, 1.335), (-0.28, 1.43), (-0.44, 1.47), (-0.57, 1.42), (-0.555, 1.35), (-0.44, 1.35)], {3, 4, 5}),               # 肩の上 (き甲) の板
     ([(0.40, 1.25), (0.58, 1.265), (0.70, 1.16), (0.715, 0.98), (0.62, 0.83), (0.45, 0.83), (0.34, 0.96), (0.33, 1.12)], {5, 6, 7}),  # 腰の板
 ]
-BELLY_LINE = [(-0.34, 0.875, 0), (-0.10, 0.845, 0), (0.15, 0.845, 0), (0.345, 0.93, 0)]
-CHEST_V = [(-0.575, 1.21, 0), (-0.64, 1.12, 35), (-0.66, 1.03, 65), (-0.66, 0.97, 90)]
+BELLY_LINE_V1 = [(-0.34, 0.875, 0), (-0.10, 0.845, 0), (0.15, 0.845, 0), (0.345, 0.93, 0)]  # (M22-05 残りの手直しで改名)
+CHEST_V_V1 = [(-0.575, 1.21, 0), (-0.64, 1.12, 35), (-0.66, 1.03, 65), (-0.66, 0.97, 90)]  # (M22-05 残りの手直しで改名)
+
+# M22-05 残りの手直し: 基準画の側面を画素で測り直した輪郭 (y = (252 - px) × 0.00795、z = (386 - py) × 0.00795)。
+# 肩の板は前上の長い斜めの辺と前へ尖った角を持つ六角、き甲の板は前上がりの平行四辺形、腰の板は前へ尖った六角。
+# 光る継ぎ目は板の縁から離した帯 (build_seam) なので、光る辺の集合は空 (build_plate の seam_band=False)
+SHOULDER = [(-0.275, 1.245), (-0.44, 1.31), (-0.636, 1.081), (-0.501, 0.843), (-0.318, 0.859), (-0.294, 1.065)]
+WITHERS = [(-0.12, 1.395), (-0.375, 1.49), (-0.43, 1.375), (-0.255, 1.29)]
+HIP = [(0.69, 1.16), (0.39, 1.28), (0.295, 1.035), (0.42, 0.82), (0.63, 0.865), (0.71, 0.985)]
+PLATES = [
+    (SHOULDER, set()),  # 肩の大きな板
+    (WITHERS, set(), dict(thick=0.09)),   # 肩の上 (き甲) の板。背の上に乗るので厚く
+    (HIP, set()),       # 腰の板
+]
+SEAM_GAP = 0.022
+# 継ぎ目 (側面図の折れ線): 腰の板の前の 2 辺 (背の線から)、き甲の板の前の辺 → 肩の板の前上の斜めの辺、き甲の板と肩の板のあいだ
+SEAMS = [
+    [(0.335, 1.36), outside(HIP, 1, SEAM_GAP), outside(HIP, 2, SEAM_GAP),
+     tuple(Vector(outside(HIP, 2, SEAM_GAP)).lerp(Vector(outside(HIP, 3, SEAM_GAP)), 0.8))],
+    [outside(WITHERS, 1, SEAM_GAP), outside(SHOULDER, 1, SEAM_GAP), outside(SHOULDER, 2, SEAM_GAP)],
+    [outside(SHOULDER, 0, SEAM_GAP), outside(SHOULDER, 1, SEAM_GAP)],
+]
+# 腹の線は腰の板の継ぎ目から肩の板の下の角へ、腹の中ほどで下へ折れる V (基準画)。胸の V 字は肩の板の前の角から胸の真ん中へ
+BELLY_LINE = [(0.29, 0.955, 0), (0.02, 0.866, 0), (-0.29, 0.925, 0)]
+_C = outside(SHOULDER, 2, SEAM_GAP)
+CHEST_V = [(_C[0], _C[1], 0), (-0.675, 1.0, 35), (-0.695, 0.955, 65), (-0.695, 0.935, 90)]
 
 def make_part(name, bm, part, cands, mats, recalc=True):
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
@@ -736,10 +892,12 @@ def build_lod(lod, obj_name, mats, antlers=True):
     bvh = BVHTree.FromPolygons(shell_v, shell_f)
     for side, s in ((-1, "L"), (1, "R")):
         bm = bmesh.new()
-        for outline, glow in PLATES:
-            build_plate(bm, bvh, lod, outline, glow, side)
-        build_ribbon(bm, bvh, lod, BELLY_LINE, side)
-        build_ribbon(bm, bvh, lod, CHEST_V, side)
+        for outline, glow, *opt in PLATES:  # (M22-05 残りの手直しで変更: 板ごとの厚さ opt を渡す)
+            build_plate(bm, bvh, lod, outline, glow, side, **(opt[0] if opt else {}))
+        for seam in SEAMS:  # (M22-05 残りの手直しで追加: 板の縁に沿う光る継ぎ目)
+            build_seam(bm, bvh, lod, seam, side)
+        build_ribbon(bm, bvh, lod, BELLY_LINE, side, width=0.022, nseg=9)  # (M22-05 残りの手直しで変更: 幅を継ぎ目と揃え、区切りを減らす)
+        build_ribbon(bm, bvh, lod, CHEST_V, side, width=0.022, nseg=10)
         parts.append(make_part(f"{obj_name}_plates_{s}", bm, "plate", lambda co: weights_for(co, body_cands(co)), mats, recalc=False))
     bm = bmesh.new()
     build_tail(bm, lod)
@@ -990,7 +1148,7 @@ def ease(a, b, t):
     return smoothstep(a, b, t)
 
 
-def pose_graze(rig, t):
+def pose_graze_v1(rig, t):  # (M22-05 残りの手直しで pose_graze から改名。首だけ上下する試作 1 の食む動き、比較のために残す)
     # 0-1.2 s 頭を下げる、1.2-3.8 s 食む (顎を 3 回/秒)、3.8-5 s 上げる
     down = ease(0.0, 1.2, t) * (1 - ease(3.8, 5.0, t))
     chew = ease(1.2, 1.5, t) * (1 - ease(3.5, 3.8, t))
@@ -1013,7 +1171,7 @@ def pose_graze(rig, t):
     return b
 
 
-def pose_fall(rig, t):
+def pose_fall_v1(rig, t):  # (M22-05 残りの手直しで pose_fall から改名。最後に角が地面下 0.93 m まで刺さっていた試作 1、比較のために残す)
     # 0-0.6 s 前膝が折れて胸が落ちる、0.5-1.4 s 横倒し、1.3-2 s 頭が地に落ちて静まる
     k1 = ease(0.0, 0.6, t)
     k2 = ease(0.45, 1.4, t)
@@ -1046,24 +1204,193 @@ def pose_fall(rig, t):
     return b
 
 
+GRAZE_T = 10.0
+
+
+def track(t, keys):
+    """(時刻, 値) のキーを smoothstep で繋ぐ (M22-05 残りの手直しで追加)。最初と最後の値を同じにすればループが閉じ、キーでは速さ 0"""
+    if t <= keys[0][0]:
+        return keys[0][1]
+    for (t0, v0), (t1, v1) in zip(keys, keys[1:]):
+        if t <= t1:
+            return v0 + (v1 - v0) * smoothstep(t0, t1, t)
+    return keys[-1][1]
+
+
+def swing(t, t0, t1):
+    """t0〜t1 の遊脚の持ち上げ (0 → 1 → 0)"""
+    return math.sin(math.pi * (t - t0) / (t1 - t0)) if t0 < t < t1 else 0.0
+
+
+# 食む (M22-05 残りの手直しで作り直し、10 s ループ)。ユーザー (2026-09-24):「首だけおもちゃのように上下を繰り返すのはおかしい。
+# 食べるときは一定、頭を下ろしたままだし、動きももっと前足を曲げて全身を落とすでしょう」。
+#   0.3〜2.2 s 頭を下ろし、前足を曲げて前半身ごと沈める → 2.4〜4.2 s 食む (口元の小さな動きと、ときどき草を引きちぎる小さな引き)
+#   4.3〜5.2 s 左前足をゆっくり一歩前へ (体重も少し前へ) → 5.6〜7.6 s 食む → 7.9〜9.7 s ゆっくり頭を上げて見回す (8.0〜8.9 s に左前足を体の下へ戻す)
+#   → 9.7 s〜次の 0.3 s は頭を上げたまま (ループの継ぎ目。群れの VAT は個体ごとに位相をずらす)
+GRAZE_DOWN = [(0, 0), (0.3, 0), (2.2, 1), (7.9, 1), (9.7, 0), (10, 0)]
+GRAZE_CROUCH = [(0, 0), (0.5, 0), (2.4, 1), (7.7, 1), (9.5, 0), (10, 0)]
+GRAZE_STEP = [(0, 0), (4.3, 0), (5.2, 1), (8.0, 1), (8.9, 0), (10, 0)]
+GRAZE_CHEW = [(0, 0), (2.1, 0), (2.5, 1), (4.1, 1), (4.4, 0), (5.3, 0), (5.7, 1), (7.5, 1), (7.8, 0), (10, 0)]
+GRAZE_LOOK = [(0, 1), (0.4, 1), (2.0, 0), (8.3, 0), (9.6, 1), (10, 1)]
+GRAZE_STEP_Y = 0.17  # 一歩の長さ (m)
+GRAZE_POSE = dict(pelvis_drop=0.07, pelvis_pitch=8.0, spine=2.0, chest=3.0, neck1=86.0, neck2=40.0, head=-52.0, carpus=20.0)
+
+
+def pose_graze(rig, t):
+    g = GRAZE_POSE
+    down = track(t, GRAZE_DOWN)
+    crouch = track(t, GRAZE_CROUCH)
+    step = track(t, GRAZE_STEP)
+    chew = track(t, GRAZE_CHEW)
+    look = track(t, GRAZE_LOOK)
+    w = 2 * math.pi / GRAZE_T
+    b = {}
+    breath = math.sin(w * 3 * t)
+    # 前足を曲げて前半身を沈める: 骨盤を下げて前へ傾け、背と胸で少し足す。左前足を出したら体重も少し前へ
+    b["pelvis"] = pelvis_basis(rig, Vector((0, -0.035 * step, -g["pelvis_drop"] * crouch - 0.004 + 0.004 * breath)),
+                               local=rot_basis(D(g["pelvis_pitch"]) * crouch))
+    b["spine1"] = rot_basis(D(g["spine"]) * crouch + D(0.5) * breath)
+    b["chest"] = rot_basis(D(g["chest"]) * crouch - D(0.5) * breath)
+    # 口元: 顎を 1.6 回/秒で小さく開け閉め。1.25 s ごとに頭を少し引いて草をちぎる (首は動かさない)
+    bite = math.sin(w * 16 * t)
+    tug = max(0.0, math.sin(w * 8 * t)) ** 4 * chew
+    sweep = math.sin(w * 2 * t) * down  # 食みながら鼻先を左右へゆっくり
+    b["neck1"] = rot_basis(D(g["neck1"]) * down + D(6) * (1 - down) * (1 - look), D(4) * sweep, 0)
+    b["neck2"] = rot_basis(D(g["neck2"]) * down + D(1.0) * tug, D(-10) * look)
+    b["head"] = rot_basis(D(g["head"]) * down - D(3.0) * tug, 0, D(5) * sweep + D(-12) * look)
+    b["jaw"] = rot_basis(D(5) * (0.5 - 0.5 * bite) * chew)
+    fl = max(0.0, math.sin(math.pi * (t - 3.1) / 0.35)) ** 2 if 3.1 < t < 3.45 else 0.0
+    fr = max(0.0, math.sin(math.pi * (t - 6.6) / 0.35)) ** 2 if 6.6 < t < 6.95 else 0.0
+    b["ear_L"] = rot_basis(D(-15) * down - D(20) * look, 0, D(12) * down + D(18) * fl)
+    b["ear_R"] = rot_basis(D(-15) * down - D(20) * look, 0, D(-12) * down - D(18) * fr)
+    tf = max(0.0, math.sin(math.pi * (t - 6.0) / 0.5)) if 6.0 < t < 6.5 else 0.0
+    b["tail1"] = rot_basis(D(4) * math.sin(w * 4 * t) + D(15) * tf, 0, D(10) * tf)
+    b["tail2"] = rot_basis(D(6) * tf)
+    for leg in LEG_BONES:
+        F, dc, dh = planted(leg)
+        if leg.startswith("fl"):
+            dc += D(g["carpus"]) * crouch  # 手首 (前膝) を前へ出して前足を曲げる
+        if leg == "fl_L":
+            F.y -= GRAZE_STEP_Y * step
+            lift = swing(t, 4.3, 5.2) + swing(t, 8.0, 8.9)
+            F.z += 0.07 * lift
+            dc += D(35) * lift
+            dh += D(25) * lift
+        solve_leg(rig, b, leg, F, dc, dh)
+    return b
+
+
+# 倒れる (M22-05 残りの手直しで作り直し)。兎の担当の検証で、試作 1 は最後に角が地面下 0.93 m まで刺さっていた (右へ倒れた体と一緒に頭も転がり、右の角が下を向く)。
+#   0〜0.6 s 前膝が折れて胸が落ちる (前足は蹄を地面に置いたまま IK で折る) → 0.45〜1.4 s 右側を下に横倒し
+#   → 1.1〜2 s 首を前へ伸ばして地面に置く。頭は体と一緒に転がさず、世界に対して起こしたまま (角は上へ) 顎を地面に付ける
+#   途中で蹄や脚が地面より下へ出るフレームは、bake_actions が出た分だけ体を持ち上げる (GROUND_CLAMP)
+def pose_fall(rig, t, lift=0.0):
+    k1 = ease(0.0, 0.6, t)
+    k2 = ease(0.45, 1.4, t)
+    k3 = ease(1.1, 2.0, t)
+    b = {}
+    roll = Quaternion(Vector((0, 1, 0)), D(88) * k2)  # +Y 軸回り (体の右側を下に)
+    drop = Vector((0.12 * k2, 0.0, -0.22 * k1 - 0.75 * k2))
+    pel_local = rot_basis(D(10) * k1 * (1 - k2) - D(3) * k2)
+    b["pelvis"] = pelvis_basis(rig, drop, wrot=roll, local=pel_local)
+    b["spine1"] = rot_basis(D(4) * k1 * (1 - k2), 0, 0)
+    b["chest"] = rot_basis(D(6) * k1 * (1 - k2))
+    # 首: 前へ伸ばし (体の前 = -Y へ寝かせる)、地面の側 (体の右 = ローカル -Z 回り) へ少し下ろす。体の転がりは首の捩じりで少し戻す
+    b["neck1"] = rot_basis(D(25) * k1 * (1 - k3) + D(62) * k3, D(22) * k3, D(16) * k3)
+    b["neck2"] = rot_basis(D(8) * k1 * (1 - k3) + D(22) * k3, D(22) * k3, D(14) * k3)
+    b["jaw"] = rot_basis(D(4) * k3)
+    b["ear_L"] = rot_basis(D(20) * k3, 0, D(-15) * k3)
+    b["ear_R"] = rot_basis(D(20) * k3, 0, D(15) * k3)
+    b["tail1"] = rot_basis(-D(15) * k3)
+    relax_f = [D(35), -D(25), D(30), D(25)]  # 横倒し後: 軽く曲げて投げ出す
+    relax_h = [-D(40), D(20), -D(25), D(25)]
+    for leg, bones in LEG_BONES.items():
+        front = leg.startswith("fl")
+        relax = relax_f if front else relax_h
+        if front:
+            tmp = dict(b)
+            solve_leg(rig, tmp, leg, leg_rest_F(leg), D(85) * k1, 0.0)  # 前膝をつく: 手首を前へ大きく折る
+        else:
+            tmp = dict(b)
+            F = leg_rest_F(leg)
+            solve_leg(rig, tmp, leg, F, -D(10) * ease(0.2, 0.8, t), 0.0)
+        for i, bn in enumerate(bones):
+            a_ik = tmp[bn].to_euler().x
+            b[bn] = Matrix.Rotation(a_ik * (1 - k2) + relax[i] * k2, 4, "X")
+    # 頭: 首の先に付いたままの向き (FK) から、世界に対して起こした向きへ移す。最後は鼻先を少し下げ、地面の側へ 12° 傾ける
+    P = posed(rig, b)
+    head = rig.data.bones["head"]
+    par = P["neck2"] @ (head.parent.matrix_local.inverted() @ head.matrix_local)
+    fk = par.to_quaternion()
+    want = (Quaternion(Vector((0, 1, 0)), D(12) * k3) @ Quaternion(Vector((1, 0, 0)), D(8) * k3)) @ head.matrix_local.to_quaternion()
+    q = fk.slerp(want, ease(0.3, 1.2, t))
+    b["head"] = (fk.inverted() @ q).to_matrix().to_4x4()
+    # 持ち上げは脚の IK を解いたあとに骨盤ごと平行移動する (先に動かすと IK が蹄を地面の下の目標へ引き戻す)
+    b["pelvis"] = pelvis_basis(rig, drop + Vector((0, 0, lift)), wrot=roll, local=pel_local)
+    return b
+
+
+GROUND_CLAMP = {"fall"}  # (M22-05 残りの手直しで追加) 地面より下へ出た分だけ体を持ち上げるアクション
+
+
 ACTIONS = [("idle", 4.0, pose_idle, True), ("walk", 1.2, pose_walk, True), ("run", 0.6, pose_run, True),
-           ("graze", 5.0, pose_graze, True), ("fall", 2.0, pose_fall, False)]
+           ("graze", GRAZE_T, pose_graze, True), ("fall", 2.0, pose_fall, False)]  # (M22-05 残りの手直しで変更: graze 5 s → 10 s)
+GROUND_TOL = 0.0  # 持ち上げたあとの一番低い頂点の高さ (m)
 
 
-def bake_actions(rig):
+def set_pose(rig, basis):
+    for bn in ORDER:
+        M = basis.get(bn, Matrix.Identity(4))
+        loc, q, _ = M.decompose()
+        pb = rig.pose.bones[bn]
+        pb.location = loc
+        pb.rotation_quaternion = q
+
+
+def lowest(meshes):
+    """今の姿勢での 3 メッシュの一番低い頂点の高さ"""
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    lo = 1e9
+    for ob in meshes:
+        ev = ob.evaluated_get(dg)
+        me = ev.to_mesh()
+        lo = min(lo, min((ev.matrix_world @ v.co).z for v in me.vertices))
+        ev.to_mesh_clear()
+    return lo
+
+
+def ground_lifts(rig, fn, nf, meshes):
+    """(M22-05 残りの手直しで追加) GROUND_CLAMP のアクションで、各フレームの一番低い頂点が地面 (z = 0) より下なら、その分だけ体を持ち上げる量。
+    持ち上げは骨盤の平行移動なので正確に効く。前後 2 フレームの最大を取ってから平均してなめらかにする (どのフレームも元の量以上になる)"""
+    rig.animation_data.action = None
+    raw = []
+    for f in range(nf + 1):
+        set_pose(rig, fn(rig, f / FPS))
+        raw.append(max(0.0, GROUND_TOL - lowest(meshes)))
+    mx = [max(raw[max(0, i - 2):i + 3]) for i in range(len(raw))]
+    return [sum(mx[max(0, i - 2):i + 3]) / len(mx[max(0, i - 2):i + 3]) for i in range(len(mx))]
+
+
+def bake_actions(rig, meshes=()):
     global ORDER
     ORDER = bone_order(rig)
     rig.animation_data_create()
     acts = []
     for name, dur, fn, loop in ACTIONS:
+        nf = round(dur * FPS)
+        lifts = ground_lifts(rig, fn, nf, meshes) if name in GROUND_CLAMP and meshes else None  # (M22-05 残りの手直しで追加)
+        if lifts:
+            print(f"action {name}: ground lift max {max(lifts):.3f} m (frames {[i for i, v in enumerate(lifts) if v > 1e-4][:1]}..)")
         act = bpy.data.actions.new(name)
         act.use_fake_user = True
         rig.animation_data.action = act
-        nf = round(dur * FPS)
         last = {}
         for f in range(nf + 1):
             t = f / FPS
             basis = fn(rig, t if (f < nf or not loop) else 0.0)  # ループはの最後のフレームを最初と同じにする
+            if lifts:
+                basis = fn(rig, t, lift=lifts[f])
             for bn in ORDER:
                 pb = rig.pose.bones[bn]
                 M = basis.get(bn, Matrix.Identity(4))
@@ -1109,7 +1436,7 @@ def main():
         mod.object = rig
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
-    bake_actions(rig)
+    bake_actions(rig, meshes)  # (M22-05 残りの手直しで変更: 地面へのめり込みを測るためにメッシュを渡す)
     scene.frame_set(0)
     for o in scene.objects:
         o.select_set(True)
