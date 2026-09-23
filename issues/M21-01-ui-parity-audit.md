@@ -1,7 +1,7 @@
 ---
 id: M21-01
 title: 通し実行の台本の UI パリティ監査
-status: todo
+status: review
 milestone: M21
 plan: docs/specs/plans/2026-09-23-roadmap.md#21-チケットになっていない負債既存-11-本の仕上げ
 depends_on: []

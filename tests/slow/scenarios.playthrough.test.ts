@@ -12,6 +12,7 @@ import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { INTERCEPT_NEED } from '../../src/simulation/works';
 import { LOAD_RADIUS } from '../../src/simulation/civilizationLoad';
 import { timberAround, SHIP_FOREST_MIN } from '../../src/simulation/ship';
+import { disasterClick, spawnClick } from '../../src/ui/clicks';
 
 /**
  * 5 本のシナリオを「放置」と「台本どおりの介入」で回し、
@@ -34,17 +35,18 @@ const respawnAll: Script = (r, s) => {
   for (let i = 0; i < s.layers.elevation.length; i += 37) {
     if (s.layers.elevation[i] < 0.3) continue;
     k++;
-    for (const id of ['moss', 'grass', 'forest']) r.intervene({ type: 'spawn_species', speciesId: id, cell: i, amount: 0.5 });
-    if (k % 3 === 0) for (const id of ['deer', 'rabbit']) r.intervene({ type: 'spawn_species', speciesId: id, cell: i, amount: 0.3 });
+    for (const id of ['moss', 'grass', 'forest']) r.intervene(spawnClick(id, i));
+    if (k % 3 === 0) for (const id of ['deer', 'rabbit']) r.intervene(spawnClick(id, i));
     // 狼は薄く放つと餌を食い尽くす前に消える紙一重なので、6 セルに 1 つ・0.3 と厚めに放つ
-    if (k % 6 === 0) r.intervene({ type: 'spawn_species', speciesId: 'wolf', cell: i, amount: 0.3 });
+    // (M21-01: 放流はすべて UI の 1 クリック = 環 1・0.5 に揃えた)
+    if (k % 6 === 0) r.intervene(spawnClick('wolf', i));
   }
 };
 
 /** 沈む欠片の介入 (星の力の制約下)。放流はプレイヤーのクリック 1 回 (半径 1) に合わせる */
 const sinkingOps = (r: ScenarioRunner, s: WorldSnapshot) => ({
   spawnHigh: (ids: string[], k: number) => {
-    for (const c of highest(s, k)) for (const id of ids) r.intervene({ type: 'spawn_species', speciesId: id, cell: c, amount: 0.3, radius: 1 });
+    for (const c of highest(s, k)) for (const id of ids) r.intervene(spawnClick(id, c));
   },
   plagueWolvesIfMany: () => {
     const t = s.totals;
@@ -53,7 +55,7 @@ const sinkingOps = (r: ScenarioRunner, s: WorldSnapshot) => ({
     let bv = -1;
     for (let i = 0; i < s.layers.elevation.length; i++) if (s.layers.populations.wolf[i] > bv) { bv = s.layers.populations.wolf[i]; bi = i; }
     // UI の疫病の半径 (DISASTER_RADIUS.plague = 4) に合わせる (M10R-07 で一時 6 にしたが谷の波なら 4 で足りるので戻した)
-    r.intervene({ type: 'disaster', kind: 'plague', cell: bi, radius: 4 });
+    r.intervene(disasterClick('plague', bi));
   },
 });
 
@@ -99,7 +101,7 @@ const scripts: Record<string, Script> = {
     let k = 0;
     for (let i = 0; i < s.layers.elevation.length; i += 23) {
       if (s.layers.elevation[i] < 0.3 || s.layers.moisture[i] < 0.6) continue;
-      if (k++ % 2 === 0) r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: i, amount: 0.4 });
+      if (k++ % 2 === 0) r.intervene(spawnClick('moss', i));
     }
   },
 };
@@ -192,11 +194,11 @@ const towerOps = (r: ScenarioRunner, s: WorldSnapshot, state: { planted: number;
   return {
     plant: (n) => {
       for (let k = 0; k < n && state.planted < state.sites.length; k++, state.planted++) {
-        r.intervene({ type: 'spawn_species', speciesId: 'belltree', cell: state.sites[state.planted], amount: 0.5, radius: 1 });
+        r.intervene(spawnClick('belltree', state.sites[state.planted]));
       }
     },
     erupt: () => {
-      if (r.power() >= ERUPT_COST) r.intervene({ type: 'disaster', kind: 'volcano', cell: TOWER_VOLCANO, radius: 4 });
+      if (r.power() >= ERUPT_COST) r.intervene(disasterClick('volcano', TOWER_VOLCANO));
     },
     short: (mult) => (f ? f.stock < f.need * mult : false),
   };
@@ -284,13 +286,13 @@ describe('tower scenario v2 playthroughs (size 64)', { timeout: 600_000 }, () =>
 const NO_ANSWER_HOME = 2063;
 const VEIN_HOME = 1770;
 /** 儀式: 集落に苔を放つ (4)。同じ種類の介入を 3 年ごとに続けると信仰が上がる (狼の祈りの応えにはならない) */
-const ritual = (r: ScenarioRunner, home: number) => r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: home, amount: 0.3, radius: 1 });
+const ritual = (r: ScenarioRunner, home: number) => r.intervene(spawnClick('moss', home));
 /** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered)。半径 4 は UI の DISASTER_RADIUS.plague と同じ (M10R-07 で 6 を試したが、谷の波なら 4 で足りるので戻した) */
-const plagueHome = (r: ScenarioRunner, home: number) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: home, radius: 4 }); };
+const plagueHome = (r: ScenarioRunner, home: number) => { if (r.power() >= 24) r.intervene(disasterClick('plague', home)); };
 /** 狼の波が落ちる北の谷 (schedule と同じセル、M10R-07)。集落 2063 から 13 セル */
 const NO_ANSWER_VALLEY = 1366;
 /** 先回り: 谷に疫病 (24、環 4 = UI と同じ)。波の年のうち (計測では 3 か月以内) に谷を病ませれば狼は集落へ着かず、民は祈らない */
-const plagueValley = (r: ScenarioRunner) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: NO_ANSWER_VALLEY, radius: 4 }); };
+const plagueValley = (r: ScenarioRunner) => { if (r.power() >= 24) r.intervene(disasterClick('plague', NO_ANSWER_VALLEY)); };
 /** 狼の波が下りる年 (schedule と同じ: 6 年目から 8 年ごと、M10R-07) */
 const waveYear = (y: number) => y >= 6 && (y - 6) % 8 === 0;
 
@@ -318,7 +320,7 @@ const preemptScripts: Record<string, Script> = {
 
 const veinScripts: Record<string, Script> = {
   // 苔だけ: 信仰も勅令も無し。脈が尽きて生気が戻らない → dead
-  'moss-only': (r, _s, y) => { if (y >= 1 && y % 3 === 1) ritual(r, VEIN_HOME); if (y >= 20 && y % 5 === 0) for (const c of [VEIN_HOME - 2, VEIN_HOME + 2, VEIN_HOME - 2 * SIZE, VEIN_HOME + 2 * SIZE]) r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: c, amount: 0.5, radius: 1 }); },
+  'moss-only': (r, _s, y) => { if (y >= 1 && y % 3 === 1) ritual(r, VEIN_HOME); if (y >= 20 && y % 5 === 0) for (const c of [VEIN_HOME - 2, VEIN_HOME + 2, VEIN_HOME - 2 * SIZE, VEIN_HOME + 2 * SIZE]) r.intervene(spawnClick('moss', c)); },
   // 信仰を上げずに止めよ: 民は聞かない → dead (放置と同じ)
   'edict-without-faith': (r, s, y) => { if (y >= 1 && y % 5 === 0 && !s.civ?.miningStopped) r.intervene({ type: 'civ_edict', edict: 'stop_mining' }); },
   // 想定解 1: 祈りに応えて速く上げ、0.6 になったら止めよ
@@ -399,12 +401,13 @@ describe('faith scenarios (M9-04, size 64)', { timeout: 600_000 }, () => {
  * 星は三度落ちる (60/100/140)。星の門 (半径 12 の民 4.0 + 信仰 0.8) と工事 (備蓄 3.0、信仰 0.6) と薄い脈 (crystalScale 0.62)。
  * 儀式を最初から続ければ塔で待たずに星に上がり、三度撃てる。儀式を後回しにすると、信仰が 0.8 に届くまで塔で掘り続けて脈を
  * 無駄にし、三度目の備蓄が足りない。そのとき「止めよ」で脈を守れば間に合う。儀式をせず祈りに応えるだけでは 0.8 に届かず、一つ目が落ちる
+ * (M21-01: 応えを UI と同じ手にすると応えだけで 0.8 に届き alive。下の answer-only と M21-03 を見よ)
  */
 describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }, () => {
   const def = defs.find((d) => d.id === 'intercept-tower');
   if (!def) throw new Error('scenario intercept-tower missing');
   /** 草の儀式: 集落へ同じ放流を 2 年ごと (信仰 +0.05/年、草は群れの餌にもなる) */
-  const ritualFrom = (y0: number): Script => (r, s, y) => { if (y >= y0 && y % 2 === 0) r.intervene({ type: 'spawn_species', speciesId: 'grass', cell: s.civ!.home, amount: 0.5, radius: 3 }); };
+  const ritualFrom = (y0: number): Script => (r, s, y) => { if (y >= y0 && y % 2 === 0) r.intervene(spawnClick('grass', s.civ!.home)); };
   /** 備蓄が満ちたら撃つ */
   const fire: Script = (r, s) => { if ((s.civ?.works?.stock ?? 0) >= INTERCEPT_NEED) r.intervene({ type: 'intercept' }); };
   /**
@@ -425,17 +428,21 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
   const answerOnly: Script = (r, s) => {
     const p = s.civ?.prayer;
     if (!p || p.issuedYear !== s.year) return;
-    if (p.kind === 'wolves') r.intervene({ type: 'disaster', kind: 'plague', cell: s.civ!.home, radius: 6 });
-    if (p.kind === 'rain') r.intervene({ type: 'spawn_species', speciesId: 'grass', cell: s.civ!.home, amount: 0.5, radius: 3 });
+    if (p.kind === 'wolves') r.intervene(disasterClick('plague', s.civ!.home));
+    if (p.kind === 'rain') r.intervene(spawnClick('grass', s.civ!.home));
   };
   const seq = (...fs: Script[]): Script => (r, s, y) => { for (const f of fs) f(r, s, y); };
   it('idle → dead (信仰が減衰して塔で止まり、一つ目の星が落ちる)', () => {
     const v = playTower(def, null);
     expect(v.status).toBe('dead');
   });
-  it('naive answer-only (儀式なし、祈りにだけ応える) → dead (信仰が 0.8 に届かず星に上がれない)', () => {
+  // M21-01: 応えを UI と同じ手 (疫病 環 4・草 環 1) にすると、応えだけで信仰 0.88 に届いて 30 年目に星、50 年目までに三度砕き alive。
+  // 以前の dead は環 6 の疫病で 50 年目の祈りが 1 回多く、信仰が工事の門 0.6 を割らずに脈を掘り尽くした偶然だった。応えだけで勝てる問題と、
+  // 50 年で撃ち終わる後半の空白は M21-03 の LD で扱う (docs/specs/plans/2026-09-23-m21-01-ui-parity-audit.md §3)
+  it('answer-only (儀式なし、祈りにだけ応える) → alive (応えで信仰 0.88、30 年目に星、50 年目までに三度砕く。M21-03 で作り直す)', () => {
     const v = playTower(def, seq(answerOnly, fire));
-    expect(v.status).toBe('dead');
+    expect(v.status, v.reason).toBe('alive');
+    expect(v.reason).toContain('星を 3 回砕いた');
   });
   it('naive ritual without edict (儀式を最初から、止めよ無し) → dead (脈を掘り尽くし「星の砂を」の無視で上限が削れ、工事が止まり内乱で崩れる)', () => {
     const v = playTower(def, seq(ritualFrom(0), fire));
@@ -479,7 +486,7 @@ describe('sky-ship scenario playthroughs (size 64)', { timeout: 900_000 }, () =>
   /** 材と信仰が門を越えたら着工 */
   const launchWhenReady: Script = (r, s) => { if (!s.ship && timber(s) >= SHIP_FOREST_MIN && (s.civ?.faith ?? 0) >= 0.5) r.intervene({ type: 'launch_ship' }); };
   /** 集落の周りに同じ種を every 年ごとに放つ (儀式を兼ねる)。M10R-08 では鐘樹の放流に plantBelltree を使うが、forest-only の比較用に残す */
-  const ring = (id: string, radius: number, amount: number, every: number): Script => (r, s, y) => { if (y % every === 0) r.intervene({ type: 'spawn_species', speciesId: id, cell: s.civ!.home, amount, radius }); };
+  const ring = (id: string, every: number): Script => (r, s, y) => { if (y % every === 0) r.intervene(spawnClick(id, s.civ!.home)); };
   const seq = (...fs: Script[]): Script => (r, s, y) => { for (const f of fs) f(r, s, y); };
   /** 集落半径 6 内で鐘樹の適地 (suitability > 0.6) を 2 セル以上離して集落に近い順に選ぶ。環 1 の放流 (5 セル) が敷き詰まる間隔 */
   function belltreeSitesAround(s: WorldSnapshot, home: number, radius: number): number[] {
@@ -504,7 +511,7 @@ describe('sky-ship scenario playthroughs (size 64)', { timeout: 900_000 }, () =>
         acc -= 1;
         const bt = s.layers.populations.belltree;
         const cell = next < sites.length ? sites[next++] : sites.reduce((a, b) => ((bt?.[a] ?? 0) <= (bt?.[b] ?? 0) ? a : b));
-        r.intervene({ type: 'spawn_species', speciesId: 'belltree', cell, amount: 0.5, radius: 1 });
+        r.intervene(spawnClick('belltree', cell));
       }
     };
   };
@@ -541,7 +548,7 @@ describe('sky-ship scenario playthroughs (size 64)', { timeout: 900_000 }, () =>
     expect(v.reason).toContain('次の島へ');
   });
   it('naive forest-only (森を UI 並みの環 1・0.5 で 2 年ごとに放ち続ける) → dead (鹿に食われ、材が育たない)', () => {
-    const v = playTower(def, seq(ring('forest', 1, 0.5, 2), launchWhenReady));
+    const v = playTower(def, seq(ring('forest', 2), launchWhenReady));
     expect(v.status).toBe('dead');
   });
 });

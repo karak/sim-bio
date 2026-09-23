@@ -12,15 +12,7 @@ import type { Command } from './simulation/types';
 import { resolveCivilizationStart } from './simulation/civilization';
 import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
-
-/**
- * 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる。
- * 疫病は 4 のまま (M10R-07): 祈りに応えるなの狼の波は谷 (集落から 13 セル、環 3) に落ち、谷への疫病 環 4 で波の 3 か月後まで追える
- * (LD 2026-09-22-level-design-faith-economy.md §8.10。集落に落とす環 6 の波は環 6 の疫病でも波と同じ tick でしか効かず、UI では打てなかった)
- */
-const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, wildfire: 0, plague: 4 };
-/** 種を放つときに各セルへ加える密度 */
-const SPAWN_AMOUNT = 0.5;
+import { disasterClick, spawnClick } from './ui/clicks';
 
 async function boot(): Promise<void> {
   const [base, species, scenarios] = await Promise.all([
@@ -171,7 +163,7 @@ async function boot(): Promise<void> {
       const id = spawnArmed;
       const s = world.snapshot();
       // 1 セルだけだと見えにくいので半径 1 (3×3 相当) に放つ。1 コマンドなので値段も 1 回分。海セルは World 側で無視される
-      const ok = intervene({ type: 'spawn_species', speciesId: id, cell, amount: SPAWN_AMOUNT, radius: 1 });
+      const ok = intervene(spawnClick(id, cell));
       if (ok) {
         const def = s.species.find((d) => d.id === id);
         hud.addMarker(s.year, def?.name ?? id, def?.color ?? '#6FBF7C');
@@ -182,7 +174,7 @@ async function boot(): Promise<void> {
     if (armed) {
       const kind = armed;
       const s = world.snapshot();
-      const ok = intervene({ type: 'disaster', kind, cell, radius: DISASTER_RADIUS[kind] });
+      const ok = intervene(disasterClick(kind, cell));
       if (ok) hud.addMarker(s.year, kind, '#E07A55');
       hud.setArmed(null);
       return;
