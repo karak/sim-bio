@@ -627,7 +627,8 @@ code-review の指摘 10 件を直した。
 - **(c)(d) シナリオ・通し実行**: `assets/data/scenarios.json` の空の舟の schedule に 0 年目の鐘樹の予定放流(環 4・0.6、民の林)、
   通し実行(tests/slow)の放流は環 1・0.5 に揃えた(別エージェントの作業)。
 - **ファイル**: `assets/data/species.json`、`src/simulation/ship.ts`、`src/simulation/World.ts`、`src/ui/Hud.ts`、
-  `tests/unit/ship.test.ts`・`ui.hud.test.ts`。
+  `tests/unit/ship.test.ts`・`ui.hud.test.ts`、(c)(d) は `assets/data/scenarios.json`(sky-ship)、`tests/unit/scenario.runner.test.ts`(0 年目の予定)、
+  `tests/slow/scenarios.playthrough.test.ts`(空の舟の 8 件)。
 
 ## 6. マイルストーンと受入基準
 
