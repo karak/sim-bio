@@ -257,7 +257,8 @@ async function boot(): Promise<void> {
     list.push(new Matrix4().compose(new Vector3(x, field.heightAt(x, z) - 0.15, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), ry), new Vector3(1, 1, 1)));
     settlementPlacements.set(name, list);
   };
-  const toSea = Math.atan2(marks.slipway.x - marks.center.x, marks.slipway.z - marks.center.z);
+  // (M22-06: 集落から船台への向きをやめ、船台から外海が最も開けた方位へ向ける)
+  const toSea = Math.atan2(marks.slipwayBow.x, marks.slipwayBow.z);
   place('slipway', marks.slipway.x, marks.slipway.z, toSea);
   const c0 = marks.center;
   place('hut', c0.x - 14, c0.z - 8, 0.4);

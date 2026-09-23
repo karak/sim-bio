@@ -63,4 +63,22 @@ describe('観察画面 (M22-04): landmarks', () => {
     expect(m.slipway).toEqual({ x: 0, z: 0 });
     expect(m.coast).toEqual({ x: 0, z: 0 });
   });
+
+  it('M22-06: 池 (外海につながらない海) の岸より、遠くても外海に接する陸を船台に選び、舳先は外海へ向ける', () => {
+    // 集落の東隣 (17,16) だけが池。col 21〜 は地図の東の縁までつながる外海
+    const snap = fakeSnapshot({ elevation: (col, row) => (col >= 21 || (col === 17 && row === 16) ? 0.25 : 0.4) });
+    const area = extractArea(snap, OBS_HOME, 8);
+    expect(area.cells.find((c) => c.col === 17 && c.row === 16)).toMatchObject({ isLand: false, openSea: false });
+    expect(area.cells.find((c) => c.col === 21 && c.row === 16)).toMatchObject({ isLand: false, openSea: true });
+    const m = landmarks(area);
+    expect(m.slipway).toEqual({ x: 40, z: 0 });
+    expect(m.slipwayBow).toEqual({ x: 1, z: 0 });
+  });
+
+  it('M22-06: 外海が無く池だけなら池の岸を船台にし、舳先は池へ向ける', () => {
+    const snap = fakeSnapshot({ elevation: (col, row) => (col === 16 && row >= 18 && row <= 20 ? 0.25 : 0.4) });
+    const m = landmarks(extractArea(snap, OBS_HOME, 8));
+    expect(m.slipway).toEqual({ x: 0, z: 10 });
+    expect(m.slipwayBow).toEqual({ x: 0, z: 1 });
+  });
 });

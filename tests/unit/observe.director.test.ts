@@ -21,6 +21,7 @@ const marks: Landmarks = {
   center: { x: 0, z: 0 },
   grove: { x: -30, z: 0 },
   slipway: { x: 40, z: 0 },
+  slipwayBow: { x: 1, z: 0 },
   lanterns: [{ x: 0, z: 0 }],
   coast: { x: 70, z: 10 },
 };
