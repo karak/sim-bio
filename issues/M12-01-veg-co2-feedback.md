@@ -4,7 +4,7 @@ title: 植生→気温・CO2→気温
 status: todo
 milestone: M12
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: []
+depends_on: [M12-00]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-None (can start immediately)
+M12-00
 
 ## Acceptance criteria
 

@@ -4,7 +4,7 @@ title: 持ち込み(次の島)
 status: todo
 milestone: M14
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M10-03]
+depends_on: [M10-03, M14-00]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-M10-03
+M10-03, M14-00
 
 ## Acceptance criteria
 

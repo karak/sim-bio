@@ -4,7 +4,7 @@ title: 手動受入プレイテスト(M14)
 status: todo
 milestone: M14
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M14-01, M14-02, M14-03]
+depends_on: [M14-01, M14-02, M14-03, M17-04]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-M14-01, M14-02, M14-03
+M14-01, M14-02, M14-03, M17-04
 
 ## Acceptance criteria
 

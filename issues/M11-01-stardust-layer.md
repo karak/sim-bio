@@ -4,7 +4,7 @@ title: 星砂層
 status: todo
 milestone: M11
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M8-01]
+depends_on: [M8-01, M11-00]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-M8-01
+M8-01, M11-00
 
 ## Acceptance criteria
 

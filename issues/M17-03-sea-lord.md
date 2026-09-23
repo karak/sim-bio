@@ -4,7 +4,7 @@ title: 海の主
 status: todo
 milestone: M17
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M15-03]
+depends_on: [M15-03, M17-00]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-M15-03
+M15-03, M17-00
 
 ## Acceptance criteria
 

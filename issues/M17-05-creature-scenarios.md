@@ -4,7 +4,7 @@ title: 「巨人の道」「夢喰いの影」の校正
 status: todo
 milestone: M17
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M17-01, M17-02]
+depends_on: [M17-01, M17-02, M17-00]
 evidence: []
 ---
 
@@ -16,11 +16,11 @@ evidence: []
 
 ## Blocked by
 
-M17-01, M17-02
+M17-01, M17-02, M17-00
 
 ## Acceptance criteria
 
-- [ ] 校正の前にレベルデザイン文書(体験の芯・キーアイテム・ループ・判定行列)を書き、ユーザーの承認を得る
+- [ ] M17-00 のレベルデザイン(承認済み)に従う。想定解の台本は UI と同じ手(放流 環 1・0.5、力 4)で書き、手で勝てない想定解は成立と数えない
 - [ ] レバー感度・定着・副作用の確認がヘッドレスで通っている(通らなければ係数ではなく仕組みに戻る)
 - [ ] scenarios.json に 2 本
 - [ ] tests/slow: 各シナリオで放置 dead、素朴戦略 2 つ dead、想定解 2 つ alive

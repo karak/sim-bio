@@ -4,7 +4,7 @@ title: 巨人
 status: todo
 milestone: M17
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M13-01, M9-01]
+depends_on: [M13-01, M9-01, M17-00]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-M13-01, M9-01
+M13-01, M9-01, M17-00
 
 ## Acceptance criteria
 

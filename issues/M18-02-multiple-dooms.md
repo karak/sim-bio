@@ -4,7 +4,7 @@ title: 複数の滅びの同時進行と偽の予言
 status: todo
 milestone: M18
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: []
+depends_on: [M18-00]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-None (can start immediately)
+M18-00
 
 ## Acceptance criteria
 

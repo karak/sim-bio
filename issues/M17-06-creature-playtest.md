@@ -4,7 +4,7 @@ title: 手動受入プレイテスト(M17)
 status: todo
 milestone: M17
 plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
-depends_on: [M17-01, M17-02, M17-03, M17-04, M17-05]
+depends_on: [M17-01, M17-02, M17-03, M17-05]
 evidence: []
 ---
 
@@ -16,7 +16,7 @@ evidence: []
 
 ## Blocked by
 
-M17-01, M17-02, M17-03, M17-04, M17-05
+M17-01, M17-02, M17-03, M17-05
 
 ## Acceptance criteria
 
