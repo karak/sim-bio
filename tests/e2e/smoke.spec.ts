@@ -245,17 +245,21 @@ test('stone tablet: milestone disappears when reached, power warning appears, ve
 test('intercept: ?scenario=test-intercept の星の民は「星を砕け」で三年目の隕石を取り消し、節目が消えて年表に「星が砕けた」が出る (M10-02)', async ({ page }) => {
   await page.goto('/?scenario=test-intercept');
   await expect(page.locator('#hud-works')).toBeVisible();
+  // 次の星の年を行に出す (M21-02 D4)
+  await expect(page.locator('#intercept-next')).toHaveText('次の星 3 年目');
   // 逃がす条件の無い石板では舟の行を出さない (M10-04 のプレイテストで「舟を作れ」が気を散らした)
   await expect(page.locator('#hud-ship')).toBeHidden();
   await expect(page.locator('#hud-civ')).toContainText('工事 3.0 / 3');
   await expect(page.locator('#tablet-milestones')).toContainText('3 年目: 星が落ちる');
   await expect(page.locator('#intercept-btn')).not.toHaveClass(/unaffordable/);
+  await expect(page.locator('#intercept-reason')).toBeHidden();
   await page.click('#intercept-btn');
   await expect(page.locator('#tablet-timeline')).toContainText('星が砕けた(3 年目の星は落ちない)');
   await expect(page.locator('#tablet-milestones')).not.toContainText('星が落ちる');
   // 備蓄が消費され、二度目は撃てない
   await expect(page.locator('#hud-civ')).toContainText('工事 0.0 / 3');
-  await expect(page.locator('#intercept-btn')).toHaveClass(/unaffordable/);
+  // 撃つ星 (test-intercept の唯一の隕石) が無くなったので、迎撃の行ごと畳む (M21-02 D4)
+  await expect(page.locator('#hud-works')).toBeHidden();
 });
 
 test('weather tower: ?scenario=test-tower で気象塔チップを武装して島をクリックすると建ち、セル詳細と年表に出る (M10-01)', async ({ page }) => {
@@ -289,10 +293,40 @@ test('sky ship: ?scenario=test-ship shows the ship progress in the HUD and escap
   await page.goto('/?scenario=test-ship');
   await expect(page.locator('#hud-ship')).toBeVisible();
   await expect(page.locator('#ship-hint')).toContainText('舟 進み 119.9 / 120');
+  // 徴収半径内の材を「舟 進み」の直後に出す (M21-02 D2: 林があと何年で舟を養えるか読めないプレイテストへの対応)
+  await expect(page.locator('#ship-hint')).toHaveText(/^舟 進み 119\.9 \/ 120 · 材 \d+\.\d$/);
   await page.click('#speed-100');
   await expect(page.locator('#verdict')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('#verdict-title')).toHaveText('次の島へ');
   // ダウンロードの中身は確かめない (実際にダウンロードはしない)。ボタンが出て download 属性を持つことだけ確かめる
   await expect(page.locator('#verdict-download')).toBeVisible();
   await expect(page.locator('#verdict-download')).toHaveAttribute('download', 'cargo.json');
+});
+
+test('ship: 段階が帆に満たない年は押せない理由を行に出す (M21-02 D3)', async ({ page }) => {
+  await page.goto('/?scenario=test-ship-gate');
+  await expect(page.locator('#hud-ship')).toBeVisible();
+  await expect(page.locator('#ship-btn')).toHaveClass(/unaffordable/);
+  await expect(page.locator('#ship-reason')).toHaveText('押せない: 段階が帆に満たない');
+});
+
+test('intercept: 備蓄が足りない年は押せない理由を行に出す (M21-02 D3)', async ({ page }) => {
+  await page.goto('/?scenario=test-intercept-low');
+  // 開始直後 (年 0) はまだ works が無い (worksStock 未指定) ので迎撃の行自体が無い
+  await expect(page.locator('#hud-works')).toBeHidden();
+  await page.click('#speed-100');
+  await expect(page.locator('#hud-works')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#intercept-btn')).toHaveClass(/unaffordable/);
+  await expect(page.locator('#intercept-reason')).toContainText('押せない: 備蓄が足りない');
+});
+
+test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チップが出て、押すと狼レイヤーが開く (M21-02 D5)', async ({ page }) => {
+  await page.goto('/?scenario=test-event');
+  await page.click('#speed-100');
+  await expect(page.locator('#tablet-warnings')).toContainText('狼の群れが北の谷に下りた', { timeout: 20_000 });
+  await expect(page.locator('#layer-species-wolf')).not.toHaveClass(/on/);
+  const chip = page.getByRole('button', { name: '狼を見る' });
+  await expect(chip).toBeVisible();
+  await chip.click();
+  await expect(page.locator('#layer-species-wolf')).toHaveClass(/on/);
 });
