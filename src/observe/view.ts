@@ -8,6 +8,8 @@ import {
   HemisphereLight,
   IcosahedronGeometry,
   BoxGeometry,
+  Box3,
+  Sphere,
   Matrix4,
   Mesh,
   Object3D,
@@ -36,7 +38,7 @@ import { instanceProps, lodProps, type LodProps } from './render/instancer';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
-import { createShotCamera, frameBlocked, inFoliage } from './render/shotCamera';
+import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
@@ -416,7 +418,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   place('woven_screen', c0.x + 9, c0.z - 7, -0.6);
   place('stone_wall_corner', c0.x - 22, c0.z - 18, 0.8);
   const side = { x: marks.slipwayBow.z, z: -marks.slipwayBow.x };
-  for (const [name, mats] of settlementPlacements) scene.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
+  // 小屋・巨石・石垣もカメラの遮りに数える (舟の見上げのカメラが集落の中に立って巨石が画を覆ったため)。自動カメラは舟も数える (集落の俯瞰が舟の甲板の上に立ったため)
+  const settlement = new Group();
+  scene.add(settlement);
+  for (const [name, mats] of settlementPlacements) settlement.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
   const pile = findNode(shipGlb, 'timber_pile');
   if (pile) {
     const px = slip.x + side.x * 9 - marks.slipwayBow.x * 3;
@@ -516,7 +521,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     controls.target.set(tx, ty + 1.2, tz);
     // (M22-03: 林の置き方が変わると寄せ先のカメラが樹冠に入るので、狙いとの間に木があれば向きを少しずつ振って見通しの良い所を探す。
     // どの向きも塞がっていれば、最初の向きで木の手前に寄せる)
-    const blockers = lods.map((l) => l.group);
+    const blockers = [...lods.map((l) => l.group), settlement];
     const place = (yw: number) => {
       const cx = tx + Math.sin(yw) * dist;
       const cz = tz + Math.cos(yw) * dist;
@@ -578,7 +583,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     shots.appendChild(b);
   }
   // 自動カメラ (M22-08): 場面の引き金・狩り・民・群れ・風景からショットを選び、触れば自由カメラ、20 秒触らなければ戻る
-  const shotCam = createShotCamera(camera, field.heightAt, () => lods.map((l) => l.group), AREA_R * CELL_M, mulberry32(31));
+  // 舟の見上げ以外は、舟を狙いより手前に映さない (集落の俯瞰が帆柱の真上に立ったため)
+  const shipBox = new Box3();
+  const shipBall = new Sphere();
+  const shipAvoid = (shot: Shot): AvoidZone[] => {
+    if (!shipView.node() || shot.kind === 'shipLookUp') return [];
+    shipBox.setFromObject(shipView.group);
+    if (shipBox.isEmpty()) return [];
+    shipBox.getBoundingSphere(shipBall);
+    return [{ x: shipBall.center.x, y: shipBall.center.y, z: shipBall.center.z, r: shipBall.radius }];
+  };
+  const shotCam = createShotCamera(camera, field.heightAt, () => [...lods.map((l) => l.group), settlement, shipView.group], AREA_R * CELL_M, mulberry32(31), shipAvoid);
   let director = initialDirector();
   let prevFrame: SceneFrame | null = null;
   let touched = !OPT.auto;
@@ -796,7 +811,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       if (host.debug === false) stats.textContent = `${st.year} 年`;

@@ -28,7 +28,7 @@ const VITALITY_LIFE = 2.6;
 const VITALITY_RATE = 32;
 /** 芽吹き (M22-08、sheets/effects の 3): 植えた所の地面から金色の粒が立つ。雨 (5): カメラの周りに降る筋 */
 const SPROUT = 500;
-const SPROUT_LIFE = 5;
+const SPROUT_LIFE = 7;
 const RAIN = 3000;
 const RAIN_BOX = 30;
 
@@ -199,7 +199,8 @@ export function createMotes(input: MotesInput): Motes {
     m.renderOrder = 1;
     group.add(m);
   }
-  const sproutMat = pointMaterial('#FFD27A', 2.8, 0.16, 2);
+  // (0.16 では引きの画 (26 m) で昼の地面に紛れて見えなかった。自然記録の距離で金の粒として読める大きさに)
+  const sproutMat = pointMaterial('#FFD27A', 2.8, 1.6, 2);
   const sprouts = points(SPROUT, sproutMat, (i, _p, seed, alpha) => {
     alpha[i] = 0;
     seed[i] = 0;
