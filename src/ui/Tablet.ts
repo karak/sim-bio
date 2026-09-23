@@ -66,7 +66,8 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
     case 'intervene':
       return cmdText(e.command, false);
     case 'scheduled':
-      return cmdText(e.command, true);
+      // text 付きの予定 (M10R-07: 狼の波) はその台詞をそのまま出す
+      return e.text ?? cmdText(e.command, true);
     case 'power_exhausted':
       return '力が尽き、気候が元に戻った';
     case 'warning':

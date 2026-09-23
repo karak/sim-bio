@@ -52,8 +52,8 @@ const sinkingOps = (r: ScenarioRunner, s: WorldSnapshot) => ({
     let bi = -1;
     let bv = -1;
     for (let i = 0; i < s.layers.elevation.length; i++) if (s.layers.populations.wolf[i] > bv) { bv = s.layers.populations.wolf[i]; bi = i; }
-    // UI の疫病の半径に合わせる (M10R-07: DISASTER_RADIUS.plague が 4 → 6 になった)
-    r.intervene({ type: 'disaster', kind: 'plague', cell: bi, radius: 6 });
+    // UI の疫病の半径 (DISASTER_RADIUS.plague = 4) に合わせる (M10R-07 で一時 6 にしたが谷の波なら 4 で足りるので戻した)
+    r.intervene({ type: 'disaster', kind: 'plague', cell: bi, radius: 4 });
   },
 });
 
@@ -284,8 +284,12 @@ const NO_ANSWER_HOME = 2063;
 const VEIN_HOME = 1770;
 /** 儀式: 集落に苔を放つ (4)。同じ種類の介入を 3 年ごとに続けると信仰が上がる (狼の祈りの応えにはならない) */
 const ritual = (r: ScenarioRunner, home: number) => r.intervene({ type: 'spawn_species', speciesId: 'moss', cell: home, amount: 0.3, radius: 1 });
-/** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered、出る前なら先回り)。半径 6 は UI の DISASTER_RADIUS.plague に合わせた (M10R-07) */
-const plagueHome = (r: ScenarioRunner, home: number) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: home, radius: 6 }); };
+/** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered)。半径 4 は UI の DISASTER_RADIUS.plague と同じ (M10R-07 で 6 を試したが、谷の波なら 4 で足りるので戻した) */
+const plagueHome = (r: ScenarioRunner, home: number) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: home, radius: 4 }); };
+/** 狼の波が落ちる北の谷 (schedule と同じセル、M10R-07)。集落 2063 から 13 セル */
+const NO_ANSWER_VALLEY = 1366;
+/** 先回り: 谷に疫病 (24、環 4 = UI と同じ)。波の年のうち (計測では 3 か月以内) に谷を病ませれば狼は集落へ着かず、民は祈らない */
+const plagueValley = (r: ScenarioRunner) => { if (r.power() >= 24) r.intervene({ type: 'disaster', kind: 'plague', cell: NO_ANSWER_VALLEY, radius: 4 }); };
 /** 狼の波が下りる年 (schedule と同じ: 6 年目から 8 年ごと、M10R-07) */
 const waveYear = (y: number) => y >= 6 && (y - 6) % 8 === 0;
 
@@ -301,14 +305,14 @@ const noAnswerScripts: Record<string, Script> = {
  * その年に祈りが出たかどうかを確かめられない (M9-04 由来の制約、M10R-07 でも変わらない)
  */
 const preemptScripts: Record<string, Script> = {
-  // 想定解 1: 欲張り。波の年のうち、まだ祈りが出ていなければ疫病 (plagueHome が力 24 未満なら何もしない)
-  greedy: (r, s, y) => { if (waveYear(y) && !s.civ?.prayer) plagueHome(r, NO_ANSWER_HOME); },
+  // 想定解 1: 欲張り。波の年のうち、まだ祈りが出ていなければ谷に疫病 (plagueValley が力 24 未満なら何もしない)
+  greedy: (r, s, y) => { if (waveYear(y) && !s.civ?.prayer) plagueValley(r); },
   // 想定解 2: 一つおき (2 波に 1 回) に先回り
-  alt1in2: (r, s, y) => { if (waveYear(y) && ((y - 6) / 8) % 2 === 0 && !s.civ?.prayer) plagueHome(r, NO_ANSWER_HOME); },
+  alt1in2: (r, s, y) => { if (waveYear(y) && ((y - 6) / 8) % 2 === 0 && !s.civ?.prayer) plagueValley(r); },
   // naive: 3 波に 1 回だけ先回り。記憶の予算が足りず夢喰い
-  alt1in3: (r, s, y) => { if (waveYear(y) && ((y - 6) / 8) % 3 === 0 && !s.civ?.prayer) plagueHome(r, NO_ANSWER_HOME); },
+  alt1in3: (r, s, y) => { if (waveYear(y) && ((y - 6) / 8) % 3 === 0 && !s.civ?.prayer) plagueValley(r); },
   // naive: 波の翌年に打つ。窓 (波の年) を外しているので群れはもう崩れて祈りになっている
-  late: (r, s, y) => { if (waveYear(y - 1) && !s.civ?.prayer) plagueHome(r, NO_ANSWER_HOME); },
+  late: (r, s, y) => { if (waveYear(y - 1) && !s.civ?.prayer) plagueValley(r); },
 };
 
 const veinScripts: Record<string, Script> = {

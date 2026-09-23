@@ -639,13 +639,94 @@ code-review の指摘 10 件を直した。
   若い段階では効かせない(戻る手段を応えだけに絞り、記憶に圧をかける)。`World.ts` は `updateFaithCap` に `withdrawn`・`young`
   (`civ.stage <= FAITH_YOUNG_STAGE`) を渡す。
 - **シナリオ「祈りに応えるな」**(`assets/data/scenarios.json`): 集落を 2787 から **2063**(振幅比 0.06 の安定な群れ、自然の祈りが
+  出ない)へ。狼の波は **北の谷 1366(集落から 13 セル)に 1.0 / 環 3** を 6 年目から 8 年ごと(`schedule` の `everyYears`)。狼はひと冬かけて
+  集落へ歩くので、谷への疫病(環 4 = UI と同じ)が波の 90 tick 後まで効く(§8.10)。年収は 12 のままだが、実効収入は
+  `incomePerYear × 陸地率 × 生気率` で、この島では実効 ≈ 3/年 にしかならない(§8.10 の M12 の正体。台本の不具合ではなく予算だった)。
+  先回りは 12 波中 7 回までしか買えず、6〜7 回で alive、5 回以下は記憶が尽きて夢喰いになる。
+- **予定コマンドの `text`**(`src/scenario/types.ts` `ScheduledCommand.text`、`ScenarioRunner.ts`): text 付きの予定は `everyYears` の繰り返しでも
+  発火した年の警告(kind `event`)と年表(`scheduled` に text)に出す。「狼の群れが北の谷に下りた」で星が気づいて動く。`Tablet.ts` は text をそのまま出す。
+- **`DISASTER_RADIUS.plague` は 4 のまま**(`src/main.ts`)。集落に落とす環 6 の波は環 6 の疫病でも波と同じ tick でしか効かず(狼の拡散 0.2/tick)、
+  UI では打てなかった。谷の波なら環 4 で足りる。通し実行の plagueHome も 4 のまま。
+- **ファイル**: `src/simulation/faith.ts`・`civilization.ts`・`World.ts`・`prayer.ts`、`src/scenario/ScenarioRunner.ts`、`src/ui/Hud.ts`・`Tablet.ts`。
+
+### 4.27 実装時の差分(M10R-04: 舟か塔か(舟が先に伐る)と乗せる民)
+
+レベルデザイン `docs/design/2026-09-22-level-design-faith-economy.md` §3.4 を実装した。既存の `src/simulation/ship.ts` に係数と関数を足す(新規モジュールは無い)。
+
+- **順序**: `World.stepCivYearly` の年次ブロックの並びを「舟 → 塔の燃料 → 星の工事」に変えた(以前は「塔の燃料 → 星の工事 → 舟」)。舟の `stepShip` が徴収半径 `LOAD_RADIUS[civ.stage]` 内の森+鐘樹を `SHIP_CUT` だけ先に伐り、塔の燃料 (`collectFuel`、同じ半径の鐘樹が対象) はその残りから取る(民は舟を優先する。LD §3.4)。fuel 側の計算そのものは舟の有無を見ないので、ブロックを丸ごと入れ替えるだけで済んだ(依存の再構成は不要)。
+- **乗せる民**: `SHIP_CREW = POP_NEED[SHIP_STAGE]`(初期値 0.6)を `ship.ts` に追加。`shipCrew(pops, home, elevation, size)` は `civilizationLoad.populationFor(SHIP_STAGE, ...)` の薄い包み(段階 帆 は MAX_STAGE 未満なので中身は `populationAround`、SUPPORT_RADIUS)。`CivState.populationShip`(`populationStar` と同じ流儀で年 1 回更新)を追加し、舟の門・警告・HUD はこの値を読む。
+- **完成の門**: 舟が完成 (`shipDone`) した年、信仰 ≥ `SHIP_FAITH` **かつ** `populationShip` ≥ `SHIP_CREW` の両方を満たさなければ飛ばない。信仰を先に見る(`canLaunchShip` と同じ門の順)。信仰は足りて民だけ足りなければ `sim.ship.waiting` の `reason` が `'crew'`(信仰が足りなければ `'faith'`)。どちらも毎年再判定する。`sim.ship.launched` に `crew` を足した。
+- **警告・HUD**: `warnings.ts` の `ship_waiting` は信仰不足のときの文言(既存)に加え、民不足のとき「舟は成ったが民が足りない(民 0.42。0.6 に足りない)」を出す(`s.civ.populationShip` を直接読み、`ShipContext` の拡張は不要だった)。`Hud.ts` の `formatShipHint` は同様に「· 民が乗るには足りない(民 0.42 / 0.6)」を追加(信仰不足の文言が優先)。石板の年表は汎用の `warning` kind (`⚠ ${warning.text}`) がそのまま理由つきの文言を出すので、`Tablet.ts`/`ScenarioRunner.ts` の `TimelineEvent` に変更は無い。
+- **ファイル**: `src/simulation/ship.ts`・`civilization.ts`(`CivState.populationShip`)・`World.ts`、`src/scenario/warnings.ts`、`src/ui/Hud.ts`。
+
+### 4.28 実装時の差分(M10R-03: 夢喰い、状態機械の影)
+
+レベルデザイン `docs/design/2026-09-22-level-design-faith-economy.md` §3.3 を実装した。新規モジュール `src/simulation/dreamEater.ts`(unrest.ts と同じ流儀: 純粋関数 + `applyDreamEater`)。
+
+- **係数**(dreamEater.ts): `DREAM_CAP` 0.3(出現の上限)、`DREAM_STAGE` 3(歌、出現に要る最低段階)、`DREAM_EAT` 0.2(毎年支え半径内の民に掛ける減り)、`DREAM_LEAVE` 0.5(去る上限)。
+- **`DreamEaterState`**: `{ since: number }`(現れた年)。`ship.ts` の `ShipState`・`weatherTower.ts` の `WeatherTower` と同じく、種としての密度を持たない舞台装置の状態として `World` が別に持つ(`CivState` には持たせない。M17 の本体は密度を持つ種として別に残す)。
+- **`stepDreamEater`**(純粋関数): 現れていなければ 段階 ≥ `DREAM_STAGE` かつ `faithCap < DREAM_CAP` で出現、現れていれば `faithCap ≥ DREAM_LEAVE` で退去。`faithCap` が無ければ(発生直後で未計算)1 とみなし出現しない。
+- **`applyDreamEater`**(純粋関数): `applyUnrest` と同じ形。home の支え半径内の陸セルの、その文明種の密度を `(1 − DREAM_EAT)` 倍にする。
+- **`World`**: `this.dreamEater: DreamEaterState | null` を `towers`/`ship` と同じ流儀で snapshot・serialize・restore に持たせる(セーブに無ければ null)。`stepCivYearly` は `faithCap` の更新・内乱の判定(崩壊すれば先に `collapseCiv` が `dreamEater` を消す)の後で `stepDreamEater` を呼び、現れた/去った年にログ `sim.civ.dream_eater { year, phase, faithCap }` を出す。出現中は毎年 `applyDreamEater` を掛ける。文明の進みは、採掘そのもの(`stepMining`、輝石の消費)は止めずに、`this.civ = this.dreamEater ? this.civ : state`(`stepMining` が返す新しい progress/stage を捨てる)で止める。年境界の直後の 1 年は、境界の判定より前に採掘が走るため、進みが止まるのは出現した翌年からになる。
+- **判定**: `judge.ts` に条件 `{ type: 'dream_eater' }`(`s.dreamEater !== null`)を足した。真のとき why は「夢喰いに食われた」(`intercepted`/`escaped` と同じ、型と評価を switch に足すだけ)。`assets/data/scenarios.json` の `no-answer` の `dead`(`any`)にこの条件を追加した。
+- **UI**: `ScenarioRunner` は `snapshot.dreamEater` の有無の flip を前年と比べて `TimelineEvent { kind: 'dream_eater', phase, faithCap }` を積む(`tower_power` のように自分で dispatch する状態ではないので、`civ_faith_cap` と同じ「値の変化を見る」流儀)。`Tablet.ts` の `describeEvent` は「夢喰いが集落に現れた(信仰の上限 0.28)」「夢喰いが去った(信仰の上限 0.50)」(`formatFaith`)。`Hud.ts` の `formatCiv` は第 2 引数 `dreamEater: boolean`(既定 false)を足し、信仰の文言の直後に「· 夢喰い」を出す(`CivState` に無い値なので、呼び出し元が `snapshot.dreamEater !== null` を渡す)。
+- **SceneView**: `src/render/dreamEaterShade.ts`(`settlementInstances` と同じ流儀の純粋関数)が home・支え半径・表示の有無を返し、`SceneView.ts` は暗い半透明の円 (`CircleGeometry`) を集落の上に置く/隠すだけ(塔・集落の箱と同じ、tick/civ が変わった時だけ置き直す)。
+- **ファイル**: `src/simulation/dreamEater.ts`(新規)・`civilization.ts` の型注釈なし(`CivState` は変えていない)・`World.ts`、`src/scenario/types.ts`・`judge.ts`・`ScenarioRunner.ts`、`src/ui/Tablet.ts`・`Hud.ts`、`src/render/dreamEaterShade.ts`(新規)・`SceneView.ts`、`assets/data/scenarios.json`。
+
+### 4.29 実装時の差分(M10R-05: 校正で足した仕組み)
+
+レベルデザイン `docs/design/2026-09-22-level-design-faith-economy.md` §8 の計測から足した。
+
+- **勅令「採掘を止めよ」は星の工事の採掘も止める**(`works.ts` の `stepWorks` が `civ.miningStopped` を見る)。備蓄は残り、迎撃はできる。
+  `works.stopped` は信仰不足の印なので立てない。信仰の上限が入ると、脈が 10% を切ったあとの「星の砂を」の無視で上限が削れて工事が止まり、
+  星が掘り続ける限りどの手も滅びたため。
+- **帆を失えば舟は止まる**(`World.stepCivYearly`): 段階 < 帆の年は伐らず進まず、完成していても飛ばない。ログ `sim.ship.halted { year, stage, progress }`、
+  警告 `ship_stalled` の文言「帆を失い、舟は止まっている(段階 4 < 5。進み …)」。進みは残り、帆に戻れば再開する。
+- **シナリオ**: 迎撃の塔は脈 1.0 に戻し、予言と節目に「掘り尽くせば祈り、失望が積もれば工事が止まる。止めよで蓄えは残る」を足した。
+  空の舟は薪の蓄え 0、予言と節目を「舟か塔か」「陰で群れが痩せる」に書き換えた。
+- **ファイル**: `src/simulation/works.ts`、`src/simulation/World.ts`、`src/scenario/warnings.ts`、`assets/data/scenarios.json`、
+  `tests/unit/works.test.ts`、`tests/unit/world.ship.test.ts`、`tests/unit/scenario.warnings.test.ts`、`tests/slow/scenarios.playthrough.test.ts`。
+- **レビューの修正**(M10R、7eff673): 上限の年表の閾値に 1e-9 の余裕(無視 1 回の 0.1 が二進小数で落ちていた)。`everyYears` は `untilYear`
+  省略時に予言の年まで繰り返す(以前は 1 回だけ。既存の「祈りに応えるな」の狼も 6 年目の 1 回だった)。`dreamEater` 欠落のスナップショットは
+  「いない」(`!= null`)。内乱と夢喰いの民の減らし方を `scalePopulationAround` に共用。祈りの解決を `markPrayerResolved` に一本化。
+  帆を失った舟の HUD 文言。`populationShip` は `population` を写す(同じ半径の平均で、走査を重ねない)。内乱の戻り min(0.4, 上限) は
+  上限 < 0.3 で連鎖する(夢喰いの局面の意図した螺旋、unrest.ts に注記)。
+- **空の舟の差し戻し**(M10R-06 の手動受入、LD §8.7〜8.8): 薪 0 の定義は UI(環 1 の放流)では手で勝てず、机上でも林だけでは塔が飢えると分かったため、
+  空の舟の定義と通し実行は M10 の状態(薪 800、予言・節目も)に戻した。帆を失えば止まる・乗せる民の仕組みは残る(薪 800 の間は効かない)。作り直しは M10R-08。
+
+### 4.30 実装時の差分(M10R-08: 空の舟の作り直し)
+
+レベルデザイン §8.9(仮説 → 部品 → 縮約モデル → 本体計測 A〜C)の結論を入れた。
+
+- **鐘樹の特性**(`assets/data/species.json`): 成長 0.005→0.0025、枯死 0.0026→0.0005、拡散 0.002→0。遅く枯れにくい樹にすると
+  1 セルの上限が草を押しのけて育つが(本体計測 A)、拡散を残したまま枯れにくくすると鐘樹が島中に広がり草を絶やす(計測 B: r7 の草 44 → 0)。
+  拡散 0 にして初めて、植えた所にだけ立ち・伐っても 10 年で戻る樹になった(計測 C)。
+- **舟の伐採量**(`src/simulation/ship.ts`): `SHIP_CUT`(立木の割合 0.3)を `SHIP_CUT_PER_YEAR`(一定量 6/年)に差し替えた。割合では
+  林を大きくしても着工から同じ年数で帆が落ち、林の大きさも着工の時期も問いにならなかった(LD §8.8)。一定量なら 塔 4 + 舟 6 = 10/年 が
+  林の持続収量を超え、着工した瞬間から林が痩せ始めるので、林の大きさと着工の時期の両方が意味を持つ。
+- **(c)(d) シナリオ・通し実行**: `assets/data/scenarios.json` の空の舟の schedule に 0 年目の鐘樹の予定放流(環 4・0.6、民の林)、
+  通し実行(tests/slow)の放流は環 1・0.5 に揃えた(別エージェントの作業)。
+- **ファイル**: `assets/data/species.json`、`src/simulation/ship.ts`、`src/simulation/World.ts`、`src/ui/Hud.ts`、
+  `tests/unit/ship.test.ts`・`ui.hud.test.ts`、(c)(d) は `assets/data/scenarios.json`(sky-ship)、`tests/unit/scenario.runner.test.ts`(0 年目の予定)、
+  `tests/slow/scenarios.playthrough.test.ts`(空の舟の 8 件)。
+
+### 4.31 実装時の差分(M10R-07: 祈りに応えるなの作り直し)
+
+レベルデザイン §8.5〜8.6、§8.10(仮説 → 縮約モデル → 本体計測)の結論を入れた。
+
+- **若い信仰の記憶**(`src/simulation/faith.ts` `FAITH_YOUNG_STAGE` = 歌 (3))。この段階以下では、応えられずに終わった祈りは
+  取り下げでも上限から `FAITH_CAP_IGNORE` を引く(石以上は取り下げでは引かない)。祈りの無い年の `FAITH_CAP_RECOVER` (+0.01) も
+  若い段階では効かせない(戻る手段を応えだけに絞り、記憶に圧をかける)。`World.ts` は `updateFaithCap` に `withdrawn`・`young`
+  (`civ.stage <= FAITH_YOUNG_STAGE`) を渡す。
+- **シナリオ「祈りに応えるな」**(`assets/data/scenarios.json`): 集落を 2787 から **2063**(振幅比 0.06 の安定な群れ、自然の祈りが
   出ない)へ。狼の波は 0.8 / 環 6 を 6 年目から 8 年ごと(`schedule` の `everyYears`)。年収は 12 のままだが、実効収入は
   `incomePerYear × 陸地率 × 生気率` で、この島では実効 ≈ 3/年 にしかならない(§8.10 の M12 の正体。台本の不具合ではなく予算だった)。
   先回り(波の年に力 24 で疫病)は 12 波中 7 回までしか買えず、6〜7 回で alive、5 回以下は記憶が尽きて夢喰いになる。
 - **`DISASTER_RADIUS.plague` を 4 → 6**(`src/main.ts`)。波が環 6 なので、環 4 の疫病では外縁が残って群れが崩れず、先回りが
   一度も効かなかった(UI 並みの検証で発覚)。環 5 でも足りず、波と同じ環 6 で初めて先回りが機能する。
 - **ファイル**: `src/simulation/faith.ts`、`src/simulation/World.ts`、`src/main.ts`、`assets/data/scenarios.json`、
-  `tests/unit/faith.test.ts`、`tests/unit/world.civilization.prayer.test.ts`、`tests/slow/scenarios.playthrough.test.ts`(祈りに応えるなの 8 件)。
+  `src/scenario/types.ts`、`src/scenario/ScenarioRunner.ts`、`src/scenario/warnings.ts`、`src/ui/Tablet.ts`、
+  `tests/unit/faith.test.ts`、`tests/unit/world.civilization.prayer.test.ts`、`tests/unit/scenario.runner.test.ts`、`tests/slow/scenarios.playthrough.test.ts`(祈りに応えるなの 8 件)。
 
 ## 6. マイルストーンと受入基準
 

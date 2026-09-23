@@ -37,7 +37,11 @@ export type Condition =
   | { type: 'any'; of: Condition[] };
 
 /** 予定コマンド。at は開始からの年 (整数)。every があれば every 年ごとに繰り返す */
-export type ScheduledCommand = { atYear: number; everyYears?: number; untilYear?: number; command: Command };
+/**
+ * 予定コマンド。text (M10R-07) があれば発火した年に石板の警告と年表に出す (everyYears の繰り返しでも)。
+ * 「狼の群れが北の谷に下りた」のように、星が気づいて動く猶予を知らせる舞台装置の台詞
+ */
+export type ScheduledCommand = { atYear: number; everyYears?: number; untilYear?: number; text?: string; command: Command };
 
 export type ScenarioDef = {
   id: string;
