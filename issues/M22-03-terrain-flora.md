@@ -36,6 +36,10 @@ M22-02
 - 2026-09-24 草と地面の磨き上げ(草の側): 房を 12 枚の細い葉を根元に寄せた 36 三角形の形(`carpetTuft`)に替え、根元は地面の色の陰・先は明るい草の色、遠くは地面の色に溶かす。法線を上へ寄せて影も受ける。
   地面は大きな斑(茂った/乾いた)・土ののぞく斑・水際の湿り・森の木の陰・画素ごとの筆のむらを足し、草の置き方と丈も同じ斑から決める。集落の広場・戸口・船台への道を踏み固めた土に。
   6 つの寄せ先で draw call 82〜105、三角形 110〜143 万(前 105〜141 万)。比較画 `docs/design/qa/observe/grass-before-after-{grove,settlement,rabbit,wolf}.png`、記録は `docs/design/qa/observe/environment.md` の「追記(草の磨き上げ)」。単体テスト `tests/unit/observe.grass.test.ts`。木は別の作業。
+- 2026-09-24 木の磨き上げ(木の側): 鐘樹の成木と森の木の樹冠を、塊の表面に散らした葉の房の絵のカードで毛羽立たせ(塊は暗い内側、房の上は明るく暖かく下は暗く)、房の間の隙間は残した。
+  幹は縦の裂け目と筋、鰭の板根、根元の苔(頂点色)。観察画面は切り抜きの葉のカードの材質(`src/observe/render/foliage.ts`、両面で法線を裏返さない、切り抜いた影)。
+  成木 3,646 / lod1 1,080 / 森の木 1,288 / lod1 380 三角形。草の磨き上げを取り込んだ後、6 つの寄せ先で draw call 87〜108、三角形 109〜140 万。
+  比較画 `docs/design/qa/observe/trees-before-after-{grove,groveTrack,settlementHigh}.png`・`trees-vs-reference.png`、記録は `docs/design/qa/observe/environment.md` の「追記(木の磨き上げ)」。単体テスト `tests/unit/observe.foliage.test.ts`。
 
 ## 残り(ユーザーの判断で積んだ順)
 
