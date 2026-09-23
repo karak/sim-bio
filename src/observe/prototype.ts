@@ -383,7 +383,7 @@ async function boot(): Promise<void> {
   const air = OPT.air ? new AtmospherePass(camera, sun) : null;
   const grade = createGrade(renderer, scene, camera, air ? [air] : []);
   // 調整用 (M22-07): 開発者ツールから空気の層の uniform と時刻を触る
-  (window as unknown as { __observeAir: unknown }).__observeAir = { air, sun, camera, controls, heightAt: field.heightAt };
+  (window as unknown as { __observeAir: unknown }).__observeAir = { air, sun, camera, controls, scene, renderer, heightAt: field.heightAt };
   grade.setEnabled({ grade: OPT.grade, bloom: OPT.bloom });
   const resize = () => {
     const w = canvas.clientWidth;
