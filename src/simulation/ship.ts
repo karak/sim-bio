@@ -23,8 +23,12 @@ export const SHIP_FAITH = 0.5;
 export const SHIP_CREW = POP_NEED[SHIP_STAGE];
 /** 着工に要る材 (徴収半径内の森+鐘樹の密度和) の下限 */
 export const SHIP_FOREST_MIN = 6;
-/** 建造 1 年で材 (森+鐘樹の立木) に掛ける伐採の割合。合計の伐採量は材 × SHIP_CUT */
-export const SHIP_CUT = 0.3;
+/**
+ * 建造 1 年で伐る材の量 (M10R-08、LD §8.9 (b))。M10-03〜M10R-05 までは立木の割合 (SHIP_CUT 0.3) を毎年伐っていたが、
+ * 割合では林を大きくしても着工から同じ年数で帆が落ち、林の大きさも着工の時期も問いにならなかった (LD §8.8)。
+ * 一定量なら 塔 4 + 舟 6 = 10/年 が林の持続収量を超え、着工した瞬間から林が痩せ始める。舟は SHIP_NEED / SHIP_CUT_PER_YEAR = 20 年
+ */
+export const SHIP_CUT_PER_YEAR = 6;
 /**
  * 完成に要る進みの累計。校正 (M10-03): 10 では開始時の森 (集落の徴収半径に 22) だけで 5〜12 年で飛べてしまい、
  * 森が鹿に食われる圧も沈没も効かなかった。120 なら森を放ち続けても (鹿に食われて年 0.8 しか進まず) 200 年に間に合わず、
@@ -86,8 +90,8 @@ export function canLaunchShip(civ: CivState | null, timber: number, ship: ShipSt
 
 /**
  * 年に一度呼ぶ。既に飛び立っていれば何もしない (unchanged)。
- * 徴収半径内の陸セルから、森・鐘樹の立木に SHIP_CUT の割合を掛けて伐り、進みに積む。
- * 合計の伐採量 (材 × SHIP_CUT) が残りの必要量 (SHIP_NEED − progress) を超えるなら、割合を落として超えないようにする。
+ * 徴収半径内の陸セルから、森・鐘樹の立木を年に SHIP_CUT_PER_YEAR だけ伐り、進みに積む (M10R-08 までは材 × SHIP_CUT の割合)。
+ * 立木の合計がそれに満たなければ全部を伐り、残りの必要量 (SHIP_NEED − progress) を超えるなら、そこで頭打ちにする。
  * 材が 0 の年は何も変わらない (progress は頭打ちのまま)。pops は呼び出し元の配列をその場で書き換える。
  */
 export function stepShip(
@@ -103,9 +107,9 @@ export function stepShip(
   if (remaining <= 0) return { ship, cut: 0 };
   const timber = timberAround(pops, home, radius, elevation, size);
   if (timber <= 0) return { ship, cut: 0 };
-  const potentialCut = timber * SHIP_CUT;
-  const cut = Math.min(potentialCut, remaining);
-  const rate = SHIP_CUT * (cut / potentialCut);
+  // 一定量 (SHIP_CUT_PER_YEAR) を、立木の全部を上限に伐る。残りの必要量を超えない。各セルからは立木に比例して (同じ割合 rate で) 伐る
+  const cut = Math.min(SHIP_CUT_PER_YEAR, timber, remaining);
+  const rate = cut / timber;
   forEachInRadius(home, radius, size, (i) => {
     if (elevation[i] < SEA_LEVEL) return;
     if (pops.forest && pops.forest[i] > 0) pops.forest[i] -= pops.forest[i] * rate;

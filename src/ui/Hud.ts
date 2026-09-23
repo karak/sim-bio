@@ -10,7 +10,7 @@ import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
 import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
-import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
+import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import './hud.css';
 
@@ -51,7 +51,7 @@ export function formatCiv(civ: CivState | null, dreamEater = false): string | nu
  * 未着工なら門の説明、建造中なら進み、完成したが信仰不足なら「民は乗らない」を添え、飛び立てば専用の文を返す。
  */
 export function formatShipHint(civ: CivState | null, ship: ShipState | null): string {
-  if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。材を伐って ${SHIP_NEED} まで進む`;
+  if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。年に ${SHIP_CUT_PER_YEAR} の材を伐って ${SHIP_NEED} まで進む(${SHIP_NEED / SHIP_CUT_PER_YEAR} 年)`;
   if (ship.launchedYear !== undefined) return '舟は飛び立った';
   // 帆を失えば舟は止まる (M10R-05): 段階が帆に満たない年は理由を添える (warnings.ts の「帆を失い」と同じ)
   if ((civ?.stage ?? 0) < SHIP_STAGE) return `舟 進み ${ship.progress.toFixed(1)} / ${SHIP_NEED} · 帆を失い止まっている(段階 ${civ?.stage ?? 0} < ${SHIP_STAGE})`;

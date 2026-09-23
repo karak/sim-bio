@@ -8,6 +8,7 @@ import type { SpeciesDef, WorldConfig, WorldSnapshot } from '../../src/simulatio
 import { resolveCivilizationStart } from '../../src/simulation/civilization';
 import { forEachInRadius } from '../../src/simulation/disaster';
 import { suitability } from '../../src/simulation/vegetation';
+import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { INTERCEPT_NEED } from '../../src/simulation/works';
 import { LOAD_RADIUS } from '../../src/simulation/civilizationLoad';
 import { timberAround, SHIP_FOREST_MIN } from '../../src/simulation/ship';
@@ -426,9 +427,16 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
 });
 
 /**
- * 空の舟 (M10-03、size 64、200 年)。LD: docs/design/2026-09-22-level-design-devices.md §4.2・§5・§8.3。
- * 帆@2787、沈没 0.0006/年。舟は材 (森+鐘樹) を伐って 120 まで進む。森は鹿に食われ、放ち続けても年 0.8 しか進まず 200 年に間に合わない。
- * 鐘樹は食われないので、植えながら着工 (25 年) でも、30 年育ててから着工 (43 年) でも飛べる
+ * 空の舟 (M10R-08 作り直し、size 64、200 年)。LD §8.9(仮説 → 部品 → 縮約モデル → 本体計測 A〜C)。
+ * (M10-03 の旧校正: LD docs/design/2026-09-22-level-design-devices.md §4.2・§5・§8.3。帆@2787、沈没 0.0006/年。舟は材 (森+鐘樹) を伐って 120 まで進む。
+ * 森は鹿に食われ、放ち続けても年 0.8 しか進まず 200 年に間に合わない。鐘樹は食われないので、植えながら着工 (25 年) でも、30 年育ててから着工 (43 年) でも飛べた。
+ * ただし台本の放流が環 3 で UI の 10 倍だったため手では勝てず、M10R-08 で作り直した)
+ * 薪の蓄えは 0、鐘樹は成長 0.0025・枯死 0.0005・拡散 0(植えた所にだけ立ち、伐っても戻るのは遅い)、
+ * 舟は毎年一定量 6 を伐り成るまで 20 年(塔 4 + 舟 6 = 10/年 が林の持続収量を超え、着工した瞬間から林が痩せ始める)。
+ * 0 年目に予定放流で「民の林」(鐘樹 環 4・0.6) が立ち、台本の放流は UI と同じ環 1・0.5 に揃える。
+ * 問いは「いつ着工するか」: 早すぎれば帆が落ちて止まり(dead)、遅すぎれば陸と群れ・信仰の上限が削れて間に合わない(dead)。
+ * 計測 C(民の林 環 4)の行列: 林だけ dead 175、薄い植え足し(c 0.5、L 20) dead 107〜111、早い着工(c 1、L 5) dead 77〜119、
+ * L 20 escaped 40、L 45 escaped 65、遅い着工(c 1、L 100) dead(沈没と信仰の上限)
  */
 describe('sky-ship scenario playthroughs (size 64)', { timeout: 900_000 }, () => {
   const def = defs.find((d) => d.id === 'sky-ship');
@@ -436,31 +444,70 @@ describe('sky-ship scenario playthroughs (size 64)', { timeout: 900_000 }, () =>
   const timber = (s: WorldSnapshot) => timberAround({ forest: s.layers.populations.forest, belltree: s.layers.populations.belltree }, s.civ!.home, LOAD_RADIUS[Math.max(1, s.civ!.stage)], s.layers.elevation, SIZE);
   /** 材と信仰が門を越えたら着工 */
   const launchWhenReady: Script = (r, s) => { if (!s.ship && timber(s) >= SHIP_FOREST_MIN && (s.civ?.faith ?? 0) >= 0.5) r.intervene({ type: 'launch_ship' }); };
-  /** 集落の周りに同じ種を every 年ごとに放つ (儀式を兼ねる) */
+  /** 集落の周りに同じ種を every 年ごとに放つ (儀式を兼ねる)。M10R-08 では鐘樹の放流に plantBelltree を使うが、forest-only の比較用に残す */
   const ring = (id: string, radius: number, amount: number, every: number): Script => (r, s, y) => { if (y % every === 0) r.intervene({ type: 'spawn_species', speciesId: id, cell: s.civ!.home, amount, radius }); };
   const seq = (...fs: Script[]): Script => (r, s, y) => { for (const f of fs) f(r, s, y); };
-  it('idle → dead (信仰が減衰し、陸が沈み、群れが尽きて崩壊)', () => {
+  /** 集落半径 6 内で鐘樹の適地 (suitability > 0.6) を 2 セル以上離して集落に近い順に選ぶ。環 1 の放流 (5 セル) が敷き詰まる間隔 */
+  function belltreeSitesAround(s: WorldSnapshot, home: number, radius: number): number[] {
+    const bt = species.find((d) => d.id === 'belltree')!;
+    const out: number[] = [];
+    forEachInRadius(home, radius, SIZE, (i) => {
+      if (s.layers.elevation[i] < SEA_LEVEL) return;
+      if (suitability(bt, s.layers.temperature[i], s.layers.moisture[i]) <= 0.6) return;
+      const x = i % SIZE, y = Math.floor(i / SIZE);
+      if (out.every((c) => Math.hypot(x - (c % SIZE), y - Math.floor(c / SIZE)) >= 2)) out.push(i);
+    });
+    return out;
+  }
+  /** 毎年 clicksPerYear 回 (端数は繰り越し) 鐘樹を環 1・0.5 で植える。適地を近い順に一巡したら、鐘樹の最も薄い適地に植え直す */
+  const plantBelltree = (clicksPerYear: number): Script => {
+    let sites: number[] = []; let next = 0; let acc = 0;
+    return (r, s, y) => {
+      if (y < 1) return;
+      if (sites.length === 0) sites = belltreeSitesAround(s, s.civ!.home, 6);
+      acc += clicksPerYear;
+      while (acc >= 1) {
+        acc -= 1;
+        const bt = s.layers.populations.belltree;
+        const cell = next < sites.length ? sites[next++] : sites.reduce((a, b) => ((bt?.[a] ?? 0) <= (bt?.[b] ?? 0) ? a : b));
+        r.intervene({ type: 'spawn_species', speciesId: 'belltree', cell, amount: 0.5, radius: 1 });
+      }
+    };
+  };
+  /** L 年目以降、門 (材・信仰) を越えたら着工 */
+  const launchAt = (L: number): Script => (r, s, y) => { if (y >= L) launchWhenReady(r, s, y); };
+  it('idle → dead (林だけでは塔は立つが舟が無く、沈む)', () => {
     const v = playTower(def, null);
     expect(v.status).toBe('dead');
   });
-  it('naive rush-once (開始時の森で着工し、あとは苔の儀式だけ) → dead (森切れで進みが 10 で止まる)', () => {
-    const v = playTower(def, seq((r, _s, y) => { if (y === 0) r.intervene({ type: 'launch_ship' }); }, ring('moss', 1, 0.3, 2)));
+  it('林だけ (植えずに 10 年目に着工) → dead (0 年目の民の林だけでは持続収量が足りず、着工しても帆が落ちる)', () => {
+    const v = playTower(def, launchAt(10));
     expect(v.status).toBe('dead');
-    expect(v.reason).toContain('舟はまだ飛んでいない');
   });
-  it('naive forest-only (森を 2 年ごとに放ち続ける) → dead (鹿に食われ、年 0.8 では 200 年に間に合わない)', () => {
-    const v = playTower(def, seq(ring('forest', 3, 0.5, 2), launchWhenReady));
+  it('naive 薄い植え足し (2 年に 1 本、20 年目に着工) → dead (進み 111 で林が尽きて帆が落ちる)', () => {
+    const v = playTower(def, seq(plantBelltree(0.5), launchAt(20)));
     expect(v.status).toBe('dead');
-    expect(v.reason).toContain('舟はまだ飛んでいない');
   });
-  it('solution 1: belltree while building (鐘樹を 2 年ごとに植えながら着工) → escaped', () => {
-    const v = playTower(def, seq(ring('belltree', 3, 0.5, 2), launchWhenReady));
+  it('naive 早い着工 (毎年 1 本、5 年目に着工) → dead (進み 119 で林が尽きて止まる)', () => {
+    const v = playTower(def, seq(plantBelltree(1), launchAt(5)));
+    expect(v.status).toBe('dead');
+  });
+  it('naive 遅い着工 (毎年 1 本、100 年目に着工) → dead (沈没で林が痩せ、民の記憶=信仰の上限も削れている)', () => {
+    const v = playTower(def, seq(plantBelltree(1), launchAt(100)));
+    expect(v.status).toBe('dead');
+  });
+  it('solution 1: 毎年 1 本植えて 20 年目に着工 → escaped (40 年目)', () => {
+    const v = playTower(def, seq(plantBelltree(1), launchAt(20)));
     expect(v.status).toBe('escaped');
     expect(v.reason).toContain('次の島へ');
   });
-  it('solution 2: grow then build (鐘樹を 30 年育ててから着工) → escaped', () => {
-    const v = playTower(def, seq(ring('belltree', 3, 0.5, 2), (r, _s, y) => { if (y === 30) r.intervene({ type: 'launch_ship' }); }));
+  it('solution 2: 毎年 1 本植えて 45 年目に着工 → escaped (65 年目)', () => {
+    const v = playTower(def, seq(plantBelltree(1), launchAt(45)));
     expect(v.status).toBe('escaped');
     expect(v.reason).toContain('次の島へ');
+  });
+  it('naive forest-only (森を UI 並みの環 1・0.5 で 2 年ごとに放ち続ける) → dead (鹿に食われ、材が育たない)', () => {
+    const v = playTower(def, seq(ring('forest', 1, 0.5, 2), launchWhenReady));
+    expect(v.status).toBe('dead');
   });
 });
