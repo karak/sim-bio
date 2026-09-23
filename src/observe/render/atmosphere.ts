@@ -108,6 +108,8 @@ const AirShader = {
     uShafts: { value: 1 },
     uTime: { value: 0 },
     uResolution: { value: new Vector2(1, 1) },
+    uSunUv: { value: new Vector2(0.5, 0.5) },
+    uSunVis: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -131,6 +133,8 @@ const AirShader = {
     uniform float uMist;
     uniform float uShafts;
     uniform float uTime;
+    uniform vec2 uSunUv;
+    uniform float uSunVis;
     varying vec2 vUv;
 
     float vnoise(vec2 p) {
@@ -193,6 +197,23 @@ const AirShader = {
         float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * mu, 1.5) / 12.566;
         outc += uLightColor * lit * hg * uShafts * (1.0 - exp(-maxD * 0.025)) * (sky ? 0.8 : 2.4);
       }
+      // 光芒 (M22-07、試作 2 の判断「光の筋があるとさらによい」): 日の画面上の位置へ向かって深度を辿り、空が見える所を数える。
+      // 木の輪郭と樹冠の隙間から日の方へ放射状に伸びる筋になる (上の体積光は奥行きの明るさ、こちらは絵としての筋)
+      if (uSunVis > 0.0) {
+        vec2 delta = (vUv - uSunUv) * (0.9 / 48.0);
+        vec2 uv = vUv;
+        float illum = 1.0;
+        float rays = 0.0;
+        float j2 = ign(gl_FragCoord.xy + 7.0);
+        uv -= delta * j2 * 0.5;
+        for (int i = 0; i < 48; i++) {
+          uv -= delta;
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) break;
+          rays += step(0.99999, texture2D(tDepth, uv).x) * illum;
+          illum *= 0.965;
+        }
+        outc += uLightColor * rays * (1.0 / 48.0) * uSunVis * uShafts * 0.9;
+      }
       gl_FragColor = vec4(outc, col.a);
     }
   `,
@@ -201,6 +222,9 @@ const AirShader = {
 export class AtmospherePass extends Pass {
   private readonly quad: FullScreenQuad;
   readonly mat: ShaderMaterial;
+  private readonly sunDir = new Vector3();
+  private readonly fwd = new Vector3();
+  private readonly sunPos = new Vector3();
   constructor(
     private readonly camera: PerspectiveCamera,
     private readonly light: DirectionalLight,
@@ -231,6 +255,15 @@ export class AtmospherePass extends Pass {
     (u.uCamWorld.value as Matrix4).copy(this.camera.matrixWorld);
     (u.uCamPos.value as Vector3).setFromMatrixPosition(this.camera.matrixWorld);
     (u.uShadowMatrix.value as Matrix4).copy(this.light.shadow.matrix);
+    // 日の画面上の位置。カメラの後ろ・画面から大きく外れた日は光芒を消す
+    // (日は画面の上に外れることが多い。上から林の隙間を下りる筋が見えるよう、画面の外 2.5 画面ぶんまでは残す)
+    const toSun = this.sunDir.copy(u.uLightDir.value as Vector3);
+    const fwd = this.camera.getWorldDirection(this.fwd);
+    const facing = fwd.dot(toSun);
+    this.sunPos.copy(this.camera.position).addScaledVector(toSun, 1000).project(this.camera);
+    (u.uSunUv.value as Vector2).set(this.sunPos.x * 0.5 + 0.5, this.sunPos.y * 0.5 + 0.5);
+    const off = Math.max(Math.abs(this.sunPos.x), Math.abs(this.sunPos.y));
+    u.uSunVis.value = facing <= 0 ? 0 : Math.min(1, facing * 1.6) * (1 - Math.min(1, Math.max(0, (off - 1) / 2.5)));
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
     this.quad.render(renderer);
   }
