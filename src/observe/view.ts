@@ -23,7 +23,7 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { WorldSnapshot } from '../simulation/types';
 import { mulberry32 } from '../simulation/rng';
-import { CELL_M, createTerrainField, createTerrainMesh } from './render/terrain';
+import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh } from './render/terrain';
 import { createWater } from './render/water';
 import { createGrass } from './render/grass';
 import { createGrade } from './render/grade';
@@ -49,7 +49,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * URL: ?deer=300&trees=200&near=40&grass=20000&grade=1&bloom=1&shadow=1
  * (個体層をつないだ後: deer は区域の鹿の目標頭数。K を密度の合計から逆算する。0 なら本体の密度 × K_DEFAULT のまま。near は使わない)
  * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
- * (M22-08: auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
+ * (M22-08: sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  */
 const params = new URLSearchParams(location.search);
@@ -67,6 +67,7 @@ const OPT = {
   ship: params.has('ship') ? num('ship', 0) : null,
   launched: params.get('launched') === '1',
   speed: num('speed', 1),
+  sink: num('sink', 0),
   auto: params.get('auto') !== '0' && !params.has('shot'),
   air: flag('air'),
   time: num('time', 0.16),
@@ -417,8 +418,15 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let simSpeed = OPT.freeze ? 0 : OPT.speed;
   let simAcc = 0;
   let snap = s;
+  // 沈降 (M22-08): 集落のセルの標高が最初からどれだけ下がったかを、海面の上がりとして見せる
+  const elev0 = s.layers.elevation[home];
+  water.setLevel(OPT.sink);
+  grass.setLevel(OPT.sink);
   const onSnapshot = (next: WorldSnapshot) => {
     snap = next;
+    const level = OPT.sink + Math.max(0, elev0 - next.layers.elevation[home]) * ELEV_M;
+    water.setLevel(level);
+    grass.setLevel(level);
     area = extractArea(snap, home, AREA_R);
     targets = targetCounts(area, K, folkRuleFor(snap.civ, 3));
     building = !!snap.ship && snap.ship.launchedYear === undefined && (snap.civ?.stage ?? 0) >= 5;

@@ -7,7 +7,12 @@ import type { TerrainField } from './terrain';
  * 草の房の GPU インスタンス (設計 §5)。密度 (本体の grass・moss) に比例して散らし、風で揺らす。
  * 房の形は assets/models/observe/flora.glb の grass_tuft があればそれ、無ければ 3 枚の葉の仮の形。
  */
-export type Grass = { mesh: InstancedMesh; update(t: number, camera?: { x: number; z: number }): void };
+export type Grass = {
+  mesh: InstancedMesh;
+  update(t: number, camera?: { x: number; z: number }): void;
+  /** 海面 (M22-08、沈降)。海面より下の房は描かない */
+  setLevel(level: number): void;
+};
 
 /**
  * 距離で間引く (M22-03 の三角形の予算)。房は 1 つ 40 三角形あり、25,000 房を全部描くと 100 万になる。
@@ -108,13 +113,14 @@ export function createGrass(field: TerrainField, layers: { grass?: Float32Array;
   const keepHash = Float32Array.from({ length: k }, () => rng());
   let lastX = Infinity;
   let lastZ = Infinity;
+  let level = -Infinity;
   const repack = (cx: number, cz: number) => {
     const im = mesh.instanceMatrix.array as Float32Array;
     const ic = mesh.instanceColor?.array as Float32Array | undefined;
     let n = 0;
     for (let i = 0; i < k; i++) {
       const d = Math.hypot(allM[i * 16 + 12] - cx, allM[i * 16 + 14] - cz);
-      if (keepHash[i] > grassKeep(d)) continue;
+      if (keepHash[i] > grassKeep(d) || allM[i * 16 + 13] < level) continue;
       im.set(allM.subarray(i * 16, i * 16 + 16), n * 16);
       if (ic && allC) ic.set(allC.subarray(i * 3, i * 3 + 3), n * 3);
       n++;
@@ -132,6 +138,11 @@ export function createGrass(field: TerrainField, layers: { grass?: Float32Array;
         lastZ = camera.z;
         repack(camera.x, camera.z);
       }
+    },
+    setLevel(l) {
+      if (Math.abs(l - level) < 0.05) return;
+      level = l;
+      if (Number.isFinite(lastX)) repack(lastX, lastZ);
     },
   };
 }
