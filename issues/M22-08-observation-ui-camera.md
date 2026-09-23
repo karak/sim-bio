@@ -1,11 +1,11 @@
 ---
 id: M22-08
 title: 観察画面の入り方・UI・自動カメラ
-status: todo
+status: review
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-04]
-evidence: []
+evidence: ["E2E tests/e2e/observe.spec.ts 3 件(入る・戻る・速さ・個体を追う)、734c9c3 ほか"]
 ---
 
 # 観察画面の入り方・UI・自動カメラ
