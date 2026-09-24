@@ -2,6 +2,7 @@ import { BufferAttribute, BufferGeometry, Color, Mesh, type MeshToonMaterial } f
 import type { WorldSnapshot } from '../../simulation/types';
 import { SEA_LEVEL } from '../../simulation/terrain';
 import { createToonMaterial } from './toon';
+import { RELIEF, groundDetailTexture } from './groundDetail';
 
 /** 1 セル = 10 m (設計 §1) */
 export const CELL_M = 10;
@@ -180,6 +181,20 @@ export function groundColorAt(field: TerrainField, L: GroundLayers, x: number, z
   return out.multiplyScalar(groundJitter(x, z));
 }
 
+/**
+ * 地面の質感の種類の重み (地面の質感): [草地の土, むき出しの土 (踏み固めた道・広場・土の見える斑), 砂 (浜と浅瀬), 岩 (急な斜面)]。合計は 1。
+ * 頂点ごとに持たせ、シェーダ (paintedGround) が種類ごとの起伏 (土の塊・小石・風紋・割れ目) の混ぜ方を決める。色の塗り分け (groundBase) と同じ高さ・傾き・斑を見る
+ */
+export type GroundKind = [grass: number, bare: number, sand: number, rock: number];
+export function groundKind(field: TerrainField, L: GroundLayers, x: number, z: number, h: number): GroundKind {
+  const slope = Math.hypot(field.heightAt(x + 1, z) - h, field.heightAt(x, z + 1) - h);
+  const rock = Math.min(1, Math.max(0, (slope - 0.35) * 2.5));
+  const sand = (1 - smooth(0.6, 1.3, h)) * (1 - rock);
+  const g = L.grass ? field.layerAt(L.grass, x, z) : 0;
+  const bare = h < 1.2 ? 0 : groundPatch(x, z, g).bare * 0.45 * (1 - rock - sand);
+  return [Math.max(0, 1 - rock - sand - bare), bare, sand, rock];
+}
+
 /** 踏み固めた所 (草の磨き上げ: 集落の広場・戸口・船台への道)。a から b への線分の周り半径 r、縁はノイズで揺らす */
 export type Worn = { ax: number; az: number; bx: number; bz: number; r: number };
 export function wearAt(worn: readonly Worn[], x: number, z: number): number {
@@ -201,6 +216,8 @@ export const TRAMPLED = new Color('#8C7A55');
 export function wearTerrain(mesh: Mesh, worn: readonly Worn[]): void {
   const pos = mesh.geometry.getAttribute('position');
   const col = mesh.geometry.getAttribute('color');
+  // (地面の質感) 踏み固めた所は質感もむき出しの土 (小石) へ寄せる
+  const kind = mesh.geometry.getAttribute('groundKind');
   const c = new Color();
   for (let i = 0; i < pos.count; i++) {
     if (pos.getY(i) < 1.2) continue;
@@ -208,9 +225,78 @@ export function wearTerrain(mesh: Mesh, worn: readonly Worn[]): void {
     if (w <= 0) continue;
     c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).lerp(TRAMPLED, w * 0.7);
     col.setXYZ(i, c.r, c.g, c.b);
+    if (kind) {
+      const t = w * 0.9;
+      const rock = kind.getW(i);
+      const soil = 1 - rock;
+      kind.setXYZW(i, kind.getX(i) * (1 - t), kind.getY(i) * (1 - t) + soil * t, kind.getZ(i) * (1 - t), rock);
+    }
   }
   col.needsUpdate = true;
+  if (kind) kind.needsUpdate = true;
 }
+
+/**
+ * 地面の質感 (2026-09-24 審査台 t03-coast「もういっぽざらつきや凹凸などの質感がほしい」)。
+ * 質感の升 (groundDetail.ts) を世界座標で 2 つの大きさ (近い 5 m 升・広い 13 m 升を 34° 回す、繰り返しを目立たせない) に敷き、
+ * 種類の重み (草地の土・むき出しの土・砂・岩) で起伏の高さを混ぜる。3 点で読んだ差から傾きを出して法線を揺らし (日の当たる稜と陰の窪み)、
+ * 高さで窪みを暗く・盛り上がりを明るくする (筆で置いた陰)。近い升は 18〜45 m、広い升は 40〜110 m で消し (ちらつき・モアレを避ける)、
+ * 升はミップマップなので遠いほど均される。形 (三角形) は変えない (水たまり・草・動物の足は heightAt のまま地面に乗る)。
+ */
+/** GLSL の浮動小数の書き方 (整数も 1.0 のように小数点を付ける) */
+const glslFloat = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
+const glslList = (ns: readonly number[]) => ns.map(glslFloat).join(', ');
+const GROUND_DETAIL_PARS = [
+  'uniform sampler2D uGroundDetail;',
+  'varying vec4 vGroundK;',
+  // 種類ごとの起伏の高さ (m)。列は升の組 (R 土の塊・G 小石・B 風紋・A 岩)。近い升と広い升で分ける
+  // (2026-09-25 で変更: 値は groundDetail.ts の RELIEF から。前は mat4(0.11, 0.0, 0.0, 0.0,  0.05, 0.06, 0.0, 0.0,  0.0, 0.0, 0.05, 0.0,  0.0, 0.0, 0.0, 0.2) と
+  // mat4(0.22, 0.0, 0.0, 0.0,  0.14, 0.0, 0.0, 0.0,  0.03, 0.0, 0.08, 0.0,  0.0, 0.0, 0.0, 0.5))
+  `const mat4 G_AMP_NEAR = mat4(${glslList(RELIEF.ampNear)});`,
+  `const mat4 G_AMP_FAR = mat4(${glslList(RELIEF.ampFar)});`,
+  // 窪みの陰の強さ (種類ごと): 草地の土・むき出しの土・砂・岩
+  // (2026-09-25 で変更: 前は vec4(0.3, 0.38, 0.22, 0.55))
+  `const vec4 G_CAVITY = vec4(${glslList(RELIEF.cavity)});`,
+].join('\n');
+const GROUND_DETAIL_COLOR = [
+  'float gDist = length(vViewPosition);',
+  'float gFadeN = 1.0 - smoothstep(18.0, 45.0, gDist);',
+  'float gFadeF = 1.0 - smoothstep(40.0, 110.0, gDist);',
+  'vec4 gK = vGroundK / max(1e-3, dot(vGroundK, vec4(1.0)));',
+  'const float gE = 1.5 / 256.0;',
+  'vec2 gUn = gp / 5.0;',
+  'vec2 gUf = mat2(0.829, -0.559, 0.559, 0.829) * gp / 13.0;',
+  'vec4 gN0 = texture2D(uGroundDetail, gUn);',
+  'vec4 gNx = texture2D(uGroundDetail, gUn + vec2(gE, 0.0));',
+  'vec4 gNz = texture2D(uGroundDetail, gUn + vec2(0.0, gE));',
+  'vec4 gF0 = texture2D(uGroundDetail, gUf);',
+  'vec4 gFx = texture2D(uGroundDetail, gUf + vec2(gE, 0.0));',
+  'vec4 gFz = texture2D(uGroundDetail, gUf + vec2(0.0, gE));',
+  'vec4 gAmpN = G_AMP_NEAR * gK * gFadeN;',
+  'vec4 gAmpF = G_AMP_FAR * gK * gFadeF;',
+  // 傾き (高さ m / 世界の m)。広い升は回した座標の傾きを世界へ戻す
+  'vec2 gGrad = vec2(dot(gNx - gN0, gAmpN), dot(gNz - gN0, gAmpN)) / (gE * 5.0);',
+  'gGrad += mat2(0.829, 0.559, -0.559, 0.829) * (vec2(dot(gFx - gF0, gAmpF), dot(gFz - gF0, gAmpF)) / (gE * 13.0));',
+  // 窪みの陰: 種類ごとに見る組の高さ (0.5 が平ら) を混ぜる
+  'vec4 gSelN = vec4(gK.x + gK.y * 0.5, gK.y * 0.5, gK.z, gK.w);',
+  'vec4 gSelF = vec4(gK.x + gK.y, 0.0, gK.z, gK.w);',
+  'vec4 gMid = vec4(0.45, 0.36, 0.5, 0.5);',
+  'float gHn = dot(gN0 - gMid, gSelN) * gFadeN + dot(gF0 - gMid, gSelF) * gFadeF * 0.8;',
+  // (2026-09-25 で変更: 倍率と上下限は RELIEF (cavityShade と同じ式)。前は 1.6、0.55〜1.25)
+  `diffuseColor.rgb *= clamp(1.0 + gHn * dot(G_CAVITY, gK) * ${glslFloat(RELIEF.gain)}, ${glslFloat(RELIEF.shadeMin)}, ${glslFloat(RELIEF.shadeMax)});`,
+  // 小石は土より明るい灰色に (近い升だけ)
+  'float gPebble = smoothstep(0.42, 0.6, gN0.g) * gK.y * gFadeN;',
+  'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.3, 0.5, 0.2))) * vec3(1.28, 1.24, 1.16), gPebble * 0.35);',
+].join('\n');
+const GROUND_DETAIL_NORMAL = [
+  '{',
+  '  vec3 gNw = inverseTransformDirection(normal, viewMatrix);',
+  '  vec3 gG = vec3(gGrad.x, 0.0, gGrad.y);',
+  '  gG -= gNw * dot(gG, gNw);',
+  '  gNw = normalize(gNw - gG);',
+  '  normal = normalize((viewMatrix * vec4(gNw, 0.0)).xyz);',
+  '}',
+].join('\n');
 
 /**
  * 地面の筆のむら (草の磨き上げ)。頂点色 (1.7 m おき) より細かい 0.5〜3 m の斑を、画素ごとに世界座標の値ノイズで足す。
@@ -248,8 +334,16 @@ function paintedGround(mat: MeshToonMaterial): MeshToonMaterial {
           'float gNear = 1.0 - smoothstep(10.0, 25.0, length(vViewPosition));',
           'float gFine = gNoise(vec2(gp.x * 7.0 + gp.y * 2.0, gp.y * 7.0 - gp.x * 2.0)) - 0.5;',
           'diffuseColor.rgb *= 1.0 + gFine * 0.16 * gGreen * gNear;',
+          GROUND_DETAIL_COLOR,
         ].join('\n'),
-      );
+      )
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${GROUND_DETAIL_NORMAL}`);
+    // (地面の質感) 種類の重み (groundKind) と質感の升
+    shader.uniforms.uGroundDetail = { value: groundDetailTexture() };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec4 groundKind;\nvarying vec4 vGroundK;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGroundK = groundKind;');
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${GROUND_DETAIL_PARS}`);
   };
   mat.customProgramCacheKey = () => 'observe-ground';
   return mat;
@@ -264,6 +358,8 @@ export function createTerrainMesh(s: WorldSnapshot, field: TerrainField): Mesh {
   const step = (span * CELL_M) / (n - 1);
   const pos = new Float32Array(n * n * 3);
   const col = new Float32Array(n * n * 3);
+  // (地面の質感) 頂点ごとの質感の種類の重み (groundKind)
+  const kind = new Float32Array(n * n * 4);
   const layers = groundLayers(s);
   const c = new Color();
   for (let j = 0; j < n; j++) {
@@ -281,6 +377,7 @@ export function createTerrainMesh(s: WorldSnapshot, field: TerrainField): Mesh {
       col[k] = c.r * jitter;
       col[k + 1] = c.g * jitter;
       col[k + 2] = c.b * jitter;
+      kind.set(groundKind(field, layers, x, z, h), (j * n + i) * 4);
     }
   }
   const idx = new Uint32Array((n - 1) * (n - 1) * 6);
@@ -298,6 +395,7 @@ export function createTerrainMesh(s: WorldSnapshot, field: TerrainField): Mesh {
   const geo = new BufferGeometry();
   geo.setAttribute('position', new BufferAttribute(pos, 3));
   geo.setAttribute('color', new BufferAttribute(col, 3));
+  geo.setAttribute('groundKind', new BufferAttribute(kind, 4));
   geo.setIndex(new BufferAttribute(idx, 1));
   geo.computeVertexNormals();
   const mesh = new Mesh(geo, paintedGround(createToonMaterial({ vertexColors: true, rim: 0.08 })));
