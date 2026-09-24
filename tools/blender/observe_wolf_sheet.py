@@ -151,5 +151,13 @@ if os.path.exists(os.path.join(raw, "head-q34.png")):
         rows.append(row([head_cell(BEFORE, v, LB_BEFORE) for v in heads], 300))
     rows.append(row([head_cell(raw, v, LB_AFTER) for v in heads], 300))
     rows.append(row([label(trim(rimg(f"head-{a}.png")), f"{LB_AFTER} {a}") for a in ("stalk", "pounce")], 300))
+    # (灰狼の 5 回目で追加) 8 つ目の引数 bust で、頭・首・胸の寄り (bust-*) の前後を頭の寄りの下に足す (基準画は BUST_BOX で切る)
+    if len(sys.argv) > 8 and sys.argv[8] == "bust" and os.path.exists(os.path.join(raw, "bust-q34.png")):
+        BUST_BOX = {"side": (330, 50, 640, 330), "front": (672, 36, 848, 312), "q34": (1070, 36, 1330, 310)}
+        rows.append(row([label(REF.crop(BUST_BOX[v]), f"ref bust {v}") for v in heads], 320))
+        if BEFORE and os.path.exists(os.path.join(BEFORE, "bust-q34.png")):
+            rows.append(row([label(trim(Image.open(os.path.join(BEFORE, f"bust-{v}.png")).convert("RGB")), f"{LB_BEFORE} bust {v}")
+                             for v in heads], 320))
+        rows.append(row([label(trim(rimg(f"bust-{v}.png")), f"{LB_AFTER} bust {v}") for v in heads], 320))
     stack(rows, gap=10).save(os.path.join(out, f"{PRE}-head.png"))
 print("sheets written to", out)
