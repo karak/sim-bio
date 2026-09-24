@@ -47,6 +47,8 @@ LUMP_K = 0.86           # 葉の塊を縮める割合 (カードが外へ出る�
 INNER = (0.5, 0.56, 0.7)  # 塊 (内側) の陰りに掛ける乗数
 # lod ごとの葉のカード: (1 m² あたりの枚数, 一辺 m)
 CARDS = {0: (1.9, 1.8), 1: (0.8, 2.6)}
+# (鐘の吊り方のやり直しで変更: 樹冠の面にも鐘を下げ、鐘の周りのカードを除く分だけ枚数を増やして、葉の層の厚みを前と同じにする)
+CARDS = {0: (1.9, 1.8), 1: (0.7, 2.6)}
 
 # (M23-04 で追加) 影の代わりの形の樹冠の大きさ (lod1 の塊の半径に掛ける) と葉のカード (1 m² あたりの枚数, 一辺 m)。
 # lod1 の塊は房より 1.14 倍大きく、近い木 (lod0) の外側の葉まで自分の影に入れて暗くしたので、影は lod0 の葉の層の内に収める
@@ -341,6 +343,8 @@ def mature(lod=0):
     # (鐘樹の段の作り直しで変更: 鐘は樹冠の表に付けず、太枝から出した小枝に紐で吊る (hang_bells)。
     #  葉のカードは、鐘を吊る点の 0.5 m 上 (房の底の面) の近くにだけ置かない (紐の上が小枝まで見える))
     pts = [p + Z * 0.5 for p in hang_points()]
+    # (鐘の吊り方のやり直しで変更: 葉のカードを置かないのは、高さを散らした鐘 (bell_layout) の体と紐の真ん中の近く)
+    pts = bell_avoid_points()
     for i, (c, r, s) in enumerate(clumps):
         # (木の磨き上げで変更: 塊は LUMP_K に縮めて、葉のカードの奥の暗い内側にする)
         src = K.ico((r * LUMP_K, r * LUMP_K, r * 0.82 * LUMP_K), subdiv=s, jitter=(0.03, 0.07, 0.1)[s], seed=10 + i,
@@ -356,11 +360,14 @@ def mature(lod=0):
     density, size = CARDS[lod]
     cards = K.scatter_cards(n, M["foliage"], lumps, density, size, seed=70 + lod, color=CARD_LIN,
                             shade_of=lambda k: shade_card(centers[k][0], centers[k][1]),
-                            soft_of=lambda k: (centers[k][0] + Z * 0.15 * centers[k][1], 1.0), avoid=pts, avoid_r=0.5, gap_clear=GAP_CLEAR)
+                            soft_of=lambda k: (centers[k][0] + Z * 0.15 * centers[k][1], 1.0), avoid=pts, avoid_r=BELL_AVOID_R, gap_clear=GAP_CLEAR)
     # (木の磨き上げで追加) 鐘の付け根を、いちばん近い塊の中心から BELL_OUT 倍だけ外へ出す (カードの葉の層の外に吊るし、葉に埋もれない)
     # (鐘樹の段の作り直しで変更: 樹冠の表から外へ出した鐘は、枝と揃わず実や蜂の巣に見えた。下の輪の房の太枝から小枝を出し、紐で吊る)
-    bells = hang_bells(n, lod)
+    # (鐘の吊り方のやり直しで変更: 鐘を下・房の間・房の面の 3 つの高さの組に散らす (hang_bells_varied)。前の hang_bells は下の縁に揃っていた)
+    bells = hang_bells_varied(n, lod)
     print(f"  {name}: bells={bells} cards={cards}")
+    if lod == 0:
+        print(f"  bell heights: {bell_heights()}")
     return n
 
 
@@ -389,11 +396,13 @@ def mature_shadow():
     centers = cluster_centers()
     # (鐘樹の段の作り直しで変更: 葉のカードの避ける点は成木 (lod0) と同じ、鐘を吊る点の 0.5 m 上)
     pts = [p + Z * 0.5 for p in hang_points()]
+    # (鐘の吊り方のやり直しで変更: 避ける点は成木と同じ bell_avoid_points)
+    pts = bell_avoid_points()
     lumps = [(c, r * LUMP_K, i) for i, (c, r, _) in enumerate(clumps)]
     density, size = SHADOW_CARDS
     cards = K.scatter_cards(n, M["foliage"], lumps, density, size, seed=71, color=CARD_LIN,
                             shade_of=lambda k: shade_card(centers[k][0], centers[k][1]),
-                            soft_of=lambda k: (centers[k][0] + Z * 0.15 * centers[k][1], 1.0), avoid=pts, avoid_r=0.5, gap_clear=GAP_CLEAR)
+                            soft_of=lambda k: (centers[k][0] + Z * 0.15 * centers[k][1], 1.0), avoid=pts, avoid_r=BELL_AVOID_R, gap_clear=GAP_CLEAR)
     print(f"  belltree_mature_shadow: cards={cards}")
     return n
 
@@ -679,6 +688,9 @@ def sapling(lod=0):
 # ---------------------------------------------------------------- 株 (作り直し)
 
 STUMP_H = 0.72
+# (鐘樹の段の見直しで追加) 審査台 t2-stages のメモ (2026-09-24「マルタや切り株に苔はいらないでしょ」) を受けて、株と丸太の木に苔と地衣を付けない。
+# 根元の地面 (土・落ち葉・草・苔の斑の地面) はそのまま。True に戻すと前の苔と地衣の付いた株と丸太になる
+WOOD_MOSS = False
 STUMP_R = 0.55
 STUMP_CUT_R = 0.47
 
@@ -707,6 +719,9 @@ def stump():
     spine = [(0, 0, z) for z in zs]
     bark = with_lichen(K.bark_shade(spine, rs, BARK_LIN, MOSS_LIN, lo=0.6, hi=1.0, z1=0.75, groove=0.3, moss_z=(0.02, 0.42), seed=2.2),
                        seed=5, scale=7.0)
+    # (鐘樹の段の見直しで変更: 苔 (bark_shade の moss) と地衣は付けない。苔の色を樹皮の色にし、地衣を掛けない)
+    if not WOOD_MOSS:
+        bark = K.bark_shade(spine, rs, BARK_LIN, BARK_LIN, lo=0.6, hi=1.0, z1=0.75, groove=0.3, moss_z=(0.02, 0.42), seed=2.2)
     n.add(ringed_body(zs, rs, sides, fis), M["trunk"], smooth=True, shade=bark)
     # 樹皮の厚みの縁 (外の輪から木口へ、暗い内樹皮)
     bm = bmesh.new()
@@ -769,7 +784,8 @@ def stump():
         n.add(K.tube(pts, [0.26, 0.2, 0.1, 0.03], n=6, tip=True, cap_start=False, aspect=(0.62, 1.35)), M["trunk"],
               smooth=True, shade=bark)
     # 根の間の苔の小山
-    for i in range(3):
+    # (鐘樹の段の見直しで変更: WOOD_MOSS のときだけ)
+    for i in range(3 if WOOD_MOSS else 0):
         a = math.radians(40 + 72 * (i * 2) + 36)
         d = Vector((math.cos(a), math.sin(a), 0))
         moss_cushion(n, d * 0.72 + Z * 0.02, 0.2, 30 + i)
@@ -790,8 +806,11 @@ def log_shade(inv, r, seed):
         n1 = K.vnoise(lc.z * 2.2, ang * 1.3, 3.0, seed)
         m = smooth01((nrm.z - 0.25) / 0.4) * smooth01((n1 - 0.42) / 0.25)
         moss = K.mix3(MOSS_DEEP_LIN, MOSS_LIGHT_LIN, K.vnoise(lc.z * 8, ang * 5, 1.0, seed))
+        # (鐘樹の段の見直しで変更: 苔と地衣は WOOD_MOSS のときだけ)
+        if not WOOD_MOSS:
+            m = 0.0
         c = K.mix3(c, moss, m * 0.9)
-        li = smooth01((K.vnoise(lc.z * 6, ang * 3.5, 7.0, seed) - 0.7) / 0.08) * (1 - m)
+        li = smooth01((K.vnoise(lc.z * 6, ang * 3.5, 7.0, seed) - 0.7) / 0.08) * (1 - m) * (1.0 if WOOD_MOSS else 0.0)
         c = K.mix3(c, K.mul3(LICHEN_LIN, v), li * 0.7)
         low = clamp01((0.12 - co.z) / 0.12)
         return K.mix3(c, K.mul3(SOIL_LIN, 1.1), low * 0.5)
@@ -849,14 +868,16 @@ def logs():
     """(鐘樹の段の作り直しで追加) 丸太 3 本: 淡い樹皮に縦の筋と裂け目、上の面に苔の斑、地衣の斑、地面に接する所の土の汚れ。
     木口は樹皮の縁 (内樹皮の暗い帯) に囲まれた年輪 (偏心した髄、放射状の割れ)。2 本に折れた枝の跡。地面は苔の斑の土に落ち葉と草"""
     n = K.Node("belltree_logs")
-    ground_patch(n, 0.95, 0.06, seed=35, litter=9, blades=10, pebbles=2, cushions=1, subdiv=2, chips=3, aspect=1.35)
+    # (鐘樹の段の見直しで変更: 地面の苔の小山は丸太に寄り掛かって木の苔に見えるので、WOOD_MOSS のときだけ)
+    ground_patch(n, 0.95, 0.06, seed=35, litter=9, blades=10, pebbles=2, cushions=1 if WOOD_MOSS else 0, subdiv=2, chips=3, aspect=1.35)
     r = 0.3
     log_piece(n, 2.1, r, (0.0, -0.31, r), 2, seed=31, stub=(0.62, 70))
     log_piece(n, 1.9, r, (0.12, 0.31, r), -3, seed=32)
     zt = r + math.sqrt((2 * r) ** 2 - 0.31 ** 2)
     log_piece(n, 1.8, 0.28, (-0.08, 0.0, zt - 0.02), 5, seed=33, stub=(0.3, 100))
-    moss_cushion(n, (0.55, -0.05, zt + 0.22), 0.13, 41, flat=0.35)
-    moss_cushion(n, (-0.7, 0.55, r * 1.6), 0.1, 42, flat=0.35)
+    if WOOD_MOSS:  # (鐘樹の段の見直しで変更: 丸太の上の苔の小山は WOOD_MOSS のときだけ)
+        moss_cushion(n, (0.55, -0.05, zt + 0.22), 0.13, 41, flat=0.35)
+        moss_cushion(n, (-0.7, 0.55, r * 1.6), 0.1, 42, flat=0.35)
     return n
 
 
@@ -960,9 +981,227 @@ def hang_bells(node, lod, seed=100):
     return count
 
 
+# ---------------------------------------------------------------- 鐘の吊り方のやり直し (鐘の高さを散らす)
+# (鐘の吊り方のやり直しで追加) 審査台 t2-bells の判断 (2026-09-24「高さが揃いすぎており、不気味。枝の位置自体が悪いのかもしれない。
+# ところで、樹とのサイズ感はあっているのか？」) を受けて、鐘を 3 つの高さの組に分ける。基準画 sheets/belltree.png では鐘は樹冠の面の
+# あちこち (上の房の葉の間にも) に下がり、下の縁の下にも下がる。
+# - 下 (12 個): 下の輪の房の太枝から小枝 2 本。横へ伸びる小枝の先に 1 個 (2 房は小枝の中ほどにも短い紐で 1 個)、縁の外まで伸びる小枝の先に 1 個。
+#   小枝の先の高さと紐の長さを大きく揺らす (鐘の肩の高さは 3.9〜5.2 m に散る)
+# - 房の間 (8 個): 下の輪の房の太枝の先 (房の葉の中) から、隣の房との隙間へ上がる小枝の先に吊る (葉の間に下がる鐘、肩 5.9〜7.1 m)
+# - 房の面 (16 個): 房の外の面の葉の中から紐が出て、面のすぐ外に下がる (下の輪 5 房と上の輪 3 房に 2 つずつ。肩 5.6〜8.7 m)。
+#   紐の上と小枝は葉の中に隠れる。葉のカードは鐘の周りだけ置かず、鐘は葉の窪みに下がって見える
+# 鐘の大きさは基準画の比 (鐘の高さ ÷ 木の高さ) に合わせて BELL_SCALE 倍にする (trees3-bells-scale.png)
+BELL_SCALE = 0.82
+BELL_AVOID_R = 0.6   # 鐘の体と紐の真ん中から、葉のカードを置かない距離 (m)
+
+
+def outside_all(p, lumps, pad=0.08, rz=0.82):
+    """p が lumps [(中心, 半径)] のどれの内側にも無い (縁から pad より外)"""
+    for c, r in lumps:
+        d = p - c
+        if (d.x / (r + pad)) ** 2 + (d.y / (r + pad)) ** 2 + (d.z / ((r + pad) * rz)) ** 2 < 1.0:
+            return False
+    return True
+
+
+def bell_layout():
+    """[(組, 小枝の折れ線 (無ければ None), 吊る点, 紐の長さ, 鐘の大きさ)]。lod0 と lod1 で同じ位置 (切り替えで鐘が跳ばない)。
+    房の塊は lod0 の塊 (LUMP_K) と lod1 の塊 (房の重心、1.14 倍) の両方の外に鐘を置く (lod1 と遠い板でも鐘が塊に埋もれない)"""
+    rnd = random.Random(301)
+    spine = [Vector(p) for p in MATURE_SPINE]
+    centers = cluster_centers()
+    lumps0 = [(c, r * LUMP_K) for c, r, _ in canopy_clumps(0)]
+    lumps1 = [(c, r * LUMP_K) for c, r, _ in canopy_clumps(1)]
+    lumps = lumps0 + lumps1
+    out = []
+    lower = [(k, cc) for k, cc in enumerate(centers) if not cc[2]]
+    for j, (k, (c, r, upper, z0)) in enumerate(lower):
+        br = branch_polyline(c, r, upper, z0, spine)
+        o = Vector((c.x, c.y, 0)).normalized()
+        under = c.z - r * LUMP_K * 0.82 * 0.7 - 0.42
+
+        def turn(deg):
+            a = math.radians(deg)
+            return Vector((o.x * math.cos(a) - o.y * math.sin(a), o.x * math.sin(a) + o.y * math.cos(a), 0))
+        # 下: 横へ伸びる小枝 (付け根に近い側)、紐は短いのと長いの
+        q = along(br, rnd.uniform(0.45, 0.6))
+        d = turn((1 if j % 2 else -1) * rnd.uniform(45, 70))
+        end = Vector((q.x, q.y, 0)) + d * rnd.uniform(1.2, 1.6)
+        end.z = min(q.z + 0.3, under + rnd.uniform(-0.7, -0.1))
+        tw = [q, q.lerp(end, 0.5) + Z * 0.12, end]
+        out.append(("low", tw, along(tw, 0.97), rnd.uniform(0.5, 1.25), rnd.uniform(0.95, 1.08)))
+        if j in (0, 2):
+            out.append(("low", None, along(tw, 0.5), rnd.uniform(0.15, 0.4), rnd.uniform(0.92, 1.05)))
+        # 下: 縁の外まで伸びる小枝の先
+        q = along(br, rnd.uniform(0.8, 0.9))
+        d = turn(rnd.uniform(-15, 15))
+        end = Vector((q.x, q.y, 0)) + d * rnd.uniform(1.9, 2.3)
+        end.z = under + rnd.uniform(-0.1, 0.35)
+        tw = [q, q.lerp(end, 0.5) + Z * 0.15, end]
+        out.append(("low", tw, along(tw, 0.96), rnd.uniform(0.2, 0.8), rnd.uniform(0.9, 1.05)))
+    # 房の間: 下の輪の房 k と次の房の隙間へ、房 k の太枝の先から上がる小枝 (5 つの隙間のうち、2 つには 2 個)
+    for j, (k, (c, r, upper, z0)) in enumerate(lower):
+        c2 = lower[(j + 1) % len(lower)][1][0]
+        br = branch_polyline(c, r, upper, z0, spine)
+        q = along(br, 0.78)
+        mid = (c + c2) / 2
+        g = Vector((mid.x, mid.y, 0)).normalized()
+        for tries in range(12):
+            end = Vector((g.x, g.y, 0)) * (mid.xy.length + 0.25 * tries) + Z * rnd.uniform(6.6, 7.6)
+            if outside_all(end - Z * 0.9, lumps, pad=0.12) and outside_all(end - Z * 0.45, lumps, pad=0.05):
+                break
+        tw = [q, q.lerp(end, 0.55) + Z * 0.2, end]
+        out.append(("gap", tw, along(tw, 0.98), rnd.uniform(0.25, 0.55), rnd.uniform(0.9, 1.02)))
+        if j in (1, 3, 4):
+            p2 = along(tw, 0.7)
+            out.append(("gap", None, p2, rnd.uniform(0.45, 0.8), rnd.uniform(0.85, 0.98)))
+    # 房の面: 房の外の面の葉の中から紐を出す (鐘は面のすぐ外)
+    # 房ごとに 2 つ、外向きから左右へ振り分け、高さも片方は赤道の近く、片方は下寄りにする
+    face = [(k, sgn) for k, _ in lower for sgn in (-1, 1)] + [(k, sgn) for k in (5, 6, 7) for sgn in (-1, 1)]
+    for k, sgn in face:
+        c, r, upper, z0 = centers[k]
+        rr = r * LUMP_K
+        o = Vector((c.x, c.y, 0)).normalized()
+        a = math.radians(sgn * rnd.uniform(15, 50))
+        d = Vector((o.x * math.cos(a) - o.y * math.sin(a), o.x * math.sin(a) + o.y * math.cos(a), 0))
+        top_z = c.z - rr * 0.82 * (rnd.uniform(-0.1, 0.2) if sgn > 0 else rnd.uniform(0.3, 0.6))
+        # 房の中心から外へ進め、鐘の肩と裾の高さで lod0 と lod1 のどの塊の外にも出た所 (鐘の半径の分の余白) に置く
+        dist = rr * 0.5
+        while dist < rr * 2.5:
+            at = Vector((c.x, c.y, 0)) + d * dist
+            if outside_all(Vector((at.x, at.y, top_z)), lumps, pad=0.4) and outside_all(Vector((at.x, at.y, top_z - 0.35)), lumps, pad=0.4):
+                break
+            dist += 0.05
+        cord = rnd.uniform(0.35, 0.6)
+        at = Vector((c.x, c.y, 0)) + d * dist
+        at.z = top_z + cord
+        out.append(("face", None, at, cord, rnd.uniform(0.85, 1.0)))
+    return out
+
+
+def bell_avoid_points():
+    """葉のカードを置かない点: 鐘の体の真ん中と紐の真ん中 (鐘が葉に埋もれず、紐が見える)"""
+    pts = []
+    for kind, tw, p, cord, s in bell_layout():
+        top = p - Z * cord
+        pts.append(top - Z * 0.22 * BELL_SCALE * s)
+        pts.append(p - Z * cord * 0.5)
+    return pts
+
+
+def hung_bell_scaled(node, top, lod, phase, scale):
+    """(鐘の吊り方のやり直しで追加) hung_bell と同じ輪郭の鐘を scale 倍で"""
+    if lod == 0:
+        prof = [(0.0, 0.04), (0.1, -0.02), (0.14, -0.24), (0.2, -0.4), (0.3, -0.5), (0.0, -0.38)]
+        node.add(K.lathe(prof, n=5, phase=phase), M["bell"], matrix=K.trs(top) @ K.trs((0, 0, 0), (0, 0, 0), scale), smooth=True,
+                 per_face_mat=bell_rim_scaled(top, scale))
+    else:
+        prof = [(0.0, 0.0), (0.24, -0.42), (0.3, -0.5), (0.0, -0.38)]
+        node.add(K.lathe(prof, n=4), M["bell"], matrix=K.trs(top) @ K.trs((0, 0, 0), (0, 0, 0), scale), smooth=True,
+                 per_face_mat=bell_rim_scaled(top, scale))
+
+
+def bell_rim_scaled(top, scale):
+    """bell_rim と同じ (裾の帯と内側を明るい縁の材質に)。高さの閾値を scale 倍にする"""
+    return lambda c, nrm: M["bell_rim"] if c.z - top.z < -0.4 * scale else None
+
+
+def hang_bells_varied(node, lod, seed=100):
+    """(鐘の吊り方のやり直しで追加) bell_layout の小枝・紐・鐘を描く。返り値は組ごとの鐘の数。
+    lod1 は小枝を 3 角の錐 1 本にし、紐は描かない (hang_bells と同じ)。房の面の組は小枝を描かない (葉の中に隠れる)"""
+    rnd = random.Random(seed)
+    count = {}
+    for kind, tw, p, cord, s in bell_layout():
+        if tw is not None:
+            if lod == 0:
+                node.add(K.tube(tw, [0.085, 0.055, 0.022], n=5, tip=True, cap_start=False), M["bark"], smooth=True,
+                         shade=K.shade_const(0.9))
+            elif kind == "low":  # lod1 は房の間の小枝 (葉の中から隙間へ上がる、38 m より先では見えない) を描かない
+                node.add(K.tube([tw[0], tw[-1]], [0.09, 0.02], n=3, tip=True, cap_start=False), M["bark"], smooth=True,
+                         shade=K.shade_const(0.9))
+        top = p - Z * cord
+        if lod == 0:
+            node.add(K.tube([p + Z * 0.03, top + Z * 0.03 * BELL_SCALE * s], [0.024, 0.024], n=3, cap_start=False, cap_end=False),
+                     M["rope"], smooth=True, shade=K.shade_const(1.0))
+        hung_bell_scaled(node, top, lod, rnd.uniform(0, 1), BELL_SCALE * s)
+        count[kind] = count.get(kind, 0) + 1
+    return count
+
+
+def bell_heights():
+    """鐘の肩の高さ (m) の組ごとの一覧 (確かめ用)"""
+    out = {}
+    for kind, tw, p, cord, s in bell_layout():
+        out.setdefault(kind, []).append(round((p - Z * cord).z, 2))
+    return out
+
+
+# ---------------------------------------------------------------- 遠距離版 (芽・株)
+# (遠距離版の追加で追加) 作り直した芽 (746 三角形) と株 (1,662 三角形) の遠距離版。観察画面は芽を 25 m、株を 35 m より先で使う。
+# 近い形の 1 割ほどの三角形で、同じ色 (頂点色) と輪郭 (大きさ・高さ・木口の明るい円・根の広がり) を残す
+
+def seedling_lod1():
+    """芽の遠距離版 belltree_seedling_lod1: 土の盛り (20 三角形)、茎、子葉 2 枚 (粗い葉)、先の光"""
+    n = K.Node("belltree_seedling_lod1")
+    bm = K.ico((0.22, 0.22, 0.055), subdiv=0, jitter=0.1, seed=1, flat_bottom=0.95)
+    K.paint(bm, lambda v: K.mix3(SOIL_LIN, MOSS_DEEP_LIN, 0.55 * clamp01(v.co.z / 0.055)))
+    n.add(bm, M["ground"], smooth=True, soft=((0, 0, -0.44), 0.6))
+    base_c, tip_c = K.hex_rgb("#8C6A48"), K.hex_rgb("#C9DB9A")
+    n.add(K.tube([(0, 0, 0.0), (0.012, 0.004, 0.14), (0.004, 0.01, 0.28)], [0.013, 0.01, 0.007], n=3, cap_start=False), M["leafv"],
+          smooth=True, shade=lambda co, nrm: K.mix3(base_c, tip_c, smooth01(co.z / 0.2)))
+    top = Vector((0.004, 0.01, 0.28))
+    for a in (25, 205):
+        d = Vector((math.cos(math.radians(a)), math.sin(math.radians(a)), 0.32))
+        placed_leaf(n, top - Z * 0.012, d, 0.16, 0.12, SEEDLING_LEAF, 1, bend=0.2, shade=K.shade_const(1.0),
+                    soft=(top + Z * 0.05 - Z * 0.25, 0.35), k=1)
+    n.add(K.lathe([(0.0, 0.0), (0.02, 0.016), (0.0, 0.034)], n=4), M["glow"], matrix=K.trs(top), smooth=True)
+    return n
+
+
+def stump_lod1():
+    """株の遠距離版 belltree_stump_lod1: 地面の盛り、10 面の胴 (樹皮の筋は頂点色)、年輪 2 本の木口、倒れた側の高い楔 5 つ、鰭の根 5 本"""
+    n = K.Node("belltree_stump_lod1")
+    bm = K.ico((1.2, 1.2, 0.1), subdiv=0, jitter=0.1, seed=21, flat_bottom=0.95)
+    K.paint(bm, lambda v: K.mix3(SOIL_LIN, MOSS_DEEP_LIN, 0.6 * clamp01(v.co.z / 0.1)))
+    n.add(bm, M["ground"], smooth=True, soft=((0, 0, -2.4), 0.6))
+    sides = 10
+    zs = [-0.06, 0.2, STUMP_H]
+    rs = [0.78, 0.6, STUMP_R]
+    fis = K.fissures(sides, depth=(0.04, 0.1), bump=0.04, seed=21)
+    spine = [(0, 0, z) for z in zs]
+    bark = K.bark_shade(spine, rs, BARK_LIN, BARK_LIN, lo=0.6, hi=1.0, z1=0.75, groove=0.3, moss_z=(0.02, 0.42), seed=2.2)
+    n.add(ringed_body(zs, rs, sides, fis), M["trunk"], smooth=True, shade=bark)
+    K.ring_disc(n, M["wood"], K.trs((0, 0, STUMP_H - 0.008)), STUMP_R * 0.97, seed=24, rings=2, sides=sides,
+                light=WOOD["light"], dark=WOOD["dark"], pith=WOOD["pith"], sap=WOOD["sap"], off=(-0.1, 0.05), cracks=0)
+    hinge = math.radians(20)
+    rnd = random.Random(23)
+    for i in range(5):
+        a = hinge + (i - 2) * 0.45
+        h = 0.12 + 0.18 * (1 - abs(i - 2) / 2) + rnd.uniform(0, 0.05)
+        o = Vector((math.cos(a), math.sin(a), 0))
+        s = Vector((-o.y, o.x, 0)) * 0.1
+        p0 = o * STUMP_R * 0.95 + Z * (STUMP_H - 0.02)
+        b2 = bmesh.new()
+        vs = [b2.verts.new(v) for v in (p0 - s, p0 + s, p0 + Z * h - o * 0.02)]
+        b2.faces.new(vs)
+        n.add(b2, M["wood"], smooth=False, shade=K.shade_const(K.mul3(BARK_LIN, 0.92)))
+        b3 = bmesh.new()
+        vs = [b3.verts.new(v) for v in (p0 + s - o * 0.05, p0 - s - o * 0.05, p0 + Z * h - o * 0.04)]
+        b3.faces.new(vs)
+        n.add(b3, M["wood"], smooth=False, shade=K.shade_const(FIBRE_LIN))
+    for i in range(5):
+        a = math.radians(40 + 72 * i)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        pts = [d * 0.3 + Z * 0.42, d * 0.8 + Z * 0.06, d * 1.25 + Z * (-0.06)]
+        n.add(K.tube(pts, [0.24, 0.12, 0.03], n=4, tip=True, cap_start=False, aspect=(0.62, 1.35)), M["trunk"], smooth=True, shade=bark)
+    return n
+
+
 if __name__ == "__main__":
     # (M23-04 で変更: 成木の影の代わりの形 mature_shadow を足す。既存のノードは同じ種で同じ形のまま)
     # (鐘樹の段の作り直しで変更: 芽・若木・株・丸太は作り直した形。若木の遠距離版 sapling(1) を足す)
     nodes = [seedling(), sapling(), sapling(1), mature(0), mature(1), stump(), logs(), mature_shadow()]
+    # (遠距離版の追加で変更: 芽と株の遠距離版を足す)
+    nodes += [seedling_lod1(), stump_lod1()]
     objs = [nd.build() for nd in nodes]
     K.export_glb(objs, os.path.join(K.OUT_DIR, "belltree.glb"), texcoords=True)
