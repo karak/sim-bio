@@ -484,8 +484,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   for (const [name, mats] of settlementPlacements) {
     // (M23-09) 小屋は OPT.hut より先を遠距離版 hut_lod1 で描く (影は近い・遠いに依らず全部の小屋を hut_lod1 で落とす。M23-04 と同じ)
     const far = name === 'hut' && OPT.hut > 0 ? findNode(settleGlb, 'hut_lod1') : null;
+    // (M23-09 のやり直しで追加) 影は hut_shadow (前の遠距離版、1,249 三角形) で落とす。遠距離版は 5 千三角形を超えたので影には重い (無ければ遠距離版)
+    const hutShadow = name === 'hut' ? (findNode(settleGlb, 'hut_shadow') ?? findNode(settleGlb, 'hut_lod1')) : null;
     if (far) {
-      hutSet = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), far, mats, OPT.hut, mats.length, far, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
+      hutSet = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), far, mats, OPT.hut, mats.length, hutShadow, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
       if (hutSet.shadow) shadowOnly.add(hutSet.shadow);
       settlement.add(hutSet.group);
       continue;
@@ -495,8 +497,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // (M23-04) 小屋 (1 棟 10 千三角形) の影は遠い段 hut_lod1 (766 三角形) で落とす
     const lod1 = name === 'hut' ? findNode(settleGlb, 'hut_lod1') : null;
     if (!lod1) continue;
+    // (M23-09 のやり直しで追加) 影の形は hut_shadow (上と同じ)
+    const lod1Shadow = hutShadow ?? lod1;
     g.traverse((o) => (o.castShadow = false));
-    const proxy = instanceProps(lod1, mats);
+    const proxy = instanceProps(lod1Shadow, mats);
     settlement.add(proxy);
     shadowOnly.add(proxy);
   }

@@ -21,8 +21,11 @@ export const HUT_OFFSETS: readonly (readonly [number, number])[] = [
  * 小屋ごとに HUT_NEAR_SPREAD の幅で揺らす (HUT_NEAR_M × (1 ± HUT_NEAR_SPREAD / 2)、28.8〜35.2 m)。
  * 集落の俯瞰 (自動カメラの settlementHigh、中心から 46 m 引いて 30 m の高さ) では小屋まで 39 m より遠く、3 棟とも遠距離版。
  * 集落の寄せ先 (中心から 30 m・高さ 10 m) では手前の小屋 (17 m) だけが近い形で、画の右の端の小屋 (35 m) は遠距離版になる
+ * (M23-09 のやり直しで変更: 32 → 36 m (32.4〜39.6 m、3 棟は 37.4・34.4・36.8 m)。ユーザーの判断「30mだと明らかに違いがわかる」で遠距離版を
+ *  hut と同じ石・板・蔓・葉の形にし、切り替えも遠ざけた。36 m は集落の俯瞰で小屋が近い形に戻らない上限 (俯瞰が回っても小屋まで 38 m より遠い)。
+ *  集落の寄せ先では手前の小屋 (17 m) と画の右の端の小屋 (35 m) が近い形、奥の小屋 (44 m) が遠距離版)
  */
-export const HUT_NEAR_M = 32;
+export const HUT_NEAR_M = 36;
 export const HUT_NEAR_SPREAD = 0.2;
 
 /** 小屋の中心から炉までの距離 (m、戸口の側)。observe_settlement.py の炉 (Blender の y = −0.3) と同じ */
