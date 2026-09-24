@@ -530,9 +530,10 @@ vec3 impFrameDir(float j, float k) {
   return vec3(cos(el) * cos(az), sin(el), cos(el) * sin(az));
 }
 // 枠の外 (0〜1 の外) は覆い 0。縮小の段を選ぶ微分が崩れないよう、読むのは常に行い、外は掛けて消す
-vec4 impTap(sampler2D tex, float j, float k, vec2 uv) {
+// (M23-06 で変更: 縮小の段は枠の uv の微分 (gx, gy) で選ぶ。絵の無い所で法線・発光を読むのをやめても段が崩れない)
+vec4 impTap(sampler2D tex, float j, float k, vec2 uv, vec2 gx, vec2 gy) {
   float inside = step(0.0, uv.x) * step(0.0, uv.y) * step(uv.x, 1.0) * step(uv.y, 1.0);
-  return texture2D(tex, (vec2(j, k) + clamp(uv, 0.0, 1.0)) / IMP_GRID) * inside;
+  return textureGrad(tex, (vec2(j, k) + clamp(uv, 0.0, 1.0)) / IMP_GRID, gx, gy) * inside;
 }
 vec2 impProject(vec3 p, vec3 r, vec3 u) {
   return 0.5 + 0.5 * vec2(dot(p, r), dot(p, u)) / uImpRadius;
@@ -541,6 +542,8 @@ vec2 impProject(vec3 p, vec3 r, vec3 u) {
 // along は板の面から樹冠の表までの視線に沿った長さ (木の座標、覆いを掛けた形)。
 // (奥行きを読んで写し直す視差の補正も試したが、鐘や葉の縁で奥行きが跳んで絵が千切れ、夜の鐘の灯りが筋になったのでやめた。作業ログ)
 void impAddFrame(float j, float k, float w, inout vec4 alb, inout vec4 nrm, inout vec3 em, inout float along) {
+  // 重みの無い枠は読まない (枠の間の真ん中の外では 1 枠だけ。重みは木ごとに同じなので分かれない)
+  if (w <= 0.0) return;
   vec3 d = impFrameDir(j, k);
   vec3 r = normalize(cross(vec3(0.0, 1.0, 0.0), d));
   vec3 u = cross(d, r);
@@ -548,14 +551,18 @@ void impAddFrame(float j, float k, float w, inout vec4 alb, inout vec4 nrm, inou
   vec3 v = vImpVl;
   float vd = max(dot(v, d), 0.2);
   vec2 uv = impProject(q - v * (dot(q, d) / vd), r, u);
-  vec4 a = impTap(uImpAlbedo, j, k, uv);
-  vec4 n = impTap(uImpNormal, j, k, uv);
+  vec2 gx = dFdx(uv) / IMP_GRID;
+  vec2 gy = dFdy(uv) / IMP_GRID;
+  vec4 a = impTap(uImpAlbedo, j, k, uv, gx, gy);
+  // 絵の無い所は法線・発光を読まない
+  if (a.a <= 0.0) return;
+  vec4 n = impTap(uImpNormal, j, k, uv, gx, gy);
   float dep = a.a > 0.02 ? (n.a / a.a) * 2.0 - 1.0 : 0.0;
   alb += a * w;
   nrm += n * w;
   along += (dep * uImpRadius - dot(q, d)) / vd * a.a * w;
   #ifdef IMP_EMISSIVE
-  em += impTap(uImpEmissive, j, k, uv).rgb * w;
+  em += impTap(uImpEmissive, j, k, uv, gx, gy).rgb * w;
   #endif
 }
 `;
