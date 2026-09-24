@@ -6,6 +6,7 @@ import { Frustum, InstancedMesh, Matrix4, Mesh, Sphere, Vector3, type Camera, ty
  *   (M23-02 で変更: 草・下草・木・群れは render/cull.ts で見えるインスタンスだけを前に詰めるので、drawn は詰めた後の数。影は全部 (shadow))
  * - inView: インスタンスごとに視錐台で落としたら残る三角形 (境界球がカメラの視錐台に掛かるものだけ)
  * - shadow: 影の描画で送っている三角形 (影を落とすもの。影のカメラは区域全体を覆うので全インスタンス)
+ *   (M23-04 で変更: 影の描画だけに出す代わりの形 (render/shadowOnly.ts、ふだんは visible = false) も数える。代わりの形は drawn・inView・遠さ・インスタンスには数えない)
  * - beyond30 / beyond60: カメラから 30 m / 60 m より遠いインスタンスの三角形 (遠距離用の軽量版に差し替える候補)
  */
 export type BreakdownRow = { drawn: number; inView: number; shadow: number; beyond30: number; beyond60: number; instances: number };
@@ -20,7 +21,7 @@ export function triangleBreakdown(camera: Camera, roots: Readonly<Record<string,
   const m = new Matrix4();
   const world = new Matrix4();
   const ball = new Sphere();
-  scene.traverseVisible((o) => {
+  const count = (o: Object3D, shadowOnly: boolean) => {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const geo = mesh.geometry;
@@ -28,6 +29,10 @@ export function triangleBreakdown(camera: Camera, roots: Readonly<Record<string,
     if (!tris) return;
     const cat = owner.get(o) ?? 'other';
     const row = (rows[cat] ??= { drawn: 0, inView: 0, shadow: 0, beyond30: 0, beyond60: 0, instances: 0 });
+    if (shadowOnly) {
+      if (mesh.castShadow) row.shadow += tris * ((o as InstancedMesh).isInstancedMesh ? (o as InstancedMesh).count : 1);
+      return;
+    }
     if (!geo.boundingSphere) geo.computeBoundingSphere();
     const local = geo.boundingSphere!;
     const inst = (o as InstancedMesh).isInstancedMesh ? (o as InstancedMesh) : null;
@@ -47,6 +52,13 @@ export function triangleBreakdown(camera: Camera, roots: Readonly<Record<string,
       if (d > 30) row.beyond30 += tris;
       if (d > 60) row.beyond60 += tris;
     }
-  });
+  };
+  const visit = (o: Object3D, shadowOnly: boolean) => {
+    const only = shadowOnly || o.userData.shadowOnly === true;
+    if (!o.visible && !only) return;
+    count(o, only);
+    for (const c of o.children) visit(c, only);
+  };
+  visit(scene, false);
   return rows;
 }
