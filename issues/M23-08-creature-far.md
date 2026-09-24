@@ -1,11 +1,11 @@
 ---
 id: M23-08
 title: 動物の遠距離版
-status: todo
+status: review
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-02]
-evidence: []
+evidence: ["f24cea4 tests/unit/observe.creatureFar.test.ts"]
 ---
 
 # 動物の遠距離版
