@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Color, Matrix4, Vector3, type InstancedBufferAttribute } from 'three';
-import { carpetTuft, createGrass } from '../../src/observe/render/grass';
+import { carpetTuft, createGrass, farTuft, grassIsFar, tuftSilhouette } from '../../src/observe/render/grass';
 import { createTerrainField, groundColorAt, groundPatch, wearAt, type GroundLayers } from '../../src/observe/render/terrain';
 import type { WorldSnapshot } from '../../src/simulation/types';
 
@@ -108,6 +108,65 @@ describe('観察画面 (草の磨き上げ): 草の房', () => {
       const b = before.find((u) => u.x === t.x && u.z === t.z)!;
       if (w > 0) expect(t.h).toBeLessThan(b.h);
       else expect(t.h).toBeCloseTo(b.h, 5);
+    }
+  });
+});
+
+describe('観察画面 (M23-05): 草の遠距離版', () => {
+  it('遠距離版に替える距離は房ごとの乱数で 22〜36 m に散らす。近いほうは必ず近い房、遠いほうは必ず遠距離版、帯の中は乱数の割合', () => {
+    const hs = Array.from({ length: 1000 }, (_, i) => (i + 0.5) / 1000);
+    const share = (d: number) => hs.filter((h) => grassIsFar(d, h)).length / hs.length;
+    expect(share(0)).toBe(0);
+    expect(share(22)).toBe(0);
+    expect(share(29)).toBeCloseTo(0.5, 2);
+    expect(share(36.01)).toBe(1);
+    expect(share(120)).toBe(1);
+    // 距離が延びるほど遠距離版の割合が増え、1 つの房は一度遠距離版になれば、より遠くでも遠距離版 (カメラが離れるとき戻らない)
+    for (let d = 20; d < 40; d += 0.5) expect(share(d + 0.5)).toBeGreaterThanOrEqual(share(d));
+    for (const h of [0.1, 0.5, 0.9]) for (let d = 20; d < 40; d += 0.5) if (grassIsFar(d, h)) expect(grassIsFar(d + 0.5, h)).toBe(true);
+  });
+
+  it('遠距離版の房は 2 三角形の板で、近い房と同じ高さ・同じ横の幅。法線は真上', () => {
+    const tuft = carpetTuft();
+    const far = farTuft(tuft);
+    const pos = far.getAttribute('position');
+    expect(pos.count / 3).toBe(2);
+    expect(far.getAttribute('uv').count).toBe(pos.count);
+    tuft.computeBoundingBox();
+    far.computeBoundingBox();
+    expect(far.boundingBox!.max.y).toBeCloseTo(tuft.boundingBox!.max.y, 6);
+    expect(far.boundingBox!.min.y).toBe(0);
+    const r = Math.max(-tuft.boundingBox!.min.x, tuft.boundingBox!.max.x);
+    expect(far.boundingBox!.max.x).toBeCloseTo(r, 6);
+    expect(far.boundingBox!.min.x).toBeCloseTo(-r, 6);
+    const n = far.getAttribute('normal');
+    for (let i = 0; i < n.count; i++) expect([n.getX(i), n.getY(i), n.getZ(i)]).toEqual([0, 1, 0]);
+  });
+
+  it('板の覆いは房を横から見た輪郭: 根元は密、先は疎ら、上の角は空く。覆いの割合は 4 つの色の組で同じ', () => {
+    const tex = tuftSilhouette(carpetTuft(), 64);
+    const data = tex.image.data as Uint8Array;
+    expect(tex.image.width).toBe(64);
+    const row = (y: number) => {
+      let a = 0;
+      for (let x = 0; x < 64; x++) a += data[(y * 64 + x) * 4];
+      return a / 64 / 255;
+    };
+    const band = (y0: number, y1: number) => {
+      let a = 0;
+      for (let y = y0; y < y1; y++) a += row(y);
+      return a / (y1 - y0);
+    };
+    // 下の半分は 2.5 割以上を覆い、上の 4 分の 1 (外の葉より高い内の 4 枚の先だけ) は下の半分の 4 分の 1 未満、全体は 1〜6 割 (葉の間から地面がのぞく)
+    expect(band(0, 32)).toBeGreaterThan(0.25);
+    expect(band(48, 64)).toBeLessThan(band(0, 32) * 0.25);
+    expect(band(0, 64)).toBeGreaterThan(0.1);
+    expect(band(0, 64)).toBeLessThan(0.6);
+    expect(data[(63 * 64 + 0) * 4]).toBe(0);
+    expect(data[(63 * 64 + 63) * 4]).toBe(0);
+    for (let i = 0; i < 64 * 64; i++) {
+      expect(data[i * 4 + 1]).toBe(data[i * 4]);
+      expect(data[i * 4 + 3]).toBe(data[i * 4]);
     }
   });
 });

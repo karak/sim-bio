@@ -289,6 +289,89 @@ describe('インスタンスごとの視錐台カリング (M23-02)', () => {
     expect(g.mesh.count).not.toBe(before);
   });
 
+  it('(M23-05) 草の遠距離版: 房は近い房か遠距離版のどちらか一方に入り、距離で振り分け、行列・房の色・根元の色は組のまま。視錐台の判定も同じ', () => {
+    const s = snap();
+    const field = createTerrainField(s, home, 5);
+    const layers: GroundLayers = {
+      grass: s.layers.populations.grass,
+      moss: s.layers.populations.moss,
+    };
+    const m = new Matrix4();
+    const p = new Vector3();
+    const c = new Color();
+    const want = new Color();
+    type Tuft = { x: number; z: number; far: boolean; color: number[]; root: number[] };
+    const tufts = (g: ReturnType<typeof createGrass>) => {
+      const out: Tuft[] = [];
+      for (const [mesh, far] of [
+        [g.mesh, false],
+        [g.far, true],
+      ] as const) {
+        const root = mesh.geometry.getAttribute('aRoot') as InstancedBufferAttribute;
+        for (let i = 0; i < mesh.count; i++) {
+          mesh.getMatrixAt(i, m);
+          p.setFromMatrixPosition(m);
+          mesh.getColorAt(i, c);
+          out.push({ x: p.x, z: p.z, far, color: c.toArray(), root: [root.getX(i), root.getY(i), root.getZ(i)] });
+        }
+      }
+      return out;
+    };
+    const a = createGrass(field, layers, 4000, 7, undefined, 60);
+    a.update(0, { x: 0, z: 0 });
+    const ta = tufts(a);
+    // 遠距離版は 2 三角形の板で、mesh の子 (シーンに mesh を足せば一緒に描かれ、三角形の内訳も草に入る)
+    expect(a.far.geometry.getAttribute('position').count / 3).toBe(2);
+    expect(a.far.parent).toBe(a.mesh);
+    const near = ta.filter((t) => !t.far);
+    const far = ta.filter((t) => t.far);
+    expect(near.length).toBeGreaterThan(100);
+    expect(far.length).toBeGreaterThan(100);
+    // 22 m までは全部近い房、36 m より先は全部遠距離版、帯の中は両方が混じる (境目の輪を作らない)
+    for (const t of near) expect(Math.hypot(t.x, t.z)).toBeLessThanOrEqual(36);
+    for (const t of far) expect(Math.hypot(t.x, t.z)).toBeGreaterThan(22);
+    const inBand = (t: Tuft) => Math.hypot(t.x, t.z) > 26 && Math.hypot(t.x, t.z) < 32;
+    expect(near.filter(inBand).length).toBeGreaterThan(10);
+    expect(far.filter(inBand).length).toBeGreaterThan(10);
+    // どの房も一方にだけ入り、根元の色は地面の色と同じ式
+    const key = (t: Tuft) => `${t.x},${t.z}`;
+    expect(new Set(ta.map(key)).size).toBe(ta.length);
+    for (const t of ta.filter((_, i) => i % 7 === 0)) {
+      groundColorAt(field, layers, t.x, t.z, want);
+      expect(t.root[0]).toBeCloseTo(want.r, 5);
+      expect(t.root[1]).toBeCloseTo(want.g, 5);
+      expect(t.root[2]).toBeCloseTo(want.b, 5);
+    }
+    // カメラを 40 m 動かすと、近い房と遠距離版が入れ替わる。入れ替わった房も房の色・根元の色は同じ (組のまま写す)
+    const b = createGrass(field, layers, 4000, 7, undefined, 60);
+    b.update(0, { x: 40, z: 0 });
+    const byKey = new Map(ta.map((t) => [key(t), t]));
+    let swapped = 0;
+    for (const t of tufts(b)) {
+      const u = byKey.get(key(t));
+      if (!u) continue;
+      if (u.far !== t.far) swapped++;
+      expect(t.color).toEqual(u.color);
+      expect(t.root).toEqual(u.root);
+    }
+    expect(swapped).toBeGreaterThan(50);
+    // 視錐台: 遠距離版も見える房だけを詰め、本当の視錐台に掛かる遠い房は落とさない
+    const g = createGrass(field, layers, 4000, 7, undefined, 60);
+    const cam = eye(0, field.heightAt(0, 0) + 2, 0, 1, -0.3);
+    g.update(0, { x: 0, z: 0 }, cam);
+    const tg = tufts(g);
+    expect(g.far.count).toBeGreaterThan(20);
+    expect(g.far.count).toBeLessThan(a.far.count * 0.6);
+    const seen = new Map(tg.map((t) => [key(t), t.far]));
+    let inView = 0;
+    for (const t of far) {
+      if (!trulySees(cam, new Vector3(t.x, field.heightAt(t.x, t.z) + 0.2, t.z), 0.3)) continue;
+      inView++;
+      expect(seen.get(key(t))).toBe(true);
+    }
+    expect(inView).toBeGreaterThan(20);
+  });
+
   it('群れ (VAT): 視錐台の外の個体は書かない。近くの骨入りの個体は今までどおり', () => {
     // 1 本の骨で動く箱を群れ LOD (deer_lod1) とし、idle を 1 クリップ持つ仮の GLB
     const geo = new BoxGeometry(1, 1, 2);

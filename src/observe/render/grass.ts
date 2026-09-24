@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Color, InstancedBufferAttribute, InstancedMesh, Matrix4, Quaternion, Sphere, Vector3, type BufferGeometry as Geo, type Camera } from 'three';
+import { AddEquation, BufferAttribute, BufferGeometry, Color, CustomBlending, DataTexture, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, Matrix4, OneFactor, Quaternion, RGBAFormat, Sphere, Vector3, ZeroFactor, type BufferGeometry as Geo, type Camera } from 'three';
 import { ViewCull, uploadFront } from './cull';
 import { mulberry32 } from '../../simulation/rng';
 import { createToonMaterial } from './toon';
@@ -12,6 +12,8 @@ import { groundColorAt, groundPatch, wearAt, TRAMPLED, type GroundLayers, type T
  */
 export type Grass = {
   mesh: InstancedMesh;
+  /** (M23-05) 遠距離版 (farTuft、房の輪郭を焼いた 2 三角形の板) の房。mesh の子。置き場所・色・根元の色・距離の間引き・視錐台の判定は mesh と同じ房の組から振り分ける */
+  far: InstancedMesh;
   /** (M23-02) eye (カメラ) を渡すと、視錐台で見える房だけを前に詰めて描く (camera は間引きの距離を測る位置) */
   update(t: number, camera?: { x: number; z: number }, eye?: Camera): void;
   /** 海面 (M22-08、沈降)。海面より下の房は描かない */
@@ -35,6 +37,15 @@ const OUT_M = 110;
 const FADE_NEAR = 25;
 const FADE_FAR = 80;
 const FADE_MAX = 0.8;
+/**
+ * (M23-05) 遠距離版に替える距離 (m)。房ごとの乱数 h (0〜1) で FAR_FROM + h * FAR_BAND より遠い房を遠距離版にし、
+ * 切り替わりを FAR_BAND の幅に散らして境目の輪を見せない。FAR_FROM は色を地面へ溶かし始める FADE_NEAR の少し先
+ */
+const FAR_FROM = 22;
+const FAR_BAND = 14;
+export function grassIsFar(d: number, h: number): boolean {
+  return d > FAR_FROM + h * FAR_BAND;
+}
 export function grassKeep(d: number): number {
   if (d <= NEAR_M) return 1;
   if (d <= FAR_M) return 1 + ((KEEP_FAR - 1) * (d - NEAR_M)) / (FAR_M - NEAR_M);
@@ -79,6 +90,81 @@ export function carpetTuft(seed = 3): Geo {
   return g;
 }
 
+/**
+ * (M23-05) 遠距離用の房の形 (2 三角形の板、1 房 36 三角形の 18 分の 1)。近い房 (tuft) を横 (z の向き) から見た輪郭を焼いた板 (tuftSilhouette) を貼る。
+ * x は板の横 (シェーダーで縦の軸のまわりにカメラへ向ける)、y は高さ。幅は房の x の広がり、高さは房と同じ
+ * (uTop・根元から先への色の混ぜ方・風の撓みが同じになる)。法線は真上 (近い房も法線を上へ寄せている)
+ */
+export function farTuft(tuft: Geo): Geo {
+  const { r, h } = tuftExtent(tuft);
+  const g = new BufferGeometry();
+  // prettier-ignore
+  g.setAttribute('position', new BufferAttribute(new Float32Array([-r, 0, 0, r, 0, 0, r, h, 0, -r, 0, 0, r, h, 0, -r, h, 0]), 3));
+  g.setAttribute('uv', new BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]), 2));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]), 3));
+  return g;
+}
+
+/** 房の横の半幅 (x の絶対値の最大) と高さ (y の最大) */
+function tuftExtent(tuft: Geo): { r: number; h: number } {
+  const pos = tuft.getAttribute('position');
+  let r = 0.05;
+  let h = 0.05;
+  for (let i = 0; i < pos.count; i++) {
+    r = Math.max(r, Math.abs(pos.getX(i)));
+    h = Math.max(h, pos.getY(i));
+  }
+  return { r, h };
+}
+
+/**
+ * (M23-05) 房を横 (z の向き) から見た輪郭を size × size の覆いの割合 (0〜255) に焼く。farTuft の板の uv と同じ範囲 (x は -r〜r、y は 0〜高さ)。
+ * 1 画素を 4 × 4 の点で数えて縁をなめらかにする。材質は alphaToCoverage で読むので、遠くで縮めた (mipmap の) 薄い割合は MSAA の点の数になり、葉が消えずに房の濃さが保たれる
+ */
+export function tuftSilhouette(tuft: Geo, size = 64): DataTexture {
+  const { r, h } = tuftExtent(tuft);
+  const pos = tuft.getAttribute('position');
+  const ss = 4;
+  const n = size * ss;
+  const hit = new Uint8Array(n * n);
+  const px = (x: number) => ((x + r) / (2 * r)) * n;
+  const py = (y: number) => (y / h) * n;
+  for (let t = 0; t + 2 < pos.count; t += 3) {
+    const ax = px(pos.getX(t));
+    const ay = py(pos.getY(t));
+    const bx = px(pos.getX(t + 1));
+    const by = py(pos.getY(t + 1));
+    const cx = px(pos.getX(t + 2));
+    const cy = py(pos.getY(t + 2));
+    const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    if (Math.abs(area) < 1e-9) continue;
+    for (let y = Math.max(0, Math.floor(Math.min(ay, by, cy))); y <= Math.min(n - 1, Math.ceil(Math.max(ay, by, cy))); y++) {
+      for (let x = Math.max(0, Math.floor(Math.min(ax, bx, cx))); x <= Math.min(n - 1, Math.ceil(Math.max(ax, bx, cx))); x++) {
+        const qx = x + 0.5;
+        const qy = y + 0.5;
+        const w0 = ((bx - qx) * (cy - qy) - (by - qy) * (cx - qx)) / area;
+        const w1 = ((cx - qx) * (ay - qy) - (cy - qy) * (ax - qx)) / area;
+        if (w0 >= 0 && w1 >= 0 && w0 + w1 <= 1) hit[y * n + x] = 1;
+      }
+    }
+  }
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      let c = 0;
+      for (let j = 0; j < ss; j++) for (let i = 0; i < ss; i++) c += hit[(y * ss + j) * n + x * ss + i];
+      data.fill(Math.round((c / (ss * ss)) * 255), (y * size + x) * 4, (y * size + x) * 4 + 4);
+    }
+  const tex = new DataTexture(data, size, size, RGBAFormat);
+  tex.minFilter = LinearMipmapLinearFilter;
+  tex.magFilter = LinearFilter;
+  tex.generateMipmaps = true;
+  // 見下ろす画では板が縦に縮むので、異方性の絞りで縮んだ向きだけをぼかす (無いと葉が塊に溶ける)
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /** 房の先の色 (草の磨き上げ): 若い草の明るい先、乾いた先、茂った所の濃い先、苔の所 */
 const TIP = { fresh: new Color('#97C94C'), dry: new Color('#C7BC68'), lush: new Color('#6FA844'), moss: new Color('#79AE50') };
 
@@ -88,7 +174,7 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
   const top = Math.max(0.05, geo.boundingBox?.max.y ?? 0.5);
   // (草の磨き上げ: 縁の光は地面と同じ 0.08。房の法線を上へ寄せて地面と同じ陰りにし、影も受ける)
   const mat = createToonMaterial({ color: '#FFFFFF', rim: 0.08, side: 2 });
-  const uniforms = { uTime: { value: 0 }, uTop: { value: top }, uFade: { value: [FADE_NEAR, FADE_FAR] }, uFadeMax: { value: FADE_MAX } };
+  const uniforms = { uTime: { value: 0 }, uTop: { value: top }, uFade: { value: [FADE_NEAR, FADE_FAR] }, uFadeMax: { value: FADE_MAX }, uLean: { value: 0 } };
   const baseCompile = mat.onBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
     baseCompile.call(mat, shader, renderer);
@@ -96,12 +182,21 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
     shader.uniforms.uTop = uniforms.uTop;
     shader.uniforms.uFade = uniforms.uFade;
     shader.uniforms.uFadeMax = uniforms.uFadeMax;
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uTop;\nattribute vec3 aRoot;\nvarying vec3 vRoot;\nvarying float vH;\nvarying float vDist;').replace(
+    shader.uniforms.uLean = uniforms.uLean;
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uTop;\nuniform float uLean;\nattribute vec3 aRoot;\nvarying vec3 vRoot;\nvarying float vH;\nvarying float vDist;').replace(
       '#include <begin_vertex>',
       [
         '#include <begin_vertex>',
         // 房の上ほど揺れる。位置ごとに位相をずらし、風の帯が野を渡るように見せる
         'vec4 wp = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);',
+        // (M23-05) 遠距離版の板 (farTuft) は縦の軸のまわりにカメラへ向け、先をカメラから遠ざかる向きへ uLean だけ倒す。
+        // 横から見た輪郭は変わらず、上から見ると房の奥行きの 6 割ほど地面を覆う (立てたままだと見下ろす画で細い線になる)。
+        // 房ごとの回転と横の拡大を戻した房の座標で向きを決める (instanceMatrix の横の拡大は x・z で同じ)
+        '#ifdef GRASS_FAR',
+        'vec3 toEyeL = transpose(mat3(instanceMatrix)) * vec3(cameraPosition.x - (modelMatrix * wp).x, 0.0, cameraPosition.z - (modelMatrix * wp).z);',
+        'vec2 fw = normalize(toEyeL.xz + 1e-5);',
+        'transformed = vec3(-fw.y * position.x - fw.x * position.y * uLean, position.y, fw.x * position.x - fw.y * position.y * uLean);',
+        '#endif',
         // (比較画の撮り直しで追加) カメラの足元 1.5〜5 m の房は根元へ縮める。低い寄りの画で手前の房が画を覆わないように
         'transformed *= smoothstep(1.5, 5.0, distance((modelMatrix * wp).xz, cameraPosition.xz));',
         'float sway = sin(uTime * 1.6 + wp.x * 0.15 + wp.z * 0.07) * 0.5 + sin(uTime * 2.7 + wp.z * 0.3) * 0.2;',
@@ -132,10 +227,59 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
         ].join('\n'),
       )
       // 両面の裏で上向きの法線が下を向かないように、裏返しを戻す
-      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n#ifdef DOUBLE_SIDED\nnormal *= faceDirection;\n#endif');
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n#ifdef DOUBLE_SIDED\nnormal *= faceDirection;\n#endif')
+      // (M23-05) 遠距離版の板: 覆いの割合を縁で鋭くして alphaToCoverage に渡す (縁は画素 1 つ分でなめらか、内は全部覆う)。
+      // 遠くで縮めた (mipmap の) 覆いは葉が細って薄くなるので、縮めた段の数だけ割合を持ち上げて房の濃さを保つ
+      // (段の数は縮みの小さいほうの向きで数える。異方性の絞りで読むので、縮みの大きい向きで数えると持ち上げすぎて塊になる)
+      .replace(
+        '#include <alphamap_fragment>',
+        [
+          '#include <alphamap_fragment>',
+          '#ifdef GRASS_FAR',
+          'vec2 texel = vAlphaMapUv * 64.0;',
+          'float lod = max(0.0, 0.5 * log2(min(dot(dFdx(texel), dFdx(texel)), dot(dFdy(texel), dFdy(texel)))));',
+          'diffuseColor.a *= 1.0 + lod * 0.3;',
+          'diffuseColor.a = clamp((diffuseColor.a - 0.5) / max(fwidth(diffuseColor.a), 1e-4) + 0.5, 0.0, 1.0);',
+          '#endif',
+        ].join('\n'),
+      );
   };
   mat.customProgramCacheKey = () => 'observe-grass';
   const mesh = new InstancedMesh(geo, mat, max);
+  // (M23-05) 遠距離版。材質は同じシェーダーに GRASS_FAR を足したもの (uniforms は近い房と共有)
+  const farGeo = farTuft(geo);
+  // 板は房の輪郭を焼いた覆い (tuftSilhouette) を alphaToCoverage で抜く (4× MSAA の点の数。discard の閾値は使わない)。
+  // 色は置き換え、描画先の不透明度は前のまま残す (覆いの割合が描画先の不透明度に残ると、画の上で背景が透けて房が白く抜ける)
+  const farMat = createToonMaterial({
+    color: '#FFFFFF',
+    rim: 0.08,
+    side: 2,
+    alphaMap: tuftSilhouette(geo),
+    alphaToCoverage: true,
+    blending: CustomBlending,
+    blendEquation: AddEquation,
+    blendSrc: OneFactor,
+    blendDst: ZeroFactor,
+    blendEquationAlpha: AddEquation,
+    blendSrcAlpha: ZeroFactor,
+    blendDstAlpha: OneFactor,
+  });
+  farMat.defines = { GRASS_FAR: '' };
+  farMat.onBeforeCompile = mat.onBeforeCompile;
+  farMat.customProgramCacheKey = () => 'observe-grass-far';
+  // 上から見て房の奥行き (直径) の 6 割ほど地面を覆うように倒す (房の座標で、先の高さあたりの横の量)。
+  // 直径の分まで倒すと、見下ろす画 (海岸) で板が四角い塊に見えた
+  {
+    const b = geo.boundingBox!;
+    uniforms.uLean.value = ((b.max.x - b.min.x + b.max.z - b.min.z) / 2 / top) * 0.6;
+  }
+  const far = new InstancedMesh(farGeo, farMat, max);
+  far.instanceColor = new InstancedBufferAttribute(new Float32Array(max * 3), 3);
+  const farRoot = new InstancedBufferAttribute(new Float32Array(max * 3), 3);
+  farGeo.setAttribute('aRoot', farRoot);
+  far.count = 0;
+  far.receiveShadow = true;
+  far.name = 'observe-grass-far';
   const rng = mulberry32(seed);
   // 草は区域 (半径 radiusM) の中に密に置く。縁の外は地面の色だけで遠景に溶かす
   const half = radiusM ?? field.window * 10;
@@ -191,6 +335,10 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
   geo.setAttribute('aRoot', rootAttr);
   mesh.receiveShadow = true;
   mesh.name = 'observe-grass';
+  // (M23-05) 遠距離版の丸ごとの境界の球は近い房の全部の球に、倒した先の分 (約 1 m) を足したもの
+  far.boundingSphere = mesh.boundingSphere!.clone();
+  far.boundingSphere.radius += 1;
+  mesh.add(far);
   // 全部の房の行列と色を控えておき、カメラが動いたら残す房だけを前に詰め直す
   const allM = mesh.instanceMatrix.array.slice(0, k * 16);
   const allC = mesh.instanceColor ? mesh.instanceColor.array.slice(0, k * 3) : null;
@@ -198,6 +346,8 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
   const keepHash = Float32Array.from({ length: k }, () => rng());
   const wearHash = Float32Array.from({ length: k }, () => rng());
   const gone = new Uint8Array(k);
+  // (M23-05) 遠距離版に替える距離を散らす房ごとの乱数 (grassIsFar)
+  const farHash = Float32Array.from({ length: k }, () => rng());
   // (M23-02) 房ごとの境界の球 (中心 x・y・z と半径)。風で撓む分 (葉先で最大約 0.2 m) を半径に足す。踏まれて短くなった房も元の球のまま (大きめに見る)
   const balls = new Float32Array(k * 4);
   if (!geo.boundingSphere) geo.computeBoundingSphere();
@@ -215,11 +365,24 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
     const im = mesh.instanceMatrix.array as Float32Array;
     const ic = mesh.instanceColor?.array as Float32Array | undefined;
     const ir = rootAttr.array as Float32Array;
+    const fm = far.instanceMatrix.array as Float32Array;
+    const fc = far.instanceColor!.array as Float32Array;
+    const fr = farRoot.array as Float32Array;
     let n = 0;
+    let nf = 0;
     for (let i = 0; i < k; i++) {
       const d = Math.hypot(allM[i * 16 + 12] - cx, allM[i * 16 + 14] - cz);
       if (gone[i] || keepHash[i] > grassKeep(d) || allM[i * 16 + 13] < level) continue;
       if (culling && !view.sees(balls[i * 4], balls[i * 4 + 1], balls[i * 4 + 2], balls[i * 4 + 3])) continue;
+      // (M23-05) 遠い房は遠距離版へ。行列・房の色・根元の色は同じ番号で一緒に写す
+      if (grassIsFar(d, farHash[i])) {
+        fm.set(allM.subarray(i * 16, i * 16 + 16), nf * 16);
+        if (allC) fc.set(allC.subarray(i * 3, i * 3 + 3), nf * 3);
+        else fc.fill(1, nf * 3, nf * 3 + 3);
+        fr.set(allR.subarray(i * 3, i * 3 + 3), nf * 3);
+        nf++;
+        continue;
+      }
       im.set(allM.subarray(i * 16, i * 16 + 16), n * 16);
       if (ic && allC) ic.set(allC.subarray(i * 3, i * 3 + 3), n * 3);
       ir.set(allR.subarray(i * 3, i * 3 + 3), n * 3);
@@ -230,9 +393,14 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
     uploadFront(mesh.instanceMatrix, n);
     if (mesh.instanceColor) uploadFront(mesh.instanceColor, n);
     uploadFront(rootAttr, n);
+    far.count = nf;
+    uploadFront(far.instanceMatrix, nf);
+    uploadFront(far.instanceColor!, nf);
+    uploadFront(farRoot, nf);
   };
   return {
     mesh,
+    far,
     update(t, camera, eye) {
       uniforms.uTime.value = t;
       // (M23-02) カメラが広げた視錐台の分だけ動いたか回ったら詰め直す
