@@ -1,7 +1,7 @@
 ---
 id: M23-05
 title: 草の遠距離版
-status: review
+status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-02]
@@ -58,3 +58,4 @@ M23-02
   - 前後に動かす: 林の低い目(兎の群れの 12 m 手前、目の高さ 1.0 m)・集落・林の画から、見る向き(水平)へ 1 コマ 0.5 m ずつ 16 コマ寄って 16 コマ戻る連続の画。`grass-far-dolly.png`(低い目、9 コマ)。コマからコマへ 24 を超えて変わる画素の割合は、前と後で同じ(低い目 5.68% → 5.68%、集落 12.06% → 12.06%、林 9.68% → 9.69%)で、切り替わりで余分に跳ねる房は数に出ない。同じコマの前後の差は 0.01〜0.04%。輪は見えない。
 - 試験: `tests/unit/observe.grass.test.ts` に 3 件(`grassIsFar` の 22 m まで近い・36 m より先は遠い・帯の中は乱数の割合で、1 つの房は遠ざかるほど戻らない。`farTuft` は 2 三角形で房と同じ高さ・横の幅・真上の法線。`tuftSilhouette` の覆いは根元が密で先が疎ら)、`tests/unit/observe.cull.test.ts` に 1 件(房は近い房か遠距離版のどちらか一方、22 m まで近い・36 m より先は遠い・帯の中は両方が混じる、根元の色は地面の色の式、カメラを 40 m 動かして入れ替わった房も房の色・根元の色が同じ、視錐台に掛かる遠い房は落とさない、遠距離版は mesh の子)。観察の単体試験 113 件、全体 `npx vitest run` 638 件と `tests/e2e/observe.spec.ts` 3 件(自分の Vite 5371)が feat/m21(M23-04)を取り込んだ後で通る。tsc・eslint(変えたファイル)も通る。
 - 確かめていないこと: M4 以外の GPU での fps と見た目(alphaToCoverage の点の置き方は GPU で違う。MSAA の無い描画先では alphaToCoverage が効かず板が四角く出る。今の観察画面の描画先は 4× MSAA)。ユーザーの審査台での見た目の確認。夜・雨の画。
+- 2026-09-24 20:38 審査台(M23) https://claude.ai/artifact/XeQZ8TYQnCqQtAJz8Y1qtt でユーザーの判断: m23-grass-far 合格(メモなし)

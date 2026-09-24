@@ -1,7 +1,7 @@
 ---
 id: M23-07
 title: 塗りの負荷の計測と調整
-status: review
+status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-01]
@@ -70,3 +70,4 @@ M23-01
   - 見た目が変わりうる所: 集落の夕の、日を背にした舟の肋材と空の境(半分の大きさの空気を引き伸ばす所。肋材の縁の霞が 1〜2 画素ずれる)。光の筋の雑音の粒が 2 画素単位になる(引き伸ばしで均され、比較画では見えない)。動的な解像度が働く遅い GPU では、働いている間は絵が柔らかくなる。
   - 試験: `tests/unit/observe.dynamicResolution.test.ts` 7 件(予算の中では 1 のまま・窓ごとに下げて下限で止まる・1 コマの引っかかりでは下げない・250 ms を超えるコマは数え直す・8 秒で戻す・戻してすぐ下がったら待ちを倍に・指定)、`tests/unit/observe.bloom.test.ts` 3 件(ぼかしの係数・合成の重み・段の大きさが UnrealBloomPass と一致)、`tests/unit/bench-observe.compare.test.ts` に見出しの 1 件。観察の単体試験 146 件、全体 `npx vitest run` 667 件、`tests/e2e/observe.spec.ts` 3 件(自分の Vite 5401 番)が通る。tsc・eslint(変えたファイル)も通る。
   - 確かめていないこと: M4 以外の GPU(とくに小さなパスの固定の重さは ANGLE Metal と Apple の GPU の性質かもしれない)。headed の Chrome・垂直同期ありの実機の画面での fps と、動的な解像度が 60 Hz の画面で上げ下げを繰り返さないか。ユーザーの審査台での見た目の確認。
+- 2026-09-24 20:38 審査台(M23) https://claude.ai/artifact/XeQZ8TYQnCqQtAJz8Y1qtt でユーザーの判断: m23-fill・m23-fill-msaa2 どちらも合格(メモなし)

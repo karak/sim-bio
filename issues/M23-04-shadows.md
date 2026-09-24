@@ -1,7 +1,7 @@
 ---
 id: M23-04
 title: 影の軽量化
-status: review
+status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-02]
@@ -67,3 +67,4 @@ M23-02
 - 試験: `tests/unit/observe.shadowOnly.test.ts` 7 件(影の描画の間だけ見える・投げても戻る・光線に当たらない・骨入りの骨を影の前に更新し、使っていない枠は描かない・木の代わりの形は全部の木で植え直しに付いていく・内訳は影にだけ数える・雌の角を除く・近くの枠は群れ LOD だけが影を落とし雌は除いた形)。観察の単体試験 109 件、全体 `npx vitest run` 634 件、`tests/e2e/observe.spec.ts` 3 件(自分の Vite 5361 番)が通る。tsc・eslint(変えたファイル)も通る。
 - 見た目が変わりうる所: 近い木の自分の影(葉・幹・枝への日の当たり方)は代わりの形で決まるので、明るい葉の並びが前と変わる。地面の木の影は少し小さく、斑が多い。鐘の小さな影は無くなった。遠くの群れ(VAT)は今までどおり影を落とさない。
 - 確かめていないこと: M4 以外の GPU での fps。GPU を分けていない状態での fps の前後。ユーザーの審査台での見た目の確認。
+- 2026-09-24 20:38 審査台(M23) https://claude.ai/artifact/XeQZ8TYQnCqQtAJz8Y1qtt でユーザーの判断: m23-shadows 合格(メモなし)

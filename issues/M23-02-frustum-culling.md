@@ -1,7 +1,7 @@
 ---
 id: M23-02
 title: インスタンスごとの視錐台カリング
-status: review
+status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-01]
@@ -118,3 +118,4 @@ M23-01
 - 試験: `tests/unit/observe.cull.test.ts` 8 件(並べる順・広げた視錐台・取り直さない間に本当の視錐台の球を落とさないこと(判定の閾値を 0.5 → 3 にすると 344 個落ちて失敗することも確かめた)・影と光線の当たり判定は全部・木の近い遠い × 視錐台・自動カメラの遮りは画面の外の木にも当たる・草の行列と色と `aRoot` が組のまま・群れの視錐台の外の個体)。観察の単体試験 102 件、全体 `npx vitest run` 627 件、`tests/e2e/observe.spec.ts` 3 件が通る。tsc・eslint(変えたファイル)も通る。
 - 気づいたこと: `__observeStats.grass`(計測の行の「草」)は描いている房の数になった(前は間引いた後の全部)。動物の仮の形(GLB の無い種のカプセル)は落としていない。
 - 確かめていないこと: M4 以外の GPU での fps。ユーザーの審査台での見た目の確認。
+- 2026-09-24 20:38 審査台(M23) https://claude.ai/artifact/XeQZ8TYQnCqQtAJz8Y1qtt でユーザーの判断: m23-culling 合格(メモなし)
