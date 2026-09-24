@@ -1710,6 +1710,124 @@ def build_ruff(bm, lod):
     return faces
 
 
+# ================================================================ 灰狼の 5 回目 (2026-09-25 08:07 手元の審査台 w4-wolf への判断)
+# 判断「よくなった。あとは頬や胸元などのの立て髪のような広がりを含めた毛並み。デフォルメの仕方など既存のデフォルメ造形の箱庭ゲームを参考に」。
+# 3 回目の細い房の林は「首まわりの毛並みの立ち方がかえって不自然」と言われたので、頬と胸元の広がりは、ローポリのデフォルメ造形の
+# 毛の塊のまとめ方 (スタイライズドの髪・毛の房を数本の太い塊にまとめる) で作る (CHUNKS):
+#  - 1 本の塊は、根元を頭・首の皮の下へ沈め、面に沿って毛の流れの向きへ寝かせ、外へ持ち上げて先を尖らせる太い房 (幅 8〜12 cm・長さ 10〜16 cm・
+#    厚さ 3.4〜4.6 cm)。断面は上の稜と平たい下の菱形で、稜を境に光の面と陰の面の 2 枚に塗り分ける (胴の面の立て方と同じ)
+#  - 頬は片側 2 本 (群れ LOD は 1 本)。顎の角から外・後ろ下へ張り、正面で顔の下半分が頭蓋より外へ広がり、側面で顎の線の後ろに尖りの段
+#  - 胸元は喉の列 3 本 (中心が長い) と胸の列 2 本 (群れ LOD は喉の 3 本)。正面で V の尖り、側面で喉の線の下に段
+#  - 色は根元が地の毛・喉の灰茶、先ほど明るい灰茶 (筆の跡やテクスチャで毛を描かない)。顔 (目・眉・鼻づら) には触れない
+# 試した形の記録: 体の面に当てた光線で起こした平たい板 (縁に尖りの段) は、Blender の寄りで紙を切って貼ったように見えた (2 回目の判断「折り紙」)。
+# 細い塊 (幅 4〜5 cm) は角のように突き出た。6 点のなめらかな断面は丸いソーセージの塊に見えた
+# 塊: (根元の目安 (x, y, z) (+X 側。x が None なら横から当てた光線で面を探す)、流れの向き、長さ、根元の幅、厚さ、外への反り、近 LOD だけか)
+CHUNKS = {
+    "cheek": [
+        # 後ろ: 顎の角の後ろ上から後ろ・外・下へ (首の横へ流れる)
+        ((None, -0.540, 0.595), (0.40, 1.0, -0.45), 0.125, 0.085, 0.038, 0.25, True),
+        # 前: 顎の角から外・後ろ下へ (正面で頬を頭蓋より外へ張り出す本体)
+        ((None, -0.590, 0.572), (0.55, 0.85, -0.45), 0.160, 0.105, 0.046, 0.30, False),
+    ],
+    "chest": [
+        # 胸の列 (下に回る): 胸の前から前脚の間へ垂れる
+        ((0.060, None, 0.400), (0.40, -0.30, -1.0), 0.100, 0.075, 0.034, 0.25, True),
+        # 喉の列 (上に重なる): 喉から胸へ。両脇は外下へ、中心が長い (正面で V の 3 つの尖り)
+        ((0.090, None, 0.480), (0.70, -0.25, -1.0), 0.130, 0.090, 0.040, 0.25, False),
+        ((0.0, None, 0.460), (0.0, -0.30, -1.0), 0.160, 0.120, 0.046, 0.25, False),
+    ],
+}
+CHUNK_SINK = 0.012  # 根元を皮の下へ沈める量
+# 断面は 4 点 (両の縁・上の稜・平たい下) の菱形。硬い辺 (CHUNK_SHARP) で、上の稜を境に光の面と陰の面の 2 枚に分けて塗る
+# (6 点のなめらかな断面は丸いソーセージの塊に見え、基準画の面の立った筆の塗りとそろわなかった)
+CHUNK_N = 4
+CHUNK_GAP = 0.003  # 塊の下の面を体の面から浮かせる最小の量
+CHUNK_CONFORM = {"cheek": True, "chest": True}  # 体の面の外へ押し出すか
+CHUNK_RINGS = ((0.0, 1.0, 1.0), (0.45, 0.92, 0.9), (0.78, 0.52, 0.6))
+CHUNK_SHARP = 35
+CHUNK_OUT = {"cheek": 0.42, "chest": 0.35}  # 流れの向きに足す外 (面の法線) への成分
+
+
+def chunk(bm, cl, root, nrm, d, L, W, T, curl, c_root, c_tip, n=6, rings=((0.0, 1.0, 1.0), (0.32, 1.0, 1.0), (0.64, 0.74, 0.82), (0.86, 0.42, 0.55)),
+          bvh=None):
+    """(灰狼の 5 回目で追加) 太い毛の塊 1 本。rings は (位置 t, 幅の倍率, 厚さの倍率)。断面は外 (nrm の側) が丸く、内が平たい三日月。
+    bvh を渡すと、根元の輪より先の頂点を体の面の外へ押し出す (面に沿わせる。凸の胸で塊が体の中と外を行き来して、細かい破片に見えた)"""
+    side = d.cross(nrm)
+    side = side.normalized() if side.length > 1e-4 else d.orthogonal().normalized()
+    up = side.cross(d).normalized()
+    if up.dot(nrm) < 0:
+        up, side = -up, -side
+
+    def at(t):
+        return root + d * (L * t) + up * (curl * L * t * t)
+
+    rs = []
+    for t, ws, ts in rings:
+        c = at(t)
+        ring_ = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            s_, h_ = math.cos(a), math.sin(a)
+            h_ = h_ if h_ > 0 else h_ * 0.30  # 内 (体の側) は平たく
+            q = c + side * (W * ws * 0.5 * s_) + up * (T * ts * h_)
+            if bvh is not None and t > 0:
+                loc, nn, _, _ = bvh.find_nearest(q)
+                if loc is not None:
+                    nn = nn if nn.dot(nrm) >= 0 else -nn
+                    need = CHUNK_GAP + T * ts * max(0.0, h_) * 0.8
+                    dq = (q - loc).dot(nn)
+                    if dq < need:
+                        q = q + nn * (need - dq)
+            v = bm.verts.new(q)
+            k = t / rings[-1][0]
+            v[cl] = (*mix(c_root, c_tip, smoothstep(0.1, 1.0, k) * (0.55 + 0.45 * max(0.0, h_))), 1.0)
+            ring_.append(v)
+        rs.append(ring_)
+    tip = bm.verts.new(at(1.0))
+    tip[cl] = (*c_tip, 1.0)
+    return loft(bm, rs + [tip])
+
+
+def build_chunks(bm, bvh, lod, region):
+    """(灰狼の 5 回目で追加) 頬・胸元の太い毛の塊 (CHUNKS) を bm に足す。bvh は体の外側の面 (胴・首・首の殻・頭)。左右に鏡映する"""
+    hero = lod["name"] == "hero"
+    cl = bm_colors(bm)
+    n = CHUNK_N if hero else 4
+    rings = CHUNK_RINGS if hero else ((0.0, 1.0, 1.0), (0.5, 0.8, 0.85))
+    pale, fur = PAL["pale"], PAL["fur"]
+    light = mix(pale, PAL["tip"], 0.6)
+    for (x, y, z), d, L, W, T, curl, hero_only in CHUNKS[region]:
+        if hero_only and not hero:
+            continue
+        for sx in (-1, 1):
+            if region == "chest" and x == 0 and sx < 0:
+                continue
+            ray = Vector((-sx, 0, 0)) if x is None else Vector((0, 1, 0))
+            if x is None:
+                loc, nrm, _, _ = bvh.ray_cast(Vector((sx * 0.6, y, z)), ray)
+            else:
+                loc, nrm, _, _ = bvh.ray_cast(Vector((sx * x, -1.5, z)), ray)
+            if loc is None:
+                continue
+            if nrm.dot(ray) > 0:  # 部品の面の向きはそろっていないので、光線の来た側 (外) へ向ける
+                nrm = -nrm
+            dd = Vector((sx * d[0], d[1], d[2])).normalized()
+            dt = dd - nrm * dd.dot(nrm)
+            dd = ((dt.normalized() if dt.length > 1e-3 else dd) + nrm * CHUNK_OUT[region]).normalized()
+            root = loc - nrm * CHUNK_SINK
+            # 根元の色は付く面の色 (頬の上は地の毛、下は灰茶)、先は明るい灰茶
+            c0 = mix(fur, pale, smoothstep(0.64, 0.58, loc.z)) if region == "cheek" else pale
+            kw = {} if rings is None else {"rings": rings}
+            chunk(bm, cl, root, nrm, dd, L, W, T, curl * 0.35, c0, light, n=n, bvh=bvh if CHUNK_CONFORM[region] else None, **kw)
+
+
+CHUNK_WEIGHTS = {
+    "cheek": lambda co: weights_for(co, [("head", 1.0), ("neck2", 0.9)]),
+    "chest": lambda co: weights_for(co, [("neck2", 0.7), ("neck1", 1.0), ("chest", 0.9)]),
+}
+CHUNK_REGIONS = ("cheek", "chest")  # 空にすると 4 回目の形に戻る
+
+
 def build_body2(bm, lod):
     nsec, n = lod["body"]
     secs = resample(BODY_KEYS, nsec)
@@ -2160,6 +2278,7 @@ def build_lod2(lod, obj_name, mats):
     parts.append(make_part(obj_name + "_neck", bm, "neck", neck_cands(None), mats, sharp=FACET))  # (灰狼の 4 回目の見直しで変更: 胴と同じ角で面を立てる。元は sharp なし)
     bm = bmesh.new()  # (灰狼の 4 回目で追加) 首の飾り毛の殻
     build_ruff(bm, lod)
+    add(bm, (skin_v, skin_f))  # (灰狼の 5 回目で追加) 頬・胸元の毛の塊を首の殻の外へ当てる
     parts.append(make_part(obj_name + "_ruff", bm, "ruff", lambda co: weights_for(co, neck_cands(co) + [("head", 0.6)]), mats, sharp=FACET))
     bm = bmesh.new()
     build_head2(bm, lod)
@@ -2228,6 +2347,11 @@ def build_lod2(lod, obj_name, mats):
     regions = ["cheek", "mane", "hackle", "chest", "thigh", "belly", "tail"] + (["elbow"] if hero else [])
     # (灰狼の 4 回目で変更: 首・頬・胸・尾ほかの立った房をやめ、背の逆立つ毛 (光る) だけ残す。首の飾り毛は胴の輪郭の一部 (build_ruff) で作る)
     regions = ["hackle"]
+    # (灰狼の 5 回目で追加) 頬・胸元の太い毛の塊 (CHUNKS)
+    for region in CHUNK_REGIONS:
+        bm = bmesh.new()
+        build_chunks(bm, bvh_skin, lod, region)
+        parts.append(make_part(f"{obj_name}_chunk_{region}", bm, "chunk", CHUNK_WEIGHTS[region], mats, sharp=CHUNK_SHARP))
     for region in regions:
         bm = bmesh.new()
         tufts_region(bm, bvh_top if region == "hackle" else bvh_skin, lod, region)
