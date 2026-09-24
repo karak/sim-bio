@@ -42,6 +42,9 @@ M22-02
   比較画 `docs/design/qa/observe/trees-before-after-{grove,groveTrack,settlementHigh}.png`・`trees-vs-reference.png`、記録は `docs/design/qa/observe/environment.md` の「追記(木の磨き上げ)」。単体テスト `tests/unit/observe.foliage.test.ts`。
 - 2026-09-24 鐘樹の段の作り直し(審査台 20:25 の t03-belltree・t03-flora・t03-grove・p-trees-settlement): 鐘を下の輪の房の太枝から出した小枝に紐で吊る(30 個、樹冠の表に付けない)。芽・若木・株・丸太と羊歯・小花・穂の月草を頂点色の作り込み(樹皮の筋・苔・地衣、年輪の木口、裂けた縁、中肋で折った葉、苔と落ち葉の地面)で作り直し、若木と羊歯に遠距離版。草の縁の光を日の影で消す(影の中の房が浮いて「草に木の影が落ちていない」に見えた)。
   成木 3,923 / lod1 1,141 三角形(樹冠の葉のカードはそのまま)。6 つの寄せ先で三角形 23.5〜40.3 万(前 21.7〜34.2 万)、draw call 71〜103(前 70〜102)。比較画 `docs/design/qa/observe/trees2-*.png`、記録は `docs/design/qa/observe/environment.md` の「追記(鐘樹の段の作り直し)」。単体テスト `tests/unit/observe.grass.test.ts`。fps の前後は GPU を分け合って未確認。
+- 2026-09-24 鐘の吊り方のやり直し(審査台 t2-bells 不合格「高さが揃いすぎており、不気味」): 鐘 36 個を、下の縁の下(12)・房の隙間(8)・房の面の葉の間(16)の 3 つの高さの組に散らした(肩 3.9〜8.7 m)。鐘の大きさを基準画の比に合わせて 0.82 倍(鐘 ÷ 木の高さ 基準画 0.039、前 0.051、後 0.041)。成木 3,963 / lod1 1,192 三角形。比較画 `docs/design/qa/observe/trees3-bells.png`・`trees3-bells-scale.png`。
+- 2026-09-24 株と丸太の苔を外した(t2-stages のメモ)、羊歯と小花の葉を高くした(t2-flora のメモ、羊歯の葉の先 0.6〜0.75 m、小花の葉の先約 0.3 m)。立った小葉が裏から縁の光で白茶けたので、`flora_under` の両面の材質は裏の法線を裏返さない(`src/observe/render/bake.ts`、`tests/unit/observe.bake.test.ts`)。比較画 `trees3-stages.png`・`trees3-understory.png`。
+- 2026-09-24 遠距離版: 芽(746 → 57、25 m)・株(1,662 → 220、35 m)・小花(307 → 54、25 m)・穂の月草(164 → 33、25 m)、羊歯のさらに遠い版(12、45 m)。林の `__observeBreakdown()` の other は drawn 91.9 千 → 22.2 千(60 m より先 70.6 千 → 9.3 千)、6 つの寄せ先の三角形 22.8〜34.6 万(前 23.9〜41.6 万)、draw call +3。切り替わりの画 `trees3-lod-swap.png`。記録は `docs/design/qa/observe/environment.md` の「追記(鐘の吊り方のやり直し・株と丸太の苔・下草の丈・遠距離版)」。fps の前後は GPU を分け合って未確認。
 
 ## 残り(ユーザーの判断で積んだ順)
 

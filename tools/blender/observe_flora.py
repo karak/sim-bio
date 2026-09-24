@@ -369,19 +369,32 @@ def face_up(bm):
     return bm
 
 
-def fern_frond(n, yaw, length, rise, width, k, seed, droop=1.6, rachis=True):
+# (下草の見直しで追加) 審査台 t2-flora のメモ (2026-09-24「しだ、花の葉部分はもう少し高くても良いのでは」) を受けて高くする
+FERN_RISE = (1.05, 1.35)      # 羊歯の葉の立ち上がり (葉の先の高さは約 0.56 倍、0.6〜0.75 m)
+FLOWER_LEAF_UP = 1.3          # 小花の葉の向きの縦の成分 (横 1 に対して)
+FLOWER_LEAF_L = (0.3, 0.38)   # 小花の葉の長さ (m)
+FLOWER_STEM = (0.3, 0.46)     # 小花の茎の高さ (m)
+
+
+def fern_frond(n, yaw, length, rise, width, k, seed, droop=1.6, rachis=True, every=1, coarse=False):
     """羊歯の葉 1 枚: 付け根から反って垂れる軸 (細い管) の両側に、先へ向いた小葉 (菱形、2 三角形) を k 対。
     小葉は中ほどが長く、付け根と先で短い。付け根は暗く先ほど明るく、小葉ごとに明暗を揺らし、軸と小葉の付け根が明るい"""
     rnd = random.Random(seed)
     m = K.trs((0, 0, 0.02), (0, 0, yaw))
     pts = [Vector((length * u, 0, rise * (1.9 * u - droop * u * u))) for u in [i / k for i in range(k + 1)]]
     rach = pts[::2] if k % 2 == 0 else pts[::2] + [pts[-1]]
+    # (遠距離版の追加で追加) coarse なら軸を付け根・中ほど・先の 3 点で描く (遠距離版)
+    if coarse:
+        rach = [pts[0], pts[k // 2], pts[-1]]
     if rachis:
             n.add(K.tube(rach, [0.006 * (1 - j / (len(rach) - 1)) + 0.0015 for j in range(len(rach) - 1)] + [0.0],
                      n=3, tip=True, cap_start=False), M["under"], matrix=m, smooth=True, soft=((0, 0, -3.0), 0.9),
               shade=lambda co, nrm: K.mix3(FERN_BASE, FERN_RIB, 0.5 + 0.5 * min(1.0, co.z / max(0.01, rise))))
     import bmesh
     for i in range(1, k):
+        # (遠距離版の追加で追加) every > 1 なら小葉を every 対に 1 対だけ描く (遠距離版の小葉を近い形と同じ位置に置く)
+        if i % every:
+            continue
         u = i / k
         a, b = pts[i], pts[min(k, i + 1)]
         ax = (b - a).normalized()
@@ -421,17 +434,21 @@ def fern():
     rnd = random.Random(21)
     for i in range(6):
         yaw = 60 * i + rnd.uniform(-14, 14)
-        fern_frond(n, yaw, rnd.uniform(0.55, 0.74), rnd.uniform(0.45, 0.66), 0.21, 10, seed=22 + i, droop=rnd.uniform(1.5, 1.8))
+        # (下草の見直しで変更: 葉の立ち上がり 0.45〜0.66 → FERN_RISE。草の房 (丈の平均 0.47 m) の上へ葉が出る)
+        fern_frond(n, yaw, rnd.uniform(0.55, 0.74), rnd.uniform(*FERN_RISE), 0.21, 10, seed=22 + i, droop=rnd.uniform(1.5, 1.8))
     # 巻いた若い芽: 立ち上がる茎の先を渦に巻く
     pts = [Vector((0.02, 0.01, 0.0)), Vector((0.03, 0.0, 0.18)), Vector((0.05, 0.0, 0.3))]
     cx, cz = 0.08, 0.3
+    # (下草の見直しで変更: 葉を高くしたので、巻いた芽も 0.5 m まで伸ばす)
+    pts = [Vector((0.02, 0.01, 0.0)), Vector((0.03, 0.0, 0.3)), Vector((0.05, 0.0, 0.5))]
+    cx, cz = 0.08, 0.5
     for j in range(1, 6):
         t = j / 5 * 1.6 * math.pi
         rr = 0.04 * (1 - j / 7)
         pts.append(Vector((cx - math.cos(t) * rr, 0.0, cz + math.sin(t) * rr)))
     n.add(K.tube(pts, [0.012] * 3 + [0.011, 0.01, 0.009, 0.008, 0.0], n=3, tip=True, cap_start=False), M["under"], smooth=True,
           soft=((0, 0, -3.0), 0.9),
-          shade=lambda co, nrm: K.mix3(FERN_MID, K.hex_rgb("#A6C66E"), min(1.0, co.z / 0.3)))
+          shade=lambda co, nrm: K.mix3(FERN_MID, K.hex_rgb("#A6C66E"), min(1.0, co.z / 0.5)))
     return n
 
 
@@ -442,8 +459,10 @@ def fern_lod1():
     rnd = random.Random(21)
     for i in range(6):
         yaw = 60 * i + rnd.uniform(-14, 14)
-        fern_frond(n, yaw, rnd.uniform(0.55, 0.74), rnd.uniform(0.45, 0.66), 0.24, 6, seed=22 + i, droop=rnd.uniform(1.5, 1.8),
-                   rachis=False)
+        # (遠距離版の追加で変更: 小葉 5 対 (k=6) では近い形と小葉の位置がずれ、切り替わりで跳ぶ。近い形と同じ k=10 の小葉を 1 対おきに描き、
+        #  軸も 3 点の粗い管で描く (軸が無いと、切り替わりで株の真ん中の立ち上がる軸の束が消えて見えた))
+        fern_frond(n, yaw, rnd.uniform(0.55, 0.74), rnd.uniform(*FERN_RISE), 0.26, 10, seed=22 + i, droop=rnd.uniform(1.5, 1.8),
+                   rachis=True, every=2, coarse=True)
     return n
 
 
@@ -456,11 +475,14 @@ def flower_patch():
     for i in range(5):
         a = 2 * math.pi * i / 5 + rnd.uniform(-0.3, 0.3)
         d = Vector((math.cos(a), math.sin(a), 0.18))
+        # (下草の見直しで変更: 地に伏せた葉を、斜めに立ち上がって先が外へ撓む長い葉にする (先の高さ 0.25〜0.33 m)。草の房の間から葉が見える)
+        d = Vector((math.cos(a), math.sin(a), FLOWER_LEAF_UP))
         m = K.aim(d)
         m.translation = Vector((0, 0, 0.01))
         L = rnd.uniform(0.14, 0.19)
+        L = rnd.uniform(*FLOWER_LEAF_L)
         cols = tuple(K.mul3(c, rnd.uniform(0.9, 1.08)) for c in ROSETTE)
-        n.add(K.leaf_folded(L, L * 0.5, k=2, fold=0.25, bend=0.35, thick=0.004, base_col=cols[0], tip_col=cols[1], rib_col=cols[2]),
+        n.add(K.leaf_folded(L, L * 0.34, k=3, fold=0.25, bend=0.42, thick=0.004, base_col=cols[0], tip_col=cols[1], rib_col=cols[2]),
               M["under"], matrix=m, smooth=True, soft=((0, 0, -3.0), 0.85))
     heads = []
     for i in range(7):
@@ -468,11 +490,12 @@ def flower_patch():
         r = rnd.uniform(0.04, 0.2)
         base = Vector((math.cos(a) * r, math.sin(a) * r, 0))
         h = rnd.uniform(0.11, 0.21)
+        h = rnd.uniform(*FLOWER_STEM)  # (下草の見直しで変更: 花が高くした葉の上に出る)
         lean = Vector((math.cos(a), math.sin(a), 0)) * h * rnd.uniform(0.1, 0.25)
         top = base + Z * h + lean
         mid = base.lerp(top, 0.5) + lean * 0.3
         n.add(K.tube([base, mid, top], [0.0035, 0.003, 0.0025], n=3, cap_start=False), M["under"], smooth=True, soft=((0, 0, -3.0), 0.9),
-              shade=lambda co, nrm: K.mul3(STEM_LIN, 0.7 + 0.3 * min(1.0, co.z / 0.25)))
+              shade=lambda co, nrm: K.mul3(STEM_LIN, 0.7 + 0.3 * min(1.0, co.z / 0.4)))
         heads.append((top, a, i))
     for top, a, i in heads:
         if i >= 5:  # つぼみ
@@ -545,9 +568,108 @@ def moongrass_tuft_seed():
     return n
 
 
+# ---------------------------------------------------------------- 遠距離版 (小花・穂の出た月草)
+# (遠距離版の追加で追加) 小花 (307 三角形) と穂の出た月草 (164 三角形) は林床と草地に 600 株ずつまで置くので、25 m より先は遠距離版で描く。
+# 近い形の 1〜2 割の三角形で、同じ色 (頂点色)・同じ高さ・同じ花の数を残す
+
+def flower_patch_lod1():
+    """小花の遠距離版 flower_patch_lod1: 立ち上がる葉 3 枚 (粗い葉)、茎 5 本 (細い三角 1 枚)、花 5 輪 (5 角の平たい花、芯は色だけ)"""
+    import bmesh
+    n = K.Node("flower_patch_lod1")
+    rnd = random.Random(31)
+    for i in range(3):
+        a = 2 * math.pi * i / 3 + rnd.uniform(-0.3, 0.3)
+        d = Vector((math.cos(a), math.sin(a), FLOWER_LEAF_UP))
+        m = K.aim(d)
+        m.translation = Vector((0, 0, 0.01))
+        L = rnd.uniform(*FLOWER_LEAF_L)
+        n.add(K.leaf_folded(L, L * 0.4, k=1, fold=0.25, bend=0.42, thick=0.004, base_col=ROSETTE[0], tip_col=ROSETTE[1], rib_col=ROSETTE[2]),
+              M["under"], matrix=m, smooth=True, soft=((0, 0, -3.0), 0.85))
+    for i in range(5):
+        a = 2 * math.pi * i / 5 + rnd.uniform(-0.35, 0.35)
+        r = rnd.uniform(0.04, 0.2)
+        base = Vector((math.cos(a) * r, math.sin(a) * r, 0))
+        h = rnd.uniform(*FLOWER_STEM)
+        top = base + Z * h + Vector((math.cos(a), math.sin(a), 0)) * h * 0.15
+        side = Vector((-math.sin(a), math.cos(a), 0)) * 0.006
+        bm = bmesh.new()
+        bm.faces.new([bm.verts.new(v) for v in (base - side, base + side, top)])
+        n.add(bm, M["under"], smooth=True, recalc=False, soft=((0, 0, -3.0), 0.9),
+              shade=lambda co, nrm: K.mul3(STEM_LIN, 0.7 + 0.3 * min(1.0, co.z / 0.4)))
+        pc = PETALS[i % len(PETALS)]
+        bm = bmesh.new()
+        lay = bm.verts.layers.float_color.new("Col")
+        ctr = bm.verts.new((0, 0, 0.006))
+        # 花の芯の黄は近い形でも小さく、遠目には花弁の色が勝つ。芯を黄にすると花が黄色い点に見えて切り替わりで色が跳ぶので、芯は花弁の色を少し暖かく
+        ctr[lay] = (*K.mix3(pc[0], FLOWER_EYE, 0.2), 1)
+        ph = rnd.uniform(0, 2 * math.pi)
+        rim = []
+        for j in range(5):
+            t = ph + 2 * math.pi * j / 5
+            v = bm.verts.new((0.055 * math.cos(t), 0.055 * math.sin(t), 0.01))
+            v[lay] = (*pc[1], 1)
+            rim.append(v)
+        for j in range(5):
+            bm.faces.new((ctr, rim[j], rim[(j + 1) % 5]))
+        tilt = K.trs(top, (0, 0, math.degrees(a))) @ K.trs((0, 0, 0), (0, 30, 0))
+        n.add(face_up(bm), M["under"], matrix=tilt, smooth=True, recalc=False)
+    return n
+
+
+def fern_lod2():
+    """(遠距離版の追加で追加) 羊歯のさらに遠い版 fern_lod2 (観察画面は 45 m より先で使う): 同じ向き・長さ・高さの葉 6 枚を、
+    付け根から葉の先へ伸びる細い菱形 1 つ (2 三角形) ずつで描く。林の画で遠距離版 fern_lod1 (120 三角形) が 555 株見え、6.7 万三角形あった"""
+    import bmesh
+    n = K.Node("fern_lod2")
+    rnd = random.Random(21)
+    for i in range(6):
+        yaw = 60 * i + rnd.uniform(-14, 14)
+        length, rise, droop = rnd.uniform(0.55, 0.74), rnd.uniform(*FERN_RISE), rnd.uniform(1.5, 1.8)
+        # fern_frond の軸の曲線: 付け根、いちばん高い所 (u = 0.95 / droop)、先
+        um = min(0.9, 0.95 / droop)
+        peak = Vector((length * um, 0, rise * (1.9 * um - droop * um * um)))
+        tipp = Vector((length, 0, rise * (1.9 - droop)))
+        # 葉の幅は近い形の小葉の広がりほど (付け根から先へ弓なりの帯にする)
+        w = 0.21 * 0.5
+        bm = bmesh.new()
+        lay = bm.verts.layers.float_color.new("Col")
+        vs = [bm.verts.new(v) for v in (Vector((0, 0, 0.02)), peak + Vector((0, -w, -0.03)), tipp, peak + Vector((0, w, -0.03)))]
+        for v, c in zip(vs, (FERN_BASE, FERN_MID, FERN_TIP, FERN_MID)):
+            v[lay] = (*c, 1)
+        # 付け根 → 高い所の幅 → 先の弓なりの帯 (付け根と先を結ぶ弦を面に含めない。含めると遠目に葉の下が塗られた三角のテントに見えた)
+        bm.faces.new((vs[0], vs[1], vs[3]))
+        bm.faces.new((vs[1], vs[2], vs[3]))
+        n.add(face_up(bm), M["under"], matrix=K.trs((0, 0, 0.02), (0, 0, yaw)), smooth=True, recalc=False, soft=((0, 0, -3.0), 0.85))
+    return n
+
+
+def moongrass_tuft_seed_lod1():
+    """穂の出た月草の遠距離版 moongrass_tuft_seed_lod1: 葉 5 枚 (葉の段 1 つ)、穂 3 本 (茎は描かず、光る紡錘 1 つずつ)"""
+    n = K.Node("moongrass_tuft_seed_lod1")
+    rnd = random.Random(12)
+    height = 0.66
+    for i in range(5):
+        a = 2 * math.pi * (i + rnd.uniform(-0.25, 0.25)) / 5
+        d = Vector((math.cos(a), math.sin(a), 0))
+        h = height * rnd.uniform(0.75, 1.0)
+        n.add(K.blade(d * 0.03, d, h, 0.05, 0.3, segs=1, twist=rnd.uniform(-0.6, 0.6)),
+              M["under"], smooth=True, recalc=False, soft=((0, 0, -height), 0.5),
+              shade=lambda co, nrm, h=h: K.mix3(MOON_BASE, MOON_TIP, min(1.0, max(0.0, co.z / h)) ** 0.8))
+    for i in range(3):
+        a = 2 * math.pi * i / 3 + rnd.uniform(-0.3, 0.3)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        h = rnd.uniform(0.74, 0.9)
+        top = d * 0.02 + Z * h + d * h * 0.12
+        # 近い形の小穂 5 つが並ぶ穂の長さ (約 0.3 m) の細い紡錘 1 つ
+        n.add(K.lathe([(0.0, -0.3), (0.007, -0.14), (0.0, 0.03)], n=3), M["moonseed"], matrix=K.trs(top), smooth=True)
+    return n
+
+
 if __name__ == "__main__":
     nodes = [grass_tuft(), moongrass_tuft(), moss_clump(), rock(),
              forest_tree(0), forest_tree(1), moongrass_tuft_seed(), fern(), flower_patch(),
              fern_lod1()]  # (鐘樹の段の作り直しで追加: 羊歯の遠距離版)
+    nodes += [flower_patch_lod1(), moongrass_tuft_seed_lod1()]  # (遠距離版の追加で追加: 小花と穂の出た月草の遠距離版)
+    nodes += [fern_lod2()]  # (遠距離版の追加で追加: 羊歯のさらに遠い版)
     objs = [nd.build() for nd in nodes]
     K.export_glb(objs, os.path.join(K.OUT_DIR, "flora.glb"), texcoords=True)

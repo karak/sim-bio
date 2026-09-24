@@ -100,6 +100,14 @@ const OPT = {
   airScale: (num('airres', 2) === 1 ? 1 : 2) as 1 | 2,
   dynres: flag('dynres'),
 };
+/**
+ * (遠距離版の追加で追加) 作り直した芽・株・下草を遠距離版に替える距離 (m)。どれも近い形の 1〜2 割の三角形で、切り替わりの距離では数画素の違い。
+ * 羊歯は FERN_BEYOND_M より先をさらに遠い版 (12 三角形) にする (林の画で遠距離版 120 三角形が 555 株見え、6.7 万三角形あった)
+ */
+const SEEDLING_NEAR_M = 25;
+const STUMP_NEAR_M = 35;
+const UNDER_NEAR_M: Record<string, number> = { fern: 22, flower_patch: 25, moongrass_tuft_seed: 25 };
+const FERN_BEYOND_M = 45;
 /** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
 const AREA_R = 8;
 const WINDOW = 12;
@@ -348,6 +356,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     byKind.stump.push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.05, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(1, 1, 1)));
   }
   const lods: LodProps[] = [];
+  // (遠距離版の追加で追加) 株の近い・遠いの組 (自動カメラの遮りには今までどおり入れない)
+  let stumpSet: LodProps | null = null;
   const belltreeSets: Partial<Record<string, LodProps>> = {};
   for (const [kind, mats] of Object.entries(byKind)) {
     const node = findNode(treeGlb, `belltree_${kind}`) ?? placeholderTree(kind as 'mature' | 'sapling' | 'seedling' | 'stump');
@@ -365,13 +375,22 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       // (M22-03: 若木と芽も植え直せるよう、遠くも同じ形の組にして置き場所を入れ替えられるようにする)
       // (鐘樹の段の作り直しで変更: 若木は作り直して 1,421 三角形になったので、45 m より先は遠距離版 belltree_sapling_lod1 (356 三角形) で描く)
       const far = (kind === 'sapling' ? findNode(treeGlb, 'belltree_sapling_lod1') : null) ?? node;
-      const l = lodProps(node, far, mats, 45, OPT.trees);
+      // (遠距離版の追加で変更: 芽 (746 三角形) も 25 m より先は遠距離版 belltree_seedling_lod1 (57 三角形) で描く)
+      const farNode = kind === 'seedling' ? (findNode(treeGlb, 'belltree_seedling_lod1') ?? far) : far;
+      const l = lodProps(node, farNode, mats, kind === 'seedling' ? SEEDLING_NEAR_M : 45, OPT.trees);
       // (M23-04) 芽 (0.4 m) は影を落とさない (影が小さく見えない。下草と同じ)
       if (kind === 'seedling') l.group.traverse((o) => (o.castShadow = false));
       lods.push(l);
       belltreeSets[kind] = l;
       scene.add(l.group);
-    } else scene.add(instanceProps(node, mats));
+    } else {
+      // (遠距離版の追加で変更: 株 (1,662 三角形) は 35 m より先を遠距離版 belltree_stump_lod1 (220 三角形) で描く。無ければ今までどおり 1 つの組)
+      const stumpFar = findNode(treeGlb, 'belltree_stump_lod1');
+      if (stumpFar) {
+        stumpSet = lodProps(node, stumpFar, mats, STUMP_NEAR_M);
+        scene.add(stumpSet.group);
+      } else scene.add(instanceProps(node, mats));
+    }
   }
 
   // 森の木 (M22-03): 本体の forest の密度に比例して最大 OPT.forest 本。鐘樹と同じく集落の広場と船台は切り開く
@@ -436,8 +455,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // (鐘樹の段の作り直しで変更: 羊歯は作り直して 417 三角形になり、林の画で数百株が見えるので、22 m より先は遠距離版 fern_lod1 (120 三角形) で描く。
     //  下草なので影は落とさない (近い・遠いの組の castShadow を切る)。自動カメラの遮り (lods) には入れない)
     const far = findNode(floraGlb, `${name}_lod1`);
+    // (遠距離版の追加で変更: 近い・遠いの切り替えの距離は下草ごと (UNDER_NEAR_M)。羊歯は 45 m より先をさらに遠い版 fern_lod2 (12 三角形) で描く)
+    const beyond = findNode(floraGlb, `${name}_lod2`);
     if (node && far && mats.length) {
-      const l = lodProps(node, far, mats, 22);
+      const l = lodProps(node, far, mats, UNDER_NEAR_M[name] ?? 22, mats.length, null, beyond ? { node: beyond, farM: FERN_BEYOND_M } : null);
       l.group.traverse((o) => (o.castShadow = false));
       understory.push(l);
     } else if (node && mats.length) understory.push(culledProps(node, mats, false));
@@ -943,6 +964,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     creatures.update(agents.agents, camera, field.heightAt, t, dt);
     for (const l of lods) l.update(camera);
     hutSet?.update(camera);
+    stumpSet?.update(camera);
     for (const u of understory) u.update(camera);
     grass.update(t, camera.position, camera);
     renderer.info.autoReset = false;
