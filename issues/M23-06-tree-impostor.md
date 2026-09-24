@@ -1,11 +1,11 @@
 ---
 id: M23-06
 title: 木の遠距離版(インポスター)
-status: todo
+status: review
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-04]
-evidence: []
+evidence: ["2e4270e 017804b tests/unit/observe.impostor.test.ts"]
 ---
 
 # 木の遠距離版(インポスター)
