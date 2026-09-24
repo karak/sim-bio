@@ -39,6 +39,9 @@ import { HUT_NEAR_M, HUT_NEAR_SPREAD, hutPlacements } from './settlementLayout';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
+import { createPuddles, puddleSpots } from './render/puddles';
+import { createSurface } from './render/roofs';
+import { MIST_S, mistEnvelope, surgeStep, wetness, type SurgeState } from './fx';
 import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { triangleBreakdown } from './render/breakdown';
 import { installShadowOnly } from './render/shadowOnly';
@@ -501,9 +504,22 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const z = (rng() * 2 - 1) * AREA_R * CELL_M;
     if (Math.hypot(x, z) <= AREA_R * CELL_M && field.heightAt(x, z) > 1.2) fireflyAt.push({ x, z });
   }
+  // (M22-07 の手直し、雨「屋根や地面での跳ね返りがない」) 跳ね返りを置く面の高さ: 小屋の近くは、近い形の小屋 (描かない複製) に真上から光線を落として焼いた屋根の高さ (render/roofs.ts)
+  const roofNode = findNode(settleGlb, 'hut');
+  const roofs = roofNode && settlementPlacements.get('hut')?.length ? instanceProps(roofNode, settlementPlacements.get('hut')!, false) : null;
+  const surface = createSurface(field.heightAt, huts, roofs);
   // (集落の建物の作り直しで変更: 小屋の炉にも灯りの溜まりを置く (夜に戸口から火の明かりがこぼれる。帆を失うと灯りと一緒に消える))
-  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: [...marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), ...huts.map((h) => h.hearth)], fireflyAt });
+  // (M22-07 の手直しで変更: 跳ね返りを置く面 (surfaceAt・roofPoints) を渡す)
+  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: [...marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), ...huts.map((h) => h.hearth)], fireflyAt, surfaceAt: surface.at, roofPoints: surface.roofPoints });
   scene.add(motes.group);
+  // (M22-07 の手直し、雨「水たまりと波紋がない」) 水たまり: 踏み固めた広場・道・小屋の戸口の窪み。置き場所は専用の乱数で決める (他の置き場所の乱数を動かさない)
+  const wornSpots = worn.flatMap((w) => {
+    const len = Math.hypot(w.bx - w.ax, w.bz - w.az);
+    const n = Math.max(1, Math.round(len / 5));
+    return Array.from({ length: n }, (_, i) => ({ x: w.ax + ((w.bx - w.ax) * (i + 0.5)) / n, z: w.az + ((w.bz - w.az) * (i + 0.5)) / n, r: w.r }));
+  });
+  const puddles = createPuddles(puddleSpots(wornSpots, field.heightAt, mulberry32(41), 16), field.heightAt);
+  scene.add(puddles.mesh);
   // 空の舟 (M22-06): 進みで段を切り替えて船台に載せる
   const shipView = createShipView(shipGlb, slip, toSea, field.heightAt(slip.x, slip.z) - 0.15);
   const shipState = s.ship ? { ...s.ship, ...(OPT.ship !== null ? { progress: OPT.ship } : {}), ...(OPT.launched || OPT.depart ? { launchedYear: s.year } : {}) } : null;
@@ -544,12 +560,16 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const elev0 = s.layers.elevation[home];
   water.setLevel(OPT.sink);
   grass.setLevel(OPT.sink);
+  // (M22-07 の手直し) 沈む海: 本体の沈降から決まる海面 seaTarget (と調整用の上げ seaExtra) へ、見せる海面 sea.level を上げていく
+  let seaTarget = OPT.sink;
+  let seaExtra = 0;
+  let sea: SurgeState = { level: OPT.sink, surge: 0, hold: 0 };
   const onSnapshot = (next: WorldSnapshot) => {
     snap = next;
     replant(next);
     const level = OPT.sink + Math.max(0, elev0 - next.layers.elevation[home]) * ELEV_M;
-    water.setLevel(level);
-    grass.setLevel(level);
+    // (M22-07 の手直しで変更: 海面はすぐには上げず、fx で SURGE_RATE m/s で追わせ、上がる間は波立ちと流れを見せる (沈む海岸「波立ちがない。流れが見えない。」))
+    seaTarget = level;
     area = extractArea(snap, home, AREA_R);
     targets = targetCounts(area, K, folkRuleFor(snap.civ, 3));
     building = !!snap.ship && snap.ship.launchedYear === undefined && (snap.civ?.stage ?? 0) >= 5;
@@ -679,16 +699,22 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // 入った (start した) あとの最初の年表は、見る前の出来事として既読にするだけ (入るたびに昔の介入を再生しない)
   let baseline = true;
   let mist = 0;
+  // (M22-07 の手直し) 霧が立ってからの秒数。濃さと余韻は fx.ts の mistEnvelope が決める (MIST_S を過ぎたら消えている)
+  let mistAge = MIST_S;
   let mistAt = { x: 0, y: 0, z: 0 };
   let mistR = 20;
   let rain = 0;
   let rainLeft = 0;
-  const MIST_S = 90;
+  // (M22-07 の手直しで変更: 霧の長さ MIST_S (90 秒) は fx.ts に移した)
   const RAIN_S = 45;
+  // (M22-07 の手直し) 雨の濡れ (水たまりの広がり) と、波紋を動かす時刻
+  let wet = 0;
+  let fxTime = 0;
   const playScene = (e: SceneEvent) => {
     if (e.kind === 'sprout') motes.sprout(e.at, Math.max(1, e.radius) * CELL_M);
     else if (e.kind === 'mist') {
       mist = 1;
+      mistAge = 0;
       mistR = Math.max(12, e.radius * CELL_M);
       mistAt = { x: e.at.x, y: field.heightAt(e.at.x, e.at.z), z: e.at.z };
     } else if (e.kind === 'rain') rainLeft = RAIN_S;
@@ -732,17 +758,32 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     if (lampsTarget === 0 && snap.ship && snap.civ && snap.civ.stage >= 5) lampsTarget = 1;
     lamps += (lampsTarget - lamps) * Math.min(1, dt / 3);
     motes.setLamps(lamps);
-    mist = Math.max(0, mist - dt / MIST_S);
-    air?.setMist(mistAt, mistR, mist);
+    // (M22-07 の手直しで変更: 霧の濃さは一様に薄めず、fx.ts の mistEnvelope (立ち上がり → 満ちる → 最後の 32 秒の余韻) で決める)
+    mistAge += dt;
+    const env = mistEnvelope(mistAge);
+    mist = env.amount;
+    air?.setMist(mistAt, mistR, mist, env.fade);
     rainLeft = Math.max(0, rainLeft - dt);
     rain += ((rainLeft > 0 ? 1 : 0) - rain) * Math.min(1, dt / 4);
     motes.setRain(rain);
+    // (M22-07 の手直し) 雨の水たまり・海面の波紋
+    fxTime += dt;
+    wet = wetness(wet, rainLeft > 0, dt);
+    puddles.update(wet, rain, hemi.color, fxTime);
+    water.setRain(rain);
+    // (M22-07 の手直し) 沈む海: 海面を追わせ、上がる間の波立ちと流れ
+    sea = surgeStep(sea, seaTarget + seaExtra, dt);
+    water.setLevel(sea.level);
+    grass.setLevel(sea.level);
+    water.setSurge(sea.surge);
   };
   // 調整用: 開発者ツールから場面を起こす (__observeFx('sprout' | 'mist' | 'rain'))
-  (window as unknown as { __observeFx: unknown }).__observeFx = (kind: 'sprout' | 'mist' | 'rain') => {
+  // (M22-07 の手直しで変更: 'sinking' は海面を 1.5 m 上げる (本体の沈降の代わり)。上がる間は波立ちと流れが見える)
+  (window as unknown as { __observeFx: unknown }).__observeFx = (kind: 'sprout' | 'mist' | 'rain' | 'sinking') => {
     const at = marks.grove ?? marks.center;
     if (kind === 'sprout') playScene({ kind, year: snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
     else if (kind === 'mist') playScene({ kind, year: snap.year, cell: home, at, radius: 4 });
+    else if (kind === 'sinking') seaExtra += 1.5;
     else playScene({ kind, year: snap.year });
   };
   // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__observeLook('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
