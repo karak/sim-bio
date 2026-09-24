@@ -1,4 +1,4 @@
-import { AddEquation, BufferAttribute, BufferGeometry, Color, CustomBlending, DataTexture, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, Matrix4, OneFactor, Quaternion, RGBAFormat, Sphere, Vector3, ZeroFactor, type BufferGeometry as Geo, type Camera } from 'three';
+import { AddEquation, BufferAttribute, ShaderChunk, BufferGeometry, Color, CustomBlending, DataTexture, InstancedBufferAttribute, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, Matrix4, OneFactor, Quaternion, RGBAFormat, Sphere, Vector3, ZeroFactor, type BufferGeometry as Geo, type Camera } from 'three';
 import { ViewCull, uploadFront } from './cull';
 import { mulberry32 } from '../../simulation/rng';
 import { createToonMaterial } from './toon';
@@ -165,6 +165,14 @@ export function tuftSilhouette(tuft: Geo, size = 64): DataTexture {
   return tex;
 }
 
+/**
+ * (鐘樹の段の作り直しで追加) 草の光の計算の始まり。平行光の影の値を grassSun に控えてから光の色に掛ける (縁の光を影で消すため。上の createGrass)
+ */
+export const GRASS_LIGHTS_BEGIN = ShaderChunk.lights_fragment_begin.replace(
+  /directLight\.color \*= (\( directLight\.visible && receiveShadow \) \? getShadow\( directionalShadowMap\[ i \][^;]*);/,
+  'grassSun = $1;\n\t\tdirectLight.color *= grassSun;',
+);
+
 /** 房の先の色 (草の磨き上げ): 若い草の明るい先、乾いた先、茂った所の濃い先、苔の所 */
 const TIP = { fresh: new Color('#97C94C'), dry: new Color('#C7BC68'), lush: new Color('#6FA844'), moss: new Color('#79AE50') };
 
@@ -228,6 +236,12 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
       )
       // 両面の裏で上向きの法線が下を向かないように、裏返しを戻す
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n#ifdef DOUBLE_SIDED\nnormal *= faceDirection;\n#endif')
+      // (鐘樹の段の作り直しで追加) 縁の光 (toon.ts) を日の影で消す。房の法線は上向きなので、低い目の画では縁の光がどの房にも掛かり、
+      // 木の影の中の房まで白く浮いて「草に木の影が落ちていない」と見えた (審査台 p-trees-settlement のメモ)。
+      // 影は three.js の光の計算が平行光に掛ける影の値をそのまま控える (grassSun、平行光は日の 1 つだけ)。
+      // 影の地図をもう一度引くと、画面を広く覆う草の断片ごとに PCF の読みが倍になり、林・群れの画で fps が半分近くに落ちた
+      .replace('#include <lights_fragment_begin>', `float grassSun = 1.0;\n${GRASS_LIGHTS_BEGIN}`)
+      .replace('gl_FragColor.rgb += uRimColor * uRimLight * rimTerm * uRim;', 'gl_FragColor.rgb += uRimColor * uRimLight * rimTerm * uRim * grassSun;')
       // (M23-05) 遠距離版の板: 覆いの割合を縁で鋭くして alphaToCoverage に渡す (縁は画素 1 つ分でなめらか、内は全部覆う)。
       // 遠くで縮めた (mipmap の) 覆いは葉が細って薄くなるので、縮めた段の数だけ割合を持ち上げて房の濃さを保つ
       // (段の数は縮みの小さいほうの向きで数える。異方性の絞りで読むので、縮みの大きい向きで数えると持ち上げすぎて塊になる)

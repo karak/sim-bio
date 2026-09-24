@@ -114,7 +114,8 @@ def rock():
 
 # ---------------------------------------------------------------- M22-03 の追加
 
-def moongrass_tuft_seed():
+# (鐘樹の段の作り直しで変更: 前の穂の出た月草。書き出しには使わない (前と後を比べるために残す)。今の穂の出た月草は下の「下草の作り直し」の moongrass_tuft_seed())
+def moongrass_tuft_seed_old():
     """穂の出た月草: 葉 5 枚と、先に淡く光る細い穂を付けた茎 3 本"""
     n = tuft("moongrass_tuft_seed", "moongrass", blades=5, height=0.68, width=0.05, spread=0.06, bend=0.3, seed=12,
              lo=0.62, warm=0.04)
@@ -155,7 +156,8 @@ def frond(n, base, yaw, length, rise, width, k=8):
           soft=((0, 0, -0.4), 0.5))
 
 
-def fern():
+# (鐘樹の段の作り直しで変更: 前の羊歯。書き出しには使わない (前と後を比べるために残す)。今の羊歯は下の「下草の作り直し」の fern())
+def fern_old():
     n = K.Node("fern")
     rnd = random.Random(21)
     for i in range(5):
@@ -164,7 +166,8 @@ def fern():
     return n
 
 
-def flower_patch():
+# (鐘樹の段の作り直しで変更: 前の小花。書き出しには使わない (前と後を比べるために残す)。今の小花は下の「下草の作り直し」の flower_patch())
+def flower_patch_old():
     """淡い小花 5 輪 (白・淡い藤色、中心は黄色) と、地に伏せた葉 4 枚。花は 5 弁の星形で、外へ少し傾けて上を向く"""
     import bmesh
     n = K.Node("flower_patch")
@@ -218,6 +221,8 @@ def forest_tree(lod=0):
         spine, radii = [spine[0], spine[2], spine[3]], [radii[0], radii[2], radii[3]]
     # (木の磨き上げで変更: 幹と根は、縦の裂け目・筋・根元の苔を頂点色で持つ forest_trunk の材質にする)
     bark = K.bark_shade(spine, radii, FOREST_BARK_LIN, FOREST_MOSS_LIN, lo=0.6, hi=1.0, z1=2.5, moss_z=(0.05, 0.8), seed=2.1)
+    # (鐘樹の段の作り直しで追加) 鐘樹の株・丸太と同じく、樹皮に地衣の淡い斑を足す
+    bark = forest_lichen(bark) if lod == 0 else bark
     n.add(K.tube(spine, radii, n=sides, cap_start=False, ridge=K.fissures(sides, depth=(0.07, 0.14), seed=9, rings=len(spine))),
           M["forest_trunk"], smooth=True, shade=bark)
     if lod == 0:
@@ -227,6 +232,11 @@ def forest_tree(lod=0):
             # (木の磨き上げで変更: 根の断面を縦長の楕円 (鰭) にする)
             n.add(K.tube([d * 0.15 + Z * 0.6, d * 0.45 + Z * 0.14, d * 0.78 + Z * -0.03], [0.17, 0.1, 0.03], n=4,
                          tip=True, cap_start=False, aspect=(0.7, 1.3)), M["forest_trunk"], smooth=True, shade=bark)
+        # (鐘樹の段の作り直しで追加) 根と根の間に苔の小山 3 つ (鐘樹の株と同じ、明るい苔と暗い苔の斑)
+        for i in range(3):
+            a = math.radians(75 + 90 * i)
+            d = Vector((math.cos(a), math.sin(a), 0))
+            forest_moss(n, d * 0.42 + Z * 0.0, 0.16 + 0.03 * i, 60 + i)
     # (M22-07 光の筋のために変更: 3 本の太枝の先に大きな塊 8 つを重ねた樹冠をやめ、房 6 つ (FOREST_CLUSTERS) に
     #  1 本ずつ枝を伸ばす。房と房の間 (0.4〜0.6 m) が抜け、日の影の地図で影がまだらになる。lod1 も隙間を残す)
     trunk_top = Vector(spine[-1])
@@ -263,6 +273,28 @@ def forest_tree(lod=0):
                             gap_clear=0.25)
     print(f"  {name}: cards={cards}")
     return n
+
+
+def forest_lichen(shade, seed=4):
+    """(鐘樹の段の作り直しで追加) 森の木の樹皮の陰りに、地衣 (淡い灰緑) の斑を足す (高さ 0.6 m より上)"""
+    lichen = K.hex_rgb("#A7AE8A")
+
+    def f(co, nrm):
+        v = shade(co, nrm)
+        if co.z < 0.6:
+            return v
+        t = K.vnoise(co.x * 7, co.y * 7, co.z * 3.5, seed)
+        t = min(1.0, max(0.0, (t - 0.7) / 0.1))
+        return K.mix3(v, K.mul3(lichen, 0.55 + 0.45 * sum(v) / 3 / max(1e-3, sum(FOREST_BARK_LIN) / 3)), t * 0.7)
+    return f
+
+
+def forest_moss(n, at, size, seed):
+    """(鐘樹の段の作り直しで追加) 根元の苔の小山 (粗い 20 三角形、斑は頂点色)"""
+    deep, light = K.hex_rgb("#4E6E2A"), K.hex_rgb("#8FAE45")
+    bm = K.ico((size, size * 0.8, size * 0.45), subdiv=0, jitter=0.25, seed=seed, flat_bottom=0.9)
+    K.paint(bm, lambda v: K.mix3(deep, light, K.vnoise(v.co.x * 14, v.co.y * 14, v.co.z * 14, seed)))
+    n.add(bm, M["forest_trunk"], matrix=K.trs(at), smooth=True, soft=(Vector(at) - Z * size, 0.5))
 
 
 def forest_card_shade(c, r):
@@ -309,8 +341,213 @@ def forest_lumps(c, r, upper):
     return lumps
 
 
+# ---------------------------------------------------------------- 下草の作り直し
+# (鐘樹の段の作り直しで追加) 審査台への判断 (t03-flora 保留「鐘樹の段 (芽・若木・成木・株・丸太) におなじ」) を受けて、
+# 羊歯・小花・穂の出た月草を作り直す。色は頂点色で持ち (材質の基本色は白、両面)、葉ごとの明暗・付け根の陰・中肋・先の明るさを描く。
+# 形は assets/textures/board/sheets/flora.png (月草の細い穂) と key-visuals/herd.png (林床の羊歯) に寄せる
+
+M["under"] = K.material("flora_under", "#FFFFFF", rough=0.9, double=True)
+FERN_BASE = K.hex_rgb("#2F5A24")
+FERN_MID = K.hex_rgb("#5A9538")
+FERN_TIP = K.hex_rgb("#A2CC60")
+FERN_RIB = K.hex_rgb("#9CB86A")
+STEM_LIN = K.hex_rgb("#5E8638")
+ROSETTE = (K.hex_rgb("#3E6A2C"), K.hex_rgb("#6E9A44"), K.hex_rgb("#9FC06E"))
+PETALS = [(K.hex_rgb("#F6F2E6"), K.hex_rgb("#FFFDF6")), (K.hex_rgb("#D9CFEA"), K.hex_rgb("#F1ECF8")), (K.hex_rgb("#F3E9C9"), K.hex_rgb("#FFF8E2"))]
+FLOWER_EYE = K.hex_rgb("#E8B83C")
+MOON_BASE = K.hex_rgb("#6F8A66")
+MOON_TIP = K.hex_rgb("#D6E4CE")
+
+
+def face_up(bm):
+    """(鐘樹の段の作り直しで追加) 片面の板 (小葉・花弁) の面の向きを上 (+Z) に揃える。観察画面の両面の材質は裏の面の法線を裏返すので、
+    裏向きの板は下向きの法線になって縁の光が一面に掛かり、小葉が白茶けて見えた"""
+    import bmesh
+    down = [f for f in bm.faces if (f.normal_update() or f.normal.z) < 0]
+    if down:
+        bmesh.ops.reverse_faces(bm, faces=down)
+    return bm
+
+
+def fern_frond(n, yaw, length, rise, width, k, seed, droop=1.6, rachis=True):
+    """羊歯の葉 1 枚: 付け根から反って垂れる軸 (細い管) の両側に、先へ向いた小葉 (菱形、2 三角形) を k 対。
+    小葉は中ほどが長く、付け根と先で短い。付け根は暗く先ほど明るく、小葉ごとに明暗を揺らし、軸と小葉の付け根が明るい"""
+    rnd = random.Random(seed)
+    m = K.trs((0, 0, 0.02), (0, 0, yaw))
+    pts = [Vector((length * u, 0, rise * (1.9 * u - droop * u * u))) for u in [i / k for i in range(k + 1)]]
+    rach = pts[::2] if k % 2 == 0 else pts[::2] + [pts[-1]]
+    if rachis:
+            n.add(K.tube(rach, [0.006 * (1 - j / (len(rach) - 1)) + 0.0015 for j in range(len(rach) - 1)] + [0.0],
+                     n=3, tip=True, cap_start=False), M["under"], matrix=m, smooth=True, soft=((0, 0, -3.0), 0.9),
+              shade=lambda co, nrm: K.mix3(FERN_BASE, FERN_RIB, 0.5 + 0.5 * min(1.0, co.z / max(0.01, rise))))
+    import bmesh
+    for i in range(1, k):
+        u = i / k
+        a, b = pts[i], pts[min(k, i + 1)]
+        ax = (b - a).normalized()
+        L = width * min(1.0, u * 3.2) * (1 - u) ** 0.45 * rnd.uniform(0.9, 1.08)
+        if L < 0.015:
+            continue
+        for side in (-1, 1):
+            out = Vector((0, side, 0))  # 軸の横 (葉の座標の y)
+            dirp = (out * 0.85 + ax * 0.5).normalized()
+            dirp.z -= 0.2
+            base = a + ax * 0.004
+            tipp = base + dirp * L
+            w = L * 0.42
+            mid = base.lerp(tipp, 0.45)
+            p1 = mid + (ax * w)
+            p2 = mid - (ax * w)
+            bm = bmesh.new()
+            lay = bm.verts.layers.float_color.new("Col")
+            vb, v1, vt, v2 = (bm.verts.new(p) for p in (base, p1, tipp, p2))
+            jit = rnd.uniform(0.85, 1.12)
+            c_base = K.mul3(K.mix3(FERN_BASE, FERN_MID, u), jit)
+            c_tip = K.mul3(K.mix3(FERN_MID, FERN_TIP, u), jit)
+            vb[lay] = (*K.mix3(c_base, FERN_RIB, 0.35), 1)
+            vt[lay] = (*c_tip, 1)
+            v1[lay] = (*K.mul3(K.mix3(c_base, c_tip, 0.5), 1.05), 1)
+            v2[lay] = (*K.mul3(K.mix3(c_base, c_tip, 0.5), 0.85), 1)
+            bm.faces.new((vb, v1, vt))
+            bm.faces.new((vb, vt, v2))
+            # 法線はほぼ上向きに寄せる (草と同じ。房の外向きのままだと、見下ろす画で小葉の縁が縁の光で白く浮いた)
+            n.add(face_up(bm), M["under"], matrix=m, smooth=True, recalc=False, soft=((0, 0, -3.0), 0.85))
+
+
+def fern():
+    """(鐘樹の段の作り直しで変更: 葉 5 枚の三角の羊歯を、軸と菱形の小葉の葉 6 枚 (付け根が暗く先が明るい) と、
+    真ん中で巻いた若い芽 (ぜんまい) 1 本に作り直す。前の形は fern_old)"""
+    n = K.Node("fern")
+    rnd = random.Random(21)
+    for i in range(6):
+        yaw = 60 * i + rnd.uniform(-14, 14)
+        fern_frond(n, yaw, rnd.uniform(0.55, 0.74), rnd.uniform(0.45, 0.66), 0.21, 10, seed=22 + i, droop=rnd.uniform(1.5, 1.8))
+    # 巻いた若い芽: 立ち上がる茎の先を渦に巻く
+    pts = [Vector((0.02, 0.01, 0.0)), Vector((0.03, 0.0, 0.18)), Vector((0.05, 0.0, 0.3))]
+    cx, cz = 0.08, 0.3
+    for j in range(1, 6):
+        t = j / 5 * 1.6 * math.pi
+        rr = 0.04 * (1 - j / 7)
+        pts.append(Vector((cx - math.cos(t) * rr, 0.0, cz + math.sin(t) * rr)))
+    n.add(K.tube(pts, [0.012] * 3 + [0.011, 0.01, 0.009, 0.008, 0.0], n=3, tip=True, cap_start=False), M["under"], smooth=True,
+          soft=((0, 0, -3.0), 0.9),
+          shade=lambda co, nrm: K.mix3(FERN_MID, K.hex_rgb("#A6C66E"), min(1.0, co.z / 0.3)))
+    return n
+
+
+def fern_lod1():
+    """(鐘樹の段の作り直しで追加) 羊歯の遠距離版 fern_lod1 (観察画面は 22 m より先で使う): 同じ向きと大きさの葉 6 枚を、
+    軸と若い芽なしの小葉 5 対で描く (羊歯は林床に数百株あり、近い形 417 三角形のままだと林の画で 23 万三角形になった)"""
+    n = K.Node("fern_lod1")
+    rnd = random.Random(21)
+    for i in range(6):
+        yaw = 60 * i + rnd.uniform(-14, 14)
+        fern_frond(n, yaw, rnd.uniform(0.55, 0.74), rnd.uniform(0.45, 0.66), 0.24, 6, seed=22 + i, droop=rnd.uniform(1.5, 1.8),
+                   rachis=False)
+    return n
+
+
+def flower_patch():
+    """(鐘樹の段の作り直しで変更: 伏せた葉 4 枚と星形の花 5 輪を、中肋で折った葉のロゼット 5 枚と、細い茎の先の 5 弁の花 5 輪
+    (弁ごとに付け根が淡く陰り先が明るい、黄色い花芯) とつぼみ 2 つに作り直す。前の形は flower_patch_old)"""
+    import bmesh
+    n = K.Node("flower_patch")
+    rnd = random.Random(31)
+    for i in range(5):
+        a = 2 * math.pi * i / 5 + rnd.uniform(-0.3, 0.3)
+        d = Vector((math.cos(a), math.sin(a), 0.18))
+        m = K.aim(d)
+        m.translation = Vector((0, 0, 0.01))
+        L = rnd.uniform(0.14, 0.19)
+        cols = tuple(K.mul3(c, rnd.uniform(0.9, 1.08)) for c in ROSETTE)
+        n.add(K.leaf_folded(L, L * 0.5, k=2, fold=0.25, bend=0.35, thick=0.004, base_col=cols[0], tip_col=cols[1], rib_col=cols[2]),
+              M["under"], matrix=m, smooth=True, soft=((0, 0, -3.0), 0.85))
+    heads = []
+    for i in range(7):
+        a = 2 * math.pi * i / 7 + rnd.uniform(-0.35, 0.35)
+        r = rnd.uniform(0.04, 0.2)
+        base = Vector((math.cos(a) * r, math.sin(a) * r, 0))
+        h = rnd.uniform(0.11, 0.21)
+        lean = Vector((math.cos(a), math.sin(a), 0)) * h * rnd.uniform(0.1, 0.25)
+        top = base + Z * h + lean
+        mid = base.lerp(top, 0.5) + lean * 0.3
+        n.add(K.tube([base, mid, top], [0.0035, 0.003, 0.0025], n=3, cap_start=False), M["under"], smooth=True, soft=((0, 0, -3.0), 0.9),
+              shade=lambda co, nrm: K.mul3(STEM_LIN, 0.7 + 0.3 * min(1.0, co.z / 0.25)))
+        heads.append((top, a, i))
+    for top, a, i in heads:
+        if i >= 5:  # つぼみ
+            n.add(K.lathe([(0.0, 0.0), (0.012, 0.012), (0.0, 0.03)], n=4), M["under"], matrix=K.trs(top), smooth=True,
+                  shade=lambda co, nrm: K.hex_rgb("#C9D6A0"))
+            continue
+        pc = PETALS[i % len(PETALS)]
+        ph = rnd.uniform(0, 2 * math.pi)
+        tilt = K.trs(top, (0, 0, math.degrees(a))) @ K.trs((0, 0, 0), (0, rnd.uniform(20, 40), 0))
+        for j in range(5):
+            t = ph + 2 * math.pi * j / 5
+            dv = Vector((math.cos(t), math.sin(t), 0))
+            sv = Vector((-math.sin(t), math.cos(t), 0))
+            L = rnd.uniform(0.068, 0.084)
+            bm = bmesh.new()
+            lay = bm.verts.layers.float_color.new("Col")
+            v0 = bm.verts.new(dv * 0.006 + Z * 0.004)
+            v1 = bm.verts.new(dv * L * 0.6 + sv * L * 0.36 + Z * 0.012)
+            v2 = bm.verts.new(dv * L + Z * 0.008)
+            v3 = bm.verts.new(dv * L * 0.6 - sv * L * 0.36 + Z * 0.012)
+            v0[lay] = (*K.mul3(pc[0], 0.8), 1)
+            for v in (v1, v3):
+                v[lay] = (*pc[0], 1)
+            v2[lay] = (*pc[1], 1)
+            bm.faces.new((v0, v1, v2))
+            bm.faces.new((v0, v2, v3))
+            n.add(face_up(bm), M["under"], matrix=tilt, smooth=True, recalc=False)
+        n.add(K.lathe([(0.0, 0.004), (0.016, 0.012), (0.0, 0.024)], n=5), M["under"], matrix=tilt, smooth=True,
+              shade=lambda co, nrm: FLOWER_EYE)
+    return n
+
+
+def moongrass_tuft_seed():
+    """(鐘樹の段の作り直しで変更: 葉 5 枚と光る紡錘 3 つを、根元が暗く先が淡い銀緑の葉 7 枚 (葉ごとに明暗を揺らす) と、
+    細い茎に互い違いの小穂 (淡く光る菱形 5 つ) を付けた穂 3 本に作り直す。基準画 sheets/flora.png の月草の穂。前の形は moongrass_tuft_seed_old)"""
+    import bmesh
+    n = K.Node("moongrass_tuft_seed")
+    rnd = random.Random(12)
+    height = 0.66
+    for i in range(7):
+        a = 2 * math.pi * (i + rnd.uniform(-0.25, 0.25)) / 7
+        d = Vector((math.cos(a), math.sin(a), 0))
+        h = height * rnd.uniform(0.7, 1.0)
+        jit = rnd.uniform(0.85, 1.1)
+        n.add(K.blade(d * rnd.uniform(0.01, 0.05), d, h, 0.045 * rnd.uniform(0.85, 1.15), 0.3 * rnd.uniform(0.6, 1.3), segs=2,
+                      twist=rnd.uniform(-0.6, 0.6)),
+              M["under"], smooth=True, recalc=False, soft=((0, 0, -height), 0.5),
+              shade=lambda co, nrm, jit=jit, h=h: K.mul3(K.mix3(MOON_BASE, MOON_TIP, min(1.0, max(0.0, co.z / h)) ** 0.8), jit))
+    for i in range(3):
+        a = 2 * math.pi * i / 3 + rnd.uniform(-0.3, 0.3)
+        d = Vector((math.cos(a), math.sin(a), 0))
+        h = rnd.uniform(0.74, 0.9)
+        base = d * 0.02
+        top = base + Z * h + d * h * 0.12
+        mid = base.lerp(top, 0.55) + d * 0.02
+        n.add(K.tube([base, mid, top], [0.005, 0.004, 0.003], n=3, cap_start=False), M["under"], smooth=True, soft=((0, 0, -3.0), 0.9),
+              shade=lambda co, nrm: K.mix3(MOON_BASE, MOON_TIP, min(1.0, co.z / 0.8)))
+        ax = (top - mid).normalized()
+        side = ax.cross(Z).normalized() if abs(ax.z) < 0.99 else Vector((1, 0, 0))
+        for j in range(5):
+            t = 0.62 + 0.38 * j / 4
+            p = mid.lerp(top, (t - 0.55) / 0.45) if t > 0.55 else mid
+            s = side * (1 if j % 2 else -1)
+            L = 0.06 * (1 - 0.35 * j / 4)
+            dv = (ax * 0.75 + s * 0.4).normalized()
+            q = Z.rotation_difference(dv).to_matrix().to_4x4()
+            q.translation = p
+            # 小穂は閉じた 3 角の紡錘 (材質は片面なので、裏の見えない板にしない)
+            n.add(K.lathe([(0.0, 0.0), (0.011, L * 0.45), (0.0, L)], n=3, phase=j * 0.7), M["moonseed"], matrix=q, smooth=True)
+    return n
+
+
 if __name__ == "__main__":
     nodes = [grass_tuft(), moongrass_tuft(), moss_clump(), rock(),
-             forest_tree(0), forest_tree(1), moongrass_tuft_seed(), fern(), flower_patch()]
+             forest_tree(0), forest_tree(1), moongrass_tuft_seed(), fern(), flower_patch(),
+             fern_lod1()]  # (鐘樹の段の作り直しで追加: 羊歯の遠距離版)
     objs = [nd.build() for nd in nodes]
     K.export_glb(objs, os.path.join(K.OUT_DIR, "flora.glb"), texcoords=True)
