@@ -168,6 +168,11 @@ for k, (az, el) in (("q34", (36, 8)), ("side", (6, 5)), ("front", (90, 5))):
 for name, f in (("stalk", 12), ("pounce", 16)):
     set_action(name, f)
     shoot(f"head-{name}.png", 30, 6, pad=1.15, sel=lambda p: p.z > 0.25 and p.y < -0.40 - (0.3 if name == "pounce" else 0.0))
+# (灰狼の 5 回目で追加) 頭・首・胸の寄り (bust): 頬と胸元の毛の広がりを見るため、頭から肩の前・胸の下までを枠に入れる
+bust_sel = lambda p: p.y < -0.22 and p.z > 0.30  # noqa: E731
+for k, (az, el) in (("q34", (36, 8)), ("side", (6, 5)), ("front", (90, 5))):
+    set_action(None, 0)
+    shoot(f"bust-{k}.png", az, el, pad=1.10, sel=bust_sel)
 if ONLY == "views":
     sys.exit(0)
 set_action(None, 0)
