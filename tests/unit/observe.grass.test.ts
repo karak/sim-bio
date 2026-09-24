@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Color, Matrix4, Vector3, type InstancedBufferAttribute } from 'three';
-import { carpetTuft, createGrass, farTuft, grassIsFar, tuftSilhouette } from '../../src/observe/render/grass';
+import { GRASS_LIGHTS_BEGIN, carpetTuft, createGrass, farTuft, grassIsFar, tuftSilhouette } from '../../src/observe/render/grass';
+import { ShaderChunk } from 'three';
 import { createTerrainField, groundColorAt, groundPatch, wearAt, type GroundLayers } from '../../src/observe/render/terrain';
 import type { WorldSnapshot } from '../../src/simulation/types';
 
@@ -168,5 +169,17 @@ describe('観察画面 (M23-05): 草の遠距離版', () => {
       expect(data[i * 4 + 1]).toBe(data[i * 4]);
       expect(data[i * 4 + 3]).toBe(data[i * 4]);
     }
+  });
+});
+
+describe('観察画面 (鐘樹の段の作り直し): 草の縁の光を日の影で消す', () => {
+  it('光の計算の平行光の影の値を grassSun に控え、光の色にはその値を掛ける (影の地図を引くのは平行光の影の 1 回のまま)', () => {
+    expect(GRASS_LIGHTS_BEGIN).not.toBe(ShaderChunk.lights_fragment_begin);
+    expect(GRASS_LIGHTS_BEGIN).toContain('grassSun = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ]');
+    expect(GRASS_LIGHTS_BEGIN).toContain('directLight.color *= grassSun;');
+    const count = (src: string) => src.split('getShadow( directionalShadowMap').length - 1;
+    expect(count(GRASS_LIGHTS_BEGIN)).toBe(count(ShaderChunk.lights_fragment_begin));
+    // 点光・スポットの影はそのまま
+    expect(GRASS_LIGHTS_BEGIN).toContain('getPointShadow( pointShadowMap[ i ]');
   });
 });

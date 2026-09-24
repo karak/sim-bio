@@ -292,6 +292,9 @@ class Node:
             if dst_uv is not None:
                 for ls, ld in zip(f.loops, nf.loops):
                     ld[dst_uv].uv = ls[src_uv].uv
+        # (鐘樹の段の作り直しで追加) src が頂点の色の層 "Col" を持てば (葉・年輪の部品) shade の乗数に掛ける
+        vl = src.verts.layers.float_color.get("Col")
+        src_col = {vmap[v]: tuple(v[vl])[:3] for v in src.verts} if vl is not None else None
         src.free()
         for f in faces:
             f.normal_update()
@@ -302,6 +305,10 @@ class Node:
             f.material_index = self._mi(m)
             for lp in f.loops:
                 c = shade(lp.vert.co, f.normal) if shade else (1.0, 1.0, 1.0)
+                if src_col is not None:
+                    k = src_col.get(lp.vert)
+                    if k is not None:
+                        c = (c[0] * k[0], c[1] * k[1], c[2] * k[2])
                 lp[self.col] = (min(1.0, c[0]), min(1.0, c[1]), min(1.0, c[2]), 1.0)
         if soft is not None:
             for f in faces:
@@ -625,3 +632,153 @@ def fissures(n, depth=(0.06, 0.13), bump=0.05, seed=0, flare=None, rings=None):
             v *= 1 + (flare[1] - 1) * (1 - i / flare[0])
         return v
     return f
+
+
+# ---------------------------------------------------------------- 鐘樹の段の作り直しで追加
+# 芽・若木・株・丸太・下草を成木と同じ作り込みにするための部品。色は部品の頂点の色の層 "Col" に持たせ (Node.add が shade に掛ける)、
+# 材質の基本色は白にする (樹皮・年輪・葉の色を頂点色で描く。観察画面の焼き (bake.ts) で 1 つの draw call にまとまる)。
+
+def vnoise(x, y, z=0.0, seed=0.0):
+    """値のノイズ (0〜1)。格子点の乱数を 3 次元で滑らかに補間する (樹皮の筋・苔と地衣の斑・年輪の揺れ)"""
+    def h(i, j, k):
+        v = math.sin(i * 127.1 + j * 311.7 + k * 74.7 + seed * 17.13) * 43758.5453
+        return v - math.floor(v)
+    ix, iy, iz = math.floor(x), math.floor(y), math.floor(z)
+    fx, fy, fz = x - ix, y - iy, z - iz
+    sx, sy, sz = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy), fz * fz * (3 - 2 * fz)
+
+    def lerp(a, b, t):
+        return a + (b - a) * t
+    c00 = lerp(h(ix, iy, iz), h(ix + 1, iy, iz), sx)
+    c10 = lerp(h(ix, iy + 1, iz), h(ix + 1, iy + 1, iz), sx)
+    c01 = lerp(h(ix, iy, iz + 1), h(ix + 1, iy, iz + 1), sx)
+    c11 = lerp(h(ix, iy + 1, iz + 1), h(ix + 1, iy + 1, iz + 1), sx)
+    return lerp(lerp(c00, c10, sy), lerp(c01, c11, sy), sz)
+
+
+def paint(bm, color_of):
+    """bm の頂点に色の層 "Col" を付ける。color_of(頂点) -> (r, g, b) (リニア)"""
+    lay = bm.verts.layers.float_color.get("Col") or bm.verts.layers.float_color.new("Col")
+    for v in bm.verts:
+        c = color_of(v)
+        v[lay] = (c[0], c[1], c[2], 1.0)
+    return bm
+
+
+def mix3(a, b, t):
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+
+
+def mul3(a, k):
+    if isinstance(k, (int, float)):
+        return tuple(v * k for v in a)
+    return tuple(a[i] * k[i] for i in range(3))
+
+
+def leaf_folded(length, width, k=4, fold=0.18, bend=0.2, thick=0.01, base_col=(0.1, 0.2, 0.05), tip_col=None,
+                rib_col=None, edge=0.78, round_tip=0.0):
+    """中肋で浅く折った葉 (閉じた形、片面の材質で裏からも見える)。+X へ伸び、表の法線は +Z。
+    - 輪郭は卵形 (付け根寄りが広く、先が尖る。round_tip で先を丸める)、fold × 半幅だけ縁を持ち上げた浅い樋
+    - 頂点の色: 付け根 base_col → 先 tip_col、中肋 rib_col (明るい葉脈)、縁は edge 倍に暗く
+    三角形は 6k + 2"""
+    bm = bmesh.new()
+    tip_col = tip_col or base_col
+    rib_col = rib_col or mix3(base_col, (1, 1, 1), 0.25)
+    lay = bm.verts.layers.float_color.new("Col")
+    L = length
+    rr, ll, mm = [], [], []
+    base = bm.verts.new((0, 0, 0))
+    tipv = bm.verts.new((L, 0, -bend * L))
+    for j in range(1, k + 1):
+        t = j / (k + 1)
+        w = width * 0.5 * math.sin(math.pi * t) ** (0.7 - 0.35 * round_tip) * (1.15 - 0.3 * t)
+        zc = -bend * L * t * t
+        rr.append((bm.verts.new((L * t, -w, zc + fold * w)), t))
+        ll.append((bm.verts.new((L * t, w, zc + fold * w)), t))
+        mm.append((bm.verts.new((L * t, 0, zc)), t))
+    bot = bm.verts.new((L * 0.45, 0, -bend * L * 0.2 - thick))
+
+    def col(t, rib):
+        c = mix3(base_col, tip_col, t)
+        return mix3(c, rib_col, 0.6) if rib else mul3(c, edge)
+    base[lay] = (*col(0.0, True), 1)
+    tipv[lay] = (*col(1.0, True), 1)
+    bot[lay] = (*mul3(col(0.45, False), 0.8), 1)
+    for (v, t) in rr + ll:
+        v[lay] = (*col(t, False), 1)
+    for (v, t) in mm:
+        v[lay] = (*col(t, True), 1)
+    R = [base] + [v for v, _ in rr] + [tipv]
+    Lf = [base] + [v for v, _ in ll] + [tipv]
+    M_ = [base] + [v for v, _ in mm] + [tipv]
+    for i in range(k + 1):
+        for side, O in ((1, R), (-1, Lf)):
+            quad = [M_[i], O[i], O[i + 1], M_[i + 1]]
+            vs = []
+            for v in quad:
+                if v not in vs:
+                    vs.append(v)
+            if len(vs) >= 3:
+                bm.faces.new(vs if side > 0 else list(reversed(vs)))
+    loop = R + list(reversed(Lf[1:-1]))
+    for i in range(len(loop)):
+        bm.faces.new((loop[(i + 1) % len(loop)], loop[i], bot))
+    return bm
+
+
+def ring_disc(node, mat, matrix, radius, seed=0, rings=6, sides=16, light=(0.93, 0.8, 0.6), dark=(0.72, 0.52, 0.32),
+              pith=(0.55, 0.36, 0.2), sap=(0.97, 0.88, 0.7), off=(0.07, 0.03), cracks=2, crack_col=(0.3, 0.2, 0.12)):
+    """伐った断面の年輪 (中心が原点、XY 平面、法線 +Z、半径 radius)。帯ごとに頂点を分けて色の境を立てる。
+    - 年輪は外ほど間が詰まり、髄 (中心) は off だけ片寄る (偏心)。輪の半径を角度でゆっくり揺らす
+    - 明るい早材の帯と細い暗い晩材の線を交互に、外の辺材は明るく、髄は暗く
+    - cracks 本の放射状の割れ (暗い細い楔) を少し浮かせて重ねる
+    matrix で置く。三角形は sides × (4 × rings + 1) + 割れ"""
+    r_ = random.Random(seed)
+    ph = [r_.uniform(0, 2 * math.pi) for _ in range(3)]
+    cx, cy = off[0] * radius, off[1] * radius
+
+    def ring_pt(f, i):
+        a = 2 * math.pi * i / sides
+        wob = 1 + 0.035 * math.sin(3 * a + ph[0]) + 0.02 * math.sin(5 * a + ph[1]) * f
+        # 中心は髄へ寄せ、外の輪ほど円周 (radius) に揃える
+        ox, oy = cx * (1 - f), cy * (1 - f)
+        rr = f * radius * (wob if f < 0.999 else 1.0)
+        return Vector((ox + rr * math.cos(a), oy + rr * math.sin(a), 0))
+
+    def band(f0, f1, color):
+        bm = bmesh.new()
+        if f0 <= 1e-6:
+            ctr = bm.verts.new((cx, cy, 0))
+            outer = [bm.verts.new(ring_pt(f1, i)) for i in range(sides)]
+            for i in range(sides):
+                bm.faces.new((ctr, outer[i], outer[(i + 1) % sides]))
+        else:
+            inner = [bm.verts.new(ring_pt(f0, i)) for i in range(sides)]
+            outer = [bm.verts.new(ring_pt(f1, i)) for i in range(sides)]
+            for i in range(sides):
+                j = (i + 1) % sides
+                bm.faces.new((inner[i], outer[i], outer[j], inner[j]))
+        jit = r_.uniform(0.95, 1.04)
+        node.add(bm, mat, matrix=matrix, smooth=False, recalc=False, shade=shade_const(mul3(color, jit)))
+
+    edges = [((j + 1) / rings) ** 0.8 for j in range(rings)]
+    prev = 0.0
+    band(0.0, edges[0] * 0.35, pith)
+    prev = edges[0] * 0.35
+    for j, e in enumerate(edges):
+        w = e - prev
+        late = max(0.012, w * 0.22)
+        t = j / max(1, rings - 1)
+        early = mix3(light, sap, max(0.0, t - 0.6) / 0.4)
+        band(prev, e - late, early)
+        band(e - late, e, dark if j < rings - 1 else mix3(dark, sap, 0.3))
+        prev = e
+    for c in range(cracks):
+        a = r_.uniform(0, 2 * math.pi)
+        bm = bmesh.new()
+        p0 = Vector((cx, cy, 0.004)) + Vector((math.cos(a), math.sin(a), 0)) * radius * r_.uniform(0.1, 0.3)
+        p1 = Vector((cx, cy, 0.004)) + Vector((math.cos(a), math.sin(a), 0)) * radius * r_.uniform(0.7, 0.95)
+        s = Vector((-math.sin(a), math.cos(a), 0)) * radius * 0.018
+        vs = [bm.verts.new(p0), bm.verts.new(p1 - s), bm.verts.new(p1 + s)]
+        bm.faces.new(vs)
+        node.add(bm, mat, matrix=matrix, smooth=False, recalc=False, shade=shade_const(crack_col))

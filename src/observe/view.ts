@@ -360,7 +360,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       scene.add(l.group);
     } else if (kind !== 'stump') {
       // (M22-03: 若木と芽も植え直せるよう、遠くも同じ形の組にして置き場所を入れ替えられるようにする)
-      const l = lodProps(node, node, mats, 45, OPT.trees);
+      // (鐘樹の段の作り直しで変更: 若木は作り直して 1,421 三角形になったので、45 m より先は遠距離版 belltree_sapling_lod1 (356 三角形) で描く)
+      const far = (kind === 'sapling' ? findNode(treeGlb, 'belltree_sapling_lod1') : null) ?? node;
+      const l = lodProps(node, far, mats, 45, OPT.trees);
       // (M23-04) 芽 (0.4 m) は影を落とさない (影が小さく見えない。下草と同じ)
       if (kind === 'seedling') l.group.traverse((o) => (o.castShadow = false));
       lods.push(l);
@@ -428,7 +430,14 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const understory: CulledProps[] = [];
   for (const [name, mats] of Object.entries(under)) {
     const node = findNode(floraGlb, name);
-    if (node && mats.length) understory.push(culledProps(node, mats, false));
+    // (鐘樹の段の作り直しで変更: 羊歯は作り直して 417 三角形になり、林の画で数百株が見えるので、22 m より先は遠距離版 fern_lod1 (120 三角形) で描く。
+    //  下草なので影は落とさない (近い・遠いの組の castShadow を切る)。自動カメラの遮り (lods) には入れない)
+    const far = findNode(floraGlb, `${name}_lod1`);
+    if (node && far && mats.length) {
+      const l = lodProps(node, far, mats, 22);
+      l.group.traverse((o) => (o.castShadow = false));
+      understory.push(l);
+    } else if (node && mats.length) understory.push(culledProps(node, mats, false));
   }
   for (const u of understory) scene.add(u.group);
 

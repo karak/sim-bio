@@ -40,6 +40,8 @@ M22-02
   幹は縦の裂け目と筋、鰭の板根、根元の苔(頂点色)。観察画面は切り抜きの葉のカードの材質(`src/observe/render/foliage.ts`、両面で法線を裏返さない、切り抜いた影)。
   成木 3,646 / lod1 1,080 / 森の木 1,288 / lod1 380 三角形。草の磨き上げを取り込んだ後、6 つの寄せ先で draw call 87〜108、三角形 109〜140 万。
   比較画 `docs/design/qa/observe/trees-before-after-{grove,groveTrack,settlementHigh}.png`・`trees-vs-reference.png`、記録は `docs/design/qa/observe/environment.md` の「追記(木の磨き上げ)」。単体テスト `tests/unit/observe.foliage.test.ts`。
+- 2026-09-24 鐘樹の段の作り直し(審査台 20:25 の t03-belltree・t03-flora・t03-grove・p-trees-settlement): 鐘を下の輪の房の太枝から出した小枝に紐で吊る(30 個、樹冠の表に付けない)。芽・若木・株・丸太と羊歯・小花・穂の月草を頂点色の作り込み(樹皮の筋・苔・地衣、年輪の木口、裂けた縁、中肋で折った葉、苔と落ち葉の地面)で作り直し、若木と羊歯に遠距離版。草の縁の光を日の影で消す(影の中の房が浮いて「草に木の影が落ちていない」に見えた)。
+  成木 3,923 / lod1 1,141 三角形(樹冠の葉のカードはそのまま)。6 つの寄せ先で三角形 23.5〜40.3 万(前 21.7〜34.2 万)、draw call 71〜103(前 70〜102)。比較画 `docs/design/qa/observe/trees2-*.png`、記録は `docs/design/qa/observe/environment.md` の「追記(鐘樹の段の作り直し)」。単体テスト `tests/unit/observe.grass.test.ts`。fps の前後は GPU を分け合って未確認。
 
 ## 残り(ユーザーの判断で積んだ順)
 
