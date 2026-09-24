@@ -1,11 +1,11 @@
 ---
 id: M23-07
 title: 塗りの負荷の計測と調整
-status: todo
+status: review
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-01]
-evidence: []
+evidence: ["3d717a7 tests/unit/observe.dynamicResolution.test.ts"]
 ---
 
 # 塗りの負荷の計測と調整
