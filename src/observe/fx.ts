@@ -7,6 +7,7 @@
  *   amount はゆっくり尾を引いて 0 へ)。余韻の間、霧は筋に千切れ、薄く広がって少し持ち上がる (atmosphere.ts が fade を読む)。
  * - sproutBurst(rng, radiusM): 芽吹きの粒 1 つの飛び方。植えた点から水平に放射状に飛び出し (速さ speed、向き angle)、
  *   抗力 SPROUT_DRAG で止まるまでに進む距離は radiusM の 0.55〜1.35 倍 (= speed / SPROUT_DRAG)。上向きの初速 up で弧を描く。
+ *   (M22-07 の 3 回目で変更: 進む距離は radiusM の SPROUT_REACH_MIN〜SPROUT_REACH_MAX (0.3〜1.0) 倍。粒は植えた円の中に収まり、外へ飛び出さない)
  * - wetness(prev, raining, dt): 雨の濡れ (水たまりの広がり、0〜1)。降っている間は WET_FILL_S 秒で満ち、止むと WET_DRY_S 秒で乾く。
  * - surgeStep(state, target, dt): 沈む海の海面と波立ち。見せる海面 level は target へ SURGE_RATE m/s で上がり
  *   (下がるときはすぐ)、上がっている間と上がり終えてから SURGE_HOLD_S 秒は surge (波立ちと流れ、0〜1) が 2.5 秒で 1 へ、
@@ -18,6 +19,11 @@ export const MIST_RISE_S = 4;
 export const MIST_LINGER_S = 32;
 
 export type MistEnvelope = { amount: number; fade: number };
+/**
+ * (M22-07 の 3 回目、疫病の霧「螺旋の動きがみえない。」) 渦の腕が回る速さ (rad/s、負は腕が外から中心へ吸い込まれて見える向き)。
+ * 2.5 秒で 60° 回り、見ていて回っているのが分かる (前は腕の位相の進みと回転が打ち消し合い、1 秒に 2° ほど)。render/atmosphere.ts の霧が使う
+ */
+export const MIST_SPIN = -0.42;
 
 export function mistEnvelope(age: number): MistEnvelope {
   if (age <= 0 || age >= MIST_S) return { amount: 0, fade: age >= MIST_S ? 1 : 0 };
@@ -31,11 +37,14 @@ export function mistEnvelope(age: number): MistEnvelope {
 }
 
 export const SPROUT_DRAG = 2.2;
+/** (M22-07 の 3 回目、芽吹き「放射が広すぎないか。草の周辺だけでいいのに」) 粒が止まるまでに進む距離の、植えた円の半径に対する倍率の幅 */
+export const SPROUT_REACH_MIN = 0.3;
+export const SPROUT_REACH_MAX = 1.0;
 
 export type SproutParticle = { angle: number; speed: number; up: number; delay: number };
 
 export function sproutBurst(rng: () => number, radiusM: number): SproutParticle {
-  const reach = radiusM * (0.55 + rng() * 0.8);
+  const reach = radiusM * (SPROUT_REACH_MIN + rng() * (SPROUT_REACH_MAX - SPROUT_REACH_MIN));
   // 放射の筋が揃って見えるよう、角度は 22 本の筋のまわりに寄せる (筋の間にもまばらに散らす)
   const ray = Math.floor(rng() * 22);
   const onRay = rng() < 0.7;

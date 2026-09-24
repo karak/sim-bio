@@ -14,7 +14,7 @@ import {
   Vector3,
 } from 'three';
 import type { Agent } from '../agents';
-import { SPROUT_DRAG, sproutBurst, sproutReach } from '../fx';
+import { SPROUT_DRAG, SPROUT_REACH_MAX, SPROUT_REACH_MIN, sproutBurst, sproutReach } from '../fx';
 
 /**
  * 空気の中の光の粒 (M22-07、基準画 sheets/effects の 1「倒れた鹿から立つ生気の粒」と key-visuals/herd の光の中の塵)。
@@ -35,18 +35,43 @@ const VITALITY_RATE = 32;
 const SPROUT = 900;
 const SPROUT_LIFE = 7;
 /** (M22-07 の手直し、芽吹き「粒の広がりと放射の鋭さがどちらも足りない」) 放射の広がり (m) は植えた円の半径のこの倍、下限 SPROUT_MIN_R */
-const SPROUT_SPREAD = 1.8;
-const SPROUT_MIN_R = 16;
+// (M22-07 の 3 回目で変更、芽吹き「放射が広すぎないか。草の周辺だけでいいのに何エリア分ある？」: 1.8 倍・下限 16 m (植えた 1 セルの点で届く所 24 m) → 0.9 倍・下限 5 m (9 m)。
+//  遠くから見分けるのは広さでなく、光の筋の鋭さと明るさで)
+const SPROUT_SPREAD = 0.9;
+const SPROUT_MIN_R = 5;
+/** (M22-07 の 3 回目) 地面の放射の光の板の半径は、粒の届く所 (SPROUT_SPREAD 倍の円) のこの倍 (前は 1.35 倍) */
+const BURST_OVER = 1.08;
+/**
+ * (M22-07 の 3 回目) 植えた円の半径 radiusM (m) から、粒の届く所の半径 reach (粒は reach の 0.3〜1.0 倍まで飛ぶ) と地面の光の板の半径 glow (m)。
+ * 植えた 1 セルの点 (radiusM = 10) で reach 9 m・glow 9.7 m (前は 18 m・24.3 m、粒は 24.3 m まで)
+ */
+export function sproutSpread(radiusM: number): { reach: number; glow: number } {
+  const reach = Math.max(SPROUT_MIN_R, Math.max(4, Math.min(30, radiusM)) * SPROUT_SPREAD);
+  return { reach, glow: reach * BURST_OVER };
+}
 /** (M22-07 の手直し) 地面の放射の光の残る秒数 */
 const BURST_S = 6;
 /** (M22-07 の手直し) 1 回の芽吹きで飛ばす粒の数 */
 const SPROUT_PER_BURST = 640;
 /** (M22-07 の手直し) 雨の跳ね返り: 同時に出せる数・1 秒に置く数 (雨の強さ 1 のとき)・1 つの長さ (秒) */
-const SPLASH = 1600;
-const SPLASH_RATE = 4000;
+// (M22-07 の 3 回目で変更: 1,600 個・毎秒 4,000 → 2,000 個・毎秒 5,000。石垣と柱に寄せる分を足しても、地面の跳ね返りの数を前とほぼ同じに保つ)
+const SPLASH = 2000;
+const SPLASH_RATE = 5000;
 const SPLASH_LIFE = 0.32;
 /** (M22-07 の手直し) 跳ね返りのうち屋根の上に寄せる割合 */
 const ROOF_SHARE = 0.22;
+/** (M22-07 の 3 回目、雨「跳ね返りの対象を石垣と柱に広げて」) 跳ね返りのうち石垣・灯り柱・立石・衝立の天端に寄せる割合 */
+const PROP_SHARE = 0.3;
+/**
+ * (M22-07 の 3 回目、雨「地面の雨の跳ね返りがあまりに大きい！ 屋根ですらおおげさで、それは演出としてよいが、むしろ草や土は見えないくらいでちょうどいい」)
+ * 当たった面ごとの跳ね返りの大きさ (点の大きさ 0.6 m に掛ける)・濃さ・長さ (SPLASH_LIFE に掛ける)。
+ * 草と土はかすかに (0.14 m・濃さ 0.3・0.2 秒)、屋根は少し控えめに (0.42 m)、石垣と柱の天端は屋根より小さく (0.33 m)
+ */
+export const SPLASH_KIND = {
+  ground: { scale: 0.24, alpha: 0.3, life: 0.6 },
+  roof: { scale: 0.7, alpha: 1, life: 1 },
+  prop: { scale: 0.55, alpha: 0.9, life: 0.9 },
+} as const;
 const RAIN = 3000;
 const RAIN_BOX = 30;
 
@@ -88,6 +113,8 @@ const pointVertex = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_PointSize = uSize * uScale / max(-mv.z, 0.5);
     gl_Position = projectionMatrix * mv;
+    // (M22-07 の 3 回目) 雨の跳ね返り (mode 5) は当たった面ごとの大きさ (aVel.x) を掛ける
+    if (uMode == 5) gl_PointSize *= aVel.x;
     if (uMode == 4) {
       // (M22-07 の手直し) 芽吹きの放射の粒: 速さの向きに伸ばした筋。頭と尾 (0.2 秒前の位置) を画面に写し、点の中心を真ん中に置いて筋を収める
       vec4 tail = projectionMatrix * (modelViewMatrix * vec4(p - aVel * 0.2, 1.0));
@@ -212,20 +239,24 @@ const burstFragment = /* glsl */ `
     vec2 v = (vXZ - uCenter) / uR;
     float rho = length(v);
     if (rho > 1.0) discard;
-    float front = 1.0 - exp(-3.4 * uAge);
+    // (M22-07 の 3 回目で変更、芽吹き「放射線の線が目立ちすぎる。筋として粒のあとをおうくらいの背景的な存在感に」:
+    //  筋の先は粒と同じ抗力 (SPROUT_DRAG) で進み、長さは粒の届く所と同じ幅 (植えた円の 0.3〜1.0 倍)。筋は先 (粒のすぐ後ろ) だけ淡く光り、
+    //  中心へ向かって消える尾にする。筋と輪の強さは前の 1/4 ほど、中心の光はそのまま)
+    float front = 1.0 - exp(-${SPROUT_DRAG.toFixed(3)} * uAge);
     float th = mod(atan(v.y, v.x), 6.28318);
     float N = 22.0;
     float sector = floor(th / 6.28318 * N);
     float center = (sector + 0.5) / N * 6.28318;
     float arc = abs(th - center) * rho * uR;
-    float len = 0.55 + 0.65 * h1(sector + 3.0);
+    float len = (${SPROUT_REACH_MIN.toFixed(2)} + ${(SPROUT_REACH_MAX - SPROUT_REACH_MIN).toFixed(2)} * h1(sector + 3.0)) / ${BURST_OVER.toFixed(3)};
     float tip = front * len;
-    float width = 0.1 + 0.28 * rho;
-    float ray = smoothstep(width, 0.0, arc) * smoothstep(tip, tip * 0.7, rho) * (1.0 - 0.5 * rho) * exp(-uAge / 1.7);
-    float ring = smoothstep(0.035, 0.0, abs(rho - front * 0.92)) * exp(-uAge / 1.1);
+    float width = 0.04 + 0.1 * rho;
+    float trail = smoothstep(tip - 0.32, tip, rho) * smoothstep(tip + 0.015, tip - 0.01, rho);
+    float ray = smoothstep(width, 0.0, arc) * trail * exp(-uAge / 1.4);
+    float ring = smoothstep(0.03, 0.0, abs(rho - front * 0.92)) * exp(-uAge / 1.1);
     float core = exp(-rho * rho * 140.0) * exp(-uAge / 2.6) * 1.1;
     float glowDisc = 0.18 * smoothstep(front, 0.0, rho) * exp(-uAge / 2.2);
-    float I = ray * 1.25 + ring * 0.9 + core + glowDisc;
+    float I = ray * 0.5 + ring * 0.25 + core + glowDisc;
     if (I < 0.003) discard;
     gl_FragColor = vec4(uColor * I, I);
   }
@@ -242,7 +273,8 @@ function drapedDisc(x: number, z: number, R: number, heightAt: (x: number, z: nu
 }
 
 // (M22-07 の手直しで変更: surfaceAt は雨の跳ね返りを置く面の高さ (屋根の上は屋根、無ければ heightAt)。roofPoints は屋根の上の点 (x・y・z の並び、render/roofs.ts))
-export type MotesInput = { rng: () => number; heightAt(x: number, z: number): number; lanterns: { x: number; z: number }[]; fireflyAt: { x: number; z: number }[]; surfaceAt?(x: number, z: number): number; roofPoints?: Float32Array };
+// (M22-07 の 3 回目で変更: propPoints は石垣・灯り柱・立石・衝立の天端の点 (x・y・z の並び、render/roofs.ts))
+export type MotesInput = { rng: () => number; heightAt(x: number, z: number): number; lanterns: { x: number; z: number }[]; fireflyAt: { x: number; z: number }[]; surfaceAt?(x: number, z: number): number; roofPoints?: Float32Array; propPoints?: Float32Array };
 export type Motes = {
   group: Group;
   // (M22-07 の手直しで変更: camera は向きも読む (雨の跳ね返りを画面の前に置く))
@@ -366,6 +398,9 @@ export function createMotes(input: MotesInput): Motes {
   const surfaceAt = input.surfaceAt ?? heightAt;
   const roofPts = input.roofPoints ?? new Float32Array(0);
   const roofN = roofPts.length / 3;
+  // (M22-07 の 3 回目) 石垣・柱の天端の点
+  const propPts = input.propPoints ?? new Float32Array(0);
+  const propN = propPts.length / 3;
   const splashMat = pointMaterial('#EEF4F6', 1.0, 0.6, 5);
   splashMat.blending = NormalBlending;
   splashMat.premultipliedAlpha = true;
@@ -380,6 +415,11 @@ export function createMotes(input: MotesInput): Motes {
   const pPhase = splashes.geometry.getAttribute('aSeed') as BufferAttribute;
   const pAlpha = splashes.geometry.getAttribute('aAlpha') as BufferAttribute;
   const pLife = new Float32Array(SPLASH);
+  // (M22-07 の 3 回目) 跳ね返りごとの長さ・濃さと、大きさ (aVel.x)
+  const pLife0 = new Float32Array(SPLASH);
+  const pA0 = new Float32Array(SPLASH);
+  const pSize = new BufferAttribute(new Float32Array(SPLASH * 3), 3);
+  splashes.geometry.setAttribute('aVel', pSize);
   let pNext = 0;
   let pDebt = 0;
   let rainAmount = 0;
@@ -415,8 +455,9 @@ export function createMotes(input: MotesInput): Motes {
       // 芽吹き: 植えた円の中から 2 秒かけて粒を出し、ゆっくり立ちのぼらせる
       // (M22-07 の手直しで変更: 植えた点から放射状に一度に飛び出させる (出る時刻を 0〜0.5 秒ずらす)。抗力で止まるまでに植えた円の 1.8 倍 (下限 16 m) の 0.55〜1.35 倍まで広がり、
       //  弧を描いて浮き、そのあとはゆっくり立ちのぼって薄れる。筋の向きと長さは速さ (aVel) から)
+      // (M22-07 の 3 回目で変更: 広がりは植えた円の 0.9 倍 (下限 5 m) の 0.3〜1.0 倍。植えた所の中に収める)
       for (const q of sQueue) {
-        const R = Math.max(SPROUT_MIN_R, q.r * SPROUT_SPREAD);
+        const R = sproutSpread(q.r).reach;
         const y0 = heightAt(q.x, q.z);
         for (let n = 0; n < SPROUT_PER_BURST; n++) {
           const k = sNext;
@@ -484,6 +525,7 @@ export function createMotes(input: MotesInput): Motes {
           let z = cz + Math.sin(a) * r;
           // 屋根は画面の中で面積が小さく、一様に置くと跳ね返りがほとんど見えないので、ROOF_SHARE を屋根の上の点に寄せる (カメラの前の円の中の屋根だけ)
           let y = Number.NaN;
+          let onRoof = false;
           if (roofN > 0 && rng() < ROOF_SHARE) {
             const q = Math.floor(rng() * roofN) * 3;
             const rx = roofPts[q] + (rng() - 0.5) * 0.5;
@@ -492,14 +534,35 @@ export function createMotes(input: MotesInput): Motes {
               x = rx;
               z = rz;
               y = roofPts[q + 1] + 0.12;
+              onRoof = true;
+            }
+          }
+          // (M22-07 の 3 回目、雨「跳ね返りの対象を石垣と柱に広げて」) PROP_SHARE は石垣・灯り柱・立石・衝立の天端の点に寄せる。
+          // 天端は屋根よりさらに小さいので、一様に置いた分だけでは跳ね返りがほとんど乗らない (カメラの前の円の中の天端だけ)
+          if (Number.isNaN(y) && propN > 0 && rng() < PROP_SHARE) {
+            const q = Math.floor(rng() * propN) * 3;
+            const px = propPts[q] + (rng() - 0.5) * 0.2;
+            const pz = propPts[q + 2] + (rng() - 0.5) * 0.2;
+            if (Math.hypot(px - cx, pz - cz) < 26) {
+              x = px;
+              z = pz;
+              y = propPts[q + 1] + 0.08;
             }
           }
           // 海 (高さ 0.3 m 未満) には置かない (海面の波紋は water.ts)
           if (Number.isNaN(y) && heightAt(x, z) < 0.3) continue;
+          // (M22-07 の 3 回目) 当たった面の種類: 屋根に寄せた分は屋根、天端に寄せた分と一様に置いて屋根・天端に落ちた分は硬い面、残りは草と土
+          const ground = heightAt(x, z);
+          const sy = Number.isNaN(y) ? surfaceAt(x, z) : y;
+          const kind = onRoof ? SPLASH_KIND.roof : sy > ground + 0.3 ? SPLASH_KIND.prop : SPLASH_KIND.ground;
           const k = pNext;
           pNext = (pNext + 1) % SPLASH;
           pPos.setXYZ(k, x, Number.isNaN(y) ? surfaceAt(x, z) + 0.06 : y, z);
           pLife[k] = SPLASH_LIFE * (0.8 + rng() * 0.4);
+          pLife[k] *= kind.life;
+          pLife0[k] = pLife[k];
+          pA0[k] = kind.alpha;
+          pSize.setX(k, kind.scale);
         }
         let pAny = false;
         for (let k = 0; k < SPLASH; k++) {
@@ -509,12 +572,14 @@ export function createMotes(input: MotesInput): Motes {
           }
           pAny = true;
           pLife[k] -= dt;
-          pPhase.setX(k, Math.min(1, 1 - pLife[k] / SPLASH_LIFE));
-          pAlpha.setX(k, pLife[k] > 0 ? 1 : 0);
+          // (M22-07 の 3 回目で変更: 進み具合は跳ね返りごとの長さで、濃さは当たった面ごとに)
+          pPhase.setX(k, Math.min(1, 1 - pLife[k] / pLife0[k]));
+          pAlpha.setX(k, pLife[k] > 0 ? pA0[k] : 0);
         }
         pPos.needsUpdate = true;
         pPhase.needsUpdate = true;
         pAlpha.needsUpdate = true;
+        pSize.needsUpdate = true;
         splashes.visible = pAny || rainAmount > 0.01;
         splashMat.uniforms.uAmount.value = Math.min(1, rainAmount * 1.2);
       }
@@ -566,7 +631,8 @@ export function createMotes(input: MotesInput): Motes {
     sprout(at, radiusM) {
       sQueue.push({ x: at.x, z: at.z, r: Math.max(4, Math.min(30, radiusM)), left: 2.4 });
       // (M22-07 の手直し) 地面の放射の光を植えた点に置き直す (粒の届く所まで)
-      const R = Math.max(SPROUT_MIN_R, Math.max(4, Math.min(30, radiusM)) * SPROUT_SPREAD) * 1.35;
+      // (M22-07 の 3 回目で変更: 板の半径は粒の届く所の BURST_OVER 倍 (前は 1.35 倍))
+      const R = sproutSpread(radiusM).glow;
       burst.geometry.dispose();
       burst.geometry = drapedDisc(at.x, at.z, R, heightAt, 0.3);
       burstMat.uniforms.uR.value = R;
