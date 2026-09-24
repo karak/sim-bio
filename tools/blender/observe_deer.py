@@ -73,11 +73,16 @@ PAL = {k: lin(v) for k, v in {
     "hoof": "#1F4B47",
     "antler_base": "#24514C",
     "glow": "#8FF5E6",
+    # (月鹿の手直しで追加) 装甲板の面取りと角の稜のハイライト (基準画の板の縁は明るい青緑、角の稜は白に近い光)
+    "plate_hi": "#62A396",
+    "glow_hi": "#E2FFFA",
 }.items()}
 WHITE = (1.0, 1.0, 1.0)
 
 BODY, PLATE, HOOF, ABASE, GLOW = range(5)
 MAT_NAMES = ["deer_body", "deer_plate", "deer_hoof", "deer_antler_base", "deer_glow"]
+PLATE_HI, GLOW_HI = 5, 6  # (月鹿の手直しで追加) 装甲板の面取りのハイライト・角の稜の光
+MAT_NAMES += ["deer_plate_hi", "deer_glow_hi"]
 
 
 def make_materials():
@@ -89,7 +94,8 @@ def make_materials():
         bsdf = nt.nodes["Principled BSDF"]
         bsdf.inputs["Roughness"].default_value = 0.8
         bsdf.inputs["Specular IOR Level"].default_value = 0.0
-        key = {"deer_body": "fur", "deer_plate": "plate", "deer_hoof": "hoof", "deer_antler_base": "antler_base", "deer_glow": "glow"}[name]
+        key = {"deer_body": "fur", "deer_plate": "plate", "deer_hoof": "hoof", "deer_antler_base": "antler_base", "deer_glow": "glow",
+               "deer_plate_hi": "plate_hi", "deer_glow_hi": "glow_hi"}[name]
         rgb = PAL[key]
         bsdf.inputs["Base Color"].default_value = (*rgb, 1)
         m.diffuse_color = (*rgb, 1)
@@ -99,6 +105,9 @@ def make_materials():
             vc.layer_name = "Col"
             nt.links.new(vc.outputs["Color"], bsdf.inputs["Base Color"])
         if name == "deer_glow":
+            bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
+            bsdf.inputs["Emission Strength"].default_value = 1.0
+        if name == "deer_glow_hi":  # (月鹿の手直しで追加) 角の稜: deer_glow と同じ強さで白に近い色
             bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
             bsdf.inputs["Emission Strength"].default_value = 1.0
         mats.append(m)
@@ -209,8 +218,10 @@ def cap(bm, rng, mat=BODY):
     return f
 
 
-def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
-    """折れ線に沿ったチューブ (角・枝・尾)。tip=True で最後を 1 点に収束。flat で断面を横 (X) 方向に潰す"""
+def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0, ridge=0.0):
+    """折れ線に沿ったチューブ (角・枝・尾)。tip=True で最後を 1 点に収束。flat で断面を横 (X) 方向に潰す
+    (月鹿の手直しで追加: ridge (ラジアン) > 0 は断面の上側の角 (断面の上向き v の側、sin > 0.5 の 2 つ) を ±ridge の 2 点に割り、
+    角に細い稜の面を立てて deer_glow_hi (白に近い光) にする。基準画の角の縁のハイライト。断面の頂点は n + 2 になる)"""
     rings = []
     for i, (p, r) in enumerate(zip(pts, radii)):
         if tip and i == len(pts) - 1:
@@ -219,8 +230,28 @@ def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
         d = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
         u = (Z.cross(d) if abs(d.z) < 0.9 else X.cross(d)).normalized()
         v = d.cross(u).normalized()
+        if ridge > 0:
+            vs = []
+            for k in range(n):
+                a0 = 2 * math.pi * k / n + phase
+                for a in ((a0 - ridge, a0 + ridge) if math.sin(a0) > 0.5 else (a0,)):
+                    vs.append(bm.verts.new(p + u * (r * flat * math.cos(a)) + v * (r * math.sin(a))))
+            rings.append(vs)
+            continue
         rings.append(ring(bm, p, u, v, r * flat, r, r, n, phase=phase))
     faces = loft(bm, rings, mat=mat, mats=mats)
+    if ridge > 0:  # (月鹿の手直しで追加) 稜の面 (割った 2 点のあいだの帯) の光る面を deer_glow_hi に
+        slots, j = [], 0
+        for k in range(n):
+            if math.sin(2 * math.pi * k / n + phase) > 0.5:
+                slots.append(j)
+                j += 2
+            else:
+                j += 1
+        per = j
+        for idx, f in enumerate(faces):
+            if idx % per in slots and f.material_index == GLOW:
+                f.material_index = GLOW_HI
     faces.append(cap(bm, list(reversed(rings[0])), mats[0] if mats else mat))
     if not tip:
         faces.append(cap(bm, rings[-1], mats[-1] if mats else mat))
@@ -356,6 +387,8 @@ ANTLER_BEAM = [(0.07, -0.71, 1.98), (0.20, -0.62, 2.03), (0.33, -0.50, 2.075),
                (0.47, -0.35, 2.14), (0.60, -0.15, 2.22), (0.665, 0.02, 2.36), (0.665, 0.08, 2.52), (0.62, 0.05, 2.68), (0.54, -0.05, 2.81), (0.45, -0.19, 2.90)]
 ANTLER_R = [0.058, 0.056, 0.055, 0.058, 0.06, 0.06, 0.056, 0.05, 0.036, 0.008]
 ANTLER_BASE_T = 0.28  # 主幹のうち根元 (深緑) の割合
+# (月鹿の手直しで追加) 角の稜: 断面の上側の角を割る角度 (ラジアン、近 LOD だけ)
+ANTLER_RIDGE = math.radians(7)
 ANTLER_TINES = [[(0.37, -0.46, 2.095), (0.27, -0.66, 2.14), (0.18, -0.84, 2.24), (0.13, -0.91, 2.44)],
                 [(0.54, -0.33, 2.19), (0.48, -0.37, 2.35), (0.41, -0.41, 2.52)]]
 ANTLER_TINE_R = [[0.052, 0.046, 0.036, 0.0], [0.052, 0.04, 0.0]]
@@ -371,14 +404,15 @@ def build_antler(bm, lod, side):
     radii = [r for (r,) in resample([(r,) for r in ANTLER_R], nb)]
     radii[-1] = 0.0
     mats = [ABASE if (i + 0.5) / (nb - 1) < ANTLER_BASE_T else GLOW for i in range(nb - 1)]
-    faces = tube(bm, dense, radii, n, mats=mats)
+    rg = ANTLER_RIDGE if lod["name"] == "hero" else 0.0  # (月鹿の手直しで追加) 近 LOD の角に光る稜
+    faces = tube(bm, dense, radii, n, mats=mats, ridge=rg)
     nt, tn = lod["tine"]
     for tpts, trr in zip(ANTLER_TINES, ANTLER_TINE_R):
         cnt = nt + len(tpts) - 3
         tp = resample_path([antler_fit((side * x, y, z)) for x, y, z in tpts], cnt)
         rr = [r for (r,) in resample([(r,) for r in trr], cnt)]
         rr[-1] = 0.0
-        faces += tube(bm, tp, rr, tn, mat=GLOW)
+        faces += tube(bm, tp, rr, tn, mat=GLOW, ridge=rg)
     bmesh.ops.recalc_face_normals(bm, faces=faces)
 
 
@@ -504,6 +538,20 @@ def outside(poly, i, d):
     return p[i % len(poly)]
 
 
+# (月鹿の手直しで追加) 装甲板の縁のハイライト: 基準画の板は面取りが明るい青緑に光り、縁取りのように読める (下を向く辺は陰で暗いまま)。
+# 側面図で辺の外向きの法線の上下成分がこれより大きい辺の面取りを deer_plate_hi にする
+PLATE_HI_MIN_NZ = -0.55
+
+
+def edge_lit(poly, i):
+    """(月鹿の手直しで追加) 多角形 (y, z) の辺 i (i → i+1) の面取りを明るくするか"""
+    k = len(poly)
+    area = sum(poly[j][0] * poly[(j + 1) % k][1] - poly[(j + 1) % k][0] * poly[j][1] for j in range(k))
+    a, b = Vector(poly[i]), Vector(poly[(i + 1) % k])
+    out = Vector((b.y - a.y, a.x - b.x)).normalized() * (1 if area > 0 else -1)  # 外向き
+    return out.y > PLATE_HI_MIN_NZ
+
+
 def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024, seam_band=False):
     """装甲板: 縁 (表面 +4 mm) → 縁の上 → 面取り (中心へ 74%) → 頂。光る辺には外側に帯を貼り、縁の壁も光らせる。
     outline は左側面から見た (y, z)。縁と面取りの境は硬いエッジ、頂はなめらか (丸めた角ばり)
@@ -534,6 +582,8 @@ def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024
         for i in range(k):
             f = bm.faces.new((a[i], a[(i + 1) % k], b[(i + 1) % k], b[i]))
             f.material_index = GLOW if (ri == 0 and glow[i] and seam_band) else PLATE
+            if ri == 1 and lod["plate_chaikin"] and edge_lit(poly, i):  # (月鹿の手直しで追加) 面取りの縁のハイライト
+                f.material_index = PLATE_HI
             faces.append(f)
     for f in faces:
         f.smooth = False
@@ -689,6 +739,11 @@ def lens(k, lf, lb, ht, hb, pf=0.2, pb=1.2, lift=0.0, dx=0.0):
     return out
 
 
+# (月鹿の手直しで追加) 近 LOD の目の形。lens() の (目頭までの長さ, 目尻までの長さ, 上まぶたの高さ, 下まぶたの高さ) と尖り。空にすると前の形
+EYE_HI = dict(rim=28, rim_shape=(0.070, 0.058, 0.027, 0.030), rim_pf=1.6, rim_pb=1.3, rim_lift=0.25,
+              iris=24, iris_shape=(0.036, 0.033, 0.019, 0.021), iris_pf=0.3, iris_pb=0.3, iris_lift=0.1, iris_dx=-0.002)
+
+
 def build_eye(bm, bvh_head, lod, side):
     loc, n, _, _ = bvh_head.ray_cast(Vector((side * 1.0, -0.84, 1.865)), Vector((-side, 0, 0)))
     if n.dot(Vector((side, 0, 0))) < 0:
@@ -722,6 +777,18 @@ def build_eye(bm, bvh_head, lod, side):
                 f.normal_flip()
 
     # (M22-05 残りの手直しで変更: 楕円から lens() の形へ。暗い縁は目尻を後ろ上へ尖らせて伸ばし、目頭は丸く。光る瞳は丸みを残して前へ寄せる)
+    if lod["name"] == "hero" and EYE_HI:
+        # (月鹿の手直しで追加) 基準画の目 (creatures/deer.png の側面・斜め前・正面、concept/deer-angular.png) に寄せる。
+        # 両端の尖った細長いレンズ: 目頭は前下へ細く尾を引いて尖り、目尻も後ろへ尖る (目尻の持ち上げは弱く、穏やかな目)。
+        # 暗い縁は上下とも細く、両端の尖りで太る。光る瞳は縁の中をほぼ満たす卵形で、両端を少し尖らせる (まぶたの内の輪郭)。
+        # 頂点は縁 28・瞳 24 (前は 12・12)。三角形は増えるが、両端の尖りと上下のまぶたの曲がりが滑らかに出る
+        kk = EYE_HI
+        k = kk["rim"]
+        disc(0, 0, 0.003, 0.002, ABASE, shape=lens(k, *kk["rim_shape"], pf=kk["rim_pf"], pb=kk["rim_pb"], lift=kk["rim_lift"]))
+        k = kk["iris"]
+        disc(0, 0, 0.006, 0.004, GLOW, shape=lens(k, *kk["iris_shape"], pf=kk["iris_pf"], pb=kk["iris_pb"], lift=kk["iris_lift"],
+                                                  dx=kk["iris_dx"]))
+        return
     if lod["name"] == "hero":
         disc(0.064, 0.04, 0.003, 0.002, ABASE, shape=lens(k, 0.054, 0.066, 0.026, 0.032, pf=0.9, pb=1.2, lift=0.7))
     disc(0.052, 0.03, 0.006, 0.005, GLOW, shape=lens(k, 0.036, 0.034, 0.017, 0.022, pf=0.2, pb=0.4, dx=0.006))
