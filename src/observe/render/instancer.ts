@@ -1,5 +1,6 @@
 import { Group, InstancedMesh, Matrix4, Sphere, type Camera, type Mesh, type Object3D } from 'three';
 import { ViewCull, packVisible, splitCount, uploadFront } from './cull';
+import { switchJitter, tierOf } from './impostor';
 
 /**
  * 同じ形の静物 (鐘樹・株・草むら・岩) を、GLB のノードごとに InstancedMesh へまとめる (設計 §8 の draw call 予算)。
@@ -41,7 +42,15 @@ export type LodProps = {
   setPlacements(placements: Matrix4[]): void;
   /** (M23-04) 影の代わりの形の組 (shadow を渡したとき)。呼び出し側が影の描画だけに出す (render/shadowOnly.ts) */
   shadow: Group | null;
+  /** (M23-06) インポスターの組 (beyond を渡したとき)。影を落とさず、光線に当たらない */
+  impostor: Group | null;
 };
+
+/**
+ * (M23-06) 遠い段 (lod1) のさらに先の段 (インポスター、render/impostor.ts)。node は板の形と材質 (bakeImpostor の mesh)。
+ * farM より先の木を板で描く。木ごとに farM × (1 + spread × 揺らぎ (-0.5〜0.5)) で切り替え、切り替わる木が輪に並ばないようにする
+ */
+export type FarTier = { node: Object3D; farM: number; spread?: number };
 
 /**
  * 近くは lod0、遠くは lod1 の 2 組の InstancedMesh に、カメラからの距離で置き場所を振り分ける (設計 §8 の三角形の予算)。
@@ -51,7 +60,11 @@ export type LodProps = {
  * (M23-04) shadow を渡すと、影は近い・遠いの形ではなく全部の木をこの粗い形で落とす (近い・遠いの組は castShadow = false)。
  * 影の組は視錐台で詰め直さない (影のカメラは区域全体を覆う)。置き場所を入れ替えたときだけ書き直す
  */
-export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], nearM: number, capacity = placements.length, shadow: Object3D | null = null): LodProps {
+/**
+ * (M23-06) beyond を渡すと 3 段にする (近い lod0・遠い lod1・インポスター)。インポスターの段の木は、lod1 の組の見えない側 (後ろ) に並べ続けるので、
+ * lod1 の組の影 (影の代わりの形が無いとき) と光線の当たり判定 (自動カメラの遮り) は今までどおり近くない全部の木で見る。インポスターの組は本の描画だけ
+ */
+export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], nearM: number, capacity = placements.length, shadow: Object3D | null = null, beyond: FarTier | null = null): LodProps {
   const near = instanceProps(lod0, placements, !shadow, capacity);
   const far = instanceProps(lod1, placements, !shadow, capacity);
   const group = new Group();
@@ -59,9 +72,21 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
   const proxy = shadow ? instanceProps(shadow, placements, true, capacity) : null;
   if (proxy) group.add(proxy);
   const proxyMeshes = (proxy?.children ?? []) as InstancedMesh[];
+  // (M23-06) インポスターの組: 影を落とさず、光線に当たらない (当たり判定は lod1 の組の全部の木が受け持つ)。視錐台はここで詰めるので three.js の丸ごとの判定は切る
+  const impostor = beyond ? instanceProps(beyond.node, placements, false, capacity) : null;
+  if (impostor) group.add(impostor);
+  const impostorMeshes = (impostor?.children ?? []) as InstancedMesh[];
+  for (const im of impostorMeshes) {
+    im.raycast = () => {};
+    im.frustumCulled = false;
+  }
+  const impostorLocal = beyond ? impostorMeshes.map((_, k) => localOf(beyond.node, k)) : [];
+  const spread = beyond?.spread ?? 0.2;
+  const farAt = (x: number, z: number) => (beyond ? beyond.farM * (1 + spread * switchJitter(x, z)) : 0);
   const proxyLocal = shadow ? proxyMeshes.map((_, k) => localOf(shadow, k)) : [];
   let xs = placements.map((p) => p.elements[12]);
   let zs = placements.map((p) => p.elements[14]);
+  let farMs = placements.map((p) => farAt(p.elements[12], p.elements[14]));
   const nearMeshes = near.children as InstancedMesh[];
   const farMeshes = far.children as InstancedMesh[];
   const nearLocal = nearMeshes.map((_, k) => localOf(lod0, k));
@@ -74,13 +99,20 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
     ...nearMeshes.map((im, k) => ({ im, local: nearLocal[k], near: 1, count: splitCount(im), ball: meshSphere(im, nearLocal[k]), balls: new Float32Array(0) as Float32Array })),
     ...farMeshes.map((im, k) => ({ im, local: farLocal[k], near: 0, count: splitCount(im), ball: meshSphere(im, farLocal[k]), balls: new Float32Array(0) as Float32Array })),
   ];
-  const measure = () => sets.forEach((st) => (st.balls = spheresOf(st.ball, placements)));
+  // (M23-06) インポスターの組 (近い・遠いの組と違い、見えない木は並べない)
+  const impostorSets = impostorMeshes.map((im, k) => ({ im, local: impostorLocal[k], ball: meshSphere(im, impostorLocal[k]), balls: new Float32Array(0) as Float32Array }));
+  const measure = () => {
+    sets.forEach((st) => (st.balls = spheresOf(st.ball, placements)));
+    impostorSets.forEach((st) => (st.balls = spheresOf(st.ball, placements)));
+  };
   measure();
-  let isNear = new Uint8Array(placements.length);
+  // (M23-06 で変更: 近い・遠いの 2 値から、段 (0 = 近い、1 = 遠い、2 = インポスター) に)
+  let tier = new Uint8Array(placements.length);
   const view = new ViewCull();
   return {
     group,
     shadow: proxy,
+    impostor,
     update(camera) {
       const now = performance.now();
       const regroup = now - last >= 250;
@@ -89,19 +121,32 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
       if (!regroup && !turned) return;
       if (regroup) {
         last = now;
-        for (let i = 0; i < placements.length; i++) isNear[i] = Math.hypot(xs[i] - camera.position.x, zs[i] - camera.position.z) < nearM ? 1 : 0;
+        for (let i = 0; i < placements.length; i++) tier[i] = tierOf(Math.hypot(xs[i] - camera.position.x, zs[i] - camera.position.z), nearM, farMs[i]);
       }
       for (const st of sets) {
+        const b = st.balls;
+        // (M23-06 で変更: 遠い組は段 1 と段 2 の木を並べ、本の描画に回すのは段 1 の見える木だけ。段 2 は見えない側に置き、影と当たり判定に残す)
+        const r = packVisible(
+          placements.length,
+          (i) => (st.near === 1 || tier[i] === 1) && (!eye || view.sees(b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3])),
+          (i, to) => st.im.setMatrixAt(to, m.multiplyMatrices(placements[i], st.local)),
+          true,
+          (i) => (tier[i] === 0 ? 1 : 0) === st.near,
+        );
+        st.count(r.visible, r.all);
+        uploadFront(st.im.instanceMatrix, r.all);
+      }
+      for (const st of impostorSets) {
         const b = st.balls;
         const r = packVisible(
           placements.length,
           (i) => !eye || view.sees(b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3]),
           (i, to) => st.im.setMatrixAt(to, m.multiplyMatrices(placements[i], st.local)),
-          true,
-          (i) => isNear[i] === st.near,
+          false,
+          (i) => tier[i] === 2,
         );
-        st.count(r.visible, r.all);
-        uploadFront(st.im.instanceMatrix, r.all);
+        st.im.count = r.visible;
+        uploadFront(st.im.instanceMatrix, r.visible);
       }
       // 近い・遠いの組み替えで中身が変わるので、描く範囲の判定と光線の当たり判定に使う境界の球を測り直す (M22-03)
       // (M23-02 で変更: 見える・見えないの並べ替えだけなら全部の木の組は変わらないので、測り直すのは組み替えたときだけ)
@@ -111,8 +156,9 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
       placements = next.slice(0, capacity);
       xs = placements.map((p) => p.elements[12]);
       zs = placements.map((p) => p.elements[14]);
+      farMs = placements.map((p) => farAt(p.elements[12], p.elements[14]));
       measure();
-      isNear = new Uint8Array(placements.length);
+      tier = new Uint8Array(placements.length);
       last = -Infinity;
       // (M23-04) 影の代わりの形は全部の木を並べ直す
       proxyMeshes.forEach((im, k) => {

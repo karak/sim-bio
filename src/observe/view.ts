@@ -42,6 +42,7 @@ import { createMotes } from './render/motes';
 import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { triangleBreakdown } from './render/breakdown';
 import { installShadowOnly } from './render/shadowOnly';
+import { bakeImpostor } from './render/impostor';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
@@ -58,6 +59,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
  * (M22-08: depart=1 で開いてすぐ舟が飛び去る。sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
+ * (M23-06: far は鐘樹の成木と森の木をインポスター (板) に替える距離 (m)。0 で切る)
  */
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => Number(params.get(k) ?? d);
@@ -82,6 +84,7 @@ const OPT = {
   time: num('time', 0.16),
   day: num('day', DAY_CYCLE_S),
   freeze: params.get('freeze') === '1',
+  far: num('far', 60),
 };
 /** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
 const AREA_R = 8;
@@ -334,8 +337,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const node = findNode(treeGlb, `belltree_${kind}`) ?? placeholderTree(kind as 'mature' | 'sapling' | 'seedling' | 'stump');
     const lod1 = kind === 'mature' ? findNode(treeGlb, 'belltree_mature_lod1') : null;
     if (lod1) {
+      // (M23-06) OPT.far より先は lod1 を焼いた板 (インポスター、2 三角形) で描く
+      const far = OPT.far > 0 ? { node: bakeImpostor(renderer, lod1).mesh, farM: OPT.far } : null;
       // (M23-04 で変更: 成木の影は近い・遠いの形ではなく、影の代わりの形 belltree_mature_shadow (420 三角形) で落とす)
-      const l = lodProps(node, lod1, mats, 38, OPT.trees, findNode(treeGlb, 'belltree_mature_shadow'));
+      const l = lodProps(node, lod1, mats, 38, OPT.trees, findNode(treeGlb, 'belltree_mature_shadow'), far);
       if (l.shadow) shadowOnly.add(l.shadow);
       lods.push(l);
       belltreeSets[kind] = l;
@@ -375,7 +380,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   };
   let forestSet: LodProps | null = null;
   if (forestNode && forestLod) {
-    forestSet = lodProps(forestNode, forestLod, selectForest(forest), 45, OPT.forest);
+    // (M23-06 で変更: OPT.far より先はインポスター。森の木は影の代わりの形を持たないので、影は今までどおり lod1 の組が全部の木で落とす)
+    const far = OPT.far > 0 ? { node: bakeImpostor(renderer, forestLod).mesh, farM: OPT.far } : null;
+    forestSet = lodProps(forestNode, forestLod, selectForest(forest), 45, OPT.forest, null, far);
     lods.push(forestSet);
     scene.add(forestSet.group);
   }
