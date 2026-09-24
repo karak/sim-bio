@@ -5,6 +5,7 @@
   (末尾に --parts を付けると、部品ごとの三角形数を出す)
 出力: <out_dir>/rabbit.glb と rabbit.blend
   - メッシュ `rabbit` (近 LOD、~1,500 三角形)、`rabbit_lod1` (群れ LOD、~500)。どちらも同じアーマチュア `rabbit_rig` (骨 24) にスキン
+  - (M23-08) メッシュ `rabbit_far` (遠い段、~80 三角形): 群れ LOD を島ごとに削った形 (creature_far.py)。耳は多く残し、光る紋は除く。描画は切ってある (hide_render)
   - アクション idle (4 s)・hop (0.5 s)・run (0.35 s)・graze (4 s)・alert (3 s)・fall (1.5 s、ループしない)。30 fps、その場 (root は動かさない)
   - 材質 rabbit_body (頂点色で地・腹の影・鼻づら・六角の縁取りの暗い青緑) / rabbit_ear (耳の内側と先の焦げ茶) / rabbit_nose / rabbit_glow (発光 #8FF5E6: 目・六角の紋・継ぎ目)
 基準画: assets/textures/board/creatures/rabbit.png (承認済み: 四方図・採食・立ち上がり)。造形の元は assets/textures/concept/rabbit-angular.png。
@@ -26,6 +27,9 @@ import bmesh
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from creature_far import build_far  # noqa: E402  (M23-08)
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT_DIR = argv[0] if argv else "assets/models/observe"
@@ -238,6 +242,15 @@ def frame_of(d):
 HERO = dict(name="hero", body=(9, 12), neck=(2, 10), head=(8, 12), ear=(6, 8), fleg=(6, 6), hleg=(5, 6), thigh=(5, 8),
             tail=(3, 6), eye=8, hex_ring=True, ribbon_seg=6, sq=2.15, hexes=None, seams=("back", "thigh", "shoulder"),
             comb_net=True, comb_glow=None)
+def far_ratio(c, mats, n):
+    """(M23-08) 遠い段で群れ LOD の島を削る割合 (creature_far.build_far)。光る紋と継ぎ目 (6 三角形ほどの小さな島) は除き、耳は 4 割、ほかは 2 割"""
+    if "rabbit_glow" in mats:
+        return 0.0
+    if "rabbit_ear" in mats:
+        return 0.4
+    return 0.2
+
+
 LOD1 = dict(name="lod1", body=(6, 8), neck=(2, 6), head=(5, 8), ear=(3, 4), fleg=(3, 4), hleg=(3, 4), thigh=(3, 6),
             tail=(2, 4), eye=4, hex_ring=False, ribbon_seg=3, sq=2.1, hexes={"chest": [0], "back": [0, 2], "top": [0]},
             seams=("back", "thigh"), comb_net=False, comb_glow=None)
@@ -1414,6 +1427,7 @@ def main():
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
     bake_actions(rig, meshes[0])
+    build_far(meshes[1], "rabbit_far", rig, far_ratio)  # (M23-08) 遠い段
     scene.frame_set(0)
     for o in scene.objects:
         o.select_set(True)

@@ -60,6 +60,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * (M22-08: depart=1 で開いてすぐ舟が飛び去る。sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  * (M23-06: far は鐘樹の成木と森の木をインポスター (板) に替える距離 (m)。0 で切る)
+ * (M23-08: cfar は動物を遠い段 (群れ LOD を削った形) に替える距離 (m、個体ごとに ±10%)。0 で切る)
  */
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => Number(params.get(k) ?? d);
@@ -68,6 +69,7 @@ const OPT = {
   deer: num('deer', 0),
   trees: num('trees', 140),
   near: num('near', 40),
+  cfar: num('cfar', 50),
   // (草の磨き上げ: 房を 36 三角形に減らした分、25,000 から 30,000 房に増やして草の絨毯を密にする)
   grass: num('grass', 30000),
   grade: flag('grade'),
@@ -500,7 +502,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   }
   let targets = targetCounts(area, K, folk);
   // (M23-04 で変更: 近くの骨入りの個体の影は群れ LOD で落とす)
-  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50), (o) => shadowOnly.add(o));
+  // (M23-08 で変更: 遠い段に替える距離 OPT.cfar を渡す)
+  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50), (o) => shadowOnly.add(o), OPT.cfar);
   scene.add(creatures.group);
   let agents: AgentWorld = { agents: [], nextId: 1 };
   let credit = 0;

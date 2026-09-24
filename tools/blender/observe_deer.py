@@ -4,6 +4,7 @@
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/observe_deer.py -- assets/models/observe
 出力: <out_dir>/deer.glb と deer.blend
   - メッシュ `deer` (近 LOD、~3,000 三角形)、`deer_lod1` (群れ LOD、~900)、`deer_doe` (角の無い雌、近 LOD と同じ密度)。3 つとも同じアーマチュア `deer_rig` にスキン
+  - (M23-08) メッシュ `deer_far` (遠い段、~210 三角形): 群れ LOD を島ごとに削った形 (creature_far.py)。光る角・脚・装甲板は多く残す。描画は切ってある (hide_render)
   - アクション idle (4 s)・walk (1.2 s)・run (0.6 s)・graze (5 s)・fall (2 s、ループしない)。30 fps、その場 (root は動かさない)
   - 材質 deer_body (頂点色で腹・喉・耳の内側を淡く) / deer_plate / deer_hoof / deer_antler_base / deer_glow (発光 #8FF5E6)
 基準画: assets/textures/board/creatures/deer.png (承認済み)。造形の元は assets/textures/concept/deer-angular.png と tools/blender/deer.py (ローポリ版)。
@@ -31,6 +32,9 @@ import bmesh
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from creature_far import build_far  # noqa: E402  (M23-08)
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT_DIR = argv[0] if argv else "assets/models/observe"
@@ -226,6 +230,18 @@ def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
 # ---------------------------------------------------------------- LOD の密度
 HERO = dict(name="hero", body=(15, 16), neck=(7, 12), head=(10, 12), leg=(12, 8), hoof=8, antler=(12, 6), tine=(3, 6),
             ear=(4, 8), tail=(3, 6), plate_chaikin=True, ribbon_seg=12, eye=12, sq=2.4)  # (M22-05 残りの手直しで変更: eye 10 → 12、目尻の尖りを出す)
+def far_ratio(c, mats, n):
+    """(M23-08) 遠い段で群れ LOD の島を削る割合 (creature_far.build_far)。光る角 (1.9 m より上) は半分残し、胴の光る帯と目は除く。
+    脚 (蹄の材質を持つ島。鼻の暗い色を持つ頭も入る) は関節の曲がりが読めるよう 3 割、装甲板は色の斑が残るよう 35%、胴・首・耳・尾は 2 割"""
+    if "deer_glow" in mats:
+        return 0.5 if c.z > 1.9 else 0.0
+    if "deer_hoof" in mats:
+        return 0.3
+    if "deer_plate" in mats:
+        return 0.35
+    return 0.2
+
+
 LOD1 = dict(name="lod1", body=(7, 10), neck=(4, 8), head=(6, 8), leg=(6, 5), hoof=0, antler=(6, 4), tine=(2, 4),
             ear=(2, 4), tail=(2, 4), plate_chaikin=False, ribbon_seg=4, eye=4, sq=2.2)
 
@@ -1437,6 +1453,8 @@ def main():
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
     bake_actions(rig, meshes)  # (M22-05 残りの手直しで変更: 地面へのめり込みを測るためにメッシュを渡す)
+    # (M23-08) 遠い段はアクションを焼いた後に作る (接地の持ち上げは渡したメッシュの一番低い頂点で決まるので、先に作ると lod0・lod1 のアニメが変わる)
+    build_far(meshes[1], "deer_far", rig, far_ratio)
     scene.frame_set(0)
     for o in scene.objects:
         o.select_set(True)
