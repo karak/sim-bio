@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { BoxGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, Vector3, type InstancedMesh } from 'three';
 import { lodProps } from '../../src/observe/render/instancer';
 import { switchJitter } from '../../src/observe/render/impostor';
@@ -128,25 +129,61 @@ describe('小屋の切り替えの距離 (HUT_NEAR_M・HUT_NEAR_SPREAD)', () => 
   const huts = hutPlacements({ x: 0, z: 0 }, { x: 0, z: -6 }, () => 0);
   const maxSwitch = HUT_NEAR_M * (1 + HUT_NEAR_SPREAD / 2);
 
-  it('切り替えは 30〜40 m の間 (チケットの幅)', () => {
-    for (const h of huts) {
-      const m = HUT_NEAR_M * (1 + HUT_NEAR_SPREAD * switchJitter(h.x, h.z));
-      expect(m).toBeGreaterThan(28);
-      expect(m).toBeLessThan(40);
+  const switchOf = (h: { x: number; z: number }) => HUT_NEAR_M * (1 + HUT_NEAR_SPREAD * switchJitter(h.x, h.z));
+
+  it('切り替えは 34〜40 m の間 (やり直しで 32 → 36 m。不合格の寄せ引きの小屋は 30.6 → 34.4 m)', () => {
+    expect(HUT_NEAR_M).toBe(36);
+    const ms = huts.map((h) => +switchOf(h).toFixed(1));
+    expect(ms).toEqual([37.4, 34.4, 36.8]);
+    for (const m of ms) {
+      expect(m).toBeGreaterThan(34);
+      expect(m).toBeLessThanOrEqual(maxSwitch);
     }
     expect(huts).toHaveLength(HUT_OFFSETS.length);
   });
 
-  it('集落の俯瞰 (中心から 46 m 引いて 30 m の高さ、shotCamera の settlementHigh) では、どの向きからでも 3 棟とも遠距離版', () => {
+  it('集落の俯瞰 (中心から 46 m 引いて 30 m の高さ、shotCamera の settlementHigh) では、どの向きからでも 3 棟とも遠距離版 (回っても替わらない)', () => {
     for (let k = 0; k < 72; k++) {
       const a = (k / 72) * Math.PI * 2;
       const cam = { x: Math.sin(a) * 46, y: 30, z: Math.cos(a) * 46 };
-      for (const h of huts) expect(Math.hypot(h.x - cam.x, h.y - cam.y, h.z - cam.z)).toBeGreaterThan(maxSwitch);
+      for (const h of huts) expect(Math.hypot(h.x - cam.x, h.y - cam.y, h.z - cam.z)).toBeGreaterThan(switchOf(h) + 2);
     }
   });
 
   it('3 棟の切り替えの距離はみな違う (同じ距離で一斉に替わらない)', () => {
     const ms = huts.map((h) => HUT_NEAR_M * (1 + HUT_NEAR_SPREAD * switchJitter(h.x, h.z)));
     expect(new Set(ms.map((m) => m.toFixed(2))).size).toBe(huts.length);
+  });
+});
+
+describe('settlement.glb の小屋の 3 つの形 (M23-09 のやり直し)', () => {
+  // glb の JSON の塊から、ノードごとの三角形の数と材質の名前を読む
+  const glb = readFileSync(new URL('../../assets/models/observe/settlement.glb', import.meta.url));
+  const json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8')) as {
+    nodes: { name: string; mesh?: number }[];
+    meshes: { primitives: { indices: number; material: number }[] }[];
+    accessors: { count: number }[];
+    materials: { name: string }[];
+  };
+  const nodeOf = (name: string) => {
+    const node = json.nodes.find((n) => n.name === name);
+    const prims = node?.mesh === undefined ? [] : json.meshes[node.mesh].primitives;
+    return {
+      triangles: prims.reduce((t, p) => t + json.accessors[p.indices].count / 3, 0),
+      materials: prims.map((p) => json.materials[p.material].name).sort(),
+    };
+  };
+
+  it('遠距離版 hut_lod1 は hut の約半分、影の形 hut_shadow は前の遠距離版 (1,249)', () => {
+    const [hut, far, shadow] = ['hut', 'hut_lod1', 'hut_shadow'].map(nodeOf);
+    expect(hut.triangles).toBe(10178);
+    expect(far.triangles).toBe(5296);
+    expect(shadow.triangles).toBe(1249);
+    // 遠距離版は hut と同じ材質で塗る (屋根板・石の頂点色の白の材質、蔓、紋・灯籠の光)
+    for (const m of ['settlement_roof', 'settlement_stone_paint', 'settlement_vine', 'settlement_glyph', 'settlement_lantern']) {
+      expect(hut.materials).toContain(m);
+      expect(far.materials).toContain(m);
+    }
+    expect(far.materials.every((m) => hut.materials.includes(m))).toBe(true);
   });
 });
