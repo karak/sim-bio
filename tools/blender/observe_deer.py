@@ -76,6 +76,9 @@ PAL = {k: lin(v) for k, v in {
     # (月鹿の手直しで追加) 装甲板の面取りと角の稜のハイライト (基準画の板の縁は明るい青緑、角の稜は白に近い光)
     "plate_hi": "#62A396",
     "glow_hi": "#E2FFFA",
+    # (月鹿の手直し 3 で追加) 角の内側の面 (明るい) と外側の面 (暗い青緑)。基準画 creatures/deer.png の角の寄りから
+    "glow_in": "#A8F5EC",
+    "glow_lo": "#58BAB6",
 }.items()}
 WHITE = (1.0, 1.0, 1.0)
 
@@ -83,6 +86,9 @@ BODY, PLATE, HOOF, ABASE, GLOW = range(5)
 MAT_NAMES = ["deer_body", "deer_plate", "deer_hoof", "deer_antler_base", "deer_glow"]
 PLATE_HI, GLOW_HI = 5, 6  # (月鹿の手直しで追加) 装甲板の面取りのハイライト・角の稜の光
 MAT_NAMES += ["deer_plate_hi", "deer_glow_hi"]
+# (月鹿の手直し 3 で追加) 角の内側 (曲がりの内) の明るい面と、外側の暗い面 (基準画の角の面の明暗)
+GLOW_IN, GLOW_LO = 7, 8
+MAT_NAMES += ["deer_glow_in", "deer_glow_lo"]
 
 
 def make_materials():
@@ -95,7 +101,7 @@ def make_materials():
         bsdf.inputs["Roughness"].default_value = 0.8
         bsdf.inputs["Specular IOR Level"].default_value = 0.0
         key = {"deer_body": "fur", "deer_plate": "plate", "deer_hoof": "hoof", "deer_antler_base": "antler_base", "deer_glow": "glow",
-               "deer_plate_hi": "plate_hi", "deer_glow_hi": "glow_hi"}[name]
+               "deer_plate_hi": "plate_hi", "deer_glow_hi": "glow_hi", "deer_glow_in": "glow_in", "deer_glow_lo": "glow_lo"}[name]
         rgb = PAL[key]
         bsdf.inputs["Base Color"].default_value = (*rgb, 1)
         m.diffuse_color = (*rgb, 1)
@@ -108,6 +114,9 @@ def make_materials():
             bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
             bsdf.inputs["Emission Strength"].default_value = 1.0
         if name == "deer_glow_hi":  # (月鹿の手直しで追加) 角の稜: deer_glow と同じ強さで白に近い色
+            bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
+            bsdf.inputs["Emission Strength"].default_value = 1.0
+        if name in ("deer_glow_in", "deer_glow_lo"):  # (月鹿の手直し 3 で追加) 角の内側・外側の面: deer_glow と同じ強さ
             bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
             bsdf.inputs["Emission Strength"].default_value = 1.0
         mats.append(m)
@@ -258,6 +267,68 @@ def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0, 
     return faces
 
 
+# (月鹿の手直し 3 で追加) 角のハイライトの再現 (審査台 d2-deer「つののハイライトの再現率を上げて」)。基準画の角は面の立った刃で、
+# 曲がりの内側 (三日月の内) を向く面が明るく、その両の縁が白く光り、外側の面は暗い青緑。近 LOD の角は断面を曲がりの内へ向けて組み、
+# 内の面を deer_glow_in、その両の縁の細い帯を deer_glow_hi、内寄りの横の 2 面を deer_glow、外の 3 面を deer_glow_lo にする
+ANTLER_LIT = True
+ANTLER_EDGE = math.radians(8)  # 内の面の縁の帯の半幅 (断面の角度)
+
+
+def bend_dirs(pts):
+    """(月鹿の手直し 3 で追加) 折れ線の各点で曲がりの内 (曲率の中心) の向き。端と曲がらない所は隣の値を引き継ぎ、隣と平均してなめらかにする"""
+    m = len(pts)
+    tans = [(pts[min(i + 1, m - 1)] - pts[max(i - 1, 0)]).normalized() for i in range(m)]
+    raw = [None] * m
+    for i in range(1, m - 1):
+        c = pts[i - 1] + pts[i + 1] - pts[i] * 2
+        c -= tans[i] * c.dot(tans[i])
+        if c.length > 1e-6:
+            raw[i] = c.normalized()
+    known = [i for i in range(m) if raw[i] is not None]
+    if not known:
+        ref = Z - tans[0] * Z.dot(tans[0])
+        return tans, [ref.normalized()] * m
+    for i in range(m):
+        if raw[i] is None:
+            raw[i] = raw[min(known, key=lambda j: abs(j - i))]
+    out = []
+    for i in range(m):
+        k = raw[max(i - 1, 0)] + raw[i] * 2 + raw[min(i + 1, m - 1)]
+        k -= tans[i] * k.dot(tans[i])
+        k = k.normalized() if k.length > 1e-6 else raw[i]
+        if out and k.dot(out[-1]) < 0:
+            k = out[-1] - tans[i] * out[-1].dot(tans[i])  # 曲がりが反る所は前の向きを保つ (断面をねじらない)
+            k.normalize()
+        out.append(k)
+    return tans, out
+
+
+def tube_lit(bm, pts, radii, mats=None, mat=GLOW, tip=True):
+    """(月鹿の手直し 3 で追加) 曲がりの内へ 1 つの面を向けた 6 角の断面のチューブ (内の面の両の角を割って 8 頂点)。
+    面の並び: 0 内の面 / 1 縁 / 2 内寄りの横 / 3〜5 外 / 6 内寄りの横 / 7 縁。mats[i] が GLOW の帯だけ面ごとに光の材質を分ける"""
+    tans, bends = bend_dirs(pts)
+    e = ANTLER_EDGE
+    angs = [-math.pi / 6 + e, math.pi / 6 - e, math.pi / 6 + e, math.pi / 2, 5 * math.pi / 6, 7 * math.pi / 6, 3 * math.pi / 2,
+            11 * math.pi / 6 - e]
+    rings = []
+    for i, (p, r) in enumerate(zip(pts, radii)):
+        if tip and i == len(pts) - 1:
+            rings.append(bm.verts.new(p))
+            continue
+        e1 = bends[i]
+        e2 = tans[i].cross(e1).normalized()
+        rings.append([bm.verts.new(p + e1 * (r * math.cos(a)) + e2 * (r * math.sin(a))) for a in angs])
+    faces = loft(bm, rings, mat=mat, mats=mats)
+    by_slot = {0: GLOW_IN, 1: GLOW_HI, 2: GLOW, 3: GLOW_LO, 4: GLOW_LO, 5: GLOW_LO, 6: GLOW, 7: GLOW_HI}
+    for idx, f in enumerate(faces):
+        if f.material_index == GLOW:
+            f.material_index = by_slot[idx % len(angs)]
+    faces.append(cap(bm, list(reversed(rings[0])), mats[0] if mats else mat))
+    if not tip:
+        faces.append(cap(bm, rings[-1], mats[-1] if mats else mat))
+    return faces
+
+
 # ---------------------------------------------------------------- LOD の密度
 HERO = dict(name="hero", body=(15, 16), neck=(7, 12), head=(10, 12), leg=(12, 8), hoof=8, antler=(12, 6), tine=(3, 6),
             ear=(4, 8), tail=(3, 6), plate_chaikin=True, ribbon_seg=12, eye=12, sq=2.4)  # (M22-05 残りの手直しで変更: eye 10 → 12、目尻の尖りを出す)
@@ -343,16 +414,68 @@ HEAD_KEYS = [
 ]
 NOSE_Y = -1.152
 
+# (月鹿の手直し 3 で追加) 顔の面 (審査台 d2-deer「正面がで👀がみえるように鼻筋を通して頬や眼窩の部分も設ける」)。
+# 基準画の正面は、額から鼻先へ明るい鼻筋が細く通り、その両脇の眼窩の面に目が前を向いて収まる。頬は目の下・外で張り、鼻づらは目の前で細くなる。
+# 近 LOD (雄・雌) の頭は、超楕円の代わりに角を持つ断面 (head_corners_face) で組む: 鼻筋の縁・眼窩の上の縁 (眉)・頬の張り・顎の縁。
+# 眼窩の上の縁は目の前 (鼻先の側) で内へ寄せ (HEAD_ORBIT_IN)、目の載る面を前へ向ける。目はその面へ前寄りの向きから載せる (EYE_FACE_DIR)
+HEAD_FACE = True
+HEAD_FACE_PAIRS = [False, True, False, True, False, False]
+HEAD_ORBIT_IN = 0.30  # 眼窩の上の縁を目の前で内へ寄せる割合
+EYE_FACE_DIR = (0.80, -0.58, 0.10)  # 目を載せる向き (x は side を掛ける)。前は真横 (1, 0, 0)
+EYE_FACE_AT = (-0.855, 1.853)  # 目を載せる狙いの (y, z)
+EYE_FACE_TILT = 0.42  # 目の長軸の前下がり (前は 0.25)
+EYE_FACE_SCALE = 1.12  # 目の大きさ (近 LOD の EYE_HI の形に掛ける)
+# 硬いエッジにする断面の頂点 (facet_ring の並び: 0 頭頂、1-2 / 13-12 鼻筋の縁、3 / 11 眼窩の上の縁、4-5 / 10-9 頬の張り、6 / 8 顎の縁、7 顎の下)
+HEAD_FACE_SHARP = (1, 2, 12, 13, 3, 11, 4, 5, 9, 10)
+HEAD_FACE_SHARP_Y = -0.66  # これより前 (鼻先の側) の断面のあいだだけ (後頭部はなめらか)
+
+
+def facet_ring(bm, center, ux, uy, corners, pairs, bevel=0.2):
+    """(月鹿の手直し 3 で追加) 面の立った断面のリング (observe_rabbit.py の facet_ring と同じ)。corners は右半分の角を上から下へ。
+    pairs[i] が真の角は 2 点 (両隣の辺へ bevel の割合だけ寄せる)。並びは上 → -ux の側 → 下 → +ux の側"""
+    pts = [corners[0]]
+    for i in range(1, len(corners) - 1):
+        c = Vector(corners[i])
+        if pairs[i]:
+            a, b = Vector(corners[i - 1]), Vector(corners[i + 1])
+            pts += [tuple(c + (a - c) * bevel), tuple(c + (b - c) * bevel)]
+        else:
+            pts.append(tuple(c))
+    pts.append(corners[-1])
+    loop = [(-x, y) for x, y in pts] + [(x, y) for x, y in reversed(pts[1:-1])]
+    return [bm.verts.new(center + ux * x + uy * y) for x, y in loop]
+
+
+def head_corners_face(rx, rt, rb, pinch, y):
+    """(月鹿の手直し 3 で追加) 頭の断面の角 (右半分、上から下): 頭頂・鼻筋の縁・眼窩の上の縁・頬の張り・顎の縁・顎の下"""
+    bridge = 0.40 - 0.12 * smoothstep(-0.80, -1.05, y)
+    orbit = 1.0 - HEAD_ORBIT_IN * smoothstep(-0.78, -0.95, y) * (1 - smoothstep(-1.02, -1.12, y))
+    rx *= 1.04
+    return [(0.0, rt), (bridge * rx, 0.97 * rt), (0.80 * rx * orbit, 0.58 * rt), (rx, -0.22 * rb),
+            (0.62 * rx * (1 - 0.5 * pinch), -0.80 * rb), (0.0, -rb)]
+
+
 def build_head(bm, lod):
     nsec, n = lod["head"]
     secs = resample(HEAD_KEYS, nsec)
-    rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rt, rb, n, pinch, sq=2.2, phase=math.pi / 2) for y, zc, rx, rt, rb, pinch in secs]
+    rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rt, rb, n, pinch, sq=2.2, phase=math.pi / 2) for y, zc, rx, rt, rb, pinch in secs] \
+        if not (lod["name"] == "hero" and HEAD_FACE) else \
+        [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners_face(rx, rt, rb, pinch, y), HEAD_FACE_PAIRS, bevel=0.18)
+         for y, zc, rx, rt, rb, pinch in secs]  # (月鹿の手直し 3 で変更: 近 LOD は角を持つ断面 head_corners_face)
     back = bm.verts.new((0, secs[0][0] + 0.012, secs[0][1]))
     tip = bm.verts.new((0, secs[-1][0] - 0.012, secs[-1][1]))
     faces = loft(bm, [back] + rings + [tip])
     for f in faces:
         if f.calc_center_median().y < NOSE_Y:
             f.material_index = HOOF  # 鼻 (基準画では暗い)
+    if lod["name"] == "hero" and HEAD_FACE:  # (月鹿の手直し 3 で追加) 顔の鼻筋・眼窩の上の縁・頬の張りの角は硬いエッジ
+        for (ya, ra), (yb, rb_) in zip(zip([q[0] for q in secs], rings), zip([q[0] for q in secs[1:]], rings[1:])):
+            if max(ya, yb) > HEAD_FACE_SHARP_Y:
+                continue
+            for j in HEAD_FACE_SHARP:
+                e = bm.edges.get((ra[j], rb_[j]))
+                if e is not None:
+                    e.smooth = False
 
 
 def build_ears(bm, lod, side):
@@ -405,14 +528,15 @@ def build_antler(bm, lod, side):
     radii[-1] = 0.0
     mats = [ABASE if (i + 0.5) / (nb - 1) < ANTLER_BASE_T else GLOW for i in range(nb - 1)]
     rg = ANTLER_RIDGE if lod["name"] == "hero" else 0.0  # (月鹿の手直しで追加) 近 LOD の角に光る稜
-    faces = tube(bm, dense, radii, n, mats=mats, ridge=rg)
+    lit = lod["name"] == "hero" and ANTLER_LIT  # (月鹿の手直し 3 で追加) 近 LOD の角は内の面を明るく、縁を光らせる (tube_lit)
+    faces = tube_lit(bm, dense, radii, mats=mats) if lit else tube(bm, dense, radii, n, mats=mats, ridge=rg)
     nt, tn = lod["tine"]
     for tpts, trr in zip(ANTLER_TINES, ANTLER_TINE_R):
         cnt = nt + len(tpts) - 3
         tp = resample_path([antler_fit((side * x, y, z)) for x, y, z in tpts], cnt)
         rr = [r for (r,) in resample([(r,) for r in trr], cnt)]
         rr[-1] = 0.0
-        faces += tube(bm, tp, rr, tn, mat=GLOW, ridge=rg)
+        faces += tube_lit(bm, tp, rr, mat=GLOW) if lit else tube(bm, tp, rr, tn, mat=GLOW, ridge=rg)
     bmesh.ops.recalc_face_normals(bm, faces=faces)
 
 
@@ -746,9 +870,14 @@ EYE_HI = dict(rim=28, rim_shape=(0.070, 0.058, 0.027, 0.030), rim_pf=1.6, rim_pb
 
 def build_eye(bm, bvh_head, lod, side):
     loc, n, _, _ = bvh_head.ray_cast(Vector((side * 1.0, -0.84, 1.865)), Vector((-side, 0, 0)))
+    if lod["name"] == "hero" and HEAD_FACE:  # (月鹿の手直し 3 で追加) 眼窩の面へ前寄りの向きから載せる (正面から目が見える)
+        dd = Vector((side * EYE_FACE_DIR[0], *EYE_FACE_DIR[1:])).normalized()
+        loc, n, _, _ = bvh_head.ray_cast(Vector((0, *EYE_FACE_AT)) + dd, -dd)
     if n.dot(Vector((side, 0, 0))) < 0:
         n = -n
     u = Vector((0, -1, -0.25))  # (M22-05 残りの手直しで変更: -0.12 → -0.25。頭の面の傾きと合わせて、真横から目頭が 20° ほど下がって見える)
+    if lod["name"] == "hero" and HEAD_FACE:
+        u = Vector((0, -1, -EYE_FACE_TILT))  # (月鹿の手直し 3 で追加) 正面から目頭が鼻へ向かって下がって見えるように
     u = (u - n * u.dot(n)).normalized()  # 目の長軸 (鼻先へ少し下がる)
     v = n.cross(u).normalized()
     if v.z < 0:
@@ -784,10 +913,12 @@ def build_eye(bm, bvh_head, lod, side):
         # 頂点は縁 28・瞳 24 (前は 12・12)。三角形は増えるが、両端の尖りと上下のまぶたの曲がりが滑らかに出る
         kk = EYE_HI
         k = kk["rim"]
-        disc(0, 0, 0.003, 0.002, ABASE, shape=lens(k, *kk["rim_shape"], pf=kk["rim_pf"], pb=kk["rim_pb"], lift=kk["rim_lift"]))
+        sc = EYE_FACE_SCALE if HEAD_FACE else 1.0  # (月鹿の手直し 3 で追加) 眼窩の面の目は一回り大きく (基準画の正面)
+        disc(0, 0, 0.003, 0.002, ABASE, shape=[(x * sc, y * sc) for x, y in
+                                               lens(k, *kk["rim_shape"], pf=kk["rim_pf"], pb=kk["rim_pb"], lift=kk["rim_lift"])])
         k = kk["iris"]
-        disc(0, 0, 0.006, 0.004, GLOW, shape=lens(k, *kk["iris_shape"], pf=kk["iris_pf"], pb=kk["iris_pb"], lift=kk["iris_lift"],
-                                                  dx=kk["iris_dx"]))
+        disc(0, 0, 0.006, 0.004, GLOW, shape=[(x * sc, y * sc) for x, y in
+                                              lens(k, *kk["iris_shape"], pf=kk["iris_pf"], pb=kk["iris_pb"], lift=kk["iris_lift"], dx=kk["iris_dx"])])
         return
     if lod["name"] == "hero":
         disc(0.064, 0.04, 0.003, 0.002, ABASE, shape=lens(k, 0.054, 0.066, 0.026, 0.032, pf=0.9, pb=1.2, lift=0.7))
@@ -806,6 +937,9 @@ def color_for(part, co, n):
     if part == "head":
         c = mix(PAL["fur"], PAL["muzzle"], smoothstep(-0.95, -1.1, co.y))
         c = mix(c, PAL["belly"], smoothstep(-0.2, -0.7, n.z))
+        if HEAD_FACE:  # (月鹿の手直し 3 で追加) 明るい鼻筋 (上を向く細い面、額から鼻先へ) と、頬の張りの下の陰
+            c = mix(c, PAL["belly"], smoothstep(0.55, 0.85, n.z) * smoothstep(-0.62, -0.78, co.y) * 0.85)
+            c = mix(c, PAL["fur_back"], smoothstep(0.0, -0.4, n.z) * smoothstep(0.55, 0.85, abs(n.x)) * smoothstep(-0.70, -0.80, co.y) * 0.6)
         return c
     if part.startswith("ear"):
         return PAL["ear_in"] if n.dot(EAR_FRONT[part]) > 0.25 else PAL["fur"]

@@ -93,6 +93,9 @@ glow = bpy.data.materials[f"{species}_glow"]
 glow.node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.45
 if f"{species}_glow_hi" in bpy.data.materials:  # (月鹿の手直しで追加) 角の稜の光も同じ強さで撮る
     bpy.data.materials[f"{species}_glow_hi"].node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.45
+for suffix in ("in", "lo"):  # (月鹿の手直し 3 で追加) 角の内側・外側の面の光も同じ強さで撮る
+    if f"{species}_glow_{suffix}" in bpy.data.materials:
+        bpy.data.materials[f"{species}_glow_{suffix}"].node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.45
 
 # グレア (発光の滲み)。コンポジタの API が無い版では飛ばす
 try:
