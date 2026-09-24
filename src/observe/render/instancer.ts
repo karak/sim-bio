@@ -64,7 +64,14 @@ export type FarTier = { node: Object3D; farM: number; spread?: number };
  * (M23-06) beyond を渡すと 3 段にする (近い lod0・遠い lod1・インポスター)。インポスターの段の木は、lod1 の組の見えない側 (後ろ) に並べ続けるので、
  * lod1 の組の影 (影の代わりの形が無いとき) と光線の当たり判定 (自動カメラの遮り) は今までどおり近くない全部の木で見る。インポスターの組は本の描画だけ
  */
-export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], nearM: number, capacity = placements.length, shadow: Object3D | null = null, beyond: FarTier | null = null): LodProps {
+/**
+ * (M23-09) 近い・遠いの切り替えの決め方 (小屋)。
+ * - nearSpread: 置き場所ごとに nearM × (1 + nearSpread × 揺らぎ (-0.5〜0.5)) で切り替える (3 棟が同じ距離で替わらない)。既定の 0 は今までどおり全部 nearM
+ * - height: 距離をカメラの高さも入れた 3 次元の距離で測る (集落の俯瞰は 30 m の高さから見下ろすので、真下に近い小屋も画面では小さい)。既定は水平の距離 (木)
+ */
+export type NearOpts = { nearSpread?: number; height?: boolean };
+
+export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], nearM: number, capacity = placements.length, shadow: Object3D | null = null, beyond: FarTier | null = null, opts: NearOpts = {}): LodProps {
   const near = instanceProps(lod0, placements, !shadow, capacity);
   const far = instanceProps(lod1, placements, !shadow, capacity);
   const group = new Group();
@@ -83,10 +90,16 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
   const impostorLocal = beyond ? impostorMeshes.map((_, k) => localOf(beyond.node, k)) : [];
   const spread = beyond?.spread ?? 0.2;
   const farAt = (x: number, z: number) => (beyond ? beyond.farM * (1 + spread * switchJitter(x, z)) : 0);
+  // (M23-09) 置き場所ごとの近い・遠いの切り替えの距離
+  const nearSpread = opts.nearSpread ?? 0;
+  const nearAt = (x: number, z: number) => nearM * (1 + nearSpread * switchJitter(x, z));
   const proxyLocal = shadow ? proxyMeshes.map((_, k) => localOf(shadow, k)) : [];
   let xs = placements.map((p) => p.elements[12]);
   let zs = placements.map((p) => p.elements[14]);
+  // (M23-09) 置き場所の高さ (opts.height のとき 3 次元の距離に使う)
+  let ys = placements.map((p) => p.elements[13]);
   let farMs = placements.map((p) => farAt(p.elements[12], p.elements[14]));
+  let nearMs = placements.map((p) => nearAt(p.elements[12], p.elements[14]));
   const nearMeshes = near.children as InstancedMesh[];
   const farMeshes = far.children as InstancedMesh[];
   const nearLocal = nearMeshes.map((_, k) => localOf(lod0, k));
@@ -121,7 +134,12 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
       if (!regroup && !turned) return;
       if (regroup) {
         last = now;
-        for (let i = 0; i < placements.length; i++) tier[i] = tierOf(Math.hypot(xs[i] - camera.position.x, zs[i] - camera.position.z), nearM, farMs[i]);
+        // (M23-09 で変更: 近い・遠いの切り替えの距離も置き場所ごと (nearMs、nearSpread が 0 なら全部 nearM)。opts.height ならカメラの高さも入れる)
+        const cy = opts.height ? (camera.position as { y?: number }).y : undefined;
+        for (let i = 0; i < placements.length; i++) {
+          const d = Math.hypot(xs[i] - camera.position.x, zs[i] - camera.position.z, cy === undefined ? 0 : ys[i] - cy);
+          tier[i] = tierOf(d, nearMs[i], farMs[i]);
+        }
       }
       for (const st of sets) {
         const b = st.balls;
@@ -156,7 +174,9 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
       placements = next.slice(0, capacity);
       xs = placements.map((p) => p.elements[12]);
       zs = placements.map((p) => p.elements[14]);
+      ys = placements.map((p) => p.elements[13]);
       farMs = placements.map((p) => farAt(p.elements[12], p.elements[14]));
+      nearMs = placements.map((p) => nearAt(p.elements[12], p.elements[14]));
       measure();
       tier = new Uint8Array(placements.length);
       last = -Infinity;

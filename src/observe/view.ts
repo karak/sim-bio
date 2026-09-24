@@ -35,7 +35,7 @@ import { createToonMaterial, rimLight } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { glow } from './render/bake';
 import { culledProps, instanceProps, lodProps, type CulledProps, type LodProps } from './render/instancer';
-import { hutPlacements } from './settlementLayout';
+import { HUT_NEAR_M, HUT_NEAR_SPREAD, hutPlacements } from './settlementLayout';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
@@ -60,6 +60,7 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * (M22-08: depart=1 で開いてすぐ舟が飛び去る。sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
  * (M23-06: far は鐘樹の成木と森の木をインポスター (板) に替える距離 (m)。0 で切る)
+ * (M23-09: hut は小屋を遠距離版 hut_lod1 に替える距離 (m、カメラの高さも入れた距離、小屋ごとに ±10% 揺らす)。0 で切る (いつも近い形))
  */
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => Number(params.get(k) ?? d);
@@ -85,6 +86,7 @@ const OPT = {
   day: num('day', DAY_CYCLE_S),
   freeze: params.get('freeze') === '1',
   far: num('far', 60),
+  hut: num('hut', HUT_NEAR_M),
 };
 /** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
 const AREA_R = 8;
@@ -454,7 +456,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // 小屋・巨石・石垣もカメラの遮りに数える (舟の見上げのカメラが集落の中に立って巨石が画を覆ったため)。自動カメラは舟も数える (集落の俯瞰が舟の甲板の上に立ったため)
   const settlement = new Group();
   scene.add(settlement);
+  // (M23-09) 小屋の近い・遠い (hut と hut_lod1) の組。settlement の中に置くので、自動カメラの遮りの光線は今までどおり小屋に当たる
+  let hutSet: LodProps | null = null;
   for (const [name, mats] of settlementPlacements) {
+    // (M23-09) 小屋は OPT.hut より先を遠距離版 hut_lod1 で描く (影は近い・遠いに依らず全部の小屋を hut_lod1 で落とす。M23-04 と同じ)
+    const far = name === 'hut' && OPT.hut > 0 ? findNode(settleGlb, 'hut_lod1') : null;
+    if (far) {
+      hutSet = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), far, mats, OPT.hut, mats.length, far, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
+      if (hutSet.shadow) shadowOnly.add(hutSet.shadow);
+      settlement.add(hutSet.group);
+      continue;
+    }
     const g = instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats);
     settlement.add(g);
     // (M23-04) 小屋 (1 棟 10 千三角形) の影は遠い段 hut_lod1 (766 三角形) で落とす
@@ -724,6 +736,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const c = typeof at === 'string' ? centroid(at) : at;
     if (c) lookFrom(c.x, c.z, dist, height, yaw);
   };
+  // (M23-09) 調整用: 小屋の置き場所 (遠距離版への切り替えを寄せ引きで確かめる)
+  (window as unknown as { __observeHuts: unknown }).__observeHuts = () => huts.map((h) => ({ x: h.x, y: h.y, z: h.z, ry: h.ry }));
   const direct = (dt: number) => {
     const frame = sceneFrame(snap, area);
     const scenes = detectScenes(prevFrame, frame, newEvents, area);
@@ -853,6 +867,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // (M23-02 で変更: 視錐台で落とすもの (群れ・木・下草・草) は、このコマのカメラが決まった後 (direct の後) に更新する。前だと寄せ先へ切り替えた最初のコマが前の画の視錐台で描かれる)
     creatures.update(agents.agents, camera, field.heightAt, t, dt);
     for (const l of lods) l.update(camera);
+    hutSet?.update(camera);
     for (const u of understory) u.update(camera);
     grass.update(t, camera.position, camera);
     renderer.info.autoReset = false;

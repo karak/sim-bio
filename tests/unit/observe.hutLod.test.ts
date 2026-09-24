@@ -1,0 +1,152 @@
+import { describe, it, expect } from 'vitest';
+import { BoxGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, Vector3, type InstancedMesh } from 'three';
+import { lodProps } from '../../src/observe/render/instancer';
+import { switchJitter } from '../../src/observe/render/impostor';
+import { installShadowOnly } from '../../src/observe/render/shadowOnly';
+import { HUT_NEAR_M, HUT_NEAR_SPREAD, HUT_OFFSETS, hutPlacements } from '../../src/observe/settlementLayout';
+
+/**
+ * 小屋の遠距離版 (M23-09): hut と hut_lod1 を lodProps で振り分ける。切り替えの距離は小屋ごとに揺らし、カメラの高さも入れた距離で測る。
+ * 影は近い・遠いに依らず全部の小屋を hut_lod1 で落とし、自動カメラの遮りの光線は近い・遠いどちらの小屋にも当たる
+ */
+
+/** 1 m の箱 (三角形 12) の近い形と、8 三角形の遠い形 (数えて見分ける) */
+function nearNode(): Group {
+  const g = new Group();
+  g.add(new Mesh(new BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new MeshBasicMaterial()));
+  return g;
+}
+function farNode(): Group {
+  const g = new Group();
+  const geo = new BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  geo.setIndex(Array.from(geo.index!.array.slice(0, 24)));
+  g.add(new Mesh(geo, new MeshBasicMaterial()));
+  return g;
+}
+const at = (x: number, z: number, y = 0) => new Matrix4().makeTranslation(x, y, z);
+const pos = (x: number, y: number, z: number) => ({ position: { x, y, z } });
+const meshes = (l: ReturnType<typeof lodProps>) => ({
+  near: l.group.children[0].children[0] as InstancedMesh,
+  far: l.group.children[1].children[0] as InstancedMesh,
+});
+/** 近い組・遠い組に並んだ置き場所の x (影と当たり判定に使う全部) */
+function xsOf(im: InstancedMesh): number[] {
+  const m = new Matrix4();
+  const p = new Vector3();
+  return Array.from({ length: im.userData.shadowCount as number }, (_, i) => (im.getMatrixAt(i, m), +p.setFromMatrixPosition(m).x.toFixed(3))).sort((a, b) => a - b);
+}
+
+describe('小屋の遠距離版 (lodProps の近い・遠いの切り替え)', () => {
+  it('nearSpread: 置き場所ごとに nearM × (1 + nearSpread × 揺らぎ) で切り替える。植え直しても同じ所は同じ距離', () => {
+    // 原点から 28〜36 m の間に 120 か所
+    const spots = Array.from({ length: 120 }, (_, i) => {
+      const a = i * 2.4;
+      const d = 28 + (i % 17) * 0.5;
+      return [Math.cos(a) * d, Math.sin(a) * d] as const;
+    });
+    const nearOf = (pts: readonly (readonly [number, number])[]) =>
+      pts.filter(([x, z]) => Math.hypot(x, z) < 32 * (1 + 0.2 * switchJitter(x, z))).map(([x]) => +x.toFixed(3)).sort((a, b) => a - b);
+    const l = lodProps(nearNode(), farNode(), spots.map(([x, z]) => at(x, z)), 32, 120, null, null, { nearSpread: 0.2 });
+    l.update(pos(0, 0, 0));
+    const { near, far } = meshes(l);
+    expect(xsOf(near)).toEqual(nearOf(spots));
+    expect(near.count + far.count).toBe(120);
+    // 32 m の輪の内でも遠い形、外でも近い形の所がある (3 棟が同じ距離で一斉に替わらない)
+    const near1 = new Set(xsOf(near));
+    expect(spots.some(([x, z]) => Math.hypot(x, z) < 32 && !near1.has(+x.toFixed(3)))).toBe(true);
+    expect(spots.some(([x, z]) => Math.hypot(x, z) > 32 && near1.has(+x.toFixed(3)))).toBe(true);
+    // 揺らぎの幅は nearM × (1 ± nearSpread / 2)
+    for (const [x, z] of spots) {
+      const m = 32 * (1 + 0.2 * switchJitter(x, z));
+      expect(m).toBeGreaterThanOrEqual(32 * 0.9);
+      expect(m).toBeLessThanOrEqual(32 * 1.1);
+    }
+    // 植え直し: 残った所の段は置き場所で決まる
+    const next = [...spots.slice(10).reverse(), [3, 4] as const];
+    l.setPlacements(next.map(([x, z]) => at(x, z)));
+    l.update(pos(0, 0, 0));
+    expect(xsOf(meshes(l).near)).toEqual(nearOf(next));
+  });
+
+  it('nearSpread を渡さなければ今までどおり全部 nearM で切り替える (木)', () => {
+    const l = lodProps(nearNode(), farNode(), [at(31.9, 0), at(32.1, 0), at(0, -31.9), at(0, -32.1)], 32);
+    l.update(pos(0, 0, 0));
+    expect(xsOf(meshes(l).near)).toEqual([0, 31.9]);
+    expect(meshes(l).far.userData.shadowCount).toBe(2);
+  });
+
+  it('height: カメラの高さも入れた距離で切り替える。渡さなければ水平の距離 (木)', () => {
+    // 水平 25 m・高さの差 30 m (距離 39 m)
+    const placements = [at(25, 0, 2), at(-10, 0, 2)];
+    const tall = lodProps(nearNode(), farNode(), placements, 32, 2, null, null, { height: true });
+    tall.update(pos(0, 32, 0));
+    expect(xsOf(meshes(tall).near)).toEqual([-10]);
+    expect(xsOf(meshes(tall).far)).toEqual([25]);
+    const flat = lodProps(nearNode(), farNode(), placements, 32);
+    flat.update(pos(0, 32, 0));
+    expect(xsOf(meshes(flat).near)).toEqual([-10, 25]);
+    // 位置だけで高さの無いカメラは水平の距離
+    const noY = lodProps(nearNode(), farNode(), placements, 32, 2, null, null, { height: true });
+    noY.update({ position: { x: 0, z: 0 } });
+    expect(xsOf(meshes(noY).near)).toEqual([-10, 25]);
+  });
+
+  it('影は近い・遠いに依らず全部の小屋を遠い形で落とし、遮りの光線は近い形・遠い形のどちらの小屋にも当たる (影の形には当たらない)', () => {
+    const shadowMap = { render() {} };
+    const stage = installShadowOnly(shadowMap);
+    const far = farNode();
+    const l = lodProps(nearNode(), far, [at(0, -10), at(0, -60), at(40, 0)], 32, 3, far, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
+    stage.add(l.shadow!);
+    const settlement = new Group();
+    settlement.add(l.group);
+    const camera = new PerspectiveCamera(50, 16 / 9, 0.2, 500);
+    camera.position.set(0, 3, 0);
+    camera.lookAt(0, 3, -1);
+    camera.updateMatrixWorld();
+    l.update(camera);
+    const { near, far: farMesh } = meshes(l);
+    expect([near.castShadow, farMesh.castShadow]).toEqual([false, false]);
+    const proxy = l.shadow!.children[0] as InstancedMesh;
+    expect([proxy.castShadow, proxy.count]).toEqual([true, 3]);
+    // 近い 1 棟は画面の中、遠い 2 棟のうち 40 m の東の小屋は画面の外 (本の描画は 1 棟、当たり判定は 2 棟)
+    expect([near.count, farMesh.count, farMesh.userData.shadowCount]).toEqual([1, 1, 2]);
+    settlement.updateMatrixWorld(true);
+    const hit = (from: Vector3, dir: Vector3) => new Raycaster(from, dir.normalize(), 0, 200).intersectObject(settlement, true).map((h) => h.object);
+    // (遠い形の箱は ±z の面を持たないので、遠い小屋には横 (x) から当てる)
+    expect(new Set(hit(new Vector3(0, 0.5, 5), new Vector3(0, 0, -1)))).toEqual(new Set([near]));
+    expect(new Set(hit(new Vector3(5, 0.5, -60), new Vector3(-1, 0, 0)))).toEqual(new Set([farMesh]));
+    // 画面の外の遠い小屋にも当たる (自動カメラは寄せ先を決めるとき画面の外にも光線を当てる)
+    expect(new Set(hit(new Vector3(20, 0.5, 0), new Vector3(1, 0, 0)))).toEqual(new Set([farMesh]));
+    // 影の代わりの形 (近い小屋の所にもある) には当たらない
+    expect(hit(new Vector3(5, 0.5, -10), new Vector3(-1, 0, 0))).toHaveLength(2);
+    expect(new Set(hit(new Vector3(5, 0.5, -10), new Vector3(-1, 0, 0)))).toEqual(new Set([near]));
+  });
+});
+
+describe('小屋の切り替えの距離 (HUT_NEAR_M・HUT_NEAR_SPREAD)', () => {
+  // 平らな地面に置いた 3 棟 (集落の中心は原点、広場は中心の少し南)
+  const huts = hutPlacements({ x: 0, z: 0 }, { x: 0, z: -6 }, () => 0);
+  const maxSwitch = HUT_NEAR_M * (1 + HUT_NEAR_SPREAD / 2);
+
+  it('切り替えは 30〜40 m の間 (チケットの幅)', () => {
+    for (const h of huts) {
+      const m = HUT_NEAR_M * (1 + HUT_NEAR_SPREAD * switchJitter(h.x, h.z));
+      expect(m).toBeGreaterThan(28);
+      expect(m).toBeLessThan(40);
+    }
+    expect(huts).toHaveLength(HUT_OFFSETS.length);
+  });
+
+  it('集落の俯瞰 (中心から 46 m 引いて 30 m の高さ、shotCamera の settlementHigh) では、どの向きからでも 3 棟とも遠距離版', () => {
+    for (let k = 0; k < 72; k++) {
+      const a = (k / 72) * Math.PI * 2;
+      const cam = { x: Math.sin(a) * 46, y: 30, z: Math.cos(a) * 46 };
+      for (const h of huts) expect(Math.hypot(h.x - cam.x, h.y - cam.y, h.z - cam.z)).toBeGreaterThan(maxSwitch);
+    }
+  });
+
+  it('3 棟の切り替えの距離はみな違う (同じ距離で一斉に替わらない)', () => {
+    const ms = huts.map((h) => HUT_NEAR_M * (1 + HUT_NEAR_SPREAD * switchJitter(h.x, h.z)));
+    expect(new Set(ms.map((m) => m.toFixed(2))).size).toBe(huts.length);
+  });
+});
