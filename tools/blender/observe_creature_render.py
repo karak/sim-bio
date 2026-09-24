@@ -91,6 +91,8 @@ ground.data.materials.append(gm)
 
 glow = bpy.data.materials[f"{species}_glow"]
 glow.node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.45
+if f"{species}_glow_hi" in bpy.data.materials:  # (月鹿の手直しで追加) 角の稜の光も同じ強さで撮る
+    bpy.data.materials[f"{species}_glow_hi"].node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.45
 
 # グレア (発光の滲み)。コンポジタの API が無い版では飛ばす
 try:
