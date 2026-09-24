@@ -1017,6 +1017,44 @@ HEAD2_KEYS = [
 HEAD2_TIP = Vector((0, -0.858, 0.578))
 MOUTH_Y = -0.636  # 口の角 (これより前が上の顎と下顎に分かれる)
 LIP2 = [(y, pts[7]) for y, pts in HEAD2_KEYS]  # 口の縁 (y, (x, z))
+# (灰狼の 4 回目で追加) 3 回目への判断「口花の突起が長すぎる、一方、正面向きだと鼻筋はもっと通っており、目や眉が前からもみえる」。
+# 基準画の側面 (creatures/wolf.png 左上) で測ると、耳の付け根の後ろ (x 475 px) → 目の中心 (547) → 鼻先 (610) は 72 : 63 px
+# (頭の長さ 135 px のうち、目が後ろから 0.53、目 → 鼻先が 0.47)。3 回目は耳の後ろ (y -0.50) → 目 (-0.650) → 鼻先 (-0.872) で 0.150 : 0.222 m
+# (目 → 鼻先が 0.60)。目を 4.8 cm 前 (-0.698) へ、鼻先を 2 cm 後ろ (-0.852) へ寄せて 0.198 : 0.154 m (0.56 : 0.44) にし、鼻づらを短く深く。
+# 目の前に額から鼻づらへの段 (ストップ、-0.718 で 2.6 cm 下がる) を置き、鼻づらの上に中心の稜 (鼻筋) を立てる (中心の点を隣より 5〜7 mm 高く)
+HEAD2_KEYS = [
+    (-0.462, [(0, 0.695), (0.030, 0.693), (0.048, 0.685), (0.060, 0.668), (0.070, 0.645), (0.074, 0.618), (0.070, 0.592), (0.058, 0.568), (0.030, 0.553), (0, 0.550)]),
+    (-0.500, [(0, 0.745), (0.040, 0.742), (0.066, 0.730), (0.084, 0.708), (0.096, 0.675), (0.102, 0.635), (0.097, 0.590), (0.080, 0.548), (0.042, 0.527), (0, 0.522)]),
+    (-0.553, [(0, 0.766), (0.045, 0.763), (0.074, 0.750), (0.094, 0.725), (0.106, 0.685), (0.122, 0.635), (0.108, 0.585), (0.088, 0.540), (0.046, 0.512), (0, 0.507)]),
+    (-0.605, [(0, 0.762), (0.045, 0.759), (0.074, 0.748), (0.094, 0.722), (0.100, 0.684), (0.124, 0.628), (0.106, 0.580), (0.082, 0.541), (0.044, 0.518), (0, 0.513)]),
+    (-0.650, [(0, 0.754), (0.044, 0.752), (0.073, 0.742), (0.092, 0.718), (0.096, 0.680), (0.112, 0.620), (0.094, 0.578), (0.073, 0.552), (0.038, 0.540), (0, 0.537)]),
+    (-0.690, [(0, 0.738), (0.040, 0.736), (0.066, 0.728), (0.084, 0.708), (0.084, 0.672), (0.090, 0.614), (0.078, 0.578), (0.068, 0.556), (0.036, 0.549), (0, 0.547)]),
+    (-0.718, [(0, 0.712), (0.028, 0.707), (0.050, 0.701), (0.064, 0.689), (0.068, 0.656), (0.072, 0.608), (0.070, 0.576), (0.066, 0.556), (0.035, 0.550), (0, 0.548)]),
+    (-0.748, [(0, 0.692), (0.021, 0.685), (0.041, 0.680), (0.057, 0.670), (0.062, 0.641), (0.065, 0.603), (0.064, 0.573), (0.061, 0.555), (0.033, 0.549), (0, 0.547)]),
+    (-0.790, [(0, 0.656), (0.018, 0.650), (0.035, 0.645), (0.049, 0.637), (0.054, 0.614), (0.056, 0.588), (0.055, 0.564), (0.052, 0.550), (0.028, 0.545), (0, 0.544)]),
+    (-0.827, [(0, 0.620), (0.015, 0.615), (0.028, 0.611), (0.040, 0.605), (0.044, 0.590), (0.046, 0.573), (0.046, 0.556), (0.043, 0.546), (0.023, 0.542), (0, 0.541)]),
+]
+HEAD2_TIP = Vector((0, -0.836, 0.585))
+LIP2 = [(y, pts[7]) for y, pts in HEAD2_KEYS]
+MOUTH_Y = -0.640
+# (灰狼の 4 回目の見直しで追加) 上の断面では鼻づらの先が高さ 8 cm・幅 9 cm の箱のまま (正面の先の面が鼻の 3 倍の高さ) で、短くても鈍く見えた。
+# 基準画の側面は鼻づらが鼻へ尖る楔、正面は細い鼻筋の稜の両脇が斜めに下がる面 (台形の断面) で、目は鼻筋のすぐ脇の前を向く面にある
+# (正面で目の中心は頬の幅の 0.39〜0.46、上の断面では 0.60)。そこで:
+#  - 目の後ろ (-0.688) は広く、目の前 (-0.722) で急に絞る。二つの断面の間の目の高さの面が前・外を向き (法線は約 (0.52, -0.85))、目をそこへ置く (EYE2 を x 0.058 へ)
+#  - 鼻づらの断面は上の稜 (幅 2〜2.6 cm) から脇が外下へ開く台形。先 (-0.832) は稜の高さ 0.610・唇 0.563 で高さ 4.7 cm・幅 7.4 cm に
+#  - 額から鼻先への上の線は目の前の段を浅くして一本に通す (段 -0.688 → -0.722 で 2.7 cm)
+# 鼻づらの比 (側面、耳の付け根の後ろ y -0.523 → 目の中心 → 鼻先。基準画は 475 → 547 → 610 px で目 → 鼻先が 0.47):
+# 3 回目 0.220 / 0.349 = 0.63、上の断面 0.154 / 0.329 = 0.47、この断面は実測 (目の中心 -0.713・鼻先 -0.857) で 0.144 / 0.334 = 0.43 (目を前へ出した分だけ短い側、先を尖らせる)
+HEAD2_KEYS = HEAD2_KEYS[:4] + [
+    (-0.650, [(0, 0.752), (0.044, 0.750), (0.073, 0.740), (0.094, 0.716), (0.100, 0.680), (0.114, 0.622), (0.096, 0.578), (0.075, 0.556), (0.039, 0.545), (0, 0.542)]),
+    (-0.688, [(0, 0.730), (0.036, 0.727), (0.062, 0.718), (0.083, 0.702), (0.093, 0.674), (0.100, 0.620), (0.084, 0.582), (0.070, 0.559), (0.037, 0.551), (0, 0.549)]),
+    (-0.722, [(0, 0.703), (0.013, 0.701), (0.024, 0.696), (0.033, 0.688), (0.043, 0.664), (0.056, 0.624), (0.062, 0.592), (0.062, 0.561), (0.034, 0.553), (0, 0.551)]),
+    (-0.760, [(0, 0.670), (0.011, 0.668), (0.021, 0.664), (0.029, 0.657), (0.037, 0.637), (0.048, 0.605), (0.054, 0.580), (0.054, 0.561), (0.030, 0.554), (0, 0.552)]),
+    (-0.798, [(0, 0.638), (0.010, 0.636), (0.018, 0.633), (0.025, 0.627), (0.032, 0.611), (0.041, 0.589), (0.046, 0.572), (0.046, 0.562), (0.026, 0.556), (0, 0.555)]),
+    (-0.832, [(0, 0.610), (0.009, 0.608), (0.016, 0.605), (0.022, 0.600), (0.028, 0.590), (0.034, 0.578), (0.037, 0.569), (0.036, 0.563), (0.020, 0.559), (0, 0.558)]),
+]
+HEAD2_TIP = Vector((0, -0.840, 0.586))
+LIP2 = [(y, pts[7]) for y, pts in HEAD2_KEYS]
 
 
 def lip_at(y):
@@ -1072,6 +1110,28 @@ JAW2_KEYS = [
     (-0.843, 0.034, 0.510, 0.017, 0.501),
 ]
 JAW2_TIP = Vector((0, -0.853, 0.512))
+# (灰狼の 4 回目で追加) 鼻づらを短くしたので下顎も短く (先 -0.853 → -0.831)
+JAW2_KEYS = [
+    (-0.605, 0.060, 0.538, 0.044, 0.520),
+    (-0.640, 0.059, 0.536, 0.041, 0.516),
+    (-0.690, 0.056, 0.534, 0.036, 0.514),
+    (-0.748, 0.051, 0.531, 0.030, 0.514),
+    (-0.798, 0.043, 0.530, 0.024, 0.516),
+    (-0.822, 0.035, 0.530, 0.016, 0.519),
+]
+JAW2_TIP = Vector((0, -0.829, 0.528))
+# (灰狼の 4 回目の見直しで追加) 上の顎の先を低く細い楔にしたので、下顎も先へ細く薄く (先の厚さ 2.5 cm)、先の点を唇の高さへ上げて
+# 正面の口の先の V の切れ目 (門歯が覗いた) を閉じる
+JAW2_KEYS = [
+    (-0.605, 0.066, 0.540, 0.046, 0.520),
+    (-0.640, 0.068, 0.541, 0.044, 0.517),
+    (-0.690, 0.064, 0.542, 0.039, 0.517),
+    (-0.748, 0.054, 0.544, 0.031, 0.522),
+    (-0.795, 0.044, 0.548, 0.023, 0.530),
+    (-0.822, 0.034, 0.555, 0.015, 0.540),
+]
+JAW2_TIP = Vector((0, -0.836, 0.557))
+# 下顎の横の中 (表の 2 つ目) は上唇の角の 3〜7 mm 内に沿わせる (唇の下のくびれから下の臼歯が覗かない)
 
 
 def jaw_at(y):
@@ -1124,6 +1184,9 @@ def cone(bm, base, d, length, r, n=4, flat=1.0, mat=TEETH, side=None):
     return out
 
 
+TEETH_UP = 0.010  # (灰狼の 4 回目で追加) 門歯・臼歯の付け根を唇から奥へ入れる量 (口を閉じた rest で歯の先を見せない)
+
+
 def build_teeth2(bm, lod, upper):
     """歯 (近 LOD のみ)。上: 牙・門歯 3 本・臼歯 3 本 (上唇の縁から下へ)。下: 牙・門歯・臼歯 (下唇から上へ)。
     上の牙は下唇の外に 1 cm ほど掛かり、口を閉じていても先が見える。下の牙は上唇の内に隠れ、口を開くと見える"""
@@ -1136,20 +1199,24 @@ def build_teeth2(bm, lod, upper):
             cone(bm, Vector((sx * (x - 0.009), y, z + 0.006)), Vector((sx * 0.02, 0.14, -1)), 0.015, 0.0062, n=5, flat=0.8)
             for xi in (0.006, 0.0135, 0.021):
                 x0, z0 = lip_at(ty + 0.006)
-                cone(bm, Vector((sx * xi, ty + 0.007 + xi * 0.25, z0 + 0.003)), Vector((0, 0.1, -1)), 0.008, 0.0032, n=4)
+                cone(bm, Vector((sx * xi, ty + 0.007 + xi * 0.25, z0 + TEETH_UP)), Vector((0, 0.1, -1)), 0.008, 0.0032, n=4)  # (灰狼の 4 回目で変更: 元は z0 + 0.003)
             for y2 in (-0.700, -0.735, -0.770):
                 x2, z2 = lip_at(y2)
-                cone(bm, Vector((sx * (x2 - 0.008), y2, z2 + 0.004)), Vector((0, 0, -1)), 0.011, 0.0065, n=4, flat=0.45, side=Y)
+                cone(bm, Vector((sx * (x2 - 0.008), y2, z2 + TEETH_UP)), Vector((0, 0, -1)), 0.011, 0.0065, n=4, flat=0.45, side=Y)  # (灰狼の 4 回目で変更: 付け根を TEETH_UP だけ上げて rest で先を唇に隠す。元は z2 + 0.004)
         else:
             y = ty + 0.020
             x, z = jaw_at(y)
             cone(bm, Vector((sx * (x - 0.011), y, z - 0.006)), Vector((sx * 0.02, -0.12, 1)), 0.014, 0.0056, n=5, flat=0.8)  # (灰狼の 3 回目で変更: 元は x - 0.009・0.020)
             for xi in (0.006, 0.012, 0.018):
                 x0, z0 = jaw_at(ty + 0.010)
-                cone(bm, Vector((sx * xi, ty + 0.011 + xi * 0.25, z0 - 0.003)), Vector((0, -0.1, 1)), 0.007, 0.003, n=4)
+                cone(bm, Vector((sx * xi, ty + 0.011 + xi * 0.25, z0 - TEETH_LOW)), Vector((0, -0.1, 1)), 0.007, 0.003, n=4)  # (灰狼の 4 回目で変更: 元は z0 - 0.003) (見直しで TEETH_UP → TEETH_LOW)
             for y2 in (-0.710, -0.745, -0.780):
                 x2, z2 = jaw_at(y2)
-                cone(bm, Vector((sx * (x2 - 0.009), y2, z2 - 0.003)), Vector((0, 0, 1)), 0.010, 0.006, n=4, flat=0.45, side=Y)
+                cone(bm, Vector((sx * (x2 - 0.009), y2, z2 - TEETH_LOW)), Vector((0, 0, 1)), 0.010, 0.006, n=4, flat=0.45, side=Y)  # (灰狼の 4 回目で変更: 元は z2 - 0.003) (見直しで TEETH_UP → TEETH_LOW)
+
+
+# (灰狼の 4 回目の見直しで追加) 鼻の幅の半分と下へのすぼまり。基準画の正面は鼻の幅が頬の幅の 0.18 で、下へ尖る丸い三角 (元は 0.030 と 0.30。幅は頬の 0.24)
+NOSE_W, NOSE_TAPER = 0.023, 0.42
 
 
 def build_nose2(bm, lod):
@@ -1166,7 +1233,7 @@ def build_nose2(bm, lod):
             ca, sa = math.cos(a), math.sin(a)
             cx = math.copysign(abs(ca) ** 0.55, ca)
             sy = math.copysign(abs(sa) ** 0.55, sa)
-            w = 0.030 * s * (1 - 0.30 * max(0.0, -sy))
+            w = NOSE_W * s * (1 - NOSE_TAPER * max(0.0, -sy))  # (灰狼の 4 回目の見直しで変更: 元は 0.030 * s * (1 - 0.30 * max(0.0, -sy)))
             vs.append(bm.verts.new(c + Vector((w * cx, dy, 0.017 * sz * sy))))
         rings.append(vs)
     tip = bm.verts.new(c + Vector((0, -0.024, 0.003)))
@@ -1193,6 +1260,8 @@ EYE2 = Vector((0.077, -0.650, 0.651))  # 眼窩の中ほど (+X 側)
 # (灰狼の 3 回目で追加) 穏やかな顔: 目の周りの隈 (0.85 → 0.3 倍)・涙の線 (0.7 → 0.15 倍) を薄く、唇の黒い帯を 8.5 → 5.5 mm に細く。
 # 目は吊り上がりを 29° → 12° に、目尻の伸びを 1.55 → 1.2 倍に、大きさを 1.25 倍に (EYE_*)
 MASK_K, TEAR_K, LIP_W = 0.3, 0.15, 0.0055
+MASK_K, TEAR_K = 0.0, 0.45  # (灰狼の 4 回目で変更: 赤い隈はやめて灰の隈 (patch) に替え、涙の線を基準画の強さへ)
+LIP_W = 0.004  # (灰狼の 4 回目で変更: 唇の黒い帯を 5.5 → 4 mm)
 EYE_UP, EYE_TAIL, EYE_S = 0.21, 1.25, 1.2
 
 
@@ -1231,10 +1300,104 @@ def build_eye2(bm, bvh_head, lod, side):
     fan(0.022 * EYE_S, 0.0080 * EYE_S * 1.1, 0.0050, 0.0055, GLOW, EYE_TAIL)  # (灰狼の 3 回目で変更: 元は 0.022, 0.0080, …, 1.35)
 
 
+def lens(k, L, H, tail_in=1.0, tail_out=1.0, lid=1.0, p_up=0.9, p_low=0.9):
+    """(灰狼の 4 回目で追加) 両端の尖ったレンズの輪郭 (u, v)。u > 0 が目頭。上瞼 (v > 0) は lid 倍の高さ。
+    上下の弧は (1 - (u/L)^2) の放物線で、両端で尖る"""
+    out = []
+    for i in range(k):
+        a = 2 * math.pi * i / k
+        ca, sa = math.cos(a), math.sin(a)
+        x = L * ca * (tail_in if ca > 0 else tail_out)
+        h = H * (1 - ca * ca) ** (p_up if sa > 0 else p_low) * (lid if sa > 0 else 1.0) * (1 if sa >= 0 else -1)  # (灰狼の 4 回目の見直しで変更: 上下の瞼の丸みを p_up・p_low に分けた。元は ** 0.9)
+        out.append((x, h))
+    return out
+
+
+def build_eye3(bm, bvh_head, lod, side):
+    """(灰狼の 4 回目で追加) 基準画の目: 灰の隈の中の、尖ったレンズの光る目と細い暗い縁 (上瞼を太く、目頭を涙の線へ伸ばす)。
+    目の面は前・外へ向ける (EYE3_FACING)。近 LOD は 24 点、群れ LOD は 6 点"""
+    hero = lod["name"] == "hero"
+    E = Vector((side * EYE2.x, EYE2.y, EYE2.z))
+    facing = Vector((side * EYE3_FACING.x, EYE3_FACING.y, EYE3_FACING.z)).normalized()
+    loc, n, _, _ = bvh_head.ray_cast(E + facing * 0.3, -facing)
+    if loc is None:
+        loc, n = E, facing
+    n = (n * 0.4 + facing * 0.6).normalized()
+    u = Vector((0, -1, -0.33))
+    u = Vector((side * EYE3_U.x, EYE3_U.y, EYE3_U.z))  # (灰狼の 4 回目の見直しで追加) 目頭の向きを面の横の向きから決める (EYE3_U)
+    u = (u - n * u.dot(n)).normalized()
+    v = n.cross(u).normalized()
+    if v.z < 0:
+        v = -v
+    k = 24 if hero else 6
+
+    def fan(pts, off, bulge, mat):
+        c = bm.verts.new(loc + n * (off + bulge))
+        vs = []
+        for x, h in pts:
+            p = loc + u * x + v * h
+            q = bvh_head.find_nearest(p)[0]
+            if EYE3_RAY:  # (灰狼の 4 回目の見直しで追加) 目の向き n に沿って面へ落とす (最寄りの点だと目の前で折れる面に引かれ、虹彩の目頭の下が縁の下へ潜って切れ込みに見えた)
+                hit = bvh_head.ray_cast(p + n * 0.03, -n)[0]
+                q = hit if hit is not None and (hit - p).length < 0.03 else q
+            vs.append(bm.verts.new((q if q is not None else p) + n * off))
+        for i in range(len(vs)):
+            f = bm.faces.new((vs[i], vs[(i + 1) % len(vs)], c))
+            f.material_index = mat
+            f.normal_update()
+            if f.normal.dot(n) < 0:
+                f.normal_flip()
+
+    if hero and EYE3_SHAPE is None:
+        fan(lens(k, 0.034, 0.0165, tail_in=1.18, tail_out=1.08, lid=1.25), 0.003, 0.002, NOSE)
+    if EYE3_SHAPE is None:
+        fan(lens(k, 0.029, 0.0122), 0.0052, 0.0045, GLOW)
+    else:  # (灰狼の 4 回目の見直しで追加) EYE3_SHAPE の縁と虹彩
+        rim, iris = EYE3_SHAPE
+        if hero:
+            fan(lens(k, *rim), EYE3_OFF[0], 0.002, NOSE)
+        fan(lens(k, *iris), EYE3_OFF[1], 0.0045, GLOW)
+
+
 # 光る線 (+X 側、-X は鏡映): 眉 (目頭の上から眉の稜に沿って耳の側へ) と頬 (目尻の下から頬骨に沿って後ろへ)
 BROW2 = [(0.058, -0.668, 0.688), (0.080, -0.646, 0.699), (0.093, -0.612, 0.716)]
 BROW2 = [(0.056, -0.666, 0.703), (0.079, -0.645, 0.708), (0.092, -0.614, 0.709)]  # (灰狼の 3 回目で追加) 眉の光を寝かせる (上がりを 2.8 → 1.4 cm、しかめ面にしない)
 CHEEK2 = [(0.090, -0.640, 0.618), (0.112, -0.605, 0.628), (0.108, -0.565, 0.652)]
+# (灰狼の 4 回目で追加) 基準画の目のまわり (側面・正面・斜め前の拡大で読んだ形):
+#  - 目は両端の尖ったレンズ (目頭は前下、目尻は後ろ上へ約 18°)。光る虹彩を細い暗い縁が囲み、縁は上瞼で太く、目頭から下へ短い涙の線が伸びる
+#  - 目は灰がかった暗い菱形の隈 (patch) の中にある。隈は目の 2 倍ほどで、目頭の前下と目尻の後ろへ尖る
+#  - 光る眉は目頭の上から後ろ上・外へ上がる短い太い筆 (正面では左右が外へ開く)。目には触れない
+#  - 下瞼に沿って、目頭の下から目尻の後ろへ少し上がる光る線 (隈の下の縁)
+#  - 正面から目と眉が見えるよう、目は鼻筋の両脇の前を向く面 (ストップの上) に置き、目の面を前へ向ける
+EYE2 = Vector((0.074, -0.698, 0.676))
+EYE3_FACING = Vector((0.60, -0.78, 0.14))
+BROW2 = [(0.062, -0.712, 0.702), (0.071, -0.697, 0.718), (0.081, -0.678, 0.734)]
+CHEEK2 = [(0.058, -0.724, 0.656), (0.082, -0.700, 0.652), (0.100, -0.664, 0.662)]
+# 側面・斜め前の、目尻の上から頭の上の縁に沿って耳の付け根へ行く光る線 (眉の筆と目尻の後ろで「く」の字を作る)
+TEMPLE2 = [(0.086, -0.668, 0.708), (0.092, -0.622, 0.726), (0.090, -0.572, 0.748)]
+PAL["patch"] = lin("#8A7362")
+PATCH_K = 0.65
+# (灰狼の 4 回目の見直しで追加) 目・眉・目尻の線を、絞った鼻づらの付け根の前・外を向く面へ (HEAD2_KEYS の -0.688 → -0.722)。
+#  - 目の中心は x 0.058 (頬の幅 0.124 の 0.47、基準画の正面 0.39〜0.46)。目頭の向き EYE3_U は面の横の向き (前・内) から約 24° 下げ、
+#    正面で目頭が下・目尻が上に約 24° 傾く (基準画の正面 20〜25°)
+#  - 形 EYE3_SHAPE (lens の L, H, 目頭の伸び, 目尻の伸び, 上瞼の倍率, 上瞼の丸み, 下瞼の丸み): 縁は上瞼を太く (虹彩との差 8 mm、下は 4 mm)、
+#    目頭を 1.1 cm 暗く伸ばして涙の線へつなぐ。上瞼はほぼ真っ直ぐ、下瞼は丸い (基準画の斜め前の目)
+#  - 眉は目頭の上から額を外上へ急に上がる短い太い筆 (正面で水平から約 67°、左右で「\ /」)。目尻の線は目尻から後ろ上へ耳の前まで。下瞼の線はやめる
+EYE2 = Vector((0.058, -0.706, 0.684))
+EYE3_U = Vector((-0.74, -0.52, -0.42))
+EYE3_SHAPE = ((0.036, 0.0136, 1.22, 1.12, 1.35, 1.05, 0.85), (0.030, 0.0099, 1.0, 1.0, 1.0, 1.10, 0.85))  # 基準画の正面の目の長さ (頬の幅の 0.15) へ
+BROW2 = [(0.045, -0.713, 0.707), (0.052, -0.699, 0.725), (0.061, -0.682, 0.743)]
+BROW2_W = 0.016
+TEMPLE2 = [(0.086, -0.687, 0.691), (0.102, -0.655, 0.698), (0.105, -0.615, 0.720)]
+CHEEK2_ON = False
+EYE3_RAY = True
+EYE3_OFF = (0.0055, 0.0090)  # 縁と虹彩を面から浮かせる量 (0.003・0.0052 では目の前の折れ目の稜が虹彩を突き抜けて目頭の下に暗い切れ込み)
+EAR_TUFTS = False  # 耳の付け根の内の淡い毛の房 (白い棘に見えた) をやめる
+HACKLE_Y0 = -0.20  # 背の逆立つ毛は肩から (首の上の -0.33・-0.26 の房は正面で頭の上に光る塊として立った)
+TEETH_UP = 0.017  # 上の門歯・臼歯の付け根を唇から奥へ入れる量 (0.010 では rest で先が唇の線に白い点として見えた)
+TEETH_LOW = 0.012  # 下の門歯・臼歯は薄くした下顎の中に収める (0.017 では付け根が顎の外へ出た、0.009 では門歯の先が口の先の隙間に覗いた)
+TEAR_K = 0.0  # 涙の線は目の縁の目頭の伸びと、下の TEAR2 (目頭から鼻づらの脇を前下へ) に替える
+TEAR2 = (Vector((-0.024, -0.018, -0.012)), Vector((-0.020, -0.040, -0.040)), 0.006, 0.55)  # (目からの始まり, 終わり, 幅, 濃さ)
 
 
 def build_line2(bm, bvh, lod, side, path, width):
@@ -1298,7 +1461,7 @@ def build_ears2(bm, lod, side):
             vv[cl] = (*fur_gain(col[kd]), 1.0)
     tip[cl] = (*fur_gain(mix(PAL["fur"], PAL["dark"], 0.5)), 1.0)
     uv_faces(bm, faces, [h, h + axis * Hh], 0.03)
-    if hero:
+    if hero and EAR_TUFTS:  # (灰狼の 4 回目の見直しで変更: EAR_TUFTS で切る。元は if hero:)
         # 付け根の内の淡い毛の房 (上と外へ)
         uvl = bm.loops.layers.uv.get("UVMap")
         for k in (-0.5, 0.1, 0.6):
@@ -1410,6 +1573,8 @@ def tufts_region(bm, bvh, lod, region):
             # 背の逆立つ毛 (首の上から肩): 中心線の両脇に後ろへ寝かせ、先 (上・前を向く面) が光る
             spikes = SPIKES_HERO if hero else SPIKES_LOD1
             for y, h, ln in spikes:
+                if y < HACKLE_Y0:  # (灰狼の 4 回目の見直しで追加)
+                    continue
                 p = Vector((sx * 0.026, y, 1.2))
                 items.append((p, Vector((sx * 0.15, 0.85, 0.50)), h * 1.05, 0.034, 0.008, Vector((0, 0.3, -0.1)), fur, mix(fur, top, 0.35), True))  # (灰狼の 3 回目で変更: 先の色 top → mix(fur, top, 0.35)。観察画面で白い鋸の歯に見えた)
         elif region == "chest":
@@ -1488,9 +1653,61 @@ FRONT_LEG = [(0.05, 0.086, 0.155), (0.45, 0.072, 0.108), (0.85, 0.056, 0.074), (
              (1.9, 0.036, 0.043), (2.05, 0.040, 0.047), (2.5, 0.034, 0.039), (3.0, 0.033, 0.037)]
 HIND_LEG = [(0.05, 0.094, 0.160), (0.4, 0.080, 0.130), (0.8, 0.058, 0.090), (1.0, 0.050, 0.068), (1.4, 0.043, 0.052),
             (1.85, 0.036, 0.045), (2.05, 0.041, 0.051), (2.5, 0.033, 0.039), (3.0, 0.033, 0.037)]
+# (灰狼の 4 回目の見直しで追加) 肩の板 (前脚の付け根) と首の後ろの端が胴の脇から出て、交わる線が肩の前・首の付け根でぎざぎざの明るい面
+# (鋸の歯) に見えた (筆の跡・塗りを消しても残る形の交わり)。前脚の付け根の断面を横 0.086 → 0.078・前後 0.155 → 0.125 m に、
+# 首の後ろの端 (-0.27) を横 0.155 → 0.145・喉 0.22 → 0.205・項 0.19 → 0.18 m に細くして、交わりを胴の中へ入れる
+FRONT_LEG = [(0.05, 0.078, 0.125), (0.45, 0.068, 0.100)] + FRONT_LEG[2:]
+NECK_KEYS = [(-0.27, 0.62, 0.145, 0.205, 0.18)] + NECK_KEYS[1:]
 # 尾: 付け根は細く、中ほどは房で太らせる (芯は細め)、真下寄りに垂らす
 TAIL2_PATH = [(0, 0.30, 0.575), (0, 0.395, 0.52), (0, 0.48, 0.43), (0, 0.555, 0.32), (0, 0.61, 0.215)]
 TAIL2_RADII = [0.042, 0.066, 0.074, 0.058, 0.0]
+
+
+TAIL2_RADII = [0.046, 0.078, 0.088, 0.068, 0.0]  # (灰狼の 4 回目で追加) 尾の房をやめたので芯を太く (元は 0.042 / 0.066 / 0.074 / 0.058)
+
+
+RUFF_JAG = 0.4  # (灰狼の 4 回目の見直しで追加) 首の殻の後ろの縁のぎざぎざと後ろへの流れの倍率 (喉の下だけ)
+
+
+def build_ruff(bm, lod):
+    """(灰狼の 4 回目で追加) 首の飾り毛: 首を包む殻 (頬の後ろから肩の前へ)。基準画の首の周りは、立った房ではなく、体の輪郭そのものが
+    後ろ下へ流れる大きな面になり、喉と胸の下の縁がぎざぎざに切れる。前の縁は頭の後ろの中に隠し、後ろへ行くほど首から離して流し、
+    後ろの縁は周りを交互に伸ばしてぎざぎざ (下ほど長く) にする。断面は首と同じ楕円を面の立った多角形に"""
+    hero = lod["name"] == "hero"
+    n = 10 if hero else 8
+    secs = resample(NECK_KEYS, 9)
+    ts = [0.0, 0.25, 0.5, 0.75, 1.0] if hero else [0.0, 0.5, 1.0]
+    rings = []
+    for k, t in enumerate(ts):
+        y = -0.555 + 0.19 * t
+        # 首の断面をこの y で補間
+        i = min(len(secs) - 2, max(0, int((secs[0][0] - y) / (secs[0][0] - secs[-1][0]) * (len(secs) - 1))))
+        a_, b_ = secs[i], secs[i + 1]
+        w = max(0.0, min(1.0, (a_[0] - y) / (a_[0] - b_[0]))) if a_[0] != b_[0] else 0.0
+        _, zc, rx, rf, rb = [a_[j] + (b_[j] - a_[j]) * w for j in range(5)]
+        off = 0.004 + 0.022 * smoothstep(0.0, 0.8, t)  # 首から離す
+        vs = []
+        for j in range(n):
+            ang_ = 2 * math.pi * j / n + math.pi / 2
+            ca, sa = math.cos(ang_), math.sin(ang_)
+            low = max(0.0, -sa)  # 喉の側ほど 1
+            jag = 0.0
+            yy = y
+            if t >= 0.99:
+                jag = (0.018 + 0.026 * low) * (1 if j % 2 == 0 else -0.25)
+                yy = y + (0.05 + 0.05 * low) * (1 if j % 2 == 0 else 0.3)  # 後ろへ流す
+            # (灰狼の 4 回目の見直しで追加) 後ろの縁のぎざぎざが肩の上で破れた紙の縁 (新しい鋸の歯) に見えたので、
+            # 項と横 (上半分) は後ろで首へ沈めて縁を見せず、ぎざぎざは喉の下だけ小さく (RUFF_JAG 倍) 残す。喉の側は後ろへ流さない
+            upper = smoothstep(-0.35, 0.25, sa)  # 項の側ほど 1
+            off_j = off * (1 - upper * smoothstep(0.45, 1.0, t)) - 0.010 * upper * smoothstep(0.8, 1.0, t)
+            jag *= RUFF_JAG * (1 - upper)
+            yy = y + (yy - y) * RUFF_JAG * (1 - upper)
+            rxx = rx + off_j * (0.5 + 0.5 * low) + jag * abs(ca)  # (灰狼の 4 回目の見直しで変更: off → off_j)
+            ry = (rb if sa > 0 else rf) + off_j * (0.5 + 1.2 * low) + jag * abs(sa)  # (灰狼の 4 回目の見直しで変更: off → off_j)
+            vs.append(bm.verts.new((rxx * ca, yy, zc + ry * sa - 0.02 * low * t)))
+        rings.append(vs)
+    faces = loft(bm, rings)
+    return faces
 
 
 def build_body2(bm, lod):
@@ -1508,7 +1725,7 @@ def build_tail2(bm, lod):
     nsec, n = lod["tail"]
     pts = resample_path(TAIL2_PATH, nsec)
     radii = [r for (r,) in resample([(r,) for r in TAIL2_RADII], nsec)]
-    faces = tube(bm, pts, radii, n, mat=BODY, flat=0.85)
+    faces = tube(bm, pts, radii, n, mat=BODY, flat=0.75)  # (灰狼の 4 回目で変更: 横の潰しを 0.85 → 0.75。房の代わりに平たい筆の尾に)
     uv_faces(bm, faces, TAIL2_PATH, 0.06)
 
 
@@ -1538,18 +1755,43 @@ def build_paw2(bm, lod, name):
 
 
 # ---- 頂点色 (make_part の color_for2 が部品の名前の頭で選ぶ)。テクスチャで暗くなった分は fur_gain で戻す
+# (灰狼の 4 回目の見直しで追加) 淡い灰茶の上の境 (y, z)。基準画の正面は目尻の下の頬から鼻の脇へ下がる V (元は -0.63 で 0.606、鼻先で 0.557)
+PALE_Z = [(-0.46, 0.555), (-0.56, 0.600), (-0.66, 0.640), (-0.72, 0.622), (-0.84, 0.572)]
+
+
 def col_head2(part, co, n):
     y, z = co.y, co.z
     c = mix(PAL["fur"], PAL["fur_top"], smoothstep(0.35, 0.85, n.z) * 0.85)
     c = mix(c, PAL["fur_shade"], smoothstep(-0.1, -0.6, n.z) * 0.4)
     # 淡い灰茶: 鼻づらの下半分・頬・喉 (目の下から鼻先へ下がる境、基準画)
     zm = interp([(-0.46, 0.555), (-0.56, 0.590), (-0.63, 0.606), (-0.88, 0.557)], y)
+    zm = interp(PALE_Z, y)  # (灰狼の 4 回目の見直しで追加) 目の下の頬まで灰茶に (PALE_Z)
     c = mix(c, PAL["pale"], smoothstep(zm + 0.010, zm - 0.012, z))
     # 目の周りの暗い隈と、目頭から前下への涙の線
     e = Vector((math.copysign(EYE2.x, co.x), EYE2.y, EYE2.z))
     c = mix(c, PAL["mask"], smoothstep(0.042, 0.020, (co - e).length) * 0.85 * MASK_K)
     a, b = e + Vector((0, -0.018, -0.008)), e + Vector((-math.copysign(0.012, co.x), -0.048, -0.040))
     c = mix(c, PAL["mask"], smoothstep(0.010, 0.004, seg_dist(co, a, b)) * 0.7 * TEAR_K)
+    # (灰狼の 4 回目で追加) 灰の隈: 目の長軸 (目頭の前下と目尻の後ろ上) に長い菱形。目頭の前下と目尻の後ろへ尖らせる
+    du_ = Vector((0, -1, -0.33)).normalized()
+    du_ = Vector((math.copysign(EYE3_U.x, co.x), EYE3_U.y, EYE3_U.z)).normalized()  # (灰狼の 4 回目の見直しで追加) 目の長軸に合わせる
+    q = co - e
+    a_ = q.dot(du_)
+    b_ = q.z - du_.z * a_
+    dd = abs(a_) / 0.050 + abs(b_) / 0.024  # 菱形 (L1) の距離
+    dd = abs(a_) / 0.046 + (q - du_ * a_).length / 0.022  # (灰狼の 4 回目の見直しで追加) 長軸からの距離を 3 次元で (前を向く面でも幅が潰れない)
+    c = mix(c, PAL["patch"], smoothstep(1.0, 0.7, dd) * PATCH_K)
+    # 鼻筋の稜は明るく、両脇の面は陰 (正面で鼻筋が通って見える)
+    if y < -0.70 and n.z > 0.2:
+        ridge = smoothstep(0.012, 0.0, abs(co.x))
+        c = mix(c, PAL["fur_top"], ridge * 0.6)
+        c = mix(c, PAL["fur_shade"], smoothstep(0.015, 0.035, abs(co.x)) * smoothstep(0.3, 0.8, abs(n.x)) * 0.35)
+    # (灰狼の 4 回目の見直しで追加) 基準画の正面の貌: 額から鼻先へ中心の幅 3〜4 cm を明るく通し (鼻筋)、鼻づらの外を向く斜めの脇の面と
+    # 目の下の頬を灰茶へ (正面で鼻筋の両脇から頬へ V の灰)。目頭から鼻づらの脇を前下へ細い暗い涙の線
+    c = mix(c, PAL["fur_top"], smoothstep(0.022, 0.010, abs(co.x)) * smoothstep(-0.62, -0.68, y) * smoothstep(-0.1, 0.4, n.z) * 0.6)
+    c = mix(c, PAL["pale"], smoothstep(0.25, 0.7, abs(n.x)) * smoothstep(-0.705, -0.735, y) * smoothstep(0.0, 0.3, n.z + 0.3) * 0.75)
+    ta, tb = e + Vector((math.copysign(TEAR2[0].x, co.x), TEAR2[0].y, TEAR2[0].z)), e + Vector((math.copysign(TEAR2[1].x, co.x), TEAR2[1].y, TEAR2[1].z))
+    c = mix(c, PAL["patch"], smoothstep(TEAR2[2], TEAR2[2] * 0.4, seg_dist(co, ta, tb)) * TEAR2[3])
     # 唇 (口の縁の黒) と口の中
     if y < MOUTH_Y + 0.004:
         xl, zl = lip_at(y)
@@ -1560,7 +1802,7 @@ def col_head2(part, co, n):
 def col_jaw2(part, co, n):
     xl, zl = jaw_at(co.y)
     c = mix(PAL["pale"], PAL["fur"], smoothstep(-0.6, 0.3, n.z) * 0.35)
-    c = mix(c, PAL["lip"], smoothstep(0.009, 0.003, zl - co.z))
+    c = mix(c, PAL["lip"], smoothstep(0.005, 0.002, zl - co.z))  # (灰狼の 4 回目で変更: 下唇の黒い帯を 9 → 5 mm。元は smoothstep(0.009, 0.003, zl - co.z))
     if n.z > 0.5 and abs(co.x) < xl - 0.004:
         c = PAL["mouth"]
     return c
@@ -1587,7 +1829,50 @@ def col_tail2(part, co, n):
     return mix(c, PAL["dark"], smoothstep(0.50, 0.60, co.y) * 0.75)  # 尾の先は焦げ茶 (狼。狐の白い先にしない)
 
 
-COLOR2 = {"head2": col_head2, "jaw2": col_jaw2, "leg2": col_leg2, "paw2": col_paw2, "tail2": col_tail2}
+def col_ruff(part, co, n):
+    """(灰狼の 4 回目で追加) 首の飾り毛: 項と肩の上は毛の色、横は明るい面、喉と胸は淡い灰茶。面の向きで明暗"""
+    c = mix(PAL["fur"], PAL["fur_top"], smoothstep(0.2, 0.8, n.z) * 0.8)
+    c = mix(c, PAL["fur_shade"], smoothstep(0.0, -0.5, n.z) * 0.4)
+    return mix(c, PAL["pale"], smoothstep(0.62, 0.50, co.z) * 0.9)
+
+
+COLOR2 = {"ruff": col_ruff, "head2": col_head2, "jaw2": col_jaw2, "leg2": col_leg2, "paw2": col_paw2, "tail2": col_tail2}
+
+
+def col_neck2(part, co, n):
+    """(灰狼の 4 回目の見直しで追加) 首を胴と同じ面の向きの明暗で塗る (背の黄み・脇の陰)。元の首の塗り (color_for の "neck") は明暗が無く、
+    首が胴から出る肩の前で胴の明暗と食い違い、交わる線がぎざぎざの境 (鋸の歯) に見えた。喉の淡い色は元のまま"""
+    c = mix(PAL["fur"], PAL["fur_top"], smoothstep(0.3, 0.8, n.z) * 0.9)
+    c = mix(c, PAL["fur_shade"], smoothstep(0.05, -0.4, n.z) * 0.8)
+    return mix(c, PAL["pale"], smoothstep(0.2, -0.3, n.z) * smoothstep(0.66, 0.56, co.z))
+
+
+def col_neck3(part, co, n):
+    """(灰狼の 4 回目の見直しで追加) col_neck2 でも肩の前に喉の淡い色がぎざぎざに残った (首の横の下側が胴の外へ出る所)。
+    首は胴と全く同じ式 (color_for の "body": 面の向きの明暗、腹の面と胸の前だけ淡い) で塗り、交わる線で色をそろえる"""
+    return color_for("body", co, n)
+
+
+COLOR2["neck"] = col_neck3
+
+
+def col_leg3(part, co, n):
+    """(灰狼の 4 回目の見直しで追加) 脚の付け根 (肩・腿の板の上、z 0.42 より上) は胴と同じ式へ移す。元の脚の塗りは後ろを向く面を陰にし
+    内を向く面を淡くするので、胴から出る肩の前で色が食い違い、交わる線がぎざぎざの明るい面 (鋸の歯) に見えた"""
+    return mix(col_leg2(part, co, n), color_for("body", co, n), smoothstep(0.40, 0.52, co.z))
+
+
+COLOR2["leg2"] = col_leg3
+
+
+def col_jaw3(part, co, n):
+    """(灰狼の 4 回目の見直しで追加) 下顎の先を唇の高さへ上げたので、先 (y < -0.812) の口の床が正面から覗き、鼻の下に赤い点に見えた。
+    先の口の床は唇の黒にする"""
+    c = col_jaw2(part, co, n)
+    return PAL["lip"] if co.y < -0.812 and c == PAL["mouth"] else c
+
+
+COLOR2["jaw2"] = col_jaw3
 
 
 def make_strokes():
@@ -1598,14 +1883,14 @@ def make_strokes():
     out = []
     for side in (-1, 1):
         # 胴・首: 肩から尻へ、背から腹へ 3 段
-        for i in range(40):
+        for i in range(STROKE_N):
             y = rng.uniform(-0.50, 0.36)
             top = interp([(k[0], k[1]) for k in BODY_KEYS], max(-0.44, min(0.36, y)))
             bot = interp([(k[0], k[2]) for k in BODY_KEYS], max(-0.44, min(0.36, y)))
             z = rng.uniform(bot + 0.06, top + 0.02)
             ang_ = math.radians(rng.uniform(-38, -12))  # 後ろ (+y) へ下る
-            L = rng.uniform(0.16, 0.30)
-            W = rng.uniform(0.07, 0.12)
+            L = rng.uniform(*STROKE_L)
+            W = rng.uniform(*STROKE_W)
             out.append((side, "body", Vector((0, y, z)), Vector((0, math.cos(ang_), math.sin(ang_))), L, W, 1 if i % 2 == 0 else -1))
         # 脚: 腿・肩から下へ 2 本ずつ
         for pre in ("fl", "hl"):
@@ -1621,6 +1906,10 @@ def make_strokes():
 
 
 STROKES = []
+# (灰狼の 4 回目で追加) 3 回目の筆の跡は細く多く、頂点の三角形の並びが見えて鋸の歯のように見えた。基準画の柔らかい大きな筆の塗りへ、
+# 数を 40 → 16 本、幅 7〜12 → 14〜24 cm、長さ 16〜30 → 26〜46 cm にし、跡の縁を広くぼかし (STROKE_SOFT)、濃さを抑える (STROKE_K)
+STROKE_N, STROKE_L, STROKE_W, STROKE_SOFT = 16, (0.26, 0.46), (0.14, 0.24), 0.0
+STROKE_K = (0.42, 0.30)
 
 
 def paint(part, co, n, c):
@@ -1640,13 +1929,13 @@ def paint(part, co, n, c):
             continue
         dist = (p - (a + d * (L * max(0.0, min(1.0, t))))).length
         w = W * (0.55 + 0.45 * math.sin(math.pi * max(0.0, min(1.0, t))))  # 筆の入りと抜きを細く
-        k_ = smoothstep(w, w * 0.45, dist) * (1 - smoothstep(0.9, 1.1, t)) * smoothstep(-0.1, 0.1, t)
+        k_ = smoothstep(w, w * STROKE_SOFT, dist) * (1 - smoothstep(0.75, 1.1, t)) * smoothstep(-0.1, 0.25, t)  # (灰狼の 4 回目で変更: 縁のぼかし 0.45 → STROKE_SOFT、入りと抜きを長く)
         if k_ <= 0:
             continue
         if tone > 0:
-            c = mix(c, mix(PAL["fur_top"], PAL["tip"], 0.5), k_ * 0.8)
+            c = mix(c, mix(PAL["fur_top"], PAL["tip"], 0.5), k_ * STROKE_K[0])  # (灰狼の 4 回目で変更: 0.8 → STROKE_K)
         else:
-            c = mix(c, mix(PAL["fur_shade"], PAL["mask"], 0.3), k_ * 0.5)
+            c = mix(c, mix(PAL["fur_shade"], PAL["mask"], 0.3), k_ * STROKE_K[1])  # (灰狼の 4 回目で変更: 0.5 → STROKE_K)
     return c
 
 
@@ -1655,7 +1944,7 @@ def color_for2(part, co, n):
     fn = COLOR2.get(part.split("_")[0])
     c = fn(part, co, n) if fn else color_for(part, co, n)
     # (灰狼の 3 回目で追加) 毛の部品 (胴・首・頭・脚・尾) には筆の塗りを重ねる
-    if c != WHITE and part.split("_")[0] in ("body", "neck", "head2", "leg2", "tail2"):
+    if c != WHITE and part.split("_")[0] in ("body", "neck", "head2", "leg2", "tail2", "ruff"):
         c = paint(part, co, n, c)
     return c if c == WHITE else fur_gain(c)
 
@@ -1868,7 +2157,10 @@ def build_lod2(lod, obj_name, mats):
     densify(bm, lod)
     uv_faces(bm, bm.faces, [(0, -0.56, 0.60), (0, -0.45, 0.62), (0, -0.36, 0.645), (0, -0.27, 0.62)], 0.14)
     add(bm, (shell_v, shell_f), (top_v, top_f), (skin_v, skin_f))
-    parts.append(make_part(obj_name + "_neck", bm, "neck", neck_cands(None), mats))
+    parts.append(make_part(obj_name + "_neck", bm, "neck", neck_cands(None), mats, sharp=FACET))  # (灰狼の 4 回目の見直しで変更: 胴と同じ角で面を立てる。元は sharp なし)
+    bm = bmesh.new()  # (灰狼の 4 回目で追加) 首の飾り毛の殻
+    build_ruff(bm, lod)
+    parts.append(make_part(obj_name + "_ruff", bm, "ruff", lambda co: weights_for(co, neck_cands(co) + [("head", 0.6)]), mats, sharp=FACET))
     bm = bmesh.new()
     build_head2(bm, lod)
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
@@ -1899,12 +2191,14 @@ def build_lod2(lod, obj_name, mats):
         EAR_FRONT[f"ear_{s}"] = build_ears2(bm, lod, side)
         parts.append(make_part(f"{obj_name}_ear_{s}", bm, f"ear_{s}", [(f"ear_{s}", 1.0), ("head", 0.25)], mats, sharp=40 if hero else None))
         bm = bmesh.new()
-        build_eye2(bm, bvh_head, lod, side)
+        build_eye3(bm, bvh_head, lod, side)  # (灰狼の 4 回目で変更: 元は build_eye2)
         parts.append(make_part(f"{obj_name}_eye_{s}", bm, "rigid", rigid_head, mats, recalc=False))
         bm = bmesh.new()
-        build_line2(bm, bvh_head, lod, side, BROW2, 0.011)
+        build_line2(bm, bvh_head, lod, side, BROW2, BROW2_W)  # (灰狼の 4 回目で変更: 幅 0.011 → 0.013) (灰狼の 4 回目の見直しで変更: 0.013 → BROW2_W)
         if hero:
-            build_line2(bm, bvh_head, lod, side, CHEEK2, 0.008)
+            if CHEEK2_ON:  # (灰狼の 4 回目の見直しで追加)
+                build_line2(bm, bvh_head, lod, side, CHEEK2, 0.007)  # (灰狼の 4 回目で変更: 幅 0.008 → 0.007。下瞼の線)
+            build_line2(bm, bvh_head, lod, side, TEMPLE2, 0.008)  # (灰狼の 4 回目で追加) 目尻の上から耳へ
         parts.append(make_part(f"{obj_name}_brow_{s}", bm, "rigid", rigid_head, mats, recalc=False))
         for pre in ("fl", "hl"):
             name = f"{pre}_{s}"
@@ -1932,6 +2226,8 @@ def build_lod2(lod, obj_name, mats):
     build_crest(bm, bvh_top, lod)
     parts.append(make_part(obj_name + "_crest", bm, "rigid", crest_weights, mats, recalc=False))
     regions = ["cheek", "mane", "hackle", "chest", "thigh", "belly", "tail"] + (["elbow"] if hero else [])
+    # (灰狼の 4 回目で変更: 首・頬・胸・尾ほかの立った房をやめ、背の逆立つ毛 (光る) だけ残す。首の飾り毛は胴の輪郭の一部 (build_ruff) で作る)
+    regions = ["hackle"]
     for region in regions:
         bm = bmesh.new()
         tufts_region(bm, bvh_top if region == "hackle" else bvh_skin, lod, region)
