@@ -44,6 +44,28 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 20_000 });
 });
 
+test('observe view: a prayer that comes while watching shows on the notice band, then fades', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto('/?scenario=sky-ship');
+  // 空の舟は 10 年目に民が祈る。9 年目まで操作画面で進め、止めてから入る (入る前の出来事は既読になるので、祈りは入ったあとに来る)
+  await page.click('#speed-100');
+  await expect(page.locator('#hud-year')).toHaveText('Year 9', { timeout: 60_000 });
+  await page.click('#speed-0');
+  await page.getByRole('button', { name: '3D で見る' }).click();
+  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^9 年$/, { timeout: 90_000 });
+  const band = page.getByRole('status', { name: /^祈り: / });
+  await expect(band).toBeHidden();
+  await page.getByRole('toolbar', { name: '観察画面' }).getByRole('button', { name: '10x' }).click();
+  // 石の銘板の帯に、石板の年表と同じ文で出る (印の種類は data-kind)
+  await expect(band).toBeVisible({ timeout: 60_000 });
+  await expect(band).toHaveText('民が祈った: 狼を減らして');
+  await expect(band).toHaveAttribute('data-kind', 'prayer');
+  await expect(band).toHaveAccessibleName('祈り: 民が祈った: 狼を減らして');
+  // 8 秒で霧のように消える
+  await expect(band).toHaveAttribute('data-state', 'out', { timeout: 12_000 });
+  await expect(band).toBeHidden({ timeout: 5_000 });
+});
+
 test('observe view: clicking an animal follows it, and the speed stays in the game controls', async ({ page }) => {
   test.setTimeout(120_000);
   // 寄せ先のボタンは試作用なので、observeDebug で出す
