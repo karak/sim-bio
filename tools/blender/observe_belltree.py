@@ -47,6 +47,11 @@ INNER = (0.5, 0.56, 0.7)  # 塊 (内側) の陰りに掛ける乗数
 # lod ごとの葉のカード: (1 m² あたりの枚数, 一辺 m)
 CARDS = {0: (1.9, 1.8), 1: (0.8, 2.6)}
 
+# (M23-04 で追加) 影の代わりの形の樹冠の大きさ (lod1 の塊の半径に掛ける) と葉のカード (1 m² あたりの枚数, 一辺 m)。
+# lod1 の塊は房より 1.14 倍大きく、近い木 (lod0) の外側の葉まで自分の影に入れて暗くしたので、影は lod0 の葉の層の内に収める
+SHADOW_K = 0.88
+SHADOW_CARDS = (0.8, 2.2)
+
 CANOPY_C = Vector((0, 0, 6.9))  # 成木の樹冠の中心 (柔らかい法線の向きの基準)
 
 
@@ -334,6 +339,39 @@ def mature(lod=0):
     return n
 
 
+def mature_shadow():
+    """(M23-04 で追加) 成木の影だけに使う代わりの形 belltree_mature_shadow (観察画面は本の描画に出さず、日の影の描画だけで描く)。
+    影の描画の三角形を減らす (成木 104 本を近い 3,646 / 遠い 1,080 三角形で描いていた)。樹冠の隙間の形は残す (光の筋・木漏れ日):
+    - 葉の塊とカードは lod1 の房の位置に置き、SHADOW_K だけ小さくする (近い木の外側の葉を自分の影で暗くしない)。カードは絵のアルファで切り抜く
+    - 幹は 4 角・3 段、板根は無し (根元の影は幹の影に紛れる)
+    - 枝は房 8 つへ 1 本ずつ、付け根から房の中への 3 角の錐 (影の中の細い線)
+    - 鐘は無し (樹冠の縁の小さな点)"""
+    n = K.Node("belltree_mature_shadow")
+    spine = [(0, 0, 0), (0.06, 0.02, 0.6), (0.12, 0.06, 1.7), (0.05, 0.12, 3.0), (-0.02, 0.06, 4.3), (0.0, 0.0, 5.6), (0.05, -0.05, 6.8)]
+    radii = [0.8, 0.6, 0.5, 0.46, 0.4, 0.3, 0.18]
+    spine, radii = spine[::2], radii[::2]
+    n.add(K.tube(spine, radii, n=4, cap_start=False), M["trunk"])
+    spine_v = [Vector(p) for p in spine]
+    for c, r, upper, z0 in cluster_centers():
+        p0 = trunk_at(spine_v, z0)
+        n.add(K.tube([p0, c - Z * 0.2 * r], [0.2 if upper else 0.26, 0.05], n=3, tip=True, cap_start=False), M["bark"])
+    clumps = [(c, r * SHADOW_K, s) for c, r, s in canopy_clumps(1)]
+    rnd = random.Random(7)
+    for i, (c, r, s) in enumerate(clumps):
+        src = K.ico((r * LUMP_K, r * LUMP_K, r * 0.82 * LUMP_K), subdiv=s, jitter=(0.03, 0.07, 0.1)[s], seed=10 + i,
+                    flat_bottom=0.3)
+        n.add(src, M["leaf"], matrix=K.trs(c, (0, 0, rnd.uniform(0, 360))))
+    centers = cluster_centers()
+    pts = bell_points(canopy_clumps(0), 30, seed=11)
+    lumps = [(c, r * LUMP_K, i) for i, (c, r, _) in enumerate(clumps)]
+    density, size = SHADOW_CARDS
+    cards = K.scatter_cards(n, M["foliage"], lumps, density, size, seed=71, color=CARD_LIN,
+                            shade_of=lambda k: shade_card(centers[k][0], centers[k][1]),
+                            soft_of=lambda k: (centers[k][0] + Z * 0.15 * centers[k][1], 1.0), avoid=pts, avoid_r=0.5, gap_clear=GAP_CLEAR)
+    print(f"  belltree_mature_shadow: cards={cards}")
+    return n
+
+
 # ---------------------------------------------------------------- 株と丸太
 
 def cut_face_mat(radius_of):
@@ -410,6 +448,7 @@ def logs():
 
 
 if __name__ == "__main__":
-    nodes = [seedling(), sapling(), mature(0), mature(1), stump(), logs()]
+    # (M23-04 で変更: 成木の影の代わりの形 mature_shadow を足す。既存のノードは同じ種で同じ形のまま)
+    nodes = [seedling(), sapling(), mature(0), mature(1), stump(), logs(), mature_shadow()]
     objs = [nd.build() for nd in nodes]
     K.export_glb(objs, os.path.join(K.OUT_DIR, "belltree.glb"), texcoords=True)

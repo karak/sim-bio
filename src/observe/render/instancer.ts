@@ -39,17 +39,27 @@ export type LodProps = {
   update(camera: { position: { x: number; z: number } } | Camera): void;
   /** 置き場所を入れ替える (capacity まで)。次の update で近い・遠いに振り分け直す */
   setPlacements(placements: Matrix4[]): void;
+  /** (M23-04) 影の代わりの形の組 (shadow を渡したとき)。呼び出し側が影の描画だけに出す (render/shadowOnly.ts) */
+  shadow: Group | null;
 };
 
 /**
  * 近くは lod0、遠くは lod1 の 2 組の InstancedMesh に、カメラからの距離で置き場所を振り分ける (設計 §8 の三角形の予算)。
  * 鐘樹の成木は 1 本 3,600 三角形あり、200 本を全部 lod0 で描くと予算 150 万を超える。振り分けは 0.25 秒ごとで足りる
  */
-export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], nearM: number, capacity = placements.length): LodProps {
-  const near = instanceProps(lod0, placements, true, capacity);
-  const far = instanceProps(lod1, placements, true, capacity);
+/**
+ * (M23-04) shadow を渡すと、影は近い・遠いの形ではなく全部の木をこの粗い形で落とす (近い・遠いの組は castShadow = false)。
+ * 影の組は視錐台で詰め直さない (影のカメラは区域全体を覆う)。置き場所を入れ替えたときだけ書き直す
+ */
+export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], nearM: number, capacity = placements.length, shadow: Object3D | null = null): LodProps {
+  const near = instanceProps(lod0, placements, !shadow, capacity);
+  const far = instanceProps(lod1, placements, !shadow, capacity);
   const group = new Group();
   group.add(near, far);
+  const proxy = shadow ? instanceProps(shadow, placements, true, capacity) : null;
+  if (proxy) group.add(proxy);
+  const proxyMeshes = (proxy?.children ?? []) as InstancedMesh[];
+  const proxyLocal = shadow ? proxyMeshes.map((_, k) => localOf(shadow, k)) : [];
   let xs = placements.map((p) => p.elements[12]);
   let zs = placements.map((p) => p.elements[14]);
   const nearMeshes = near.children as InstancedMesh[];
@@ -70,6 +80,7 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
   const view = new ViewCull();
   return {
     group,
+    shadow: proxy,
     update(camera) {
       const now = performance.now();
       const regroup = now - last >= 250;
@@ -103,6 +114,13 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
       measure();
       isNear = new Uint8Array(placements.length);
       last = -Infinity;
+      // (M23-04) 影の代わりの形は全部の木を並べ直す
+      proxyMeshes.forEach((im, k) => {
+        placements.forEach((p, i) => im.setMatrixAt(i, m.multiplyMatrices(p, proxyLocal[k])));
+        im.count = placements.length;
+        im.instanceMatrix.needsUpdate = true;
+        im.boundingSphere = null;
+      });
     },
   };
 }

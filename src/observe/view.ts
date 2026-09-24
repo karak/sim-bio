@@ -41,6 +41,7 @@ import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
 import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { triangleBreakdown } from './render/breakdown';
+import { installShadowOnly } from './render/shadowOnly';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
@@ -209,6 +210,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
   renderer.shadowMap.enabled = OPT.shadow;
   renderer.shadowMap.type = PCFShadowMap;
+  // (M23-04) 影の描画だけに出す粗い代わりの形 (鐘樹の成木・小屋・近くの動物)。本の描画の形は castShadow = false にする
+  const shadowOnly = installShadowOnly(renderer.shadowMap);
   const scene = new Scene();
   scene.background = skyTexture();
   // 霧の色は空の地平の帯に合わせ、水面の端 (区域の外の遠景) を地平に溶かす
@@ -331,13 +334,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const node = findNode(treeGlb, `belltree_${kind}`) ?? placeholderTree(kind as 'mature' | 'sapling' | 'seedling' | 'stump');
     const lod1 = kind === 'mature' ? findNode(treeGlb, 'belltree_mature_lod1') : null;
     if (lod1) {
-      const l = lodProps(node, lod1, mats, 38, OPT.trees);
+      // (M23-04 で変更: 成木の影は近い・遠いの形ではなく、影の代わりの形 belltree_mature_shadow (420 三角形) で落とす)
+      const l = lodProps(node, lod1, mats, 38, OPT.trees, findNode(treeGlb, 'belltree_mature_shadow'));
+      if (l.shadow) shadowOnly.add(l.shadow);
       lods.push(l);
       belltreeSets[kind] = l;
       scene.add(l.group);
     } else if (kind !== 'stump') {
       // (M22-03: 若木と芽も植え直せるよう、遠くも同じ形の組にして置き場所を入れ替えられるようにする)
       const l = lodProps(node, node, mats, 45, OPT.trees);
+      // (M23-04) 芽 (0.4 m) は影を落とさない (影が小さく見えない。下草と同じ)
+      if (kind === 'seedling') l.group.traverse((o) => (o.castShadow = false));
       lods.push(l);
       belltreeSets[kind] = l;
       scene.add(l.group);
@@ -440,7 +447,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // 小屋・巨石・石垣もカメラの遮りに数える (舟の見上げのカメラが集落の中に立って巨石が画を覆ったため)。自動カメラは舟も数える (集落の俯瞰が舟の甲板の上に立ったため)
   const settlement = new Group();
   scene.add(settlement);
-  for (const [name, mats] of settlementPlacements) settlement.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
+  for (const [name, mats] of settlementPlacements) {
+    const g = instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats);
+    settlement.add(g);
+    // (M23-04) 小屋 (1 棟 10 千三角形) の影は遠い段 hut_lod1 (766 三角形) で落とす
+    const lod1 = name === 'hut' ? findNode(settleGlb, 'hut_lod1') : null;
+    if (!lod1) continue;
+    g.traverse((o) => (o.castShadow = false));
+    const proxy = instanceProps(lod1, mats);
+    settlement.add(proxy);
+    shadowOnly.add(proxy);
+  }
   const pile = findNode(shipGlb, 'timber_pile');
   if (pile) {
     const px = slip.x + side.x * 9 - marks.slipwayBow.x * 3;
@@ -475,7 +492,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     if (sum > 0) K = { ...K, deer: OPT.deer / sum };
   }
   let targets = targetCounts(area, K, folk);
-  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50));
+  // (M23-04 で変更: 近くの骨入りの個体の影は群れ LOD で落とす)
+  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50), (o) => shadowOnly.add(o));
   scene.add(creatures.group);
   let agents: AgentWorld = { agents: [], nextId: 1 };
   let credit = 0;

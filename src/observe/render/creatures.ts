@@ -1,5 +1,6 @@
 import {
   AnimationMixer,
+  BufferGeometry,
   CapsuleGeometry,
   Group,
   InstancedMesh,
@@ -9,6 +10,7 @@ import {
   type AnimationClip,
   type Camera,
   type Object3D,
+  type SkinnedMesh,
 } from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
@@ -80,6 +82,11 @@ type SpeciesRig = {
   clip(a: Agent, find: (id: number) => Agent | undefined): string;
   variant(a: Agent): number;
   placeholder: { color: string; radius: number; length: number };
+  /**
+   * (M23-04) 群れ LOD (lod1) は雄の形しか無いので、影を群れ LOD で落とすとき、見た目の違い variant の個体は
+   * 骨 bone に結ばれた光る頂点 (焼いた aEmissive) のうち高さ aboveY より上を含む三角形を除いた形で落とす (雌の影に雄の光る角が出ない)
+   */
+  shadowTrim?: { variant: number; bone: string; aboveY: number };
 };
 
 export const RIGS: Record<AgentSpecies, SpeciesRig> = {
@@ -90,10 +97,44 @@ export const RIGS: Record<AgentSpecies, SpeciesRig> = {
     clip: (a) => clipFor(a.state, a.t),
     variant: (a) => (a.id % 2 === 0 ? 1 : 0),
     placeholder: { color: '#D2A04E', radius: 0.35, length: 1.0 },
+    // (M23-04) 雌 (deer_doe) の光る模様は 1.88 m まで、雄の角は頭の骨で 2.9 m まで
+    shadowTrim: { variant: 1, bone: 'head', aboveY: 1.95 },
   },
   wolf: { lod0: ['wolf'], lod1: 'wolf_lod1', near: 4, clip: wolfClip, variant: () => 0, placeholder: { color: '#E07A55', radius: 0.3, length: 0.9 } },
   rabbit: { lod0: ['rabbit'], lod1: 'rabbit_lod1', near: 6, clip: rabbitClip, variant: () => 0, placeholder: { color: '#D6B85E', radius: 0.16, length: 0.25 } },
 };
+
+/**
+ * (M23-04) 骨入りの形 geo から、骨 bone に結ばれた光る頂点 (焼いた aEmissive が 0 より大きい) で高さ (結んだ姿勢の y) が aboveY より上の頂点を
+ * 1 つでも含む三角形を除いた形を返す。属性は元と共有し、index だけ作り直す
+ */
+export function trimGlow(geo: BufferGeometry, bone: number, aboveY: number): BufferGeometry {
+  const pos = geo.getAttribute('position');
+  const em = geo.getAttribute('aEmissive');
+  const si = geo.getAttribute('skinIndex');
+  const sw = geo.getAttribute('skinWeight');
+  if (!em || !si || !sw) return geo;
+  const drop = (i: number) => {
+    if (pos.getY(i) <= aboveY || em.getX(i) + em.getY(i) + em.getZ(i) <= 0) return false;
+    for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bone && sw.getComponent(i, k) > 0) return true;
+    return false;
+  };
+  const n = geo.index ? geo.index.count : pos.count;
+  const at = (k: number) => (geo.index ? geo.index.getX(k) : k);
+  const keep: number[] = [];
+  for (let k = 0; k + 2 < n; k += 3) {
+    const a = at(k);
+    const b = at(k + 1);
+    const c = at(k + 2);
+    if (!drop(a) && !drop(b) && !drop(c)) keep.push(a, b, c);
+  }
+  const out = new BufferGeometry();
+  for (const [name, attr] of Object.entries(geo.attributes)) out.setAttribute(name, attr);
+  out.setIndex(keep);
+  out.boundingSphere = geo.boundingSphere;
+  out.boundingBox = geo.boundingBox;
+  return out;
+}
 
 /** 還る個体は RETURN_S かけて地面に沈み、小さくなる (生気の光の粒は M22-07 の演出で足す) */
 function sinkOf(a: Agent): number {
@@ -108,10 +149,14 @@ type SpeciesView = {
   update(own: readonly Agent[], find: (id: number) => Agent | undefined, camera: { position: Vector3 }, heightAt: (x: number, z: number) => number, t: number, dt: number): void;
 };
 
-export function createCreatureView(glbs: Partial<Record<AgentSpecies, GLTF | null>>, maxPerSpecies: number): CreatureView {
+/**
+ * (M23-04) shadowOnly を渡すと、近くの骨入りの個体の影は群れ LOD (lod1、月鹿 866 三角形) の骨入りで落とす (lod0 は castShadow = false)。
+ * 群れ LOD は同じ骨に結ばれているので、影は本の描画の姿勢と同じに動く (render/shadowOnly.ts が影の描画の前に骨を更新する)
+ */
+export function createCreatureView(glbs: Partial<Record<AgentSpecies, GLTF | null>>, maxPerSpecies: number, shadowOnly?: (root: Object3D) => void): CreatureView {
   const group = new Group();
   const species = Object.keys(RIGS) as AgentSpecies[];
-  const views = new Map(species.map((sp) => [sp, createSpeciesView(group, sp, glbs[sp] ?? null, maxPerSpecies)]));
+  const views = new Map(species.map((sp) => [sp, createSpeciesView(group, sp, glbs[sp] ?? null, maxPerSpecies, shadowOnly)]));
   return {
     group,
     update(agents, camera, heightAt, t, dt) {
@@ -125,7 +170,7 @@ export function createCreatureView(glbs: Partial<Record<AgentSpecies, GLTF | nul
   };
 }
 
-function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, maxPerSpecies: number): SpeciesView {
+function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, maxPerSpecies: number, shadowOnly?: (root: Object3D) => void): SpeciesView {
   const rig = RIGS[sp];
   const clips: AnimationClip[] = glb?.animations ?? [];
   // 群れ LOD は材質ごとの子に分かれているので、子ごとに VAT の群れを作り、同じ行列・クリップで動かす
@@ -145,17 +190,36 @@ function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, max
   // (M23-02) 群れ (VAT) は丸ごとの判定を切ってある (frustumCulled = false) ので、視錐台で見える個体だけを書く
   const herdR = Math.max(0, ...bakes.map((b) => b.bake.radius));
   const view = new ViewCull();
-  type NearSlot = { obj: Object3D; variants: (Object3D | null)[]; mixer: AnimationMixer; agent: number; clip: string };
+  // (M23-04 で変更: shadow は影を落とす群れ LOD の骨入り、trimmed は shadowTrim の個体に使う形)
+  type NearSlot = { obj: Object3D; variants: (Object3D | null)[]; mixer: AnimationMixer; agent: number; clip: string; shadow: { mesh: SkinnedMesh; full: BufferGeometry; trimmed: BufferGeometry }[] };
   const pool: NearSlot[] = [];
+  const trimmedCache = new Map<BufferGeometry, BufferGeometry>();
   if (glb && clips.length) {
     for (let i = 0; i < rig.near; i++) {
       const obj = cloneSkinned(glb.scene);
       const l = obj.getObjectByName(rig.lod1);
       if (l) l.visible = false;
+      // (M23-04) 影は群れ LOD で落とす
+      if (l && shadowOnly) {
+        obj.traverse((o) => (o.castShadow = false));
+        shadowOnly(l);
+      }
       obj.visible = false;
       group.add(obj);
       // GLB には雄 (deer) と雌 (deer_doe) が同じ骨で重なって入っている。個体ごとにどちらか一方だけ見せる
-      pool.push({ obj, variants: rig.lod0.map((n) => obj.getObjectByName(n) ?? null), mixer: new AnimationMixer(obj), agent: -1, clip: '' });
+      const shadow: NearSlot['shadow'] = [];
+      if (l && shadowOnly && rig.shadowTrim) {
+        const trim = rig.shadowTrim;
+        l.traverse((o) => {
+          const sk = o as SkinnedMesh;
+          if (!sk.isSkinnedMesh) return;
+          const head = sk.skeleton.bones.findIndex((b) => b.name === trim.bone);
+          let trimmed = trimmedCache.get(sk.geometry);
+          if (!trimmed) trimmedCache.set(sk.geometry, (trimmed = head < 0 ? sk.geometry : trimGlow(sk.geometry, head, trim.aboveY)));
+          shadow.push({ mesh: sk, full: sk.geometry, trimmed });
+        });
+      }
+      pool.push({ obj, variants: rig.lod0.map((n) => obj.getObjectByName(n) ?? null), mixer: new AnimationMixer(obj), agent: -1, clip: '', shadow });
     }
   }
   let placeholder: Placeholder | null = null;
@@ -229,6 +293,7 @@ function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, max
         // 雌は偶数の id (群れ LOD は雄しか無いので、遠くでは雄に見える。M22-05 で雌の群れ LOD を足す)
         const v = rig.variant(a);
         sl.variants.forEach((o, i) => o && (o.visible = i === v));
+        for (const sh of sl.shadow) sh.mesh.geometry = v === rig.shadowTrim?.variant ? sh.trimmed : sh.full;
         sl.obj.position.set(a.x, heightAt(a.x, a.z) - sink * 0.8, a.z);
         sl.obj.rotation.y = a.heading;
         sl.obj.scale.setScalar(1 - sink * 0.4);
