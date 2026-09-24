@@ -117,8 +117,53 @@ def stone(node, rnd, center, size, yaw=0.0, tilt=(0.0, 0.0), bevel=0.06, segment
     if ao is not None:
         base = shade
         shade = lambda co, n: tuple(c * ao(co, n) for c in base(co, n))  # noqa: E731
-    return node.add(src, M[mat], matrix=K.trs(center, (tilt[0], tilt[1], yaw)), smooth=False,
-                    shade=shade, per_face_mat=moss_on_top(moss, rnd))
+    faces = node.add(src, M[mat], matrix=K.trs(center, (tilt[0], tilt[1], yaw)), smooth=False,
+                     shade=shade, per_face_mat=moss_on_top(moss, rnd))
+    if FAR_PROPS:  # (M23-09 の 3 回目で追加) 部品の遠距離版 (far_props) は石の下の面を省く
+        drop_bottoms(node, faces)
+    return faces
+
+
+FAR_PROPS = False  # (M23-09 の 3 回目で追加) far_props の中 (部品の遠距離版を組む間) だけ True
+
+
+class far_props:
+    """(M23-09 の 3 回目で追加) 小屋でない部品 (灯り柱・石垣・L 字の石垣・立石・船台・衝立) の遠距離版を組む間だけ、形の部品を軽くする:
+    箱の面取りを無くし (石の下の面も省く)、管は断面の角を 2 つ減らし (3 まで)、回転体は 4 角より多いものを 2 つ減らし、
+    icosphere は細分を 1 段減らし、葉は k=1、灯籠は lantern_far、縛り縄は 3 角。乱数は同じだけ引くので、同じ石・板が同じ所に並ぶ"""
+
+    def __enter__(self):
+        global FAR_PROPS
+        FAR_PROPS = True
+        self.kit = (K.box, K.tube, K.lathe, K.ico, K.leaf)
+        box, tube, lathe, ico, leaf = self.kit
+        K.box = lambda size=(1, 1, 1), bevel=0.0, segments=1, **k: box(size, bevel=0.0, segments=1, **k)
+        K.tube = lambda pts, radii, n=6, **k: tube(pts, radii, n=max(3, n - 2), **k)
+        K.lathe = lambda profile, n=6, **k: lathe(profile, n=n if n <= 4 else max(4, n - 2), **k)
+        K.ico = lambda radii=(1, 1, 1), subdiv=1, **k: ico(radii, subdiv=max(0, subdiv - 1), **k)
+        K.leaf = lambda length, width, thick, bend=0.0, k=3: leaf(length, width, thick, bend=bend, k=1)
+        g = globals()
+        self.fns = (g["lantern"], g["lashing"])
+        lash = self.fns[1]
+        g["lantern"] = lambda n, top, s=1.0: lantern_far(n, top, s=s)
+        g["lashing"] = lambda *a, **k: lash(*a, **{**k, "far": True})
+        return self
+
+    def __exit__(self, *exc):
+        global FAR_PROPS
+        FAR_PROPS = False
+        K.box, K.tube, K.lathe, K.ico, K.leaf = self.kit
+        g = globals()
+        g["lantern"], g["lashing"] = self.fns
+        return False
+
+
+def far_of(build):
+    """(M23-09 の 3 回目で追加) 部品の遠距離版 (<名前>_lod1)。build は部品を組む関数"""
+    with far_props():
+        nd = build()
+    nd.name += "_lod1"
+    return nd
 
 
 def frame(x_axis, y_axis, origin):
@@ -493,9 +538,12 @@ def slab(fn, nu, nv, thick):
     return bm
 
 
-def shingle(L, w, t, rnd, jag=0.12):
+def shingle(L, w, t, rnd, jag=0.12, lite=False, keep=()):
     """手で割った屋根板 1 枚。+X が軒へ (長さ L)、Y が幅、Z が厚み (上面の法線 +Z)。軒側の端はぎざぎざに欠ける。
     上面と縁だけ (下面と棟側の縁は下地と上の段に隠れる)。recalc=False で置く"""
+    # (M23-09 の 3 回目で追加) lite は 60 m より先の遠距離版 (hut(far=True, lite=True)) の板: 両の長い縁を省き、上面と軒側の
+    # ぎざぎざの縁だけ (10 三角形)。乱数は同じだけ引く
+    # (M23-09 の 3 回目の手直しで追加) keep は lite でも残す長い縁 (-1 は -Y、1 は +Y の縁)。妻の端の板の外の縁 (横から見える段の暗い線)
     bm = bmesh.new()
     hw = w / 2
     outline = [(0.0, -hw), (L + rnd.uniform(-0.4, 0.6) * jag, -hw),
@@ -507,6 +555,8 @@ def shingle(L, w, t, rnd, jag=0.12):
     k = len(outline)
     for i in range(k - 1):
         j = i + 1
+        if lite and ((i == 0 and -1 not in keep) or (i == k - 2 and 1 not in keep)):
+            continue
         bm.faces.new((bot[i], bot[j], top[j], top[i]))
     return bm
 
@@ -514,10 +564,11 @@ def shingle(L, w, t, rnd, jag=0.12):
 ROOF_BASE, ROOF_GREY, ROOF_MOSS = "#8C6242", "#857566", "#7C9443"  # 屋根板の地の色、雨に晒された灰、苔
 
 
-def roof_side(n, rnd, s, far=False):
+def roof_side(n, rnd, s, far=False, lite=False):
     """屋根の片面: 軒から棟へ 6 段の屋根板。段ごとに幅をずらし、ときどき 1 枚欠ける。板の縁は暗く (段の影の線)、
     板の根元 (上の段の下) ほど暗い。軒に近い段に苔を載せる"""
     # (M23-09 のやり直しで追加) far は遠距離版: 板は hut と同じ (乱数も同じだけ引くので同じ所・同じ色)。軒の鼻の丸太は断面 4 角
+    # (M23-09 の 3 回目で追加) lite は長い縁を省いた板 (shingle の lite)、軒の鼻の丸太は 3 点・断面 3 角
     E, L = 0.8, 1.18  # (段の間隔と板の長さ。基準画の長い割り板に寄せて 5 段)
     nrm = h_nrm(s)
     moss = lin(ROOF_MOSS)
@@ -558,11 +609,15 @@ def roof_side(n, rnd, s, far=False):
                     v *= 0.5
                 m = m_amt * along
                 return tuple((col[i] * (1 - m) + moss[i] * m) * v for i in range(3))
-            n.add(shingle(ln, y1 - y0, 0.07, rnd, jag=0.16), M["roof"], matrix=frame(xa, side, head), recalc=False, shade=f)
+            # (M23-09 の 3 回目の手直しで追加) lite でも妻の端の板は外の長い縁を残す (板の +Y は s の向きの Y)
+            keep = tuple(e * s for e, at_end in ((-1, y0 <= -H_YR - 0.1 + 1e-6), (1, y1 >= H_YR + 0.1 - 1e-6)) if at_end) if lite else ()
+            n.add(shingle(ln, y1 - y0, 0.07, rnd, jag=0.16, lite=lite, keep=keep), M["roof"], matrix=frame(xa, side, head),
+                  recalc=False, shade=f)
         k += 1
     # 軒の鼻の丸太 (板の最下段を受ける。舟の腰板のように屋根の下の縁を一本の線で締める)
-    n.add(K.tube([h_roof(s, H_SL + 0.02, y, -0.02) for y in (-H_YR - 0.15, -1.2, 0.0, 1.2, H_YR + 0.15)], [0.09] * 5,
-                 n=4 if far else 6),
+    eave_ys = (-H_YR - 0.15, 0.0, H_YR + 0.15) if lite else (-H_YR - 0.15, -1.2, 0.0, 1.2, H_YR + 0.15)
+    n.add(K.tube([h_roof(s, H_SL + 0.02, y, -0.02) for y in eave_ys], [0.09] * len(eave_ys),
+                 n=3 if lite else 4 if far else 6),
           M["wood"], smooth=True, shade=K.shade_const(0.78))
 
 
@@ -576,12 +631,14 @@ def lashing(n, center, axis, r, w=0.07, far=False):
           shade=K.shade_const(0.85))
 
 
-def bell(n, top, size=1.0, cord=0.2, far=False):
+def bell(n, top, size=1.0, cord=0.2, far=False, lite=False):
     """鐘樹の青銅の小さな鐘 (口が暖かく光る。舟の舷の鐘と同じ意匠)。top は吊り紐の上端"""
     # (M23-09 のやり直しで追加) far は遠距離版 (鐘の輪を 3 角に)
+    # (M23-09 の 3 回目で追加) lite は吊り紐を省く
     top = Vector(top)
     b = top - Z * cord
-    n.add(K.tube([top, b], [0.008, 0.008], n=3, cap_start=False, cap_end=False), M["rope"])
+    if not lite:
+        n.add(K.tube([top, b], [0.008, 0.008], n=3, cap_start=False, cap_end=False), M["rope"])
     prof = [(0.0, 0.0), (0.045 * size, -0.02 * size), (0.06 * size, -0.08 * size), (0.085 * size, -0.14 * size),
             (0.0, -0.11 * size)]
     n.add(K.lathe(prof, n=3 if far else 6), M["bell"], matrix=K.trs(b), smooth=True,
@@ -637,11 +694,14 @@ def joints(ao, u, zb, hh):
     return f
 
 
-def wall_run(n, rnd, a, b, courses, thick, moss_top=0.7, ao=None, z0=0.0, far=False):
+def wall_run(n, rnd, a, b, courses, thick, moss_top=0.7, ao=None, z0=0.0, far=False, lite=False):
     """a → b に一つずつの石を段に積んだ空積みの壁。courses = [(高さ, 石の数), …] (下から)。
     石の長さはばらし、段ごとに目地がずれる"""
     # (M23-09 のやり直しで追加) far は遠距離版: 同じ石を面取りの無い箱で、下の面を省く (上の面は段の縁が明るく覗くので残す)。
     # 目地を 6 cm に広げ、目地の面と石の下を暗くする (joints)
+    # (M23-09 の 3 回目で追加) lite は隣り合う 2 つの石を 1 つの長い石にする (2 つ目は捨てる spare に置き、乱数は同じだけ引く)。
+    # 上の段に隠れる上の面も省く
+    spare = K.Node("spare") if lite else None
     a, b = Vector((a[0], a[1], 0)), Vector((b[0], b[1], 0))
     d = b - a
     L = d.length
@@ -654,19 +714,36 @@ def wall_run(n, rnd, a, b, courses, thick, moss_top=0.7, ao=None, z0=0.0, far=Fa
         tot = sum(ws)
         x = 0.0
         top = ci == len(courses) - 1
-        for w in ws:
+        for si, w in enumerate(ws):
             w = w / tot * L
             hh = h * rnd.uniform(0.9, 1.04)
             th = thick * rnd.uniform(0.88, 1.02) * (0.94 if top else 1.0)
-            p = a + u * (x + w / 2) + perp * rnd.uniform(-0.03, 0.03)
-            faces = pstone(n, rnd, (p.x, p.y, z + hh / 2), (w - (0.06 if far else 0.04), th, hh), yaw=yaw + rnd.uniform(-4, 4),
+            wide, px = w, x + w / 2
+            if lite and si % 2 == 0 and si + 1 < cnt:
+                wide = w + ws[si + 1] / tot * L
+                px = x + wide / 2
+            p = a + u * px + perp * rnd.uniform(-0.03, 0.03)
+            dst = spare if lite and si % 2 == 1 else n
+            faces = pstone(dst, rnd, (p.x, p.y, z + hh / 2), (wide - (0.06 if far else 0.04), th, hh), yaw=yaw + rnd.uniform(-4, 4),
                            tilt=(rnd.uniform(-2, 2), rnd.uniform(-2.5, 2.5)) if top else (0, 0),
                            bevel=0.0 if far else 0.06 if top else 0.05, jitter=0.025, moss=moss_top if top else 0.12, z1=1.2,
                            ao=joints(ao, u, z, hh) if far else ao)
-            if far:
-                drop_bottoms(n, faces)
+            if far and dst is n:
+                drop_bottoms(n, faces, top=lite and not top)
             x += w
         z += h
+
+
+def leaf_lite(length, width, bend=0.0):
+    """(M23-09 の 3 回目で追加) 60 m より先の遠距離版の葉: K.leaf と同じ輪郭の菱形 1 枚 (上の面 2 三角形と下の面 2 三角形)。
+    +X へ伸び、上の面の法線は +Z、先は bend だけ下がる"""
+    bm = bmesh.new()
+    top = [bm.verts.new(c) for c in ((0, 0, 0), (length * 0.45, -width / 2, 0.01), (length, 0, -bend * length),
+                                      (length * 0.45, width / 2, 0.01))]
+    bot = [bm.verts.new(v.co - Vector((0, 0, 0.012))) for v in top]
+    bm.faces.new(top)
+    bm.faces.new(list(reversed(bot)))
+    return bm
 
 
 def leaf_far(length, width, thick, bend=0.0):
@@ -688,11 +765,13 @@ def leaf_far(length, width, thick, bend=0.0):
     return bm
 
 
-def vine(n, pts, rnd, every=1, r=0.07, curls=2, far=False):
+def vine(n, pts, rnd, every=1, r=0.07, curls=2, far=False, lite=False):
     """蔓 (柱を登って屋根を越える) と葉。pts は通り道。点の間に横の揺れを入れて太い蔓がうねるようにし、
     every 点ごとに葉を 3 枚の房で、curls か所に細い巻きひげ (基準画の蔓)"""
     # (M23-09 のやり直しで追加) far は遠距離版: 同じ蔓に、同じ所・向き・大きさ・色・柔らかい法線の葉の房 (葉は 10 三角形、leaf_far)。
     # 巻きひげ (半径 1.6 cm) は省く。乱数は同じだけ引く
+    # (M23-09 の 3 回目で追加) lite は蔓を断面 3 角の管 (点の間の揺れは省く) にし、葉の房 (3 枚) を同じ所・向き・色の 2 枚の菱形の葉
+    # (leaf_lite、4 三角形、1.15 倍) にする
     pts = [Vector(p) for p in pts]
     wavy = [pts[0]]
     for i, (a, b) in enumerate(zip(pts, pts[1:])):
@@ -702,16 +781,27 @@ def vine(n, pts, rnd, every=1, r=0.07, curls=2, far=False):
         for t in (0.33, 0.66):
             wavy.append(a + d * t + side * math.sin((i * 2 + t * 3) * 1.7) * 0.08)
         wavy.append(b)
+    if lite:  # 点の間の揺れ (8 cm、60 m では 1 画素ほど) を省き、通り道の点だけを結ぶ
+        wavy = list(pts)
     k = len(wavy)
-    n.add(K.tube(wavy, [r * (1.15 - 0.6 * i / (k - 1)) for i in range(k)], n=4, cap_start=False), M["vine"],
+    # (M23-09 の 3 回目の手直しで変更: lite の断面 3 角の管は 4 角より細く見えるので半径を 1.15 倍に)
+    n.add(K.tube(wavy, [r * (1.15 if lite else 1.0) * (1.15 - 0.6 * i / (k - 1)) for i in range(k)], n=3 if lite else 4, cap_start=False),
+          M["vine"],
           smooth=True, shade=K.shade_height(0, 3.5, 0.7, 0.95))
     for j in range(2, len(pts), every):
+        tuft = []
         for _ in range(3):
             d = Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(0.3, 1.0))).normalized()
             m = K.aim(d)
             m.translation = pts[j] + d * 0.04
             sc = rnd.uniform(0.9, 1.35)
             tone = rnd.uniform(0.8, 1.05)
+            if lite:  # (M23-09 の 3 回目の手直しで変更: 丸い房 (八面体) は菱形の粒が蔓に並んで見えたので、3 枚のうち 2 枚を菱形の葉に)
+                tuft.append(None)
+                if len(tuft) < 3:
+                    n.add(leaf_lite(0.34 * sc * 1.15, 0.21 * sc * 1.15, bend=0.25), M["vine"], matrix=m, smooth=True,
+                          shade=K.shade_const(tone), soft=(pts[j] - Z * 0.25, 0.4))
+                continue
             leaf = leaf_far(0.34 * sc, 0.21 * sc, 0.03, bend=0.25) if far else K.leaf(0.34 * sc, 0.21 * sc, 0.03, bend=0.25)
             n.add(leaf, M["vine"], matrix=m, smooth=True, shade=K.shade_const(tone), soft=(pts[j] - Z * 0.25, 0.4))
     for j in rnd.sample(range(2, len(pts)), min(curls, len(pts) - 2)):
@@ -724,24 +814,30 @@ def vine(n, pts, rnd, every=1, r=0.07, curls=2, far=False):
         n.add(K.tube(tw, [0.016] * len(tw), n=3), M["vine"], smooth=True, shade=K.shade_const(0.9))
 
 
-def hut(far=False):
+def hut(far=False, lite=False):
     # (M23-09 のやり直しで追加) far=True は遠距離版 hut_lod1: hut と同じ乱数で同じ石・板・蔓・葉を同じ所に置き、形だけ軽くする
     # (石は面取りの無い箱で隠れる面を省く、管は断面の角を減らす、葉は 10 三角形のレンズ形 (leaf_far)、
     # 巻きひげは省く、灯籠は lantern_far・紋は glyph_far)。屋根の骨組み (垂木・下地・軒の鼻・棟・妻の竿と渦) も同じ所に残す
+    # (M23-09 の 3 回目で追加) lite=True (far のとき) は 60 m より先に使う軽い遠距離版 (約 2.5 千三角形)。同じ乱数で同じ所に置き、
+    # 屋根板 (長い縁を省く)・垂木 (片面 3 本)・下地・軒の鼻・棟・苔・妻の竿と渦 (点を 1 つおき) と、蔓と 2 枚の菱形の葉 (leaf_lite) を残す。
+    # 壁の石は 2 つずつ 1 つに、土台の石は 1 辺 1 つに、縛り縄・吊り紐・壺・敷物・焦げた薪は省き、炉の石の輪・薪の山・干した草・
+    # 奥の妻の板は 1 つの形に (灯籠は lantern_far)。捨てる形は spare に置いて乱数を同じだけ引く。far=True, lite=False は 5,296 三角形の版 (やり直しの版)
+    lite = far and lite
     n = K.Node("hut_lod1" if far else "hut")
     rnd = random.Random(111)
     ao = hut_ao
+    spare = K.Node("spare")
 
-    def lean(faces, top=False):
+    def lean(faces, top=False, node=None):
         if far:
-            drop_bottoms(n, faces, top=top)
+            drop_bottoms(node or n, faces, top=top)
     # 床: 踏み固めた土の上の敷き藁と、奥の編んだ敷物
     lean(n.add(K.box((2.95, 2.55, 0.07), jitter=0.01, seed=1), M["straw"], matrix=K.trs((0, 0.02, H_G + 0.02)),
                shade=with_ao(K.shade_const(0.95))))
     for x, tone in ((-0.4, 0.95), (0.05, 0.78), (0.5, 0.95)):
-        mat_faces = n.add(K.box((0.45, 0.95, 0.02)), M["straw"], matrix=K.trs((x + 0.35, 0.62, H_G + 0.065), (0, 0, 2)),
+        mat_faces = (spare if lite else n).add(K.box((0.45, 0.95, 0.02)), M["straw"], matrix=K.trs((x + 0.35, 0.62, H_G + 0.065), (0, 0, 2)),
               shade=with_ao(K.shade_const(tone * 0.78)))  # 両面の weave にすると焼きの両面の組 (draw call 2 つ) が増える
-        lean(mat_faces)
+        lean(mat_faces, node=spare if lite else n)
     # 戸口の敷居 (広場へ下りる敷石は、斜面に沿わせるためゲーム側が stepping_stone を地面に置く)
     lean(pstone(n, rnd, (0, -H_PY - 0.02, H_G - 0.02), (1.1, 0.38, 0.12), yaw=1, bevel=0.0 if far else 0.03, jitter=0.02,
                 ao=ao))
@@ -750,8 +846,11 @@ def hut(far=False):
         for k in (-1, 1):
             off = Vector((sx_ / 4 * k, 0, 0)) if sx_ > sy_ else Vector((0, sy_ / 4 * k, 0))
             size = (sx_ / 2 - 0.04, sy_, 1.0) if sx_ > sy_ else (sx_, sy_ / 2 - 0.04, 1.0)
-            lean(pstone(n, rnd, (cx + off.x, cy + off.y, -0.48), size, yaw=rnd.uniform(-2, 2), bevel=0.0 if far else 0.05,
-                        jitter=0.03, z1=0.2, ao=ao))
+            if lite and k < 0:  # (M23-09 の 3 回目で追加) 軽い遠距離版は 1 辺 1 つの石
+                off, size = Vector(), ((sx_ - 0.04, sy_, 1.0) if sx_ > sy_ else (sx_, sy_ - 0.04, 1.0))
+            dst = spare if lite and k > 0 else n
+            lean(pstone(dst, rnd, (cx + off.x, cy + off.y, -0.48), size, yaw=rnd.uniform(-2, 2), bevel=0.0 if far else 0.05,
+                        jitter=0.03, z1=0.2, ao=ao), node=dst)
     # 四隅の巨石の柱と石の笠
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -764,25 +863,26 @@ def hut(far=False):
                         bevel=0.0 if far else 0.04, jitter=0.015, moss=0.7, z1=3.0))
     # 空積みの壁: 奥・左右は 4 段、戸口の両脇は 3 段
     wall_run(n, rnd, (-H_PX + 0.28, H_PY), (H_PX - 0.28, H_PY), [(0.36, 5), (0.26, 4), (0.22, 5), (0.18, 4)], 0.42, ao=ao,
-             far=far)
+             far=far, lite=lite)
     for sx in (-1, 1):
         wall_run(n, rnd, (sx * H_PX, -H_PY + 0.26), (sx * H_PX, H_PY - 0.26), [(0.36, 4), (0.26, 5), (0.22, 4), (0.18, 4)], 0.42,
-                 ao=ao, far=far)
+                 ao=ao, far=far, lite=lite)
         wall_run(n, rnd, (sx * (H_PX - 0.28), -H_PY), (sx * 0.62, -H_PY), [(0.36, 2), (0.26, 2), (0.2, 1)], 0.42, ao=ao,
-                 far=far)
+                 far=far, lite=lite)
     # 桁 (柱の上を前後に) と梁 (前後の妻を左右に)。前の梁は戸口の鴨居
     for sx in (-1, 1):
         n.add(K.tube([(sx * H_PX, -H_PY - 0.35, H_BEAM), (sx * H_PX, 0, H_BEAM - 0.02), (sx * H_PX, H_PY + 0.35, H_BEAM)],
-                     [0.1, 0.105, 0.1], n=4 if far else 6), M["wood"], smooth=True, shade=with_ao(K.shade_const(0.92)))
+                     [0.1, 0.105, 0.1], n=3 if lite else 4 if far else 6), M["wood"], smooth=True,
+              shade=with_ao(K.shade_const(0.92)))
     for sy in (-1, 1):
         n.add(K.tube([(-H_PX - 0.3, sy * H_PY, H_BEAM + 0.02), (H_PX + 0.3, sy * H_PY, H_BEAM + 0.02)], [0.09, 0.09],
-                     n=4 if far else 6),
+                     n=3 if lite else 4 if far else 6),
               M["wood"], smooth=True, shade=with_ao(K.shade_const(0.88)))
         for sx in (-1, 1):
-            lashing(n, (sx * H_PX, sy * H_PY, H_BEAM + 0.01), Vector((1, 1, 0)), 0.14, w=0.09, far=far)
+            lashing(spare if lite else n, (sx * H_PX, sy * H_PY, H_BEAM + 0.01), Vector((1, 1, 0)), 0.14, w=0.09, far=far)
     # 垂木 (下地の下、軒から尾が覗く)・下地・屋根板
     for s in (-1, 1):
-        for y in (-2.1, -1.05, 0.0, 1.05, 2.1):
+        for y in ((-2.1, 0.0, 2.1) if lite else (-2.1, -1.05, 0.0, 1.05, 2.1)):
             n.add(K.tube([h_roof(s, 0.05, y, -0.1), h_roof(s, H_SL * 0.5, y, -0.1), h_roof(s, H_SL + 0.12, y, -0.1)],
                          [0.055, 0.055, 0.05], n=3 if far else 5), M["wood"], smooth=True, shade=K.shade_const(0.7))
 
@@ -790,10 +890,12 @@ def hut(far=False):
             return h_roof(s, u * H_SL, -H_YR + 2 * H_YR * v, lift)
         n.add(slab(deck, 1, 3, 0.05) if far else slab(deck, 3, 6, 0.05), M["bark"],
               shade=lambda co, nr: (0.5, 0.48, 0.46) if nr.z < 0 else (0.62, 0.6, 0.58))
-        roof_side(n, rnd, s, far=far)
+        roof_side(n, rnd, s, far=far, lite=lite)
     # 棟の丸太と苔
     ridge = [h_roof(1, 0, y, 0.12) for y in (-H_YR - 0.2, -1.6, -0.8, 0.0, 0.8, 1.6, H_YR + 0.2)]
-    n.add(K.tube(ridge, [0.16] * 7, n=4 if far else 6), M["wood"], smooth=True, shade=K.shade_const(0.85))
+    if lite:  # (M23-09 の 3 回目で追加) 軽い遠距離版の棟は 5 点・断面 4 角
+        ridge = [ridge[i] for i in (0, 2, 3, 4, 6)]
+    n.add(K.tube(ridge, [0.16] * len(ridge), n=4 if far else 6), M["wood"], smooth=True, shade=K.shade_const(0.85))
     for y in (-0.9, 1.3):
         p = h_roof(1, 0, y + rnd.uniform(-0.2, 0.2), 0.2)
         n.add(K.ico((0.2, rnd.uniform(0.4, 0.55), 0.09), subdiv=0, jitter=0.12, seed=rnd.randrange(1000), flat_bottom=0.6),
@@ -816,8 +918,10 @@ def hut(far=False):
             pts = [a, m, b] + spiral
             radii = [0.075, 0.07, 0.06] + [0.055 - 0.03 * i / 13 for i in range(14)]
             # (M23-09 のやり直しで追加) 遠距離版は断面 4 角 (渦の輪郭は妻の頂で引きでも読めるので、点は減らさない)
-            n.add(K.tube(pts, radii, n=4 if far else 5), M["wood"], smooth=True, shade=K.shade_const(0.9))
-        lashing(n, h_roof(1, 0.0, y, 0.12) + Z * 0.02, Y, 0.1, w=0.1, far=far)
+            if lite:  # (M23-09 の 3 回目で追加) 軽い遠距離版は渦の点を 1 つおきに、断面 3 角
+                pts, radii = pts[:3] + spiral[1::2], radii[:3] + radii[4::2]
+            n.add(K.tube(pts, radii, n=3 if lite else 4 if far else 5), M["wood"], smooth=True, shade=K.shade_const(0.9))
+        lashing(spare if lite else n, h_roof(1, 0.0, y, 0.12) + Z * 0.02, Y, 0.1, w=0.1, far=far)
     # 奥の妻を縦に割った板で塞ぐ (上端は屋根の下に合わせる)
     for i in range(7):
         x0 = -1.5 + i * 0.43
@@ -827,37 +931,53 @@ def hut(far=False):
             if v.co.z > 0:
                 v.co.z = h_roof(1 if xx >= 0 else -1, abs(xx) / H_EX * H_SL, H_PY, -0.14).z - (H_BEAM + 0.05) - 0.5
             v.co.x = xx
-        lean(n.add(bm, M["wood"], matrix=K.trs((0, H_PY + 0.06, H_BEAM + 0.05 + 0.5)),
-                   shade=K.shade_const(rnd.uniform(0.62, 0.78))))
+        lean((spare if lite else n).add(bm, M["wood"], matrix=K.trs((0, H_PY + 0.06, H_BEAM + 0.05 + 0.5)),
+                                        shade=K.shade_const(rnd.uniform(0.62, 0.78))), node=spare if lite else n)
+    if lite:  # (M23-09 の 3 回目で追加) 軽い遠距離版の奥の妻は 1 枚の三角の板 (両面)
+        bm = bmesh.new()
+        tri = [bm.verts.new((x, H_PY + 0.09, z)) for x, z in ((-1.72, H_BEAM + 0.05), (1.72, H_BEAM + 0.05), (0.0, RIDGE_Z - 0.2))]
+        bm.faces.new(tri)
+        bm.faces.new(list(reversed([bm.verts.new(v.co + Vector((0, 0.03, 0))) for v in tri])))
+        n.add(bm, M["wood"], shade=K.shade_const(0.5))
     # 炉: 石の輪、熾火、焦げた薪
     hc = Vector((0.0, -0.3, H_G + 0.06))
     for i in range(8):
         a = math.radians(45 * i + rnd.uniform(-8, 8))
         d = Vector((math.cos(a), math.sin(a), 0))
-        lean(stone(n, rnd, hc + d * 0.4 + Z * 0.04, (0.2, 0.15, 0.14), yaw=math.degrees(a) + 90, bevel=0.0, jitter=0.02, ao=ao))
+        lean(stone(spare if lite else n, rnd, hc + d * 0.4 + Z * 0.04, (0.2, 0.15, 0.14), yaw=math.degrees(a) + 90, bevel=0.0,
+                   jitter=0.02, ao=ao), node=spare if lite else n)
+    if lite:  # (M23-09 の 3 回目で追加) 軽い遠距離版の炉の石の輪は 1 つの輪
+        n.add(K.lathe([(0.5, 0.0), (0.48, 0.18), (0.32, 0.2)], n=6, phase=0.3, cap_top=False, cap_bottom=False), M["stone_paint"],
+              matrix=K.trs(hc - Z * 0.06), shade=stone_paint(0.8, -0.3, 1.0))
     n.add(K.ico((0.3, 0.3, 0.08), subdiv=0, jitter=0.1, seed=3), M["ember"], matrix=K.trs(hc + Z * 0.02))
     for i in range(3):
         a = math.radians(120 * i + 30)
         d = Vector((math.cos(a), math.sin(a), 0))
-        n.add(K.tube([hc + d * 0.34 + Z * 0.07, hc - d * 0.02 + Z * 0.17], [0.05, 0.04], n=3 if far else 5), M["char"],
+        (spare if lite else n).add(K.tube([hc + d * 0.34 + Z * 0.07, hc - d * 0.02 + Z * 0.17], [0.05, 0.04], n=3 if far else 5),
+                                   M["char"],
               per_face_mat=lambda c, nr, hc=hc: M["ember"] if (c - hc).length < 0.12 else None)
     # 壺と籠
-    n.add(K.lathe([(0.0, 0.0), (0.12, 0.0), (0.2, 0.12), (0.19, 0.25), (0.11, 0.33), (0.12, 0.37), (0.09, 0.38), (0.08, 0.3)],
+    (spare if lite else n).add(K.lathe([(0.0, 0.0), (0.12, 0.0), (0.2, 0.12), (0.19, 0.25), (0.11, 0.33), (0.12, 0.37), (0.09, 0.38), (0.08, 0.3)],
                   n=5 if far else 8, cap_top=False), M["clay"], matrix=K.trs((-0.95, 0.85, H_G + 0.05)), smooth=True,
           shade=with_ao(K.shade_height(H_G, H_G + 0.4, 0.75, 1.0)))
     for (x, y, sc) in ((1.1, -1.95, 1.0), (1.5, -2.25, 0.8), (-1.15, 0.8, 0.75)):
         prof = [(0.0, 0.0), (0.17, 0.0), (0.24, 0.12), (0.26, 0.26), (0.28, 0.3), (0.24, 0.3), (0.22, 0.08), (0.0, 0.08)]
         if far:  # (M23-09 のやり直しで追加) 遠距離版の籠は外の壁 1 段と縁と内の壁
             prof = [(0.0, 0.0), (0.17, 0.0), (0.27, 0.3), (0.22, 0.08), (0.0, 0.08)]
+        if lite:  # (M23-09 の 3 回目で追加) 軽い遠距離版は外の壁だけ
+            prof = [(0.0, 0.0), (0.17, 0.0), (0.27, 0.3)]
         n.add(K.lathe([(r * sc, z * sc) for r, z in prof], n=5 if far else 8, cap_top=False, cap_bottom=False), M["straw"],
               matrix=K.trs((x, y, H_G - 0.02)), smooth=True,
               shade=with_ao(lambda co, nr: (0.8 + 0.2 * (0.5 + 0.5 * math.sin(co.z * 55)),) * 3))
     # 薪の山 (右の壁の外、軒の下)。切り口は明るい
     for (x, z, r) in ((2.02, 0.12, 0.12), (2.28, 0.12, 0.12), (2.15, 0.34, 0.12), (2.06, 0.54, 0.1), (2.3, 0.35, 0.1)):
         y0 = rnd.uniform(-0.1, 0.1)
-        n.add(K.tube([(x, y0 - 0.85, H_G + z - 0.05), (x, y0 + 0.85, H_G + z - 0.05)], [r, r], n=4 if far else 6,
-                     phase=rnd.uniform(0, 1)),
+        (spare if lite else n).add(K.tube([(x, y0 - 0.85, H_G + z - 0.05), (x, y0 + 0.85, H_G + z - 0.05)], [r, r],
+                                          n=4 if far else 6, phase=rnd.uniform(0, 1)),
               M["bark"], shade=with_ao(K.shade_const(rnd.uniform(0.8, 1.0))),
+              per_face_mat=lambda c, nr: M["cut"] if abs(nr.y) > 0.8 else None)
+    if lite:  # (M23-09 の 3 回目で追加) 軽い遠距離版の薪の山は 1 つの箱 (切り口の面は明るい)
+        n.add(K.box((0.5, 1.7, 0.6)), M["bark"], matrix=K.trs((2.15, 0, H_G + 0.2)), shade=K.shade_const(0.8),
               per_face_mat=lambda c, nr: M["cut"] if abs(nr.y) > 0.8 else None)
     # 干し棚 (左の壁の外): X に組んだ脚と横木、干した草の束
     for y in (-0.8, 0.8):
@@ -868,12 +988,15 @@ def hut(far=False):
     n.add(K.tube([(-2.24, -1.0, H_G + 1.38), (-2.24, 1.0, H_G + 1.38)], [0.035, 0.035], n=3 if far else 4), M["wood"])
     for i, y in enumerate((-0.55, -0.2, 0.18, 0.52)):
         top = Vector((-2.24, y, H_G + 1.36))
-        n.add(K.lathe([(0.0, 0.0), (0.05, -0.06), (0.11, -0.45), (0.0, -0.5)], n=4 if far else 5, wobble=0.15, seed=i),
+        (spare if lite else n).add(K.lathe([(0.0, 0.0), (0.05, -0.06), (0.11, -0.45), (0.0, -0.5)], n=4 if far else 5,
+                                           wobble=0.15, seed=i),
               M["herb"],
               matrix=K.trs(top), smooth=True, shade=K.shade_const(0.8 + 0.2 * (i % 2)))
+    if lite:  # (M23-09 の 3 回目で追加) 軽い遠距離版の干した草は 1 つの束
+        n.add(K.box((0.16, 1.2, 0.42)), M["herb"], matrix=K.trs((-2.24, 0.0, H_G + 1.13)), shade=K.shade_const(0.85))
     # 鴨居に吊った鐘と、戸口の左の柱に刻んだ六角の紋 (淡いシアン)
     for x in (-0.75, 0.75):
-        bell(n, (x, -H_PY - 0.02, H_BEAM - 0.08), size=1.1, cord=0.22, far=far)
+        bell(n, (x, -H_PY - 0.02, H_BEAM - 0.08), size=1.1, cord=0.22, far=far, lite=lite)
     gz = 1.45
     face_y = -H_PY - (0.26 - (0.26 - 0.26 * 0.88) * (gz + 0.9) / (H_POST + 0.9)) - 0.014
     if far:  # (M23-09 のやり直しで追加) 遠距離版の紋は平たい六角の輪 (glyph_far、同じ所・同じ太さ)
@@ -887,7 +1010,7 @@ def hut(far=False):
         n.add(K.box(((p1 - p0).length + 0.03, 0.028, 0.04)), M["glyph"], matrix=m)
     # 妻の吊り灯籠 (棟から下ろす)
     hook = h_roof(1, 0.0, -H_YR + 0.45, -0.14)
-    n.add(K.tube([hook, hook - Z * 0.55], [0.01, 0.01], n=3, cap_start=False, cap_end=False), M["rope"])
+    (spare if lite else n).add(K.tube([hook, hook - Z * 0.55], [0.01, 0.01], n=3, cap_start=False, cap_end=False), M["rope"])
     if far:  # (M23-09 のやり直しで追加) 遠距離版の灯籠 (同じ寸法、格子は胴に貼った帯)
         lantern_far(n, hook - Z * 0.55, s=0.85)
     else:
@@ -899,19 +1022,19 @@ def hut(far=False):
           h_roof(-1, 0.0, 1.25, 0.26), h_roof(1, 0.9, 0.95, 0.17), h_roof(1, 1.9, 1.3, 0.17), h_roof(1, 2.9, 1.0, 0.17),
           h_roof(1, H_SL + 0.14, 1.15, 0.15)]
     v1 += [Vector(v1[-1]) + Vector((0.05, 0, -0.45)), Vector(v1[-1]) + Vector((0.03, 0.04, -0.85))]
-    vine(n, v1, rnd, every=1, far=far)
+    vine(n, v1, rnd, every=1, far=far, lite=lite)
     v2 = [(1.97, -1.73, 0.05), (1.93, -1.75, 1.0), (1.9, -1.7, 2.3), h_roof(1, H_SL + 0.05, -1.45, 0.17),
           h_roof(1, 2.2, -1.15, 0.17), h_roof(1, 1.1, -1.4, 0.17), h_roof(1, 0.0, -1.1, 0.26), h_roof(-1, 1.2, -0.85, 0.17),
           h_roof(-1, 2.5, -1.05, 0.17), h_roof(-1, H_SL + 0.14, -0.8, 0.15)]
     v2 += [Vector(v2[-1]) + Vector((-0.04, 0, -0.6))]
-    vine(n, v2, rnd, every=1, far=far)
+    vine(n, v2, rnd, every=1, far=far, lite=lite)
     # 3 本目: 奥の右の柱から登り、右の屋根の奥を斜めに這って棟で止まる
     v3 = [(1.97, 1.73, 0.05), (1.95, 1.72, 1.1), (1.9, 1.7, 2.3), h_roof(1, H_SL + 0.05, 1.95, 0.17),
           h_roof(1, 2.4, 2.1, 0.17), h_roof(1, 1.4, 1.75, 0.17), h_roof(1, 0.5, 2.0, 0.19), h_roof(1, 0.05, 1.85, 0.27)]
-    vine(n, v3, rnd, every=1, r=0.05, far=far)
+    vine(n, v3, rnd, every=1, r=0.05, far=far, lite=lite)
     for y in (-0.2, 0.55):  # 左の軒から垂れる短い蔓
         p = h_roof(-1, H_SL + 0.1, y, 0.1)
-        vine(n, [p + Z * 0.02, p - Z * 0.35 + X_AXIS * -0.03, p - Z * 0.7], rnd, every=2, r=0.03, far=far)
+        vine(n, [p + Z * 0.02, p - Z * 0.35 + X_AXIS * -0.03, p - Z * 0.7], rnd, every=2, r=0.03, far=far, lite=lite)
     return n
 
 
@@ -1195,7 +1318,11 @@ def stone_wall_corner():
 
 
 if __name__ == "__main__":
-    nodes = [hut(), hut(far=True), hut_lod1("hut_shadow"), stepping_stone(), lantern_post(), slipway(), stone_wall(), megalith(), woven_screen(),
-             stone_wall_corner()]
+    # (M23-09 の 3 回目で変更: 遠距離版は 60 m より先に使う軽い版 (lite)。HUT_FAR_FULL=1 でやり直しの版 (5,296 三角形) を書き出す)
+    far_full = os.environ.get("HUT_FAR_FULL") == "1"
+    # (M23-09 の 3 回目で追加) 灯り柱・船台・石垣・立石・衝立・L 字の石垣の遠距離版 (<名前>_lod1、far_of) も書き出す
+    props = [lantern_post, slipway, stone_wall, megalith, woven_screen, stone_wall_corner]
+    nodes = [hut(), hut(far=True, lite=not far_full), hut_lod1("hut_shadow"), stepping_stone(), lantern_post(), slipway(), stone_wall(), megalith(), woven_screen(),
+             stone_wall_corner()] + [far_of(b) for b in props]
     objs = [nd.build() for nd in nodes]
     K.export_glb(objs, os.path.join(K.OUT_DIR, "settlement.glb"))

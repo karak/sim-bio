@@ -4,7 +4,7 @@ import { BoxGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera
 import { lodProps } from '../../src/observe/render/instancer';
 import { switchJitter } from '../../src/observe/render/impostor';
 import { installShadowOnly } from '../../src/observe/render/shadowOnly';
-import { HUT_NEAR_M, HUT_NEAR_SPREAD, HUT_OFFSETS, hutPlacements } from '../../src/observe/settlementLayout';
+import { HUT_NEAR_M, HUT_NEAR_SPREAD, HUT_OFFSETS, PROP_NEAR_M, hutPlacements } from '../../src/observe/settlementLayout';
 
 /**
  * 小屋の遠距離版 (M23-09): hut と hut_lod1 を lodProps で振り分ける。切り替えの距離は小屋ごとに揺らし、カメラの高さも入れた距離で測る。
@@ -131,23 +131,33 @@ describe('小屋の切り替えの距離 (HUT_NEAR_M・HUT_NEAR_SPREAD)', () => 
 
   const switchOf = (h: { x: number; z: number }) => HUT_NEAR_M * (1 + HUT_NEAR_SPREAD * switchJitter(h.x, h.z));
 
-  it('切り替えは 34〜40 m の間 (やり直しで 32 → 36 m。不合格の寄せ引きの小屋は 30.6 → 34.4 m)', () => {
-    expect(HUT_NEAR_M).toBe(36);
+  it('切り替えは 54〜66 m の間 (3 回目で 36 → 60 m。3 棟は 62.3・57.3・61.4 m で、寄せ引きの比較画の 50〜70 m の中)', () => {
+    expect(HUT_NEAR_M).toBe(60);
     const ms = huts.map((h) => +switchOf(h).toFixed(1));
-    expect(ms).toEqual([37.4, 34.4, 36.8]);
+    expect(ms).toEqual([62.3, 57.3, 61.4]);
     for (const m of ms) {
-      expect(m).toBeGreaterThan(34);
+      expect(m).toBeGreaterThanOrEqual(HUT_NEAR_M * (1 - HUT_NEAR_SPREAD / 2));
       expect(m).toBeLessThanOrEqual(maxSwitch);
+      expect(m).toBeGreaterThan(50);
+      expect(m).toBeLessThan(70);
     }
     expect(huts).toHaveLength(HUT_OFFSETS.length);
   });
 
-  it('集落の俯瞰 (中心から 46 m 引いて 30 m の高さ、shotCamera の settlementHigh) では、どの向きからでも 3 棟とも遠距離版 (回っても替わらない)', () => {
+  it('集落の俯瞰 (中心から 46 m 引いて 30 m の高さ、shotCamera の settlementHigh) で遠距離版になる小屋はどの向きでも 57 m より遠い (回ると 72 向きのうち 53 向きで 1 棟以上が替わる。60 m で合意した替わり)', () => {
+    let turns = 0;
     for (let k = 0; k < 72; k++) {
       const a = (k / 72) * Math.PI * 2;
       const cam = { x: Math.sin(a) * 46, y: 30, z: Math.cos(a) * 46 };
-      for (const h of huts) expect(Math.hypot(h.x - cam.x, h.y - cam.y, h.z - cam.z)).toBeGreaterThan(switchOf(h) + 2);
+      const far = huts.filter((h) => Math.hypot(h.x - cam.x, h.y - cam.y, h.z - cam.z) >= switchOf(h));
+      for (const h of far) expect(Math.hypot(h.x - cam.x, h.y - cam.y, h.z - cam.z)).toBeGreaterThan(57);
+      if (far.length) turns++;
     }
+    expect(turns).toBe(53);
+  });
+
+  it('小屋でない部品 (灯り柱・石垣・立石・船台) も小屋と同じ 60 m で遠距離版に替える', () => {
+    expect(PROP_NEAR_M).toBe(HUT_NEAR_M);
   });
 
   it('3 棟の切り替えの距離はみな違う (同じ距離で一斉に替わらない)', () => {
@@ -174,10 +184,11 @@ describe('settlement.glb の小屋の 3 つの形 (M23-09 のやり直し)', () 
     };
   };
 
-  it('遠距離版 hut_lod1 は hut の約半分、影の形 hut_shadow は前の遠距離版 (1,249)', () => {
+  it('遠距離版 hut_lod1 は 60 m より先の軽い形 (2,460 三角形、hut の 4 分の 1 より少ない)、影の形 hut_shadow は前の遠距離版 (1,249)', () => {
     const [hut, far, shadow] = ['hut', 'hut_lod1', 'hut_shadow'].map(nodeOf);
     expect(hut.triangles).toBe(10178);
-    expect(far.triangles).toBe(5296);
+    expect(far.triangles).toBe(2460);
+    expect(far.triangles).toBeLessThan(hut.triangles / 4);
     expect(shadow.triangles).toBe(1249);
     // 遠距離版は hut と同じ材質で塗る (屋根板・石の頂点色の白の材質、蔓、紋・灯籠の光)
     for (const m of ['settlement_roof', 'settlement_stone_paint', 'settlement_vine', 'settlement_glyph', 'settlement_lantern']) {
@@ -185,5 +196,23 @@ describe('settlement.glb の小屋の 3 つの形 (M23-09 のやり直し)', () 
       expect(far.materials).toContain(m);
     }
     expect(far.materials.every((m) => hut.materials.includes(m))).toBe(true);
+  });
+
+  it('小屋でない部品の遠距離版 <名前>_lod1 (M23-09 の 3 回目): 三角形は近い形より少なく、材質の組は近い形と同じ (draw call は段ごとに同じ数)', () => {
+    const counts = Object.fromEntries(
+      ['lantern_post', 'megalith', 'slipway', 'stone_wall', 'stone_wall_corner', 'woven_screen'].map((name) => {
+        const [near, far] = [nodeOf(name), nodeOf(`${name}_lod1`)];
+        expect(far.materials).toEqual(near.materials);
+        return [name, [near.triangles, far.triangles]];
+      }),
+    );
+    expect(counts).toEqual({
+      lantern_post: [586, 130],
+      megalith: [596, 172],
+      slipway: [1982, 1020],
+      stone_wall: [948, 230],
+      stone_wall_corner: [1544, 484],
+      woven_screen: [1060, 884],
+    });
   });
 });
