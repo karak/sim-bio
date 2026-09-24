@@ -71,9 +71,25 @@ PAL = {k: lin(v) for k, v in {
     "glow": "#8FF5E6",
 }.items()}
 WHITE = (1.0, 1.0, 1.0)
+# (灰狼の作り直しで追加) 目の周りの暗い隈・房の先の明るい毛・歯・口の中・唇。脚の焦げ茶は頂点色で持つので、Three.js で暗く沈みすぎない値へ上げた
+# (元の "dark" #6B412F は材質の色で、頂点色 (焦げ茶の手前の暗み) と掛け合わさって黒く見えていた)。淡い色は基準画の灰茶へ少し寄せる
+PAL.update({k: lin(v) for k, v in {
+    "dark": "#6E4230",
+    "pale": "#A58A74",
+    "mask": "#8C4A31",
+    "tip": "#F0B27A",
+    "lip": "#3A2622",
+    "mouth": "#5A2A26",
+    "teeth": "#EDE4D0",
+}.items()})
 
 BODY, DARK, PALE, NOSE, GLOW = range(5)
 MAT_NAMES = ["wolf_body", "wolf_dark", "wolf_pale", "wolf_nose", "wolf_glow"]
+# (灰狼の作り直しで変更: 脚の焦げ茶 (wolf_dark) と飾り毛の淡い色 (wolf_pale) の材質をやめて頂点色へ移し、歯の材質 wolf_teeth を足した。
+#  DARK・PALE は元の部品の関数のために名前だけ残す (DARK は毛、PALE は歯の材質を指す))
+MAT_NAMES = ["wolf_body", "wolf_teeth", "wolf_nose", "wolf_glow"]
+BODY, TEETH, NOSE, GLOW = range(4)
+DARK, PALE = BODY, TEETH
 
 
 def make_materials():
@@ -85,7 +101,7 @@ def make_materials():
         bsdf = nt.nodes["Principled BSDF"]
         bsdf.inputs["Roughness"].default_value = 0.8
         bsdf.inputs["Specular IOR Level"].default_value = 0.0
-        key = {"wolf_body": "fur", "wolf_dark": "dark", "wolf_pale": "pale", "wolf_nose": "nose", "wolf_glow": "glow"}[name]
+        key = {"wolf_body": "fur", "wolf_dark": "dark", "wolf_pale": "pale", "wolf_nose": "nose", "wolf_glow": "glow", "wolf_teeth": "teeth"}[name]
         rgb = PAL[key]
         bsdf.inputs["Base Color"].default_value = (*rgb, 1)
         m.diffuse_color = (*rgb, 1)
@@ -94,6 +110,16 @@ def make_materials():
             vc = nt.nodes.new("ShaderNodeVertexColor")
             vc.layer_name = "Col"
             nt.links.new(vc.outputs["Color"], bsdf.inputs["Base Color"])
+            # (灰狼の作り直しで追加) 毛皮のテクスチャ × 頂点色。glTF には baseColorTexture と COLOR_0 として出る (GLTFLoader が両方を掛ける)
+            tx = nt.nodes.new("ShaderNodeTexImage")
+            tx.image = make_fur_image()
+            mx = nt.nodes.new("ShaderNodeMix")
+            mx.data_type = "RGBA"
+            mx.blend_type = "MULTIPLY"
+            mx.inputs[0].default_value = 1.0
+            nt.links.new(tx.outputs["Color"], mx.inputs[6])
+            nt.links.new(vc.outputs["Color"], mx.inputs[7])
+            nt.links.new(mx.outputs[2], bsdf.inputs["Base Color"])
         if name == "wolf_glow":
             bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
             bsdf.inputs["Emission Strength"].default_value = 1.0
@@ -143,6 +169,11 @@ for k in list(BONES):
     elif k == "neck1":
         BONES[k] = (h, (t[0], t[1], t[2] + HEAD_DZ / 2), p)
 BONES = {k: (Vector(h), Vector(t), p) for k, (h, t, p) in BONES.items()}
+# (灰狼の作り直しで追加) 下顎を別の部品にしたので、顎の骨の付け根を口の角の後ろ (蝶番) に、先を下顎の先に置く。
+# 耳は幅の広い頭蓋の上の外寄りから、外へ開いて立てる (値は HEAD_DZ を足した後の位置)
+BONES["jaw"] = (Vector((0, -0.600, 0.556)), Vector((0, -0.878, 0.516)), "head")
+for s, sx in (("L", -1), ("R", 1)):
+    BONES[f"ear_{s}"] = (Vector((sx * 0.084, -0.552, 0.738)), Vector((sx * 0.128, -0.548, 0.885)), "head")
 LEG_BONES = {f"{pre}_{s}": [f"{pre}_{nm}_{s}" for nm in names]
              for s in "LR" for pre, names in (("fl", ("upper", "fore", "meta", "paw")), ("hl", ("thigh", "shin", "meta", "paw")))}
 
@@ -271,6 +302,9 @@ def far_ratio(c, mats, n):
     if "wolf_glow" in mats:
         return 0.0 if n < 10 else 0.5
     if "wolf_dark" in mats:
+        return 0.3
+    # (灰狼の作り直しで追加) 脚の焦げ茶は頂点色になって wolf_dark の島が無いので、脚は位置 (低く、横へ寄った島) で見分ける
+    if c.z < 0.45 and abs(c.x) > 0.05:
         return 0.3
     if c.z > 0.7:
         return 0.5
@@ -830,26 +864,752 @@ SEAMS = [
 BROW = [(0.050, -0.668, 0.632), (0.072, -0.642, 0.662), (0.090, -0.612, 0.688)]
 
 
-def make_part(name, bm, part, cands, mats, recalc=True, smooth=True):
+# ================================================================ 灰狼の作り直し (2026-09-24 審査台 t05-wolf の不合格)
+# 判断「狐に見える。折り紙のよう。全体的にフォルムがまるっこいのでシャープにしたうえで形状の再現性をあげること。顔まわりはもっと形状も段差も
+# 制裁にする。眼および歯を内包する口の鋭さを出す。テクスチャは毛皮の感じが出して野生味をあたえる」に沿って作り直した部品。
+#   - 頭は手で置いた断面の輪郭 (平らな頭頂・眉の稜・眼窩のくぼみ・頬骨の張り・額から鼻づらへの段・箱の鼻づら・口の縁) のロフトにし、
+#     下顎を別の部品 (顎の骨) にして、口の線・唇・歯 (牙・門歯・臼歯) を入れる
+#   - 目は眼窩に沈めた吊り上がったアーモンド (暗い縁・光る虹彩・瞳)、鼻は角ばった大きな塊
+#   - 頬・首の周り・胸・背の逆立つ毛・肘・腿の裏・腹・尾に、立体の毛の房 (曲がった尖った塊) を重ねる (紙のような薄い楔の代わり)
+#   - 脚を太く、足に指と爪。脚の焦げ茶は材質を分けず頂点色で持つ
+#   - 毛皮のテクスチャ (筆の毛並みを numpy で生成、FUR_PATH) を毛の材質に掛ける。UV は部品の軸に沿う円筒の展開で、毛並みは軸の向き
+# 元の部品の関数 (build_head・build_nose・build_ears・build_eye・build_tufts・build_spikes・build_paw) は記録として残し、build_lod から新しい関数を呼ぶ
+FUR_TILE = 0.36  # 毛皮のテクスチャ 1 枚が覆う長さ (m)
+FUR_SIZE = 512
+FUR_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "textures", "observe", "wolf_fur.png")
+FUR_GAIN = 1.0  # テクスチャの平均の明るさ (リニア) の逆数。頂点色に掛けて、テクスチャで暗くなった分を戻す (make_fur_image が決める)
+_FUR_IMAGE = []
+
+
+def make_fur_image():
+    """毛皮のテクスチャ (FUR_SIZE²、上下左右につながる灰色)。筆の毛並み: 根元が暗く先が明るい細長い房を +v (行の向き) に重ね、
+    房の縁を暗くして隙間の影にする。大きな明暗のむらを薄く足す。頂点色 (珊瑚色・淡い色・焦げ茶) に掛けるので色は持たず、暗い所だけわずかに赤みへ寄せる。
+    乱数の種は固定 (作り直すたびに同じ絵)"""
+    global FUR_GAIN
+    if _FUR_IMAGE:
+        return _FUR_IMAGE[0]
+    import numpy as np
+    rng = np.random.default_rng(7)
+    H = W = FUR_SIZE
+    yy, xx = np.mgrid[0:H, 0:W] * (2 * np.pi / FUR_SIZE)
+    img = np.full((H, W), 0.80)
+    low = np.zeros((H, W))
+    for _ in range(6):
+        kx, ky = rng.integers(1, 4, 2)
+        low += np.sin(kx * xx + ky * yy + rng.uniform(0, 2 * np.pi))
+    img += 0.06 * low / 3
+    for _ in range(2000):
+        L = rng.uniform(32, 84)
+        w0 = rng.uniform(4.5, 10.5)
+        a = np.pi / 2 + rng.normal(0, 0.16)
+        dx, dy = np.cos(a), np.sin(a)
+        x0, y0 = rng.uniform(0, W), rng.uniform(0, H)
+        bend = rng.normal(0, 0.10) * L
+        tone = rng.uniform(-0.10, 0.07)
+        xs = np.arange(int(np.floor(min(x0, x0 + dx * L) - w0 - abs(bend))), int(np.ceil(max(x0, x0 + dx * L) + w0 + abs(bend))) + 1)
+        ys = np.arange(int(np.floor(min(y0, y0 + dy * L) - w0)), int(np.ceil(max(y0, y0 + dy * L) + w0)) + 1)
+        X, Y = np.meshgrid(xs, ys)
+        px, py = X - x0, Y - y0
+        t = (px * dx + py * dy) / L
+        d = -px * dy + py * dx - bend * t * t
+        w = w0 * np.clip(1 - t, 0, 1) ** 0.6
+        inside = (t >= 0) & (t <= 1) & (np.abs(d) < w)
+        if not inside.any():
+            continue
+        q = np.abs(d) / np.maximum(w, 1e-6)
+        val = (0.58 + 0.42 * t + tone) * (1 - 0.30 * q * q)
+        alpha = np.clip((1 - q) * 3, 0, 1) * inside
+        rows, cols = Y % H, X % W
+        img[rows, cols] = img[rows, cols] * (1 - alpha) + val * alpha
+    img = np.clip(img, 0.42, 1.0)
+    FUR_GAIN = float(1.0 / img.mean())
+    warm = np.clip((1 - img) * 1.6, 0, 1)
+    rgb = np.stack([img, img * (1 - 0.07 * warm), img * (1 - 0.12 * warm)], axis=-1)
+    srgb = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * np.power(rgb, 1 / 2.4) - 0.055)
+    rgba = np.concatenate([srgb, np.ones((H, W, 1))], axis=-1)
+    im = bpy.data.images.new("wolf_fur", W, H, alpha=False)
+    im.pixels.foreach_set(rgba.astype(np.float32).ravel())
+    os.makedirs(os.path.dirname(FUR_PATH), exist_ok=True)
+    im.filepath_raw = FUR_PATH
+    im.file_format = "PNG"
+    im.save()
+    im.pack()
+    print(f"fur texture {FUR_PATH}: mean {img.mean():.3f} (gain {FUR_GAIN:.3f})")
+    _FUR_IMAGE.append(im)
+    return im
+
+
+def fur_gain(c):
+    return tuple(min(1.0, x * FUR_GAIN) for x in c)
+
+
+def uv_faces(bm, faces, axis, R, tile=FUR_TILE):
+    """部品の軸 (折れ線) に沿う円筒の展開: v = 軸に沿った長さ / tile (毛並みの向き)、u = 軸の周りの角度 × 周の枚数 K。
+    K は周の長さ 2πR を tile で割って丸めた整数 (継ぎ目でテクスチャがつながる)。継ぎ目をまたぐ面は u を 1 周ずらす"""
+    uvl = bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
+    pts = [Vector(p) for p in axis]
+    acc = [0.0]
+    for a, b in zip(pts, pts[1:]):
+        acc.append(acc[-1] + (b - a).length)
+    K = max(1, round(2 * math.pi * R / tile))
+
+    def proj(co):
+        best = None
+        for i, (a, b) in enumerate(zip(pts, pts[1:])):
+            ab = b - a
+            t = max(0.0, min(1.0, (co - a).dot(ab) / ab.length_squared))
+            q = a + ab * t
+            dd = (co - q).length_squared
+            if best is None or dd < best[0]:
+                best = (dd, acc[i] + ab.length * t, q, ab.normalized())
+        _, s, q, tg = best
+        ref = Z if abs(tg.z) < 0.9 else -Y
+        e1 = (ref - tg * ref.dot(tg)).normalized()
+        e2 = tg.cross(e1)
+        r = co - q
+        return math.atan2(r.dot(e2), r.dot(e1)) / (2 * math.pi) * K, s / tile
+
+    for f in faces:
+        uv = [proj(lp.vert.co) for lp in f.loops]
+        us = [u for u, _ in uv]
+        if max(us) - min(us) > K / 2:
+            uv = [(u + K if u < 0 else u, v) for u, v in uv]
+        for lp, x in zip(f.loops, uv):
+            lp[uvl].uv = x
+
+
+def bm_colors(bm):
+    """(毛の房・耳) 部品が自分で頂点色を持つときの層。make_part はこの層があれば色を塗り直さない"""
+    return bm.verts.layers.float_color.get("Col") or bm.verts.layers.float_color.new("Col")
+
+
+def interp(keys, x):
+    """(x, 値) の折れ線の補間 (x は昇順でも降順でもよい)"""
+    ks = sorted(keys)
+    if x <= ks[0][0]:
+        return ks[0][1]
+    for (x0, v0), (x1, v1) in zip(ks, ks[1:]):
+        if x <= x1:
+            return v0 + (v1 - v0) * (x - x0) / (x1 - x0)
+    return ks[-1][1]
+
+
+# ---- 頭 (上の顎まで)。断面 (y, 右半分の輪郭 10 点 (x, z))。点の並び: 頭頂の中心・頭頂の面・額の横・眉の稜 (鼻づらでは上の角)・
+# 眼窩 (鼻づらでは横の上)・頬骨 (横の中)・横の下・口の縁 (上唇の角、頭蓋では下の角)・下の面 (口蓋)・下の中心。値は HEAD_DZ を足した高さ
+HEAD2_KEYS = [
+    (-0.462, [(0, 0.695), (0.030, 0.693), (0.048, 0.685), (0.060, 0.668), (0.070, 0.645), (0.074, 0.618), (0.070, 0.592), (0.058, 0.568), (0.030, 0.553), (0, 0.550)]),
+    (-0.500, [(0, 0.745), (0.040, 0.742), (0.066, 0.730), (0.084, 0.708), (0.096, 0.675), (0.102, 0.635), (0.097, 0.590), (0.080, 0.548), (0.042, 0.527), (0, 0.522)]),
+    (-0.553, [(0, 0.766), (0.045, 0.763), (0.074, 0.750), (0.094, 0.725), (0.106, 0.685), (0.122, 0.635), (0.108, 0.585), (0.088, 0.540), (0.046, 0.512), (0, 0.507)]),
+    (-0.600, [(0, 0.757), (0.045, 0.754), (0.074, 0.744), (0.096, 0.716), (0.086, 0.674), (0.128, 0.622), (0.104, 0.577), (0.078, 0.540), (0.042, 0.518), (0, 0.513)]),
+    (-0.638, [(0, 0.738), (0.044, 0.737), (0.072, 0.727), (0.094, 0.701), (0.068, 0.652), (0.104, 0.604), (0.080, 0.576), (0.066, 0.560), (0.034, 0.549), (0, 0.546)]),
+    (-0.672, [(0, 0.690), (0.040, 0.689), (0.058, 0.683), (0.068, 0.670), (0.069, 0.641), (0.076, 0.606), (0.072, 0.575), (0.066, 0.558), (0.036, 0.552), (0, 0.550)]),
+    (-0.709, [(0, 0.671), (0.036, 0.670), (0.052, 0.665), (0.062, 0.654), (0.065, 0.630), (0.069, 0.600), (0.070, 0.570), (0.067, 0.550), (0.037, 0.544), (0, 0.543)]),
+    (-0.764, [(0, 0.650), (0.033, 0.649), (0.048, 0.645), (0.057, 0.636), (0.060, 0.612), (0.063, 0.585), (0.064, 0.557), (0.061, 0.538), (0.034, 0.533), (0, 0.532)]),
+    (-0.819, [(0, 0.634), (0.033, 0.633), (0.047, 0.630), (0.055, 0.622), (0.058, 0.598), (0.060, 0.571), (0.060, 0.545), (0.055, 0.527), (0.031, 0.523), (0, 0.522)]),
+    (-0.847, [(0, 0.624), (0.030, 0.623), (0.043, 0.620), (0.051, 0.612), (0.054, 0.590), (0.056, 0.564), (0.056, 0.541), (0.048, 0.526), (0.027, 0.522), (0, 0.521)]),
+]
+HEAD2_TIP = Vector((0, -0.858, 0.578))
+MOUTH_Y = -0.636  # 口の角 (これより前が上の顎と下顎に分かれる)
+LIP2 = [(y, pts[7]) for y, pts in HEAD2_KEYS]  # 口の縁 (y, (x, z))
+
+
+def lip_at(y):
+    """上唇の角の (x, z)"""
+    return interp([(k, p[0]) for k, p in LIP2], y), interp([(k, p[1]) for k, p in LIP2], y)
+
+
+def head2_sections(lod):
+    """断面を Catmull-Rom で補間し、口の縁のすぐ上に唇の帯の点を足した輪郭の列 (右半分 11 点) を返す"""
+    flat = [(y,) + tuple(c for p in pts for c in p) for y, pts in HEAD2_KEYS]
+    out = []
+    for s in resample(flat, lod["head2"]):
+        pts = [Vector((s[1 + 2 * i], s[2 + 2 * i])) for i in range(10)]
+        k5, k6 = pts[6], pts[7]
+        lipb = k6 + (k5 - k6).normalized() * 0.005
+        out.append((s[0], pts[:7] + [lipb] + pts[7:]))
+    return out
+
+
+def head2_ring(bm, y, half, keep):
+    """右半分の輪郭 half (11 点、上の中心 → 下の中心) から一周のリングを作る。keep は使う点の番号 (群れ LOD は間引く)"""
+    pts = [half[i] for i in keep]
+    right = [bm.verts.new((p.x, y, p.y)) for p in pts]
+    left = [bm.verts.new((-p.x, y, p.y)) for p in pts[1:-1]]
+    return right + list(reversed(left)), len(pts)
+
+
+def build_head2(bm, lod):
+    secs = head2_sections(lod)
+    keep = list(range(11)) if lod["name"] == "hero" else [0, 3, 4, 5, 8, 10]
+    rings = [head2_ring(bm, y, half, keep)[0] for y, half in secs]
+    back = bm.verts.new((0, secs[0][0] + 0.012, (secs[0][1][0].y + secs[0][1][-1].y) / 2))
+    tip = bm.verts.new(HEAD2_TIP)
+    faces = loft(bm, [back] + rings + [tip])
+    # 口の縁から下 (口蓋) は口の中の暗い色 (顎を開くと見える)。群れ LOD は口の縁の点を持たないので塗らない
+    if 8 in keep:
+        for f in faces:
+            c = f.calc_center_median()
+            if c.y < MOUTH_Y - 0.01 and c.z < lip_at(c.y)[1] - 0.001 and abs(c.x) < lip_at(c.y)[0] - 0.004:
+                f.material_index = NOSE
+    uv_faces(bm, faces, [(0, -0.90, 0.56), (0, -0.70, 0.60), (0, -0.55, 0.64), (0, -0.45, 0.63)], 0.08)
+    return faces
+
+
+# ---- 下顎: (y, 下唇の角の x, 上の高さ, 横の中の x, 横の中の z, 下の角の x, 下の高さ)。上唇の角のすぐ内・下に置く
+# 下唇の角 (x, 上の高さ) は上唇の角のすぐ内・下 (口を閉じると唇の線 1 本に見える)。表は (y, 横の中の x, 横の中の z, 下の角の x, 下の高さ)
+JAW2_KEYS = [
+    (-0.605, 0.060, 0.534, 0.044, 0.514),
+    (-0.640, 0.059, 0.531, 0.041, 0.508),
+    (-0.695, 0.056, 0.525, 0.036, 0.503),
+    (-0.760, 0.050, 0.516, 0.030, 0.500),
+    (-0.815, 0.043, 0.510, 0.025, 0.499),
+    (-0.843, 0.034, 0.510, 0.017, 0.501),
+]
+JAW2_TIP = Vector((0, -0.853, 0.512))
+
+
+def jaw_at(y):
+    """下唇の角の (x, z)"""
+    x, z = lip_at(max(y, MOUTH_Y - 0.03) if y > MOUTH_Y else y)
+    return x - 0.003, z - 0.0015
+
+
+def build_jaw2(bm, lod):
+    hero = lod["name"] == "hero"
+    secs = resample(JAW2_KEYS, lod["jaw2"])
+    faces = []
+    rings = []
+    for y, xs, zs, xb, zb in secs:
+        xl, zt = jaw_at(y)
+        # 口の床の中心・下唇の内・下唇の角・横の中・下の角・下の中心
+        half = [(0, zt - 0.008), (xl - 0.009, zt - 0.001), (xl, zt), (xs, zs), (xb, zb + 0.006), (0, zb)]
+        if not hero:
+            half = [half[0], half[2], half[4], half[5]]
+        right = [bm.verts.new((x, y, z)) for x, z in half]
+        left = [bm.verts.new((-x, y, z)) for x, z in half[1:-1]]
+        rings.append(right + list(reversed(left)))
+    back = bm.verts.new((0, secs[0][0] + 0.01, (jaw_at(secs[0][0])[1] + secs[0][4]) / 2))
+    tip = bm.verts.new(JAW2_TIP)
+    faces += loft(bm, [back] + rings + [tip])
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
+    for f in faces:
+        c = f.calc_center_median()
+        if f.normal.z > 0.6 and abs(c.x) < jaw_at(c.y)[0] - 0.006:
+            f.material_index = NOSE  # 口の床
+    uv_faces(bm, faces, [(0, -0.89, 0.51), (0, -0.60, 0.535)], 0.04)
+    return faces
+
+
+def cone(bm, base, d, length, r, n=4, flat=1.0, mat=TEETH, side=None):
+    """歯・爪: base から d の向きへ伸びる n 角の錐。flat で横 (side) に潰す"""
+    d = d.normalized()
+    side = (side or (d.cross(Z) if abs(d.z) < 0.9 else d.cross(Y))).normalized()
+    up = side.cross(d).normalized()
+    ring_ = [bm.verts.new(base + side * (r * flat * math.cos(2 * math.pi * i / n)) + up * (r * math.sin(2 * math.pi * i / n))) for i in range(n)]
+    tip = bm.verts.new(base + d * length)
+    out = []
+    for i in range(n):
+        f = bm.faces.new((ring_[i], ring_[(i + 1) % n], tip))
+        f.material_index = mat
+        f.normal_update()
+        if f.normal.dot(f.calc_center_median() - (base + d * length * 0.3)) < 0:
+            f.normal_flip()
+        out.append(f)
+    return out
+
+
+def build_teeth2(bm, lod, upper):
+    """歯 (近 LOD のみ)。上: 牙・門歯 3 本・臼歯 3 本 (上唇の縁から下へ)。下: 牙・門歯・臼歯 (下唇から上へ)。
+    上の牙は下唇の外に 1 cm ほど掛かり、口を閉じていても先が見える。下の牙は上唇の内に隠れ、口を開くと見える"""
+    ty = HEAD2_KEYS[-1][0]  # 鼻づらの先の断面
+    for sx in (-1, 1):
+        if upper:
+            y = ty + 0.036
+            x, z = lip_at(y)
+            cone(bm, Vector((sx * (x - 0.004), y, z + 0.006)), Vector((sx * 0.08, 0.14, -1)), 0.022, 0.0066, n=5, flat=0.8)
+            for xi in (0.006, 0.0135, 0.021):
+                x0, z0 = lip_at(ty + 0.006)
+                cone(bm, Vector((sx * xi, ty + 0.007 + xi * 0.25, z0 + 0.003)), Vector((0, 0.1, -1)), 0.008, 0.0032, n=4)
+            for y2 in (-0.700, -0.735, -0.770):
+                x2, z2 = lip_at(y2)
+                cone(bm, Vector((sx * (x2 - 0.008), y2, z2 + 0.004)), Vector((0, 0, -1)), 0.011, 0.0065, n=4, flat=0.45, side=Y)
+        else:
+            y = ty + 0.020
+            x, z = jaw_at(y)
+            cone(bm, Vector((sx * (x - 0.009), y, z - 0.006)), Vector((sx * 0.05, -0.12, 1)), 0.020, 0.006, n=5, flat=0.8)
+            for xi in (0.006, 0.012, 0.018):
+                x0, z0 = jaw_at(ty + 0.010)
+                cone(bm, Vector((sx * xi, ty + 0.011 + xi * 0.25, z0 - 0.003)), Vector((0, -0.1, 1)), 0.007, 0.003, n=4)
+            for y2 in (-0.710, -0.745, -0.780):
+                x2, z2 = jaw_at(y2)
+                cone(bm, Vector((sx * (x2 - 0.009), y2, z2 - 0.003)), Vector((0, 0, 1)), 0.010, 0.006, n=4, flat=0.45, side=Y)
+
+
+def build_nose2(bm, lod):
+    """鼻: 鼻づらの先の上に載せた角ばった大きな塊 (幅 5.4 cm・高さ 3.4 cm、先へ 1.6 cm 出す)。下へ細い台形で、正面の下の中ほどを割る"""
+    hero = lod["name"] == "hero"
+    n = 12 if hero else 6
+    ty, half = HEAD2_KEYS[-1]
+    c = Vector((0, ty - 0.001, half[0][1] - 0.013))
+    rings = []
+    for dy, s, sz in ((0.018, 0.70, 0.75), (0.004, 1.0, 1.0), (-0.012, 0.97, 0.95), (-0.020, 0.72, 0.72)):
+        vs = []
+        for i in range(n):
+            a = 2 * math.pi * i / n + math.pi / 2
+            ca, sa = math.cos(a), math.sin(a)
+            cx = math.copysign(abs(ca) ** 0.55, ca)
+            sy = math.copysign(abs(sa) ** 0.55, sa)
+            w = 0.030 * s * (1 - 0.30 * max(0.0, -sy))
+            vs.append(bm.verts.new(c + Vector((w * cx, dy, 0.017 * sz * sy))))
+        rings.append(vs)
+    tip = bm.verts.new(c + Vector((0, -0.024, 0.003)))
+    loft(bm, rings + [tip], mat=NOSE)
+    cap(bm, list(reversed(rings[0])), NOSE)
+
+
+def almond(k, L, H, tail=1.3):
+    """アーモンドの輪郭 (u, v)。u > 0 が目頭 (前、丸め)、u < 0 が目尻 (後ろ、尖らせて tail 倍に伸ばす)。上瞼は平ら、下瞼は丸い"""
+    out = []
+    for i in range(k):
+        a = 2 * math.pi * i / k
+        ca, sa = math.cos(a), math.sin(a)
+        p = 1.9 if ca < 0 else 1.25
+        h = H * math.copysign(abs(sa) ** p, sa) * (0.7 if sa > 0 else 1.0)
+        out.append((L * ca * (tail if ca < 0 else 1.0), h))
+    return out
+
+
+EYE2 = Vector((0.077, -0.650, 0.651))  # 眼窩の中ほど (+X 側)
+
+
+def build_eye2(bm, bvh_head, lod, side):
+    """眼窩に沈めた吊り上がったアーモンドの目: 暗い縁 (近 LOD)・光る虹彩・暗い瞳 (近 LOD)。目頭は前下、目尻は後ろ上 (約 22°)"""
+    hero = lod["name"] == "hero"
+    E = Vector((side * EYE2.x, EYE2.y, EYE2.z))
+    facing = Vector((side * 0.70, -0.68, 0.10)).normalized()
+    loc, n, _, _ = bvh_head.ray_cast(E + facing * 0.3, -facing)
+    if loc is None:
+        loc, n = E, facing
+    n = (n + facing).normalized()
+    u = Vector((0, -1, -0.55))
+    u = (u - n * u.dot(n)).normalized()  # 目頭の向き
+    v = n.cross(u).normalized()
+    if v.z < 0:
+        v = -v
+    k = 16 if hero else 6
+
+    def fan(L, H, off, bulge, mat, tail):
+        c = bm.verts.new(loc + n * (off + bulge))
+        vs = []
+        for x, h in almond(k, L, H, tail):
+            p = loc + u * x + v * h
+            q = bvh_head.find_nearest(p)[0]
+            vs.append(bm.verts.new((q if q is not None else p) + n * off))
+        for i in range(k):
+            f = bm.faces.new((vs[i], vs[(i + 1) % k], c))
+            f.material_index = mat
+            f.normal_update()
+            if f.normal.dot(n) < 0:
+                f.normal_flip()
+
+    if hero:
+        fan(0.029, 0.0125, 0.003, 0.003, NOSE, 1.55)
+    fan(0.022, 0.0080, 0.0050, 0.0050, GLOW, 1.35)
+
+
+# 光る線 (+X 側、-X は鏡映): 眉 (目頭の上から眉の稜に沿って耳の側へ) と頬 (目尻の下から頬骨に沿って後ろへ)
+BROW2 = [(0.058, -0.668, 0.688), (0.080, -0.646, 0.699), (0.093, -0.612, 0.716)]
+CHEEK2 = [(0.090, -0.640, 0.618), (0.112, -0.605, 0.628), (0.108, -0.565, 0.652)]
+
+
+def build_line2(bm, bvh, lod, side, path, width):
+    """頭の表面に吸わせた光る細い帯 (始まりを太く、先へ細る)"""
+    nseg = max(2, lod["ribbon_seg"] - 2)
+    dense = resample_path([Vector((side * x, y, z)) for x, y, z in path], nseg + 1)
+    hits = []
+    for p in dense:
+        loc, n, _, _ = bvh.find_nearest(p)
+        if n.dot(loc - Vector((0, loc.y, 0.62))) < 0:
+            n = -n
+        hits.append((loc, n))
+    prev = None
+    for i, (loc, n) in enumerate(hits):
+        d = (hits[min(i + 1, len(hits) - 1)][0] - hits[max(i - 1, 0)][0]).normalized()
+        wi = width * (1.0 - 0.6 * i / (len(hits) - 1))
+        sv = n.cross(d).normalized() * (wi / 2)
+        cur = [bm.verts.new(loc - sv + n * 0.0025), bm.verts.new(loc + n * 0.005), bm.verts.new(loc + sv + n * 0.0025)]
+        if prev:
+            for j in range(2):
+                f = bm.faces.new((prev[j], prev[j + 1], cur[j + 1], cur[j]))
+                f.material_index = GLOW
+                f.normal_update()
+                if f.normal.dot(n) < 0:
+                    f.normal_flip()
+        prev = cur
+
+
+def build_ears2(bm, lod, side):
+    """角ばった三角の耳: 幅の広い付け根、縁の立った殻。前 (内側) はくぼんで暗く、付け根の内に淡い毛の房。外へ開いて立てる"""
+    hero = lod["name"] == "hero"
+    cl = bm_colors(bm)
+    h, t = BONES["ear_L" if side < 0 else "ear_R"][:2]
+    axis = (t - h).normalized()
+    Hh = (t - h).length + 0.006
+    front = Vector((side * 0.50, -1, 0.05))
+    front = (front - axis * front.dot(axis)).normalized()
+    w = axis.cross(front).normalized()
+    nsec = 5 if hero else 2
+    rings, kinds = [], []
+    for i in range(nsec):
+        a = Hh * i / nsec
+        f = 1 - a / Hh
+        wd = 0.054 * f ** 0.7 + 0.011
+        th = 0.016 * f + 0.003
+        cup = 0.013 * f
+        c = h + axis * a - front * 0.004
+        if hero:
+            pts = [(-w * wd, "rim"), (-w * wd * 0.55 - front * th, "out"), (-front * th * 1.15, "out"), (w * wd * 0.55 - front * th, "out"),
+                   (w * wd, "rim"), (w * wd * 0.6 + front * (0.003 - cup), "in"), (front * (0.002 - cup * 1.25), "in"), (-w * wd * 0.6 + front * (0.003 - cup), "in")]
+        else:
+            pts = [(-w * wd, "rim"), (-front * th, "out"), (w * wd, "rim"), (front * (0.002 - cup), "in")]
+        rings.append([bm.verts.new(c + p) for p, _ in pts])
+        kinds = [k for _, k in pts]
+    tip = bm.verts.new(h + axis * Hh)
+    faces = loft(bm, rings + [tip])
+    faces.append(cap(bm, list(reversed(rings[0]))))
+    col = {"rim": PAL["fur_top"], "out": PAL["fur"], "in": PAL["ear_in"]}
+    for r in rings:
+        for vv, kd in zip(r, kinds):
+            vv[cl] = (*fur_gain(col[kd]), 1.0)
+    tip[cl] = (*fur_gain(mix(PAL["fur"], PAL["dark"], 0.5)), 1.0)
+    uv_faces(bm, faces, [h, h + axis * Hh], 0.03)
+    if hero:
+        # 付け根の内の淡い毛の房 (上と外へ)
+        uvl = bm.loops.layers.uv.get("UVMap")
+        for k in (-0.5, 0.1, 0.6):
+            root = h + w * (0.03 * k) + front * 0.004 + axis * 0.012
+            tuft(bm, cl, uvl, root, axis * 0.8 + front * 0.6 + w * (0.4 * k), 0.045, 0.011, 0.004, -front * 0.15, PAL["pale"], mix(PAL["pale"], WHITE, 0.3), n=3)
+    return front
+
+
+# ---- 毛の房: 曲がった尖った塊。断面は菱形 (n=4) か五角形 (n=5)。根元の色から先の色へ
+def tuft(bm, cl, uvl, root, d, L, W, T, bend, c0, c1, n=4, glow_front=False, lighten=True, normal=None):
+    d = d.normalized()
+    if normal is not None:  # 幅を面に沿わせる (厚さが法線の向き)
+        side = d.cross(normal)
+        side = side.normalized() if side.length > 1e-4 else (d.cross(Z) if abs(d.z) < 0.95 else d.cross(X)).normalized()
+    else:
+        side = (d.cross(Z) if abs(d.z) < 0.95 else d.cross(X)).normalized()
+    up = side.cross(d).normalized()
+    bend = Vector(bend)
+
+    def at(t):
+        return root + d * (L * t) + bend * (L * t * t)
+
+    rings = []
+    for t, s in ((0.0, 1.0), (0.5, 0.62)):
+        c = at(t)
+        rs = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            rs.append(bm.verts.new(c + side * (W * s * math.cos(a)) + up * (T * s * math.sin(a))))
+        rings.append(rs)
+    tip = bm.verts.new(at(1.0))
+    faces = loft(bm, rings + [tip])
+    for f in faces:
+        f.normal_update()
+        m = f.calc_center_median()
+        tt = max(0.0, min(1.0, (m - root).dot(d) / L))
+        if f.normal.dot(m - at(tt)) < 0:
+            f.normal_flip()
+        if glow_front and tip in f.verts and f.normal.dot(Vector((0, -0.5, 1)).normalized()) > 0.2:
+            f.material_index = GLOW
+    ct = mix(c1, WHITE, 0.05) if lighten else c1
+    for vv in rings[0]:
+        vv[cl] = (*fur_gain(c0), 1.0)
+    for vv in rings[1]:
+        vv[cl] = (*fur_gain(mix(c0, c1, 0.6)), 1.0)
+    tip[cl] = (*fur_gain(ct), 1.0)
+    if uvl is not None:
+        for f in faces:
+            for lp in f.loops:
+                p = lp.vert.co
+                tt = max(0.0, min(1.0, (p - root).dot(d) / L))
+                q = p - at(tt)
+                ang_ = math.atan2(q.dot(up), q.dot(side)) / (2 * math.pi)
+                lp[uvl].uv = (ang_ * 0.5, tt * L / FUR_TILE)
+    return faces
+
+
+def surface_point(bvh, p):
+    loc, n, _, _ = bvh.find_nearest(p)
+    return (loc, n) if loc is not None else (p, Z)
+
+
+def tufts_region(bm, bvh, lod, region):
+    """部位ごとの毛の房を bm に足す。bvh は房の根元を吸わせる面。房は面に沿って寝かせ (外への向きは小さく)、根元を面の中へ沈めて
+    先の半分だけを出す (棘の山にしない)。群れ LOD は大きな房を少しだけ"""
+    hero = lod["name"] == "hero"
+    cl = bm_colors(bm)
+    uvl = bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
+    n = 5 if hero else 3
+    pale, fur, top = PAL["pale"], PAL["fur"], PAL["fur_top"]
+    items = []  # (根元の目安, 向き, 長さ, 幅, 厚さ, 曲がり, 根元の色, 先の色, 先を光らせる)
+    for sx in (-1, 1):
+        if region == "cheek":
+            # 頬の飾り毛: 耳の下から喉へ下りる弧の上に、後ろ・下へ寝かせて 2 列 (外の列が長い)
+            m = 6 if hero else 3
+            for row, (dy, s) in enumerate(((0.0, 1.0), (0.030, 1.2))):
+                if not hero and row:
+                    continue
+                for i in range(m):
+                    t = i / (m - 1)
+                    p = Vector((sx * (0.104 + 0.018 * math.sin(math.pi * t)), -0.575 + 0.030 * t + dy, 0.650 - 0.140 * t))
+                    d = Vector((sx * 0.30, 0.80, -0.30 - 0.60 * t))
+                    items.append((p, d, (0.055 + 0.016 * math.sin(math.pi * t)) * s, 0.034 * s, 0.007, Vector((sx * 0.05, 0.05, -0.2)),
+                                  mix(fur, pale, 0.3 + 0.7 * t), mix(pale, WHITE, 0.2), False))
+        elif region == "mane":
+            # 首の飾り毛: 首の周りに 3 列、項は毛の色、喉は淡い色。後ろへ寝かせる
+            rows = ((-0.48, 0.0), (-0.43, 0.5), (-0.38, 1.0)) if hero else ((-0.44, 0.3),)
+            for y, rk in rows:
+                angs = (50, 18, -15, -48, -78) if hero else (35, -20, -70)
+                for deg in angs:
+                    a = math.radians(deg + 10 * rk)
+                    zc = interp([(-0.52, 0.61), (-0.45, 0.63), (-0.36, 0.645), (-0.27, 0.62)], y)
+                    p = Vector((sx * 0.20 * math.cos(a), y, zc + 0.22 * math.sin(a)))
+                    low = smoothstep(10, -60, deg)
+                    d = Vector((sx * 0.22 * math.cos(a), 0.9, 0.12 * math.sin(a) - 0.45 * low))
+                    items.append((p, d, 0.070 + 0.015 * rk, 0.040, 0.008, Vector((0, 0.05, -0.15)),
+                                  mix(fur, pale, low), mix(mix(top, pale, low), WHITE, 0.12), False))
+        elif region == "hackle":
+            # 背の逆立つ毛 (首の上から肩): 中心線の両脇に後ろへ寝かせ、先 (上・前を向く面) が光る
+            spikes = SPIKES_HERO if hero else SPIKES_LOD1
+            for y, h, ln in spikes:
+                p = Vector((sx * 0.026, y, 1.2))
+                items.append((p, Vector((sx * 0.15, 0.85, 0.50)), h * 1.05, 0.034, 0.008, Vector((0, 0.3, -0.1)), fur, top, True))
+        elif region == "chest":
+            # 胸の飾り毛 (淡い、下へ寝かせる)
+            if sx > 0:
+                pts = [(-0.06, -0.455, 0.52), (0.0, -0.465, 0.53), (0.06, -0.455, 0.52), (-0.035, -0.445, 0.45), (0.035, -0.445, 0.45),
+                       (-0.07, -0.44, 0.60), (0.07, -0.44, 0.60), (0.0, -0.455, 0.60)] if hero else [(-0.04, -0.455, 0.50), (0.04, -0.455, 0.50)]
+                for x, y, z in pts:
+                    items.append((Vector((x, y, z)), Vector((x * 1.5, 0.35, -1)), 0.065, 0.040, 0.008, Vector((0, 0.15, 0)), pale,
+                                  mix(pale, WHITE, 0.25), False))
+        elif region == "elbow":
+            if hero:
+                e = joint(f"fl_{'L' if sx < 0 else 'R'}", 1)
+                for dz in (0.03, -0.01):
+                    items.append((e + Vector((sx * 0.012, 0.045, dz)), Vector((sx * 0.15, 1, -0.8)), 0.050, 0.032, 0.007, Vector((0, 0, -0.2)),
+                                  fur, mix(fur, pale, 0.4), False))
+        elif region == "thigh":
+            k = joint(f"hl_{'L' if sx < 0 else 'R'}", 0)
+            for dz in ((0.0, -0.06, -0.12) if hero else (-0.05,)):
+                items.append((k + Vector((sx * 0.05, 0.10, dz - 0.02)), Vector((sx * 0.15, 0.8, -0.7)), 0.065, 0.040, 0.008, Vector((0, 0, -0.2)),
+                              fur, mix(fur, top, 0.4), False))
+        elif region == "belly":
+            for y in ((0.06, -0.04, -0.14, -0.24) if hero else (-0.10,)):
+                zb = interp([(k[0], k[2]) for k in BODY_KEYS], y)
+                items.append((Vector((sx * 0.07, y, zb + 0.03)), Vector((sx * 0.15, 0.55, -1)), 0.050, 0.036, 0.008, Vector((0, 0.2, 0)),
+                              mix(fur, pale, 0.6), mix(pale, WHITE, 0.2), False))
+        elif region == "tail":
+            path = resample_path(TAIL2_PATH, 21)
+            ts = (0.22, 0.38, 0.54, 0.70, 0.86) if hero else (0.45, 0.75)
+            for t in ts:
+                p0 = path[int(t * 20)]
+                d = (path[min(20, int(t * 20) + 1)] - p0).normalized()
+                sd = Vector((sx, 0, 0))
+                dark = smoothstep(0.62, 0.85, t)
+                c0 = mix(fur, PAL["dark"], dark * 0.7)
+                items.append((p0 + sd * 0.05, d + sd * 0.25 + Vector((0, 0, -0.1)), 0.075, 0.042, 0.009, d * 0.15, c0,
+                              mix(mix(top, PAL["dark"], dark * 0.8), WHITE, 0.05), False))
+                if sx > 0:
+                    under = Vector((0, -0.3, -1))
+                    items.append((p0 + Vector((0, 0, -0.04)), d + under * 0.35, 0.075, 0.042, 0.009, d * 0.15, mix(c0, pale, 0.3 * (1 - dark)),
+                                  mix(mix(pale, PAL["dark"], dark * 0.8), WHITE, 0.05), False))
+    for p, d, L, W, T, bend, c0, c1, glow in items:
+        if region == "hackle":
+            loc, nrm, _, _ = bvh.ray_cast(p, Vector((0, 0, -1)))
+            if loc is None:
+                continue
+        else:
+            loc, nrm = surface_point(bvh, p)
+        # 向きを面に沿わせる (外への成分は 0.3 まで、背の逆立つ毛は 0.6 まで)。幅の向きは面に沿い、厚さの向きが面の法線 (平たい房が重なる鱗の並び)
+        d = d.normalized()
+        dt = d - nrm * d.dot(nrm)
+        d = (dt.normalized() if dt.length > 1e-3 else d) + nrm * min(0.6 if region == "hackle" else 0.3, max(0.12, d.dot(nrm)))
+        root = loc - d.normalized() * (L * 0.18) - nrm * 0.006
+        tuft(bm, cl, uvl, root, d, L, W, T, bend, c0, c1, n=n, glow_front=glow, normal=nrm)
+
+
+# ---- 首・胴・脚・尾の形 (元の値を上書き)
+# 首を太く (基準画の首は胸とほぼ同じ太さで頭へつながる)。(y, z, 横半径, 喉側, 項側)
+NECK_KEYS = [(-0.27, 0.62, 0.155, 0.22, 0.19), (-0.36, 0.605 + HEAD_DZ * 0.4, 0.165, 0.235, 0.185), (-0.45, 0.575 + HEAD_DZ * 0.8, 0.150, 0.21, 0.155),
+             (-0.52, 0.56 + HEAD_DZ, 0.125, 0.17, 0.13), (-0.56, 0.555 + HEAD_DZ, 0.10, 0.12, 0.10)]
+# 胴: 胸をもう少し深く (肘の高さへ)、腹をもっと巻き上げ、肩 (き甲) を高く
+BODY_KEYS = [
+    (0.37, 0.55, 0.43, 0.05, 0.0),
+    (0.33, 0.59, 0.385, 0.11, 0.10),
+    (0.25, 0.645, 0.375, 0.135, 0.18),
+    (0.14, 0.705, 0.44, 0.118, 0.26),
+    (0.02, 0.77, 0.435, 0.132, 0.30),
+    (-0.10, 0.84, 0.375, 0.168, 0.36),
+    (-0.21, 0.868, 0.318, 0.200, 0.42),
+    (-0.31, 0.832, 0.305, 0.198, 0.44),
+    (-0.39, 0.755, 0.338, 0.165, 0.42),
+    (-0.445, 0.665, 0.42, 0.09, 0.30),
+]
+# 脚を太く (肩・上腕・腿は幅を 1 割、前腕・中足も 1 割太く、手首・飛節の節を立てる)
+FRONT_LEG = [(0.05, 0.086, 0.155), (0.45, 0.072, 0.108), (0.85, 0.056, 0.074), (1.05, 0.049, 0.062), (1.5, 0.041, 0.049),
+             (1.9, 0.036, 0.043), (2.05, 0.040, 0.047), (2.5, 0.034, 0.039), (3.0, 0.033, 0.037)]
+HIND_LEG = [(0.05, 0.094, 0.160), (0.4, 0.080, 0.130), (0.8, 0.058, 0.090), (1.0, 0.050, 0.068), (1.4, 0.043, 0.052),
+            (1.85, 0.036, 0.045), (2.05, 0.041, 0.051), (2.5, 0.033, 0.039), (3.0, 0.033, 0.037)]
+# 尾: 付け根は細く、中ほどは房で太らせる (芯は細め)、真下寄りに垂らす
+TAIL2_PATH = [(0, 0.30, 0.575), (0, 0.395, 0.52), (0, 0.48, 0.43), (0, 0.555, 0.32), (0, 0.61, 0.215)]
+TAIL2_RADII = [0.042, 0.066, 0.074, 0.058, 0.0]
+
+
+def build_body2(bm, lod):
+    nsec, n = lod["body"]
+    secs = resample(BODY_KEYS, nsec)
+    rings = [facet_ring(bm, Vector((0, y, (top + bot) / 2)), hw, (top - bot) / 2, (top - bot) / 2, pinch, n, bevel=0.08)
+             for y, top, bot, hw, pinch in secs]
+    rear = bm.verts.new((0, secs[0][0] + 0.02, (secs[0][1] + secs[0][2]) / 2))
+    front = bm.verts.new((0, secs[-1][0] - 0.02, (secs[-1][1] + secs[-1][2]) / 2))
+    faces = loft(bm, [rear] + rings + [front])
+    uv_faces(bm, faces, [(0, y, body_zc(y)) for y in (-0.50, -0.30, -0.10, 0.10, 0.30, 0.42)], 0.17)
+
+
+def build_tail2(bm, lod):
+    nsec, n = lod["tail"]
+    pts = resample_path(TAIL2_PATH, nsec)
+    radii = [r for (r,) in resample([(r,) for r in TAIL2_RADII], nsec)]
+    faces = tube(bm, pts, radii, n, mat=BODY, flat=0.85)
+    uv_faces(bm, faces, TAIL2_PATH, 0.06)
+
+
+def build_paw2(bm, lod, name):
+    """足: 掌の塊 + 指 4 本 (前へ出た小さな塊) + 爪 (暗い錐)。底は地面 (z = 0)"""
+    hero = lod["name"] == "hero"
+    base = joint(name, 3)
+    x = base.x
+    n = 8 if hero else 5
+    keys = [(0.045, 0.028, 0.024, 0.034), (0.018, 0.046, 0.038, 0.038), (-0.025, 0.050, 0.030, 0.030), (-0.052, 0.044, 0.020, 0.022)]
+    rings = [ring(bm, Vector((x, base.y + dy, zc)), X, Z, rx, rt, zc, n, sq=2.6, phase=math.pi / 2) for dy, rx, rt, zc in keys]
+    back = bm.verts.new((x, base.y + 0.058, 0.03))
+    toe_c = bm.verts.new((x, base.y - 0.066, 0.02))
+    faces = loft(bm, [back] + rings + [toe_c], mat=BODY)
+    if hero:
+        for dx, dy, s in ((-0.031, -0.066, 0.9), (-0.011, -0.080, 1.0), (0.011, -0.080, 1.0), (0.031, -0.066, 0.9)):
+            c = Vector((x + dx, base.y + dy, 0.0165 * s))
+            tr = []
+            for zz, sc in ((-0.0165 * s, 0.6), (-0.006, 1.0), (0.008 * s, 0.75)):
+                tr.append([bm.verts.new(c + Vector((0.0125 * s * sc * math.cos(2 * math.pi * i / 6), 0.018 * s * sc * math.sin(2 * math.pi * i / 6), zz)))
+                           for i in range(6)])
+            top_v = bm.verts.new(c + Vector((0, 0.002, 0.0165 * s)))
+            faces += loft(bm, tr + [top_v], mat=BODY)
+            faces.append(cap(bm, list(reversed(tr[0])), BODY))
+            cone(bm, c + Vector((0, -0.014 * s, -0.004)), Vector((0, -1, -0.55)), 0.016 * s, 0.0045, n=4, mat=NOSE)
+    uv_faces(bm, faces, [(x, base.y + 0.06, 0.03), (x, base.y - 0.09, 0.02)], 0.04)
+
+
+# ---- 頂点色 (make_part の color_for2 が部品の名前の頭で選ぶ)。テクスチャで暗くなった分は fur_gain で戻す
+def col_head2(part, co, n):
+    y, z = co.y, co.z
+    c = mix(PAL["fur"], PAL["fur_top"], smoothstep(0.35, 0.85, n.z) * 0.85)
+    c = mix(c, PAL["fur_shade"], smoothstep(-0.1, -0.6, n.z) * 0.4)
+    # 淡い灰茶: 鼻づらの下半分・頬・喉 (目の下から鼻先へ下がる境、基準画)
+    zm = interp([(-0.46, 0.555), (-0.56, 0.590), (-0.63, 0.606), (-0.88, 0.557)], y)
+    c = mix(c, PAL["pale"], smoothstep(zm + 0.010, zm - 0.012, z))
+    # 目の周りの暗い隈と、目頭から前下への涙の線
+    e = Vector((math.copysign(EYE2.x, co.x), EYE2.y, EYE2.z))
+    c = mix(c, PAL["mask"], smoothstep(0.042, 0.020, (co - e).length) * 0.85)
+    a, b = e + Vector((0, -0.018, -0.008)), e + Vector((-math.copysign(0.012, co.x), -0.048, -0.040))
+    c = mix(c, PAL["mask"], smoothstep(0.010, 0.004, seg_dist(co, a, b)) * 0.7)
+    # 唇 (口の縁の黒) と口の中
+    if y < MOUTH_Y + 0.004:
+        xl, zl = lip_at(y)
+        c = mix(c, PAL["lip"], smoothstep(0.0085, 0.0035, z - zl))
+    return c
+
+
+def col_jaw2(part, co, n):
+    xl, zl = jaw_at(co.y)
+    c = mix(PAL["pale"], PAL["fur"], smoothstep(-0.6, 0.3, n.z) * 0.35)
+    c = mix(c, PAL["lip"], smoothstep(0.009, 0.003, zl - co.z))
+    if n.z > 0.5 and abs(co.x) < xl - 0.004:
+        c = PAL["mouth"]
+    return c
+
+
+def col_leg2(part, co, n):
+    side = 1 if co.x > 0 else -1
+    c = mix(PAL["fur"], PAL["fur_top"], smoothstep(0.2, 0.8, n.z) * 0.7)
+    c = mix(c, PAL["fur_shade"], smoothstep(0.3, 0.9, n.y) * smoothstep(0.35, 0.6, co.z) * 0.6)
+    c = mix(c, PAL["pale"], smoothstep(0.2, 0.8, -n.x * side) * smoothstep(0.3, 0.5, co.z) * 0.5)
+    zd = LEG_DARK_Z["fl" if "fl_" in part else "hl"]
+    c = mix(c, PAL["dark"], smoothstep(zd + 0.10, zd - 0.03, co.z))
+    return mix(c, mix(PAL["dark"], PAL["fur"], 0.25), smoothstep(0.5, 0.95, n.z) * smoothstep(zd, zd - 0.1, co.z) * 0.5)
+
+
+def col_paw2(part, co, n):
+    return mix(PAL["dark"], mix(PAL["dark"], PAL["fur"], 0.3), smoothstep(0.3, 0.9, n.z) * 0.6)
+
+
+def col_tail2(part, co, n):
+    c = mix(PAL["fur"], PAL["fur_top"], smoothstep(0.3, 0.9, n.z) * 0.6)
+    c = mix(c, PAL["fur_shade"], smoothstep(0.1, -0.4, n.z) * 0.5)
+    c = mix(c, PAL["pale"], smoothstep(-0.2, -0.8, n.z) * 0.45)
+    return mix(c, PAL["dark"], smoothstep(0.50, 0.60, co.y) * 0.75)  # 尾の先は焦げ茶 (狼。狐の白い先にしない)
+
+
+COLOR2 = {"head2": col_head2, "jaw2": col_jaw2, "leg2": col_leg2, "paw2": col_paw2, "tail2": col_tail2}
+
+
+def color_for2(part, co, n):
+    """(灰狼の作り直しで追加) 新しい部品の頂点色。元の部品の名前は color_for へ。毛の色 (白でないもの) は fur_gain で明るく戻す"""
+    fn = COLOR2.get(part.split("_")[0])
+    c = fn(part, co, n) if fn else color_for(part, co, n)
+    return c if c == WHITE else fur_gain(c)
+
+
+def head2_weights(co):
+    wn = smoothstep(-0.53, -0.47, co.y) * 0.5  # 後頭部は首へ少し
+    out = [("head", 1.0 - wn)]
+    if wn > 0.02:
+        out.append(("neck2", wn))
+    s = sum(w for _, w in out)
+    return [(b, w / s) for b, w in out]
+
+
+def make_part(name, bm, part, cands, mats, recalc=True, smooth=True, sharp=None):
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
     if recalc:
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     if smooth:
         for f in bm.faces:
             f.smooth = True
+    # (灰狼の作り直しで追加) どの部品も UV の層 UVMap を持たせる (join で層がそろう。UV の無い部品 (光・歯) は 0)
+    bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
     me = bpy.data.meshes.new(name)
     bm.normal_update()
     bm.to_mesh(me)
     bm.free()
+    # (灰狼の作り直しで追加) sharp (度) より折れた辺を硬い辺にする (眉の稜・口の縁・耳の縁を立てる。曲面はなめらかなまま)
+    if sharp is not None:
+        me.set_sharp_from_angle(angle=math.radians(sharp))
     for m in mats:
         me.materials.append(m)
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
-    col = me.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
+    # (灰狼の作り直しで変更: 部品が頂点色の層を持って来たら (毛の房・耳) それを使い、塗り直さない。色は color_for2 (新しい部品と fur_gain) で塗る。
+    #  元は col = me.color_attributes.new(...) と c = color_for(part, v.co, v.normal) を毎回)
+    preset = me.color_attributes.get("Col")
+    col = preset or me.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
     groups = {}
     for v in me.vertices:
-        c = color_for(part, v.co, v.normal)
-        col.data[v.index].color = (*c, 1.0)
+        if not preset:
+            c = color_for2(part, v.co, v.normal)
+            col.data[v.index].color = (*c, 1.0)
         ws = cands(v.co) if callable(cands) else weights_for(v.co, cands)
         for b, w in ws:
             if b not in groups:
@@ -935,6 +1695,140 @@ def build_lod(lod, obj_name, mats):
         build_tufts(bm, BVHTree.FromPolygons(top_v, top_f))
         parts.append(make_part(obj_name + "_tufts", bm, "rigid",
                                lambda co: head_weights(co) if co.y < -0.5 else weights_for(co, neck_cands(co)), mats, recalc=False, smooth=False))
+
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
+    for o in parts:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
+    bpy.ops.object.join()
+    ob = bpy.context.active_object
+    ob.name = ob.data.name = obj_name
+    col = ob.data.color_attributes["Col"]
+    ob.data.color_attributes.active_color = col
+    ob.data.color_attributes.render_color_index = ob.data.color_attributes.active_color_index
+    return ob
+
+
+# (灰狼の作り直しで追加) 作り直した部品で組む LOD。build_lod と同じ並び (胴・首・頭・尾・耳・目・脚・足 → 継ぎ目・稜線・毛の房) で、
+# 頭は上の顎 (build_head2)・下顎 (build_jaw2)・歯・鼻・目・眉と頬の光に、背の棘は前の面が光る毛の房に、飾り毛は部位ごとの毛の房にした
+HERO.update(head2=22, jaw2=10, body=(15, 18))
+LOD1.update(head2=8, jaw2=4)
+
+
+def leg_tuft_weights(pre):
+    def f(co):
+        bones = LEG_BONES[f"{pre}_{'L' if co.x < 0 else 'R'}"]
+        return weights_for(co, [(bones[0], 1.0), (bones[1], 1.0), ("chest" if pre == "fl" else "pelvis", 0.4)])
+    return f
+
+
+TUFT_WEIGHTS = {
+    "cheek": lambda co: weights_for(co, [("head", 1.0), ("neck2", 0.9)]),
+    "mane": lambda co: weights_for(co, neck_cands(co)),
+    "hackle": crest_weights,
+    "chest": lambda co: weights_for(co, [("chest", 1.0), ("neck1", 0.6)]),
+    "elbow": leg_tuft_weights("fl"),
+    "thigh": leg_tuft_weights("hl"),
+    "belly": lambda co: weights_for(co, body_cands(co)),
+    "tail": lambda co: weights_for(co, [("tail1", 1), ("tail2", 1), ("tail3", 1), ("pelvis", 0.3)]),
+}
+
+
+def build_lod2(lod, obj_name, mats):
+    hero = lod["name"] == "hero"
+    parts = []
+    shell_v, shell_f = [], []  # 継ぎ目の投影先 (胴・首・脚の付け根)
+    top_v, top_f = [], []      # 稜線・背の毛の投影先 (胴・首・頭・尾)
+    skin_v, skin_f = [], []    # 毛の房の根元を吸わせる面 (毛の部品すべて)
+
+    def add(bm, *targets):
+        bm.verts.index_update()
+        for vv, ff in targets:
+            o = len(vv)
+            vv.extend(v.co.copy() for v in bm.verts)
+            ff.extend([o + v.index for v in f.verts] for f in bm.faces)
+
+    rigid_head = lambda co: [("head", 1.0)]  # noqa: E731
+    bm = bmesh.new()
+    build_body2(bm, lod)
+    add(bm, (shell_v, shell_f), (top_v, top_f), (skin_v, skin_f))
+    parts.append(make_part(obj_name + "_body", bm, "body", lambda co: weights_for(co, body_cands(co)), mats))
+    bm = bmesh.new()
+    build_neck(bm, lod)
+    uv_faces(bm, bm.faces, [(0, -0.56, 0.60), (0, -0.45, 0.62), (0, -0.36, 0.645), (0, -0.27, 0.62)], 0.14)
+    add(bm, (shell_v, shell_f), (top_v, top_f), (skin_v, skin_f))
+    parts.append(make_part(obj_name + "_neck", bm, "neck", neck_cands(None), mats))
+    bm = bmesh.new()
+    build_head2(bm, lod)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.normal_update()
+    bvh_head = BVHTree.FromBMesh(bm)
+    add(bm, (top_v, top_f), (skin_v, skin_f))
+    parts.append(make_part(obj_name + "_head", bm, "head2", head2_weights, mats, sharp=34 if hero else None))
+    bm = bmesh.new()
+    build_jaw2(bm, lod)
+    parts.append(make_part(obj_name + "_jaw", bm, "jaw2", lambda co: [("jaw", 1.0)], mats, sharp=50 if hero else None))
+    bm = bmesh.new()
+    build_nose2(bm, lod)
+    parts.append(make_part(obj_name + "_nose", bm, "rigid", rigid_head, mats, sharp=60))
+    if hero:
+        bm = bmesh.new()
+        build_teeth2(bm, lod, True)
+        parts.append(make_part(obj_name + "_teeth_up", bm, "rigid", rigid_head, mats, recalc=False, smooth=False))
+        bm = bmesh.new()
+        build_teeth2(bm, lod, False)
+        parts.append(make_part(obj_name + "_teeth_low", bm, "rigid", lambda co: [("jaw", 1.0)], mats, recalc=False, smooth=False))
+    bm = bmesh.new()
+    build_tail2(bm, lod)
+    add(bm, (top_v, top_f), (skin_v, skin_f))
+    parts.append(make_part(obj_name + "_tail", bm, "tail2", [("tail1", 1), ("tail2", 1), ("tail3", 1), ("pelvis", 0.3)], mats))
+    for side, s in ((-1, "L"), (1, "R")):
+        bm = bmesh.new()
+        EAR_FRONT[f"ear_{s}"] = build_ears2(bm, lod, side)
+        parts.append(make_part(f"{obj_name}_ear_{s}", bm, f"ear_{s}", [(f"ear_{s}", 1.0), ("head", 0.25)], mats, sharp=40 if hero else None))
+        bm = bmesh.new()
+        build_eye2(bm, bvh_head, lod, side)
+        parts.append(make_part(f"{obj_name}_eye_{s}", bm, "rigid", rigid_head, mats, recalc=False))
+        bm = bmesh.new()
+        build_line2(bm, bvh_head, lod, side, BROW2, 0.011)
+        if hero:
+            build_line2(bm, bvh_head, lod, side, CHEEK2, 0.008)
+        parts.append(make_part(f"{obj_name}_brow_{s}", bm, "rigid", rigid_head, mats, recalc=False))
+        for pre in ("fl", "hl"):
+            name = f"{pre}_{s}"
+            bones = LEG_BONES[name]
+            parent = "chest" if pre == "fl" else "pelvis"
+            bm = bmesh.new()
+            build_leg(bm, lod, name)
+            uv_faces(bm, bm.faces, [joint(name, i) for i in range(5)] + ([joint(name, 4) + Vector((0, -0.05, 0))] if not lod["paw"] else []), 0.05)
+            add(bm, (shell_v, shell_f), (skin_v, skin_f))
+            parts.append(make_part(f"{obj_name}_leg_{name}", bm, f"leg2_{name}", [(b, 1.0) for b in bones] + [(parent, 0.5)], mats))
+            if lod["paw"]:
+                bm = bmesh.new()
+                build_paw2(bm, lod, name)
+                parts.append(make_part(f"{obj_name}_paw_{name}", bm, "paw2", lambda co, b=bones[3]: [(b, 1.0)], mats, sharp=55))
+    bvh = BVHTree.FromPolygons(shell_v, shell_f)
+    bvh_top = BVHTree.FromPolygons(top_v, top_f)
+    bvh_skin = BVHTree.FromPolygons(skin_v, skin_f)
+    for side, s in ((-1, "L"), (1, "R")):
+        bm = bmesh.new()
+        for path in SEAMS:
+            build_ribbon(bm, bvh, lod, path, side)
+        parts.append(make_part(f"{obj_name}_seams_{s}", bm, "rigid", lambda co: weights_for(co, body_cands(co) + [("neck1", 0.5)]), mats,
+                               recalc=False))
+    bm = bmesh.new()
+    build_crest(bm, bvh_top, lod)
+    parts.append(make_part(obj_name + "_crest", bm, "rigid", crest_weights, mats, recalc=False))
+    regions = ["cheek", "mane", "hackle", "chest", "thigh", "belly", "tail"] + (["elbow"] if hero else [])
+    for region in regions:
+        bm = bmesh.new()
+        tufts_region(bm, bvh_top if region == "hackle" else bvh_skin, lod, region)
+        if not bm.faces:
+            bm.free()
+            continue
+        parts.append(make_part(f"{obj_name}_tuft_{region}", bm, "tuft", TUFT_WEIGHTS[region], mats, recalc=False))
 
     for o in bpy.context.selected_objects:
         o.select_set(False)
@@ -1076,6 +1970,8 @@ def leg_rest_F(leg):
 
 # (M22-05 残りの手直しで追加) 足の塊の底の目安の点 (足の付け根からの (前後, 上下)。build_paw の後ろの点・底の前後・指先)
 PAW_PTS = [(0.055, -0.005), (0.04, -0.035), (-0.035, -0.035), (-0.078, -0.035), (-0.10, -0.019)]
+# (灰狼の作り直しで追加) 足を指と爪のある形 (build_paw2) にしたので、指の底と爪の先を足した目安の点に替える
+PAW_PTS = [(0.058, -0.005), (0.045, -0.035), (-0.035, -0.035), (-0.090, -0.035), (-0.110, -0.031), (-0.100, -0.020)]
 
 
 def paw_clear(F, dth_h):
@@ -1203,6 +2099,7 @@ def pose_stalk(rig, t):
     b["head"] = rot_basis(-(pitch + D(3) + D(2) + n1 + n2) + D(3), 0, 0)
     b["ear_L"] = rot_basis(D(10), 0, D(-4))
     b["ear_R"] = rot_basis(D(10), 0, D(4))
+    b["jaw"] = rot_basis(D(7) + D(1.5) * math.sin(ph))  # (灰狼の作り直しで追加) 忍び寄りは口を少し開けて牙と歯を見せる
     # 尾は低く、先をわずかに揺らす (後ろ向きの骨は X 回りの正で先が上がる)
     b["tail1"] = rot_basis(-D(4), 0, D(3) * math.sin(ph))
     b["tail2"] = rot_basis(D(3), 0, D(3) * math.sin(ph - 0.8))
@@ -1230,6 +2127,7 @@ def pose_run(rig, t):
     b["head"] = rot_basis(D(6) - D(5) * math.sin(ph + 2.1))
     b["ear_L"] = rot_basis(-D(35), 0, D(-12))
     b["ear_R"] = rot_basis(-D(35), 0, D(12))
+    b["jaw"] = rot_basis(D(10) + D(3) * math.sin(2 * ph))  # (灰狼の作り直しで追加) 走るときは口を開けて息をする
     # 尾は後ろへ真っ直ぐ伸ばす (後ろ向きの骨は X 回りの正で先が上がる)
     b["tail1"] = rot_basis(D(26) + D(6) * math.sin(ph), 0, 0)
     b["tail2"] = rot_basis(D(12) + D(6) * math.sin(ph - 0.6))
@@ -1260,7 +2158,7 @@ def pose_pounce(rig, t):
     b["neck1"] = rot_basis(D(4) * crouch - D(4) * lunge)
     b["neck2"] = rot_basis(D(2) * crouch)
     b["head"] = rot_basis(-D(4) * crouch + D(2) * lunge)
-    b["jaw"] = rot_basis(D(26) * ease(0.4, 0.55, t) * (1 - ease(0.62, 0.8, t)))
+    b["jaw"] = rot_basis(D(32) * ease(0.4, 0.55, t) * (1 - ease(0.62, 0.8, t)) + D(6) * crouch)  # (灰狼の作り直しで変更: 顎を 26° → 32°、溜めで少し開く)
     b["ear_L"] = rot_basis(D(-20) * crouch + D(25) * lunge, 0, D(-6))
     b["ear_R"] = rot_basis(D(-20) * crouch + D(25) * lunge, 0, D(6))
     b["tail1"] = rot_basis(-D(8) * crouch + D(24) * lunge)
@@ -1424,13 +2322,17 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     mats = make_materials()
     rig = build_rig()
-    meshes = [build_lod(HERO, "wolf", mats), build_lod(LOD1, "wolf_lod1", mats)]
+    # (灰狼の作り直しで変更: 作り直した部品で組む build_lod2 に。元は build_lod(HERO, "wolf", mats), build_lod(LOD1, "wolf_lod1", mats))
+    meshes = [build_lod2(HERO, "wolf", mats), build_lod2(LOD1, "wolf_lod1", mats)]
     for ob in meshes:
         # アーマチュアの子にしない (glTF ではスキンのメッシュをルートに置く。親の変換はスキンに効かないため)
         mod = ob.modifiers.new("Armature", "ARMATURE")
         mod.object = rig
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
+    if os.environ.get("WOLF_FAST"):  # (灰狼の作り直しで追加) 形の確かめ: アニメ・遠い段・GLB を飛ばして .blend だけ書く
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(os.path.join(OUT_DIR, "wolf.blend")))
+        return
     bake_actions(rig, meshes[0])  # (M22-05 残りの手直しで変更: 接地を合わせるため近 LOD を渡す。元は bake_actions(rig))
     build_far(meshes[1], "wolf_far", rig, far_ratio)  # (M23-08) 遠い段
     scene.frame_set(0)
@@ -1442,7 +2344,8 @@ def main():
     bpy.ops.export_scene.gltf(filepath=glb, export_format="GLB", use_selection=False, export_animation_mode="ACTIONS",
                               export_force_sampling=True, export_frame_step=1, export_skins=True, export_influence_nb=4,
                               export_vertex_color="ACTIVE", export_yup=True, export_apply=False, export_def_bones=False,
-                              export_optimize_animation_size=True, export_anim_slide_to_zero=True, export_rest_position_armature=True)
+                              export_optimize_animation_size=True, export_anim_slide_to_zero=True, export_rest_position_armature=True,
+                              export_image_format="JPEG", export_jpeg_quality=88)  # (灰狼の作り直しで追加) 毛皮のテクスチャは JPEG で埋め込む
     print("saved", blend)
     print("saved", glb)
 

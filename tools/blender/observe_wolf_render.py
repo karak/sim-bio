@@ -106,7 +106,10 @@ def show(name):
 
 
 def set_action(name, frame):
-    ad = rig.animation_data
+    # (灰狼の作り直しで追加) アニメを焼いていない .blend (observe_wolf.py の WOLF_FAST) では rest のまま撮る
+    if name and name not in bpy.data.actions:
+        name = None
+    ad = rig.animation_data_create()
     for tr in ad.nla_tracks:
         tr.mute = True
     ad.action = bpy.data.actions[name] if name else None
@@ -117,7 +120,7 @@ def set_action(name, frame):
     scene.frame_set(frame)
 
 
-def shoot(path, az, el, pad=1.12):
+def shoot(path, az, el, pad=1.12, sel=None):
     a, e = math.radians(az), math.radians(el)
     fwd = -Vector((-math.cos(a) * math.cos(e), -math.sin(a) * math.cos(e), math.sin(e)))
     right = fwd.cross(Vector((0, 0, 1))).normalized()
@@ -132,6 +135,8 @@ def shoot(path, az, el, pad=1.12):
         me = ev.to_mesh()
         pts += [ev.matrix_world @ v.co for v in me.vertices]
         ev.to_mesh_clear()
+    if sel:  # (灰狼の作り直しで追加) 寄った画: sel に合う頂点 (頭など) だけで枠を決める
+        pts = [p for p in pts if sel(p)]
     xs = [p.dot(right) for p in pts]
     ys = [p.dot(up) for p in pts]
     cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
@@ -155,6 +160,14 @@ POSES = [("stalk", 12), ("run", 12)]
 for name, f in POSES:
     set_action(name, f)
     shoot(f"pose-{name}.png", 6, 5)
+# (灰狼の作り直しで追加) 頭の寄り: 斜め前・側面・正面 (rest)、忍び寄り (口を少し開く) と飛びかかり (口を開く) の斜め前
+head_sel = lambda p: p.y < -0.44 and p.z > 0.35  # noqa: E731
+for k, (az, el) in (("q34", (36, 8)), ("side", (6, 5)), ("front", (90, 5))):
+    set_action(None, 0)
+    shoot(f"head-{k}.png", az, el, pad=1.15, sel=head_sel)
+for name, f in (("stalk", 12), ("pounce", 16)):
+    set_action(name, f)
+    shoot(f"head-{name}.png", 30, 6, pad=1.15, sel=lambda p: p.z > 0.25 and p.y < -0.40 - (0.3 if name == "pounce" else 0.0))
 if ONLY == "views":
     sys.exit(0)
 set_action(None, 0)
