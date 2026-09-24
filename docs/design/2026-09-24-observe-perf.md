@@ -72,3 +72,7 @@
 | 9 | M23-09 小屋の遠距離版をつなぐ(建物の作り直しで小屋が 1 棟 10 千三角形に。`hut_lod1` 766 は作ってある) | 集落の画 −20 千前後 | view.ts・instancer.ts(M23-02 の後) |
 
 受入の物差し: M23-01 の台で、6 画の三角形・draw call・fps の前後を残す。見た目は前後の比較画で変わっていないこと(遠距離版は切り替わりの距離で目立たないこと)をユーザーの審査台で確かめる。
+
+## 審査台
+
+見た目の審査は https://claude.ai/artifact/XeQZ8TYQnCqQtAJz8Y1qtt(非公開、2026-09-24 作成)。各段の前・後・差の画像に合否とメモを付け、判定はページの db(`verdicts`)に残る。数字の推移は https://claude.ai/artifact/QUQt1hENzgEB3BPk6TS4GF 。
