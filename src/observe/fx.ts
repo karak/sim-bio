@@ -9,6 +9,8 @@
  *   抗力 SPROUT_DRAG で止まるまでに進む距離は radiusM の 0.55〜1.35 倍 (= speed / SPROUT_DRAG)。上向きの初速 up で弧を描く。
  *   (M22-07 の 3 回目で変更: 進む距離は radiusM の SPROUT_REACH_MIN〜SPROUT_REACH_MAX (0.3〜1.0) 倍。粒は植えた円の中に収まり、外へ飛び出さない)
  * - wetness(prev, raining, dt): 雨の濡れ (水たまりの広がり、0〜1)。降っている間は WET_FILL_S 秒で満ち、止むと WET_DRY_S 秒で乾く。
+ *   (審査台 2026-09-24 23:54 の指摘「雨が降る前に水たまりが広がる順序になっていないか」で変更: 4 番目の引数 rain (いま見えている雨の強さ 0〜1) の
+ *   2 乗の速さで満ちる。雨は 4 秒ほどかけて強まるので、降り始めは粒だけが見え、水たまりは地面が濡れてから遅れて広がる)
  * - surgeStep(state, target, dt): 沈む海の海面と波立ち。見せる海面 level は target へ SURGE_RATE m/s で上がり
  *   (下がるときはすぐ)、上がっている間と上がり終えてから SURGE_HOLD_S 秒は surge (波立ちと流れ、0〜1) が 2.5 秒で 1 へ、
  *   そのあと SURGE_CALM_S 秒で静まる (本体の沈降は 1 tick ごとに少しずつなので、上がりが途切れ途切れでも波立ちを保つ)。
@@ -60,8 +62,8 @@ export function sproutReach(speed: number, t: number): number {
 export const WET_FILL_S = 14;
 export const WET_DRY_S = 40;
 
-export function wetness(prev: number, raining: boolean, dt: number): number {
-  return raining ? Math.min(1, prev + dt / WET_FILL_S) : Math.max(0, prev - dt / WET_DRY_S);
+export function wetness(prev: number, raining: boolean, dt: number, rain = 1): number {
+  return raining ? Math.min(1, prev + (dt * rain * rain) / WET_FILL_S) : Math.max(0, prev - dt / WET_DRY_S);
 }
 
 export const SURGE_RATE = 0.12;

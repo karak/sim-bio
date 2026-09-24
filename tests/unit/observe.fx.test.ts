@@ -101,6 +101,22 @@ describe('介入の場面の時間の形 (M22-07 の手直し): 雨の濡れと�
     expect(w).toBeCloseTo(0.75, 6);
     expect(wetness(0.01, false, 5)).toBe(0);
   });
+  it('水たまりは雨より先に広がらない: 雨の強さが 4 秒で強まる間 (view.ts と同じ式)、濡れは見えている雨の 1 割以下に遅れる', () => {
+    let rain = 0;
+    let w = 0;
+    const dt = 1 / 60;
+    for (let t = dt; t <= 3; t += dt) {
+      rain += (1 - rain) * Math.min(1, dt / 4);
+      w = wetness(w, true, dt, rain);
+      expect(w).toBeLessThanOrEqual(rain * 0.1);
+    }
+    expect(rain).toBeGreaterThan(0.5);
+    for (let t = 0; t < 60; t += dt) {
+      rain += (1 - rain) * Math.min(1, dt / 4);
+      w = wetness(w, true, dt, rain);
+    }
+    expect(w).toBe(1);
+  });
 
   it('海面は 0.12 m/s で上がり、上がる間と上がり終えて 6 秒は波立ちが満ち、そのあと 24 秒で静まる', () => {
     let s: SurgeState = { level: 1, surge: 0, hold: 0 };

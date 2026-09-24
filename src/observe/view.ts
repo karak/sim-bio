@@ -784,7 +784,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     motes.setRain(rain);
     // (M22-07 の手直し) 雨の水たまり・海面の波紋
     fxTime += dt;
-    wet = wetness(wet, rainLeft > 0, dt);
+    // (審査台 23:54 の指摘で変更: 濡れはいま見えている雨の強さ rain で満ちる。降り始めに水たまりが雨より先に広がらない)
+    wet = wetness(wet, rainLeft > 0, dt, rain);
     puddles.update(wet, rain, hemi.color, fxTime);
     water.setRain(rain);
     // (M22-07 の手直し) 沈む海: 海面を追わせ、上がる間の波立ちと流れ
