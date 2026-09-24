@@ -51,4 +51,9 @@ describe('計測の台の前後の表 (M23-01)', () => {
       '| 集落 | 1397.2 | 102 | 57 |',
     ]);
   });
+
+  it('(M23-07) 画面の大きさとページに足した指定を見出しに出す', () => {
+    const r: BenchResult = { ...before, meta: { ...before.meta, viewport: { width: 2560, height: 1440, deviceScaleFactor: 1 }, params: 'air=0&bloom=0' } };
+    expect(summarizeBench(r).split('\n')[0]).toBe('2026-09-24T00:00:00.000Z aaa1111 2560×1440 @1x air=0&bloom=0  GPU: test');
+  });
 });

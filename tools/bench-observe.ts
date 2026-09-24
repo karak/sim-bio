@@ -10,6 +10,7 @@
  *   npm run bench:observe -- --out /path/to/before.json
  *   npm run bench:observe -- --url http://localhost:5181   # 動いている Vite を使う (無ければ自分で 5331 番から空きを探して立てる)
  *   その他: --settle <ms> (押してから測り始めるまで、既定 2500)、--samples <回> (fps を平均する回数、既定 4)、--dpr <倍> (既定 1)、--headed、--vsync (fps を 60 で頭打ちにする。既定は上限なし)
+ *   (M23-07) --size <幅>x<高さ> (既定 1280x720)、--params <指定> (ページの URL に足す。例 "air=0&bloom=0"。パスを切った前後の fps の差でパスの重さを見る)
  *
  * 測りは 2 回に分ける。
  * 1. 三角形・draw call・内訳: ページの performance.now と requestAnimationFrame を台のものに差し替え、1 コマ 1/60 s で決まったコマ数だけ進める。
@@ -90,7 +91,16 @@ function parseArgs(argv: string[]) {
     dpr: Number(get('dpr') ?? 1),
     headed: argv.includes('--headed'),
     vsync: argv.includes('--vsync'),
+    // (M23-07) 画面の大きさ・足す指定
+    viewport: parseSize(get('size') ?? `${VIEWPORT.width}x${VIEWPORT.height}`),
+    params: get('params') ?? '',
   };
+}
+
+function parseSize(v: string): { width: number; height: number } {
+  const m = /^(\d+)x(\d+)$/.exec(v);
+  if (!m) throw new Error(`--size は <幅>x<高さ> (例 2560x1440): ${v}`);
+  return { width: Number(m[1]), height: Number(m[2]) };
 }
 
 function commit(): string {
@@ -109,7 +119,8 @@ const press = (page: Page, name: string) => page.locator('#shots').getByRole('bu
 const assetsReady = (st: Stats | null) => !!st && Object.values(st.assets).every(Boolean);
 
 async function openPage(browser: Browser, opt: Opt, url: string, errors: string[], fixedClock: boolean): Promise<Page> {
-  const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: opt.dpr });
+  // (M23-07 で変更: 画面の大きさは --size)
+  const context = await browser.newContext({ viewport: opt.viewport, deviceScaleFactor: opt.dpr });
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   if (fixedClock) await page.addInitScript(installFrameStepper, FRAME_MS);
@@ -194,7 +205,8 @@ async function main(): Promise<void> {
     base = server.resolvedUrls?.local[0];
     if (!base) throw new Error('Vite の URL が取れない');
   }
-  const url = base.replace(/\/$/, '') + PAGE;
+  // (M23-07 で変更: --params をページの URL に足す)
+  const url = base.replace(/\/$/, '') + PAGE + (opt.params ? `&${opt.params}` : '');
   console.log(`開く: ${url}`);
   // 自分のブラウザを立てる (ほかの作業のページには触れない)。GPU で描くよう、headless shell ではなく Chromium 本体の新しい headless を使う
   // headless の rAF は 60 で頭打ちになり、60 より上の伸びが見えないので、既定で垂直同期とコマの上限を外す (--vsync で戻す)
@@ -218,7 +230,8 @@ async function main(): Promise<void> {
         date: localIso(new Date()),
         commit: commit(),
         url: PAGE,
-        viewport: { ...VIEWPORT, deviceScaleFactor: opt.dpr },
+        viewport: { ...opt.viewport, deviceScaleFactor: opt.dpr },
+        ...(opt.params ? { params: opt.params } : {}),
         settleMs: opt.settleMs,
         browser: `chromium ${browser.version()}${opt.headed ? ' headed' : ' headless'}${opt.vsync ? ' vsync' : ' 上限なし'}`,
         gpu: fixed.gpu,

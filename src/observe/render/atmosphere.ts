@@ -122,7 +122,10 @@ const AirShader = {
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform sampler2D tDepth;
+    // (M23-07 で変更: 影の地図が無いとき (?shadow=0) は sampler2DShadow を宣言しない。深度でない空のテクスチャが結ばれて描画が落ち、画面が黒くなっていた)
+    #ifdef AIR_SHADOW
     uniform sampler2DShadow tShadow;
+    #endif
     uniform float uUseShadow;
     uniform mat4 uInvProj;
     uniform mat4 uCamWorld;
@@ -159,10 +162,13 @@ const AirShader = {
     float ign(vec2 px) { return fract(52.9829189 * fract(dot(px, vec2(0.06711056, 0.00583715)))); }
 
     void main() {
-      vec4 col = texture2D(tDiffuse, vUv);
-      float depth = texture2D(tDepth, vUv).x;
+      // (M23-07 で変更: 場面の色は読まず、空気が足す光 L と透過率 T を書く (色調のパスで 色 × T + L)。
+      //  空気は場面の AIR_SCALE 分の 1 の大きさで描き、深度は受け持つ画素の組の左上の 1 画素を読む (色調のパスの深度を見た引き伸ばしと同じ画素))
+      ivec2 dpx = min(ivec2(gl_FragCoord.xy) * AIR_SCALE, textureSize(tDepth, 0) - 1);
+      vec2 dUv = (vec2(dpx) + 0.5) / vec2(textureSize(tDepth, 0));
+      float depth = texelFetch(tDepth, dpx, 0).x;
       bool sky = depth >= 0.99999;
-      vec4 vp = uInvProj * vec4(vUv * 2.0 - 1.0, (sky ? 0.9999 : depth) * 2.0 - 1.0, 1.0);
+      vec4 vp = uInvProj * vec4(dUv * 2.0 - 1.0, (sky ? 0.9999 : depth) * 2.0 - 1.0, 1.0);
       vec3 wp = (uCamWorld * vec4(vp.xyz / vp.w, 1.0)).xyz;
       vec3 ray = wp - uCamPos;
       // 空は水面の果て (1.5 km) より遠いものとして霞ませ、水平線で海と空が同じ空気の色に溶けるようにする
@@ -183,9 +189,11 @@ const AirShader = {
       float T = exp(-fogAmt);
       float mu = dot(rd, uLightDir);
       vec3 air = mix(uFogColor, uLightColor, pow(max(mu, 0.0), 6.0) * 0.5);
-      vec3 outc = col.rgb * T + air * (1.0 - T);
+      vec3 outc = air * (1.0 - T);
+      float Tt = T;
 
       // 光の筋: 視線に沿って 24 点で日の影の地図を引き、日の当たる空気だけ前方散乱で光らせる
+      #ifdef AIR_SHADOW
       if (uUseShadow > 0.5 && uShafts > 0.0) {
         float maxD = min(dist, 90.0);
         float stepL = maxD / 24.0;
@@ -204,6 +212,7 @@ const AirShader = {
         float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * mu, 1.5) / 12.566;
         outc += uLightColor * lit * hg * uShafts * (1.0 - exp(-maxD * 0.025)) * (sky ? 0.8 : 2.4);
       }
+      #endif
       // 疫病の霧 (M22-08、sheets/effects の 2): 地を這う平たい楕円体の中を視線が通る長さだけ、紫がかった灰の霧を掛け、渦を巻かせる
       if (uMistAmt > 0.0) {
         vec3 sc = vec3(uMistAt.w, uMistAt.w * 0.22, uMistAt.w);
@@ -233,14 +242,15 @@ const AirShader = {
             }
             float Tm = exp(-m * 0.22 * uMistAmt);
             outc = outc * Tm + uMistColor * (1.0 - Tm);
+            Tt *= Tm;
           }
         }
       }
       // 光芒 (M22-07、試作 2 の判断「光の筋があるとさらによい」): 日の画面上の位置へ向かって深度を辿り、空が見える所を数える。
       // 木の輪郭と樹冠の隙間から日の方へ放射状に伸びる筋になる (上の体積光は奥行きの明るさ、こちらは絵としての筋)
       if (uSunVis > 0.0) {
-        vec2 delta = (vUv - uSunUv) * (0.9 / 48.0);
-        vec2 uv = vUv;
+        vec2 delta = (dUv - uSunUv) * (0.9 / 48.0);
+        vec2 uv = dUv;
         float illum = 1.0;
         float rays = 0.0;
         float j2 = ign(gl_FragCoord.xy + 7.0);
@@ -253,7 +263,7 @@ const AirShader = {
         }
         outc += uLightColor * rays * (1.0 / 48.0) * uSunVis * uShafts * 0.9;
       }
-      gl_FragColor = vec4(outc, col.a);
+      gl_FragColor = vec4(outc, Tt);
     }
   `,
 };
@@ -264,12 +274,16 @@ export class AtmospherePass extends Pass {
   private readonly sunDir = new Vector3();
   private readonly fwd = new Vector3();
   private readonly sunPos = new Vector3();
+  /** (M23-07) 場面の色と深度を読む描画先 (grade.ts の ScenePass が渡す)。無ければ前のパスの描画先を読む */
+  source: WebGLRenderTarget | null = null;
+  // (M23-07 で変更: scale は場面に対して何分の 1 の大きさで描くか (1 か 2)。描く先の大きさは grade.ts が決める)
   constructor(
     private readonly camera: PerspectiveCamera,
     private readonly light: DirectionalLight,
+    readonly scale: 1 | 2 = 2,
   ) {
     super();
-    this.mat = new ShaderMaterial({ uniforms: AirShader.uniforms, vertexShader: AirShader.vertexShader, fragmentShader: AirShader.fragmentShader, depthTest: false, depthWrite: false });
+    this.mat = new ShaderMaterial({ uniforms: AirShader.uniforms, vertexShader: AirShader.vertexShader, fragmentShader: AirShader.fragmentShader, depthTest: false, depthWrite: false, defines: { AIR_SCALE: scale } });
     this.quad = new FullScreenQuad(this.mat);
   }
 
@@ -291,11 +305,19 @@ export class AtmospherePass extends Pass {
 
   render(renderer: WebGLRenderer, writeBuffer: WebGLRenderTarget, readBuffer: WebGLRenderTarget): void {
     const u = this.mat.uniforms;
-    u.tDiffuse.value = readBuffer.texture;
-    u.tDepth.value = readBuffer.depthTexture;
+    // (M23-07 で変更: 場面の描画先 source があればそこから読む)
+    const src = this.source ?? readBuffer;
+    u.tDiffuse.value = src.texture;
+    u.tDepth.value = src.depthTexture;
     const sm = this.light.castShadow ? this.light.shadow.map?.depthTexture : null;
     u.tShadow.value = sm ?? null;
     u.uUseShadow.value = sm ? 1 : 0;
+    // (M23-07) 影の地図の有る無しで、光の筋 (影の地図を引く) を組み込むかを切り替える
+    if (!!sm !== !!this.mat.defines.AIR_SHADOW) {
+      if (sm) this.mat.defines.AIR_SHADOW = true;
+      else delete this.mat.defines.AIR_SHADOW;
+      this.mat.needsUpdate = true;
+    }
     (u.uInvProj.value as Matrix4).copy(this.camera.projectionMatrixInverse);
     (u.uCamWorld.value as Matrix4).copy(this.camera.matrixWorld);
     (u.uCamPos.value as Vector3).setFromMatrixPosition(this.camera.matrixWorld);

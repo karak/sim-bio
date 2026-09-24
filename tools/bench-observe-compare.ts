@@ -38,6 +38,8 @@ export type BenchResult = {
     browser: string;
     gpu: string;
     note: string;
+    /** (M23-07) ページの URL に足した指定 (例 air=0&bloom=0) */
+    params?: string;
   };
   shots: BenchShot[];
 };
@@ -90,7 +92,8 @@ export function compareBench(before: BenchResult, after: BenchResult): string {
 
 /** 1 つの測りの要約 (作業ログに貼る用)。単位は千三角形 */
 export function summarizeBench(r: BenchResult): string {
-  const lines = [`${r.meta.date} ${r.meta.commit} ${r.meta.viewport.width}×${r.meta.viewport.height} @${r.meta.viewport.deviceScaleFactor}x  GPU: ${r.meta.gpu}`, ''];
+  // (M23-07 で変更: 足した指定 (params) を見出しに付ける)
+  const lines = [`${r.meta.date} ${r.meta.commit} ${r.meta.viewport.width}×${r.meta.viewport.height} @${r.meta.viewport.deviceScaleFactor}x${r.meta.params ? ` ${r.meta.params}` : ''}  GPU: ${r.meta.gpu}`, ''];
   lines.push('| 画 | 三角形 (千) | draw call | fps |');
   lines.push('|---|---|---|---|');
   for (const s of r.shots) lines.push(`| ${s.name} | ${k(s.triangles)} | ${s.calls} | ${s.fps.toFixed(0)} |`);

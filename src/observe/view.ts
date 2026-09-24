@@ -46,6 +46,7 @@ import { bakeImpostor } from './render/impostor';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
+import { createDynamicResolution } from './render/dynamicResolution';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks } from './area';
 import { K_DEFAULT, BUDGET_PER_SECOND, folkRuleFor, reconcile, targetCounts } from './population';
@@ -62,6 +63,8 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * (M23-06: far は鐘樹の成木と森の木をインポスター (板) に替える距離 (m)。0 で切る)
  * (M23-08: cfar は動物を遠い段 (群れ LOD を削った形) に替える距離 (m、個体ごとに ±10%)。0 で切る)
  * (M23-09: hut は小屋を遠距離版 hut_lod1 に替える距離 (m、カメラの高さも入れた距離、小屋ごとに ±10% 揺らす)。0 で切る (いつも近い形))
+ * (M23-07: msaa は場面の MSAA の段 (0 / 2 / 4)、pr はピクセル比の上限、airres は空気の層を場面の何分の 1 で描くか (1 か 2、既定 2)、
+ *  dynres=0 で動的な解像度 (コマが 60 fps の予算を続けて超えたときだけ合成の倍率を下げる。ピクセル比 2 で 0.5、1 で 0.7 まで) を切る)
  */
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => Number(params.get(k) ?? d);
@@ -89,6 +92,10 @@ const OPT = {
   freeze: params.get('freeze') === '1',
   far: num('far', 60),
   hut: num('hut', HUT_NEAR_M),
+  msaa: num('msaa', 4),
+  pr: num('pr', 2),
+  airScale: (num('airres', 2) === 1 ? 1 : 2) as 1 | 2,
+  dynres: flag('dynres'),
 };
 /** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
 const AREA_R = 8;
@@ -213,8 +220,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const field = createTerrainField(s, home, WINDOW);
 
   const canvas = host.canvas;
-  const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+  // (M23-07 で変更: 画面 (canvas) の MSAA を切る。描画はすべて合成 (grade.ts) を通り、MSAA は場面の描画先が持つ。画面の MSAA は最後の全画面の 1 枚にしか掛からず、解決の分だけ重かった)
+  const renderer = new WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  // (M23-07 で変更: ピクセル比の上限は OPT.pr)
+  renderer.setPixelRatio(Math.min(OPT.pr, window.devicePixelRatio));
   renderer.shadowMap.enabled = OPT.shadow;
   renderer.shadowMap.type = PCFShadowMap;
   // (M23-04) 影の描画だけに出す粗い代わりの形 (鐘樹の成木・小屋・近くの動物)。本の描画の形は castShadow = false にする
@@ -557,8 +566,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     onSnapshot(clock.snapshot());
   };
 
-  const air = OPT.air ? new AtmospherePass(camera, sun) : null;
-  const grade = createGrade(renderer, scene, camera, air ? [air] : []);
+  // (M23-07 で変更: 空気の層は既定で場面の半分の大きさで描く (OPT.airScale))
+  const air = OPT.air ? new AtmospherePass(camera, sun, OPT.airScale) : null;
+  // (M23-07 で変更: 場面の MSAA の段を渡す)
+  const grade = createGrade(renderer, scene, camera, air ? [air] : [], { msaa: OPT.msaa });
   // 調整用 (M22-07): 開発者ツールから空気の層の uniform と時刻を触る
   (window as unknown as { __observeAir: unknown }).__observeAir = { air, sun, camera, controls, scene, renderer, heightAt: field.heightAt };
   grade.setEnabled({ grade: OPT.grade, bloom: OPT.bloom });
@@ -829,8 +840,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let frames = 0;
   let acc = 0;
   let fps = 0;
+  // (M23-07) 動的な解像度。倍率は renderer のピクセル比に掛ける (ピクセル比 2 の画面は 0.5 = CSS の画素まで、1 の画面は 0.7 まで下げる)
+  const dynres = OPT.dynres ? createDynamicResolution({ min: renderer.getPixelRatio() >= 1.5 ? 0.5 : 0.7 }) : null;
   const loop = () => {
     const now = performance.now();
+    if (dynres) grade.setPixelRatio(renderer.getPixelRatio() * dynres.update(now - last));
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     t += dt;
@@ -884,11 +898,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       if (host.debug === false) stats.textContent = `${st.year} 年`;
-      else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
+      else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps${st.res < 1 ? ` (解像度 ×${st.res})` : ''} · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
     }
     if (running) handle = requestAnimationFrame(loop);
   };
