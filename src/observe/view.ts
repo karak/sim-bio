@@ -25,7 +25,7 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
-import { describeEvent } from '../ui/Tablet';
+import { createNoticeBand } from './notice';
 import { mulberry32 } from '../simulation/rng';
 import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh, groundLayers, wearTerrain, type Worn } from './render/terrain';
 import { createWater } from './render/water';
@@ -699,16 +699,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let lamps = 1;
   let lampsTarget = 1;
   // 知らせの帯 (M22-08): 石板の警告・祈り・結末を、画面の上に控えめに出して 8 秒で消す
-  const band = document.createElement('div');
-  band.style.cssText = 'position:absolute;left:50%;top:14px;transform:translateX(-50%);max-width:min(560px,80%);padding:5px 14px;border-radius:14px;font:13px/1.5 system-ui,sans-serif;color:#F4F6F1;background:rgba(31,38,33,0.55);opacity:0;transition:opacity 1.2s;pointer-events:none;text-align:center';
-  canvas.parentElement?.appendChild(band);
-  let bandLeft = 0;
-  const notice = (e: TimelineEvent) => {
-    if (e.kind !== 'warning' && e.kind !== 'prayer' && e.kind !== 'verdict') return;
-    band.textContent = describeEvent(e, host.names ?? {});
-    band.style.opacity = '1';
-    bandLeft = 8;
-  };
+  // (M22-08 の手直しで変更: 帯の DOM・見た目・寿命は notice.ts へ移した。石板の銘板の見た目にし、続けて来た知らせは待たせて順に出す)
+  const band = createNoticeBand(canvas.parentElement ?? document.body, () => host.names ?? {});
+  const notice = (e: TimelineEvent) => band.push(e);
+  // 調整用: 開発者ツールから知らせを出す (__observeNotice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
+  (window as unknown as { __observeNotice: unknown }).__observeNotice = notice;
   // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
   const DEPART_S = 70;
   let departLeft = OPT.depart && OPT.auto ? DEPART_S : 0;
@@ -728,7 +723,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     return true;
   };
   const fx = (dt: number) => {
-    if (bandLeft > 0 && (bandLeft -= dt) <= 0) band.style.opacity = '0';
+    band.step(dt);
     if (lampsTarget === 0 && snap.ship && snap.civ && snap.civ.stage >= 5) lampsTarget = 1;
     lamps += (lampsTarget - lamps) * Math.min(1, dt / 3);
     motes.setLamps(lamps);
