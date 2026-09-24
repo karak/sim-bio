@@ -374,6 +374,9 @@ FERN_RISE = (1.05, 1.35)      # 羊歯の葉の立ち上がり (葉の先の高�
 FLOWER_LEAF_UP = 1.3          # 小花の葉の向きの縦の成分 (横 1 に対して)
 FLOWER_LEAF_L = (0.3, 0.38)   # 小花の葉の長さ (m)
 FLOWER_STEM = (0.3, 0.46)     # 小花の茎の高さ (m)
+# (下草の 4 回目で追加) 審査台 t3-flora (2026-09-25「小花の根元の茎と草の位置がずれているのはなぜ？」) を受けて、茎を葉のロゼットの中心から出す
+FLOWER_STEM_FOOT = (0.01, 0.016, 0.022)  # 茎の付け根の中心からの距離 (m、茎ごとに順に)。葉の付け根 (中心) の間に収まる
+FLOWER_STEM_BOW = 0.15        # 茎の中ほどを付け根と花を結ぶ線から内へ寄せる割合 (水平の開きに対して)
 
 
 def fern_frond(n, yaw, length, rise, width, k, seed, droop=1.6, rachis=True, every=1, coarse=False):
@@ -489,11 +492,18 @@ def flower_patch():
         a = 2 * math.pi * i / 7 + rnd.uniform(-0.35, 0.35)
         r = rnd.uniform(0.04, 0.2)
         base = Vector((math.cos(a) * r, math.sin(a) * r, 0))
+        # (下草の 4 回目で変更: 茎を葉のロゼットの中心 (葉の付け根の間、中心から 1〜2 cm) から出す。前は中心から r (4〜20 cm) 離れた輪に植えたので、
+        #  葉を立ち上げた後は茎が葉の外の地面から生えて見えた (審査台 t3-flora「小花の根元の茎と草の位置がずれているのはなぜ？」))
+        base = Vector((math.cos(a), math.sin(a), 0)) * FLOWER_STEM_FOOT[i % 3] + Z * 0.006
         h = rnd.uniform(0.11, 0.21)
         h = rnd.uniform(*FLOWER_STEM)  # (下草の見直しで変更: 花が高くした葉の上に出る)
         lean = Vector((math.cos(a), math.sin(a), 0)) * h * rnd.uniform(0.1, 0.25)
         top = base + Z * h + lean
+        # (下草の 4 回目で変更: 花は前と同じ所 (中心から r + 傾き) に咲かせ、上から見た花の輪の大きさを保つ。茎は中心から外へ傾いて花を広げる)
+        top = Vector((math.cos(a) * r, math.sin(a) * r, 0)) + Z * h + lean
         mid = base.lerp(top, 0.5) + lean * 0.3
+        # (下草の 4 回目で変更: 茎の中ほどを付け根の真上寄りに置き、根元は葉の間を立ち上がってから外へ撓む (前のように外へ膨らませると、付け根を中心へ寄せた茎は根元の区間が仰角 40° ほどまで寝て、立ち上がる葉 (仰角 52°) より低く這う))
+        mid = base.lerp(top, 0.5) - (top - base).to_2d().to_3d() * FLOWER_STEM_BOW
         n.add(K.tube([base, mid, top], [0.0035, 0.003, 0.0025], n=3, cap_start=False), M["under"], smooth=True, soft=((0, 0, -3.0), 0.9),
               shade=lambda co, nrm: K.mul3(STEM_LIN, 0.7 + 0.3 * min(1.0, co.z / 0.4)))
         heads.append((top, a, i))
@@ -589,8 +599,11 @@ def flower_patch_lod1():
         a = 2 * math.pi * i / 5 + rnd.uniform(-0.35, 0.35)
         r = rnd.uniform(0.04, 0.2)
         base = Vector((math.cos(a) * r, math.sin(a) * r, 0))
+        # (下草の 4 回目で変更: 近い形と同じく、茎を葉の付け根の間から出し、花は前と同じ所に咲かせる)
+        base = Vector((math.cos(a), math.sin(a), 0)) * FLOWER_STEM_FOOT[i % 3] + Z * 0.006
         h = rnd.uniform(*FLOWER_STEM)
         top = base + Z * h + Vector((math.cos(a), math.sin(a), 0)) * h * 0.15
+        top = Vector((math.cos(a) * r, math.sin(a) * r, 0)) + Z * h + Vector((math.cos(a), math.sin(a), 0)) * h * 0.15
         side = Vector((-math.sin(a), math.cos(a), 0)) * 0.006
         bm = bmesh.new()
         bm.faces.new([bm.verts.new(v) for v in (base - side, base + side, top)])
