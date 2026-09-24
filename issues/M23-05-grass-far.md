@@ -1,11 +1,11 @@
 ---
 id: M23-05
 title: 草の遠距離版
-status: todo
+status: review
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-02]
-evidence: []
+evidence: ["1f78d30 tests/unit/observe.grass.test.ts"]
 ---
 
 # 草の遠距離版
