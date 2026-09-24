@@ -23,7 +23,16 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 export const VAT_FPS = 15;
 
 export type VatClip = { name: string; start: number; frames: number };
-export type VatBake = { geometry: BufferGeometry; posTex: DataTexture; nrmTex: DataTexture; clips: VatClip[]; vertexCount: number; frameCount: number };
+export type VatBake = {
+  geometry: BufferGeometry;
+  posTex: DataTexture;
+  nrmTex: DataTexture;
+  clips: VatClip[];
+  vertexCount: number;
+  frameCount: number;
+  /** (M23-02) 全フレームの頂点を囲む、個体の原点 (足元) を中心とする球の半径。個体ごとの視錐台の判定に使う */
+  radius: number;
+};
 
 /** root (glTF の scene を複製したもの) の中の skinnedName を、clips の各クリップで VAT_FPS ごとに姿勢を取って焼く */
 export function bakeVat(source: Object3D, skinnedName: string, clips: AnimationClip[]): VatBake | null {
@@ -106,7 +115,9 @@ function bakeSkinned(root: Object3D, skinned: SkinnedMesh, clips: AnimationClip[
   const vid = new Float32Array(vcount);
   for (let i = 0; i < vcount; i++) vid[i] = i;
   geometry.setAttribute('aVid', new BufferAttribute(vid, 1));
-  return { geometry, posTex: mk(pos), nrmTex: mk(nrm), clips: plan, vertexCount: vcount, frameCount };
+  let r2 = 0;
+  for (let i = 0; i < pos.length; i += 4) r2 = Math.max(r2, pos[i] * pos[i] + pos[i + 1] * pos[i + 1] + pos[i + 2] * pos[i + 2]);
+  return { geometry, posTex: mk(pos), nrmTex: mk(nrm), clips: plan, vertexCount: vcount, frameCount, radius: Math.sqrt(r2) };
 }
 
 export type VatHerd = {

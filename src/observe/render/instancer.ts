@@ -1,4 +1,5 @@
-import { Group, InstancedMesh, Matrix4, type Mesh, type Object3D } from 'three';
+import { Group, InstancedMesh, Matrix4, Sphere, type Camera, type Mesh, type Object3D } from 'three';
+import { ViewCull, packVisible, splitCount, uploadFront } from './cull';
 
 /**
  * 同じ形の静物 (鐘樹・株・草むら・岩) を、GLB のノードごとに InstancedMesh へまとめる (設計 §8 の draw call 予算)。
@@ -34,7 +35,8 @@ export function instanceProps(node: Object3D, placements: Matrix4[], castShadow 
 
 export type LodProps = {
   group: Group;
-  update(camera: { position: { x: number; z: number } }): void;
+  /** (M23-02) カメラ (Camera) を渡すと、視錐台で見える木だけを本の描画に回す。位置だけなら近い・遠いの振り分けだけ */
+  update(camera: { position: { x: number; z: number } } | Camera): void;
   /** 置き場所を入れ替える (capacity まで)。次の update で近い・遠いに振り分け直す */
   setPlacements(placements: Matrix4[]): void;
 };
@@ -55,43 +57,102 @@ export function lodProps(lod0: Object3D, lod1: Object3D, placements: Matrix4[], 
   const nearLocal = nearMeshes.map((_, k) => localOf(lod0, k));
   const farLocal = farMeshes.map((_, k) => localOf(lod1, k));
   const m = new Matrix4();
-  let last = -1;
+  // (M23-02 で変更: 最初の update で必ず振り分ける。-1 だと台の時計 (performance.now が 0 から) で 250 ms まで振り分けなかった)
+  let last = -Infinity;
+  // (M23-02) 近い組・遠い組のメッシュ (幹・葉・鐘) ごとに、見えるものを前に、見えないものを後ろに並べる。本の描画は見えるものだけ、影と光線の当たり判定は全部の木
+  const sets = [
+    ...nearMeshes.map((im, k) => ({ im, local: nearLocal[k], near: 1, count: splitCount(im), ball: meshSphere(im, nearLocal[k]), balls: new Float32Array(0) as Float32Array })),
+    ...farMeshes.map((im, k) => ({ im, local: farLocal[k], near: 0, count: splitCount(im), ball: meshSphere(im, farLocal[k]), balls: new Float32Array(0) as Float32Array })),
+  ];
+  const measure = () => sets.forEach((st) => (st.balls = spheresOf(st.ball, placements)));
+  measure();
+  let isNear = new Uint8Array(placements.length);
+  const view = new ViewCull();
   return {
     group,
     update(camera) {
       const now = performance.now();
-      if (now - last < 250) return;
-      last = now;
-      let n = 0;
-      let f = 0;
-      for (let i = 0; i < placements.length; i++) {
-        const d = Math.hypot(xs[i] - camera.position.x, zs[i] - camera.position.z);
-        if (d < nearM) {
-          nearMeshes.forEach((im, k) => im.setMatrixAt(n, m.multiplyMatrices(placements[i], nearLocal[k])));
-          n++;
-        } else {
-          farMeshes.forEach((im, k) => im.setMatrixAt(f, m.multiplyMatrices(placements[i], farLocal[k])));
-          f++;
-        }
+      const regroup = now - last >= 250;
+      const eye = (camera as Camera).isCamera ? (camera as Camera) : null;
+      const turned = eye ? view.update(eye) : false;
+      if (!regroup && !turned) return;
+      if (regroup) {
+        last = now;
+        for (let i = 0; i < placements.length; i++) isNear[i] = Math.hypot(xs[i] - camera.position.x, zs[i] - camera.position.z) < nearM ? 1 : 0;
       }
-      for (const im of nearMeshes) {
-        im.count = n;
-        im.instanceMatrix.needsUpdate = true;
-      }
-      for (const im of farMeshes) {
-        im.count = f;
-        im.instanceMatrix.needsUpdate = true;
+      for (const st of sets) {
+        const b = st.balls;
+        const r = packVisible(
+          placements.length,
+          (i) => !eye || view.sees(b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3]),
+          (i, to) => st.im.setMatrixAt(to, m.multiplyMatrices(placements[i], st.local)),
+          true,
+          (i) => isNear[i] === st.near,
+        );
+        st.count(r.visible, r.all);
+        uploadFront(st.im.instanceMatrix, r.all);
       }
       // 近い・遠いの組み替えで中身が変わるので、描く範囲の判定と光線の当たり判定に使う境界の球を測り直す (M22-03)
-      for (const im of [...nearMeshes, ...farMeshes]) im.boundingSphere = null;
+      // (M23-02 で変更: 見える・見えないの並べ替えだけなら全部の木の組は変わらないので、測り直すのは組み替えたときだけ)
+      if (regroup) for (const im of [...nearMeshes, ...farMeshes]) im.boundingSphere = null;
     },
     setPlacements(next) {
       placements = next.slice(0, capacity);
       xs = placements.map((p) => p.elements[12]);
       zs = placements.map((p) => p.elements[14]);
-      last = -1;
+      measure();
+      isNear = new Uint8Array(placements.length);
+      last = -Infinity;
     },
   };
+}
+
+/**
+ * (M23-02) 見えるものだけを本の描画に回す instanceProps。update(camera) を毎コマ呼ぶ (カメラが広げた視錐台の分だけ動いたときだけ詰め直す)。
+ * 並べ替えるだけで全部のインスタンスを持つので、影と光線の当たり判定は今までどおり全部で見る
+ */
+export type CulledProps = { group: Group; update(camera: Camera): void };
+
+export function culledProps(node: Object3D, placements: Matrix4[], castShadow = true): CulledProps {
+  const group = instanceProps(node, placements, castShadow);
+  const meshes = group.children as InstancedMesh[];
+  const all = meshes.map((im) => (im.instanceMatrix.array as Float32Array).slice(0, placements.length * 16));
+  const counts = meshes.map(splitCount);
+  // メッシュごとの境界の球 (instanceMatrix にはノード内の行列まで掛けてあるので、形の球に掛けるだけ)
+  const balls = meshes.map((im) => spheresOf(meshSphere(im, new Matrix4()), placements.map((_, i) => new Matrix4().fromArray(im.instanceMatrix.array, i * 16))));
+  const view = new ViewCull();
+  return {
+    group,
+    update(camera) {
+      if (!view.update(camera)) return;
+      meshes.forEach((im, k) => {
+        const dst = im.instanceMatrix.array as Float32Array;
+        const src = all[k];
+        const b = balls[k];
+        const sees = (i: number) => view.sees(b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3]);
+        const r = packVisible(placements.length, sees, (i, to) => dst.set(src.subarray(i * 16, i * 16 + 16), to * 16), true);
+        counts[k](r.visible, r.all);
+        uploadFront(im.instanceMatrix, r.all);
+      });
+    },
+  };
+}
+
+/** InstancedMesh の形の境界の球を、ノード内の行列 local で動かしたもの */
+function meshSphere(im: InstancedMesh, local: Matrix4): Sphere {
+  if (!im.geometry.boundingSphere) im.geometry.computeBoundingSphere();
+  return im.geometry.boundingSphere!.clone().applyMatrix4(local);
+}
+
+/** 置き場所ごとの境界の球 (中心 x・y・z と半径を 4 つずつ並べる) */
+function spheresOf(local: Sphere, placements: Matrix4[]): Float32Array {
+  const out = new Float32Array(placements.length * 4);
+  const ball = new Sphere();
+  placements.forEach((p, i) => {
+    ball.copy(local).applyMatrix4(p);
+    out.set([ball.center.x, ball.center.y, ball.center.z, ball.radius], i * 4);
+  });
+  return out;
 }
 
 /** instanceProps と同じ順でメッシュを数え、k 番目のメッシュのノード内の行列を返す */

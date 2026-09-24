@@ -1,4 +1,5 @@
-import { BufferAttribute, BufferGeometry, Color, InstancedBufferAttribute, InstancedMesh, Matrix4, Quaternion, Vector3, type BufferGeometry as Geo } from 'three';
+import { BufferAttribute, BufferGeometry, Color, InstancedBufferAttribute, InstancedMesh, Matrix4, Quaternion, Sphere, Vector3, type BufferGeometry as Geo, type Camera } from 'three';
+import { ViewCull, uploadFront } from './cull';
 import { mulberry32 } from '../../simulation/rng';
 import { createToonMaterial } from './toon';
 import { groundColorAt, groundPatch, wearAt, TRAMPLED, type GroundLayers, type TerrainField, type Worn } from './terrain';
@@ -11,7 +12,8 @@ import { groundColorAt, groundPatch, wearAt, TRAMPLED, type GroundLayers, type T
  */
 export type Grass = {
   mesh: InstancedMesh;
-  update(t: number, camera?: { x: number; z: number }): void;
+  /** (M23-02) eye (カメラ) を渡すと、視錐台で見える房だけを前に詰めて描く (camera は間引きの距離を測る位置) */
+  update(t: number, camera?: { x: number; z: number }, eye?: Camera): void;
   /** 海面 (M22-08、沈降)。海面より下の房は描かない */
   setLevel(level: number): void;
   /** (草の磨き上げ) 踏み固めた所 (集落の広場・道) の房を減らし、残りは短く乾いた色に、根元を踏み固めた土の色にする */
@@ -182,6 +184,8 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
   mesh.count = k;
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  // (M23-02) 丸ごとの視錐台の判定に使う境界の球は、詰め直す前の全部の房で測っておく (見える房だけで測ると、向きを変えたときに丸ごと落ちる)
+  mesh.computeBoundingSphere();
   const rootAttr = new InstancedBufferAttribute(new Float32Array(max * 3), 3);
   rootAttr.array.set(rootArr.subarray(0, k * 3));
   geo.setAttribute('aRoot', rootAttr);
@@ -194,6 +198,16 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
   const keepHash = Float32Array.from({ length: k }, () => rng());
   const wearHash = Float32Array.from({ length: k }, () => rng());
   const gone = new Uint8Array(k);
+  // (M23-02) 房ごとの境界の球 (中心 x・y・z と半径)。風で撓む分 (葉先で最大約 0.2 m) を半径に足す。踏まれて短くなった房も元の球のまま (大きめに見る)
+  const balls = new Float32Array(k * 4);
+  if (!geo.boundingSphere) geo.computeBoundingSphere();
+  const ball = new Sphere();
+  for (let i = 0; i < k; i++) {
+    ball.copy(geo.boundingSphere!).applyMatrix4(m.fromArray(allM, i * 16));
+    balls.set([ball.center.x, ball.center.y, ball.center.z, ball.radius + 0.2], i * 4);
+  }
+  const view = new ViewCull();
+  let culling = false;
   let lastX = Infinity;
   let lastZ = Infinity;
   let level = -Infinity;
@@ -205,21 +219,26 @@ export function createGrass(field: TerrainField, layers: GroundLayers, max: numb
     for (let i = 0; i < k; i++) {
       const d = Math.hypot(allM[i * 16 + 12] - cx, allM[i * 16 + 14] - cz);
       if (gone[i] || keepHash[i] > grassKeep(d) || allM[i * 16 + 13] < level) continue;
+      if (culling && !view.sees(balls[i * 4], balls[i * 4 + 1], balls[i * 4 + 2], balls[i * 4 + 3])) continue;
       im.set(allM.subarray(i * 16, i * 16 + 16), n * 16);
       if (ic && allC) ic.set(allC.subarray(i * 3, i * 3 + 3), n * 3);
       ir.set(allR.subarray(i * 3, i * 3 + 3), n * 3);
       n++;
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    rootAttr.needsUpdate = true;
+    // (M23-02 で変更: 詰め直しがカメラの向きでも起きるので、前から n 房分だけを送り直す)
+    uploadFront(mesh.instanceMatrix, n);
+    if (mesh.instanceColor) uploadFront(mesh.instanceColor, n);
+    uploadFront(rootAttr, n);
   };
   return {
     mesh,
-    update(t, camera) {
+    update(t, camera, eye) {
       uniforms.uTime.value = t;
-      if (camera && Math.hypot(camera.x - lastX, camera.z - lastZ) > 3) {
+      // (M23-02) カメラが広げた視錐台の分だけ動いたか回ったら詰め直す
+      culling = !!eye;
+      const turned = eye ? view.update(eye) : false;
+      if (camera && (turned || Math.hypot(camera.x - lastX, camera.z - lastZ) > 3)) {
         lastX = camera.x;
         lastZ = camera.z;
         repack(camera.x, camera.z);

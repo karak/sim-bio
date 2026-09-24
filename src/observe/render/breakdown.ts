@@ -3,6 +3,7 @@ import { Frustum, InstancedMesh, Matrix4, Mesh, Sphere, Vector3, type Camera, ty
 /**
  * 三角形の内訳 (軽量化の試算)。区分ごとに、いま描いている数と、軽量化の施策を入れたら減る見込みを数える。
  * - drawn: 本の描画で送っている三角形 (InstancedMesh は全インスタンス。three.js は InstancedMesh をまとめてしか視錐台で落とさない)
+ *   (M23-02 で変更: 草・下草・木・群れは render/cull.ts で見えるインスタンスだけを前に詰めるので、drawn は詰めた後の数。影は全部 (shadow))
  * - inView: インスタンスごとに視錐台で落としたら残る三角形 (境界球がカメラの視錐台に掛かるものだけ)
  * - shadow: 影の描画で送っている三角形 (影を落とすもの。影のカメラは区域全体を覆うので全インスタンス)
  * - beyond30 / beyond60: カメラから 30 m / 60 m より遠いインスタンスの三角形 (遠距離用の軽量版に差し替える候補)
@@ -33,7 +34,8 @@ export function triangleBreakdown(camera: Camera, roots: Readonly<Record<string,
     const n = inst ? inst.count : 1;
     row.instances += n;
     row.drawn += tris * n;
-    if (mesh.castShadow) row.shadow += tris * n;
+    // (M23-02 で変更: 視錐台で詰め直す InstancedMesh は、本の描画は見える数 (count)、影の描画は全部 (userData.shadowCount、render/cull.ts の splitCount))
+    if (mesh.castShadow) row.shadow += tris * ((inst?.userData.shadowCount as number | undefined) ?? n);
     for (let i = 0; i < n; i++) {
       if (inst) {
         inst.getMatrixAt(i, m);

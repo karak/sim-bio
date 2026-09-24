@@ -34,7 +34,7 @@ import { createGrade } from './render/grade';
 import { createToonMaterial, rimLight } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { glow } from './render/bake';
-import { instanceProps, lodProps, type LodProps } from './render/instancer';
+import { culledProps, instanceProps, lodProps, type CulledProps, type LodProps } from './render/instancer';
 import { hutPlacements } from './settlementLayout';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
@@ -397,10 +397,13 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const k = 0.8 + rng() * 0.6;
     under[kind].push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.03, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(k, k, k)));
   }
+  // (M23-02 で変更: 下草は視錐台で見える株だけを描く。update は毎コマ、カメラを動かした後に呼ぶ)
+  const understory: CulledProps[] = [];
   for (const [name, mats] of Object.entries(under)) {
     const node = findNode(floraGlb, name);
-    if (node && mats.length) scene.add(instanceProps(node, mats, false));
+    if (node && mats.length) understory.push(culledProps(node, mats, false));
   }
+  for (const u of understory) scene.add(u.group);
 
   // 集落の一角: 船台は南の海岸へ向け、小屋・灯り・巨石・石垣で囲む
   // (M22-04 の後: 南の固定位置をやめ、個体層の目印に合わせる)
@@ -818,13 +821,15 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     }
     fx(dt);
     agents = stepAgents(agents, { area, marks, night: day.night > 0.6, building, launched: false, targets }, dt, arng);
-    creatures.update(agents.agents, camera, field.heightAt, t, dt);
     motes.update(t, dt, day.night, camera, controls.target, agents.agents);
-    for (const l of lods) l.update(camera);
     water.update(t);
     shipView.update(t);
-    grass.update(t, camera.position);
     direct(dt);
+    // (M23-02 で変更: 視錐台で落とすもの (群れ・木・下草・草) は、このコマのカメラが決まった後 (direct の後) に更新する。前だと寄せ先へ切り替えた最初のコマが前の画の視錐台で描かれる)
+    creatures.update(agents.agents, camera, field.heightAt, t, dt);
+    for (const l of lods) l.update(camera);
+    for (const u of understory) u.update(camera);
+    grass.update(t, camera.position, camera);
     renderer.info.autoReset = false;
     renderer.info.reset();
     grade.render(dt);

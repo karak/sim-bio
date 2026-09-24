@@ -7,6 +7,7 @@ import {
   Quaternion,
   Vector3,
   type AnimationClip,
+  type Camera,
   type Object3D,
 } from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
@@ -15,6 +16,7 @@ import type { Agent, AgentSpecies, AgentState } from '../agents';
 import { RETURN_S } from '../agents';
 import { bakeVatAll, createVatHerd, type VatHerd } from './vat';
 import { createToonMaterial } from './toon';
+import { ViewCull } from './cull';
 
 /**
  * 個体層 (src/observe/agents.ts) の個体を描く (設計 §8)。
@@ -140,6 +142,9 @@ function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, max
     return h;
   });
   const herd = herds.length > 0;
+  // (M23-02) 群れ (VAT) は丸ごとの判定を切ってある (frustumCulled = false) ので、視錐台で見える個体だけを書く
+  const herdR = Math.max(0, ...bakes.map((b) => b.bake.radius));
+  const view = new ViewCull();
   type NearSlot = { obj: Object3D; variants: (Object3D | null)[]; mixer: AnimationMixer; agent: number; clip: string };
   const pool: NearSlot[] = [];
   if (glb && clips.length) {
@@ -230,8 +235,11 @@ function createSpeciesView(group: Group, sp: AgentSpecies, glb: GLTF | null, max
       }
       if (herd) {
         let k = 0;
+        const eye = (camera as unknown as Camera).isCamera ? (camera as unknown as Camera) : null;
+        if (eye) view.update(eye);
         for (const a of own) {
           if (nearIds.has(a.id) && pool.length) continue;
+          if (eye && !view.sees(a.x, heightAt(a.x, a.z), a.z, herdR)) continue;
           const clip = rig.clip(a, find);
           if (herdClip.get(a.id) !== clip || herdClip.get(-1 - k) !== String(a.id)) {
             // fall は倒れた瞬間 (t − a.t) にフレーム 0 になるよう位相を合わせる (VAT はループするので、2 秒で fallHold に移る前提)
