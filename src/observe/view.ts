@@ -507,10 +507,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-07 の手直し、雨「屋根や地面での跳ね返りがない」) 跳ね返りを置く面の高さ: 小屋の近くは、近い形の小屋 (描かない複製) に真上から光線を落として焼いた屋根の高さ (render/roofs.ts)
   const roofNode = findNode(settleGlb, 'hut');
   const roofs = roofNode && settlementPlacements.get('hut')?.length ? instanceProps(roofNode, settlementPlacements.get('hut')!, false) : null;
-  const surface = createSurface(field.heightAt, huts, roofs);
+  // (M22-07 の 3 回目、雨「跳ね返りの対象を石垣と柱に広げて」) 石垣・灯り柱・立石・衝立の天端も、描かない複製に光線を落として焼く (置き場所ごとの四角の半幅 m)
+  const propReach: Record<string, number> = { stone_wall: 2.6, stone_wall_corner: 3.6, lantern_post: 1.4, megalith: 1.3, woven_screen: 2 };
+  const surfaceProps = Object.entries(propReach).flatMap(([name, reach]) => {
+    const node = findNode(settleGlb, name);
+    const mats = settlementPlacements.get(name);
+    return node && mats?.length ? [{ node: instanceProps(node, mats, false), reach, sites: mats.map((m) => new Vector3().setFromMatrixPosition(m)) }] : [];
+  });
+  const surface = createSurface(field.heightAt, huts, roofs, undefined, undefined, surfaceProps);
   // (集落の建物の作り直しで変更: 小屋の炉にも灯りの溜まりを置く (夜に戸口から火の明かりがこぼれる。帆を失うと灯りと一緒に消える))
   // (M22-07 の手直しで変更: 跳ね返りを置く面 (surfaceAt・roofPoints) を渡す)
-  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: [...marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), ...huts.map((h) => h.hearth)], fireflyAt, surfaceAt: surface.at, roofPoints: surface.roofPoints });
+  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: [...marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), ...huts.map((h) => h.hearth)], fireflyAt, surfaceAt: surface.at, roofPoints: surface.roofPoints, propPoints: surface.propPoints });
   scene.add(motes.group);
   // (M22-07 の手直し、雨「水たまりと波紋がない」) 水たまり: 踏み固めた広場・道・小屋の戸口の窪み。置き場所は専用の乱数で決める (他の置き場所の乱数を動かさない)
   const wornSpots = worn.flatMap((w) => {
@@ -762,7 +769,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     mistAge += dt;
     const env = mistEnvelope(mistAge);
     mist = env.amount;
-    air?.setMist(mistAt, mistR, mist, env.fade);
+    // (M22-07 の 3 回目で変更: 地面の高さを渡し、霧を地形に沿わせる (atmosphere.ts が霧の下の高さの表を焼く))
+    air?.setMist(mistAt, mistR, mist, env.fade, field.heightAt);
     rainLeft = Math.max(0, rainLeft - dt);
     rain += ((rainLeft > 0 ? 1 : 0) - rain) * Math.min(1, dt / 4);
     motes.setRain(rain);

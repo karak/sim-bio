@@ -1,6 +1,9 @@
 import {
   BackSide,
   Color,
+  DataTexture,
+  LinearFilter,
+  RedFormat,
   Matrix4,
   Mesh,
   ShaderMaterial,
@@ -16,6 +19,7 @@ import {
 } from 'three';
 import { FullScreenQuad, Pass } from 'three/addons/postprocessing/Pass.js';
 import type { Daylight } from '../daylight';
+import { MIST_SPIN } from '../fx';
 
 /**
  * 空気感 (M22-07、基準画 key-visuals/herd の「林に差す光の筋・奥が青く霞む空気・地を這う靄」)。
@@ -116,6 +120,10 @@ const AirShader = {
     uMistColor: { value: new Color('#8C8298') },
     // (M22-07 の手直し) 霧が消えていく段 (0〜1、fx.ts の mistEnvelope)
     uMistFade: { value: 0 },
+    // (M22-07 の 3 回目) 霧の下の地面の高さの表 (霧を地形に沿わせる)。xy は表の西・北の端 (m)、z は一辺 (m)。H は高さの下限と幅 (m)
+    tMistGround: { value: null as Texture | null },
+    uMistGround: { value: new Vector4(0, 0, 1, 0) },
+    uMistGroundH: { value: new Vector2(0, 0) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -148,6 +156,9 @@ const AirShader = {
     uniform float uMistAmt;
     uniform vec3 uMistColor;
     uniform float uMistFade;
+    uniform sampler2D tMistGround;
+    uniform vec4 uMistGround;
+    uniform vec2 uMistGroundH;
     varying vec2 vUv;
 
     float vnoise(vec2 p) {
@@ -163,6 +174,31 @@ const AirShader = {
     float fbm(vec2 p) { return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.1 + 3.7) + 0.15 * vnoise(p * 4.3 + 9.1); }
     // 光の筋の数え始めをずらす (段の縞を消す)。画面に固定した雑音なので時間でちらつかない
     float ign(vec2 px) { return fract(52.9829189 * fract(dot(px, vec2(0.06711056, 0.00583715)))); }
+    // (M22-07 の 3 回目、疫病の霧「螺旋の動きがみえない。」) 渦の濃さ (0〜1)。q は霧の中心からの水平の位置 (m)、R は半径 (m)、spin は回った角度 (rad)、mf は余韻。
+    // 3 本の対数らせんの腕を尖らせて腕の間を澄ませ、雑音は腕と一緒に回して縁を崩すだけにする。
+    // 前は腕の位相の進み (uTime * 0.5) と回転 (3 × 0.16 + 3 × 0.04) がほぼ打ち消し合い、腕は 1 秒に 2° ほどしか回っていなかった
+    // (M22-07 の 3 回目) 腕の回る速さ (rad/s)・層の厚み (m)・地面の膜の厚み (m)・濃さの係数 (前は 0.22)
+    const float MIST_SPIN = ${MIST_SPIN.toFixed(3)};
+    const float MIST_LAYER = 2.5;
+    const float MIST_SHEET = 2.5;
+    const float MIST_K = 0.22;
+    // (M22-07 の 3 回目) 霧の下の地面の高さ (m)。表の外は縁の値
+    float mistGroundAt(vec2 xz) { return uMistGroundH.x + texture2D(tMistGround, (xz - uMistGround.xy) / uMistGround.z).r * uMistGroundH.y; }
+    vec2 mistFlow(float t) { return vec2(sin(t * 0.13), cos(t * 0.09)) * 3.0 + t * vec2(0.05, 0.02); }
+    float mistDensity(vec2 q, float R, float spin, float mf, vec2 flow) {
+      float cs = cos(spin);
+      float sn = sin(spin);
+      vec2 qr = vec2(cs * q.x + sn * q.y, -sn * q.x + cs * q.y);
+      float r = length(q) / R;
+      float n = fbm(qr * 0.12 + flow);
+      float ph = 3.0 * atan(qr.y, qr.x) + 7.0 * log(r + 0.05) + (n - 0.5) * 2.0;
+      float arm = pow(0.5 + 0.5 * cos(ph), 2.0);
+      float core = exp(-r * r * 45.0);
+      float d = max(arm, core) * (0.35 + 1.3 * n);
+      // 余韻では腕が細い筋に千切れる (閾値を上げる)
+      d = smoothstep(0.12 + 0.34 * mf, 0.7 + 0.12 * mf, d);
+      return d * smoothstep(1.0, 0.8, r);
+    }
 
     void main() {
       // (M23-07 で変更: 場面の色は読まず、空気が足す光 L と透過率 T を書く (色調のパスで 色 × T + L)。
@@ -220,6 +256,7 @@ const AirShader = {
       if (uMistAmt > 0.0) {
         // (M22-07 の手直し、「渦巻きの動き」「消えるところの余韻」): 余韻 (uMistFade) の間は楕円体を広げて少し持ち上げ、薄く散らす
         float mf = uMistFade;
+        float m = 0.0;
         vec3 sc = vec3(uMistAt.w * (1.0 + 0.35 * mf), uMistAt.w * (0.22 + 0.2 * mf), uMistAt.w * (1.0 + 0.35 * mf));
         vec3 o = (uCamPos - uMistAt.xyz) / sc;
         vec3 dd = rd / sc;
@@ -233,33 +270,46 @@ const AirShader = {
           float t1 = min((-b + sq) / a, dist);
           if (t1 > t0) {
             // 楕円体の中を 8 点で数える。渦の筋は高い周波数の雑音を尖らせて作り、地面から離れるほど薄くする
-            float seg = (t1 - t0) / 8.0;
-            float m = 0.0;
-            vec2 flow = vec2(sin(uTime * 0.13), cos(uTime * 0.09)) * 3.0 + uTime * vec2(0.05, 0.02);
+            // (M22-07 の 3 回目で変更: 8 点は楕円体のうち地を這う層 (霧の下の最も高い地面から MIST_LAYER m、余韻で 2.5 m 持ち上がる) の中だけに置き、
+            //  濃さは点の真下の地面からの高さで薄める (地形に沿う)。
+            //  見下ろしたとき視線が層を横切る短い区間に点が集まり、腕の輪郭が視線に沿ってぼけない)
+            float yTop = uMistGroundH.x + uMistGroundH.y + MIST_LAYER + 2.5 * mf;
+            float l0 = t0;
+            float l1 = t1;
+            if (rd.y < -1e-4) l0 = max(l0, (yTop - uCamPos.y) / rd.y);
+            else if (rd.y > 1e-4) l1 = min(l1, (yTop - uCamPos.y) / rd.y);
+            else if (uCamPos.y > yTop) l1 = l0;
+            float seg = max(l1 - l0, 0.0) / 8.0;
+            vec2 flow = mistFlow(uTime);
             // (M22-07 の手直しで変更: 渦は、中心の周りを回る 3 本の対数らせんの腕と、同じ速さで回る雑音で作る。
             //  回転は剛体の回転 (半径で速さを変えない) なので時間が経っても巻き込みすぎず、腕の位相を進めて中心へ巻き込むように見せる。
             //  雑音の数は前と同じ (1 点 1 回の fbm)、足したのは回転と log・cos だけ)
-            float spin = uTime * 0.16;
-            mat2 rot = mat2(cos(spin), -sin(spin), sin(spin), cos(spin));
+            // (M22-07 の 3 回目で変更: 腕ごと 1 秒に MIST_SPIN (−0.42 rad、24°) 回す。2〜3 秒で 50〜70° 回り、見ていて回っているのが分かる。
+            //  符号は腕が外から中心へ吸い込まれて見える向き。雑音は mistDensity の中で腕と一緒に回す)
+            float spin = uTime * MIST_SPIN;
+            float R = sc.x;
             for (int i = 0; i < 8; i++) {
-              vec3 p = uCamPos + rd * (t0 + (float(i) + 0.5) * seg);
+              vec3 p = uCamPos + rd * (l0 + (float(i) + 0.5) * seg);
               vec2 q = p.xz - uMistAt.xz;
-              vec2 qr = rot * q;
-              float r = length(q) / uMistAt.w;
-              float ang = atan(q.y, q.x) + length(q) * 0.05 - uTime * 0.04;
-              float swirl = fbm(qr * 0.11 + flow * 0.4);
-              float arms = 0.5 + 0.5 * cos(3.0 * (ang - spin) + 4.5 * log(r + 0.08) + uTime * 0.5 + swirl * 3.0);
-              swirl = mix(swirl, arms * (0.6 + 0.4 * swirl), 0.55);
               // 余韻では筋に千切れる (閾値を上げる)
-              float band = smoothstep(0.38 + 0.2 * mf, 0.72 + 0.12 * mf, swirl);
-              float low = exp(-max(p.y - uMistAt.y - 2.5 * mf, 0.0) * 0.3 * (1.0 - 0.5 * mf));
-              m += band * low * seg;
+              float band = mistDensity(q, R, spin, mf, flow * 0.4);
+              float low = exp(-max(p.y - mistGroundAt(p.xz) - 0.5 - 2.5 * mf, 0.0) * 0.5 * (1.0 - 0.5 * mf));
+              m += band * low * seg * 0.6;
             }
-            float Tm = exp(-m * 0.22 * uMistAmt);
+          }
+        }
+        // (M22-07 の 3 回目) 地面に這う薄い霧の膜: 当たった所 wp の渦の濃さを、膜 (厚み MIST_SHEET m) を視線が抜ける長さだけ足す。
+        // 地形に沿うので、中心より高い丘の上でも腕が切れず、見下ろすと腕の輪郭がくっきり出る (雑音 1 回を足すだけ)。
+        // 樹冠や幹 (地面の高さの表より 0.5 m 以上高い所) には掛けない。楕円体に視線が入らなくても (丘の上) 掛ける
+        if (!sky) {
+          float lowG = exp(-max(wp.y - mistGroundAt(wp.xz) - 0.5 - 2.5 * mf, 0.0) * 1.5);
+          m += mistDensity(wp.xz - uMistAt.xz, sc.x, uTime * MIST_SPIN, mf, mistFlow(uTime) * 0.4) * lowG * min(MIST_SHEET / max(-rd.y, 0.1), 9.0);
+        }
+        if (m > 0.0) {
+            float Tm = exp(-m * MIST_K * uMistAmt);
             // (M22-07 の手直し) 余韻では霧の色を空気の色へ寄せる (紫が抜けて灰色に散っていく)
             outc = outc * Tm + mix(uMistColor, uFogColor, 0.45 * mf) * (1.0 - Tm);
             Tt *= Tm;
-          }
         }
       }
       // 光芒 (M22-07、試作 2 の判断「光の筋があるとさらによい」): 日の画面上の位置へ向かって深度を辿り、空が見える所を数える。
@@ -290,6 +340,9 @@ export class AtmospherePass extends Pass {
   private readonly sunDir = new Vector3();
   private readonly fwd = new Vector3();
   private readonly sunPos = new Vector3();
+  /** (M22-07 の 3 回目) 霧の下の地面の高さの表 (MIST_GROUND × MIST_GROUND、霧の中心と半径が変わったときだけ焼き直す) */
+  private mistGround: DataTexture | null = null;
+  private mistGroundKey = '';
   /** (M23-07) 場面の色と深度を読む描画先 (grade.ts の ScenePass が渡す)。無ければ前のパスの描画先を読む */
   source: WebGLRenderTarget | null = null;
   // (M23-07 で変更: scale は場面に対して何分の 1 の大きさで描くか (1 か 2)。描く先の大きさは grade.ts が決める)
@@ -305,7 +358,9 @@ export class AtmospherePass extends Pass {
 
   /** 疫病の霧の中心 (m) と半径 (m)、濃さ (0 で消える) */
   // (M22-07 の手直し) fade は消えていく段 (0〜1、fx.ts の mistEnvelope)。余韻で霧を広げ、持ち上げ、筋に千切る
-  setMist(at: { x: number; y: number; z: number }, radiusM: number, amount: number, fade = 0): void {
+  // (M22-07 の 3 回目) heightAt を渡すと、霧の下の地面の高さを表に焼き、霧を地形に沿わせる (中心より高い丘の上でも地を這う)
+  setMist(at: { x: number; y: number; z: number }, radiusM: number, amount: number, fade = 0, heightAt?: (x: number, z: number) => number): void {
+    if (heightAt && amount > 0) this.bakeMistGround(at, radiusM, heightAt);
     (this.mat.uniforms.uMistAt.value as Vector4).set(at.x, at.y, at.z, radiusM);
     this.mat.uniforms.uMistAmt.value = amount;
     this.mat.uniforms.uMistFade.value = fade;
@@ -353,7 +408,43 @@ export class AtmospherePass extends Pass {
     this.quad.render(renderer);
   }
 
+  /** (M22-07 の 3 回目) 霧の中心から余韻で広がる半径 (1.35 倍) の少し外までの地面の高さを 64 × 64 の表 (8 bit、下限と幅で戻す) に焼く */
+  private bakeMistGround(at: { x: number; z: number }, radiusM: number, heightAt: (x: number, z: number) => number): void {
+    const key = `${at.x},${at.z},${radiusM}`;
+    if (key === this.mistGroundKey) return;
+    this.mistGroundKey = key;
+    const N = 64;
+    const size = radiusM * 1.45 * 2;
+    const x0 = at.x - size / 2;
+    const z0 = at.z - size / 2;
+    const h = new Float32Array(N * N);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const v = heightAt(x0 + ((i + 0.5) / N) * size, z0 + ((j + 0.5) / N) * size);
+        h[j * N + i] = v;
+        lo = Math.min(lo, v);
+        hi = Math.max(hi, v);
+      }
+    }
+    const range = Math.max(hi - lo, 0.01);
+    const data = new Uint8Array(N * N);
+    for (let k = 0; k < N * N; k++) data[k] = Math.round(((h[k] - lo) / range) * 255);
+    this.mistGround?.dispose();
+    const tex = new DataTexture(data, N, N, RedFormat);
+    tex.magFilter = LinearFilter;
+    tex.minFilter = LinearFilter;
+    tex.needsUpdate = true;
+    this.mistGround = tex;
+    const u = this.mat.uniforms;
+    u.tMistGround.value = tex;
+    (u.uMistGround.value as Vector4).set(x0, z0, size, 0);
+    (u.uMistGroundH.value as Vector2).set(lo, range);
+  }
+
   dispose(): void {
+    this.mistGround?.dispose();
     this.mat.dispose();
     this.quad.dispose();
   }

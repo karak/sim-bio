@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial } from 'three';
-import { MIST_LINGER_S, MIST_RISE_S, MIST_S, SPROUT_DRAG, SURGE_CALM_S, SURGE_HOLD_S, SURGE_RATE, WET_DRY_S, WET_FILL_S, mistEnvelope, sproutBurst, sproutReach, surgeStep, wetness, type SurgeState } from '../../src/observe/fx';
+import { BoxGeometry, DataTexture, DirectionalLight, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector4 } from 'three';
+import { MIST_LINGER_S, MIST_RISE_S, MIST_S, MIST_SPIN, SPROUT_DRAG, SPROUT_REACH_MAX, SPROUT_REACH_MIN, SURGE_CALM_S, SURGE_HOLD_S, SURGE_RATE, WET_DRY_S, WET_FILL_S, mistEnvelope, sproutBurst, sproutReach, surgeStep, wetness, type SurgeState } from '../../src/observe/fx';
+import { AtmospherePass } from '../../src/observe/render/atmosphere';
+import { SPLASH_KIND, sproutSpread } from '../../src/observe/render/motes';
 import { puddleSpots } from '../../src/observe/render/puddles';
 import { createSurface } from '../../src/observe/render/roofs';
 import { mulberry32 } from '../../src/simulation/rng';
@@ -36,15 +38,22 @@ describe('介入の場面の時間の形 (M22-07 の手直し): 疫病の霧の�
 });
 
 describe('介入の場面の時間の形 (M22-07 の手直し): 芽吹きの放射', () => {
-  it('粒は植えた円の 0.55〜1.35 倍まで飛び、7 割は 22 本の筋の向きにそろう', () => {
+  // (M22-07 の 3 回目で変更: 「放射が広すぎないか。草の周辺だけでいいのに」で 0.55〜1.35 倍 → 0.3〜1.0 倍。粒は円の外へ出ない)
+  it('粒は円の 0.3〜1.0 倍まで飛び (外へは出ない)、7 割は 22 本の筋の向きにそろう', () => {
+    expect(SPROUT_REACH_MIN).toBe(0.3);
+    expect(SPROUT_REACH_MAX).toBe(1.0);
     const rng = mulberry32(5);
     const R = 20;
     let onRay = 0;
+    let lo = Infinity;
+    let hi = 0;
     for (let i = 0; i < 2000; i++) {
       const p = sproutBurst(rng, R);
       const reach = p.speed / SPROUT_DRAG;
-      expect(reach).toBeGreaterThanOrEqual(R * 0.55 - 1e-9);
-      expect(reach).toBeLessThanOrEqual(R * 1.35 + 1e-9);
+      lo = Math.min(lo, reach);
+      hi = Math.max(hi, reach);
+      expect(reach).toBeGreaterThanOrEqual(R * 0.3 - 1e-9);
+      expect(reach).toBeLessThanOrEqual(R * 1.0 + 1e-9);
       expect(p.up).toBeGreaterThanOrEqual(1.2);
       expect(p.delay).toBeGreaterThanOrEqual(0);
       expect(p.delay).toBeLessThan(0.5);
@@ -53,6 +62,22 @@ describe('介入の場面の時間の形 (M22-07 の手直し): 芽吹きの放�
     }
     expect(onRay / 2000).toBeGreaterThan(0.68);
     expect(onRay / 2000).toBeLessThan(0.8);
+    // 幅いっぱいに散る (中心寄りも縁も埋まる)
+    expect(lo).toBeLessThan(R * 0.32);
+    expect(hi).toBeGreaterThan(R * 0.98);
+  });
+
+  it('(M22-07 の 3 回目) 放射は植えた所の周りだけ: 植えた 1 セルの点 (半径 10 m) で粒は 9 m、光の板は 9.72 m まで (前は 18 m・24.3 m)', () => {
+    const one = sproutSpread(10);
+    expect(one.reach).toBeCloseTo(9, 6);
+    expect(one.glow).toBeCloseTo(9.72, 6);
+    // 前の広がり (1.8 倍・下限 16 m、板は 1.35 倍) の 4 割
+    expect(one.glow / (Math.max(16, 10 * 1.8) * 1.35)).toBeCloseTo(0.4, 6);
+    // 小さな円は下限 5 m、大きな円は 30 m で頭打ち (27 m)
+    expect(sproutSpread(2).reach).toBe(5);
+    expect(sproutSpread(5).reach).toBe(5);
+    expect(sproutSpread(20).reach).toBeCloseTo(18, 6);
+    expect(sproutSpread(80).reach).toBeCloseTo(27, 6);
   });
 
   it('抗力で減速して、1 秒で届く所の 89%、3 秒でほぼ止まる', () => {
@@ -136,5 +161,118 @@ describe('雨の水たまりと跳ね返り (M22-07 の手直し)', () => {
     }
     // 屋根が無ければ地面そのまま
     expect(createSurface(() => 2, [{ x: 0, z: 0 }], null).at(0, 0)).toBe(2);
+    expect(surface.propPoints.length).toBe(0);
+  });
+
+  it('(M22-07 の 3 回目、「跳ね返りの対象を石垣と柱に広げて」) 石垣と柱の天端も焼き、天端の点を返す。屋根が先、地面は 0.3 m 未満の当たりを捨てる', () => {
+    // 地面は 1 m。石垣 (中心 (0, 5)、長さ 4.1 m・厚み 0.7 m・天端 1.95 m) を 2 つの置き場所に、柱 (0.7 m 角・天端 3.75 m) を 1 つ
+    // (光線の目 0.2 m おきが面の縁にちょうど乗らない大きさ)
+    const wall = new Group();
+    const w = new Mesh(new BoxGeometry(4.1, 0.95, 0.7), new MeshBasicMaterial());
+    w.position.set(0, 1.475, 5);
+    const w2 = w.clone();
+    w2.position.set(20, 1.475, 5);
+    wall.add(w, w2);
+    const post = new Group();
+    const p = new Mesh(new BoxGeometry(0.7, 2.75, 0.7), new MeshBasicMaterial());
+    p.position.set(-6, 2.375, 0);
+    // 足元の平たい石 (地面から 0.2 m) は天端に数えない
+    const foot = new Mesh(new BoxGeometry(1.2, 0.4, 1.2), new MeshBasicMaterial());
+    foot.position.set(-6, 1.0, 0);
+    post.add(p, foot);
+    const roofs = new Group();
+    const roof = new Mesh(new BoxGeometry(4, 0.2, 4), new MeshBasicMaterial());
+    roof.position.set(10, 3, 0);
+    roofs.add(roof);
+    const surface = createSurface(() => 1, [{ x: 10, z: 0 }], roofs, 9, 0.5, [
+      { node: wall, sites: [{ x: 0, z: 5 }, { x: 20, z: 5 }], reach: 2.6 },
+      { node: post, sites: [{ x: -6, z: 0 }], reach: 1.4 },
+    ]);
+    expect(surface.at(0, 5)).toBeCloseTo(1.95, 5);
+    expect(surface.at(1.8, 5.2)).toBeCloseTo(1.95, 5);
+    expect(surface.at(20, 5)).toBeCloseTo(1.95, 5);
+    expect(surface.at(0, 6)).toBe(1);
+    expect(surface.at(-6, 0)).toBeCloseTo(3.75, 5);
+    expect(surface.at(-6.5, 0)).toBe(1);
+    expect(surface.at(10, 0)).toBeCloseTo(3.1, 5);
+    // 屋根の点は前と同じ 81、天端の点は 0.2 m おき: 石垣 21 × 3 を 2 つ、柱 3 × 3
+    expect(surface.roofPoints.length / 3).toBe(81);
+    const n = surface.propPoints.length / 3;
+    expect(n).toBe(21 * 3 * 2 + 3 * 3);
+    let onPost = 0;
+    for (let i = 0; i < n; i++) {
+      const [x, y, z] = [surface.propPoints[i * 3], surface.propPoints[i * 3 + 1], surface.propPoints[i * 3 + 2]];
+      if (Math.abs(x + 6) < 0.5) {
+        onPost++;
+        expect(y).toBeCloseTo(3.75, 5);
+        expect(Math.abs(z)).toBeLessThanOrEqual(0.35);
+      } else {
+        expect(y).toBeCloseTo(1.95, 5);
+        expect(Math.abs(z - 5)).toBeLessThanOrEqual(0.35);
+      }
+    }
+    expect(onPost).toBe(9);
+  });
+});
+
+describe('(M22-07 の 3 回目) 雨の跳ね返りの大きさ: 「草や土は見えないくらいでちょうどいい」', () => {
+  it('草と土はかすかに (0.14 m・濃さ 0.3・短く)、屋根は控えめ (0.42 m)、石垣と柱は屋根より小さい', () => {
+    const SIZE = 0.6;
+    expect(SIZE * SPLASH_KIND.ground.scale).toBeCloseTo(0.144, 6);
+    expect(SIZE * SPLASH_KIND.roof.scale).toBeCloseTo(0.42, 6);
+    expect(SIZE * SPLASH_KIND.prop.scale).toBeCloseTo(0.33, 6);
+    expect(SPLASH_KIND.ground.alpha).toBe(0.3);
+    expect(SPLASH_KIND.ground.life).toBeLessThan(SPLASH_KIND.prop.life);
+    expect(SPLASH_KIND.prop.scale).toBeLessThan(SPLASH_KIND.roof.scale);
+    // 前はどの面も 0.6 m・濃さ 1
+    expect(SPLASH_KIND.roof.scale).toBeLessThan(1);
+  });
+});
+
+describe('(M22-07 の 3 回目) 疫病の霧: 「螺旋の動きがみえない。」', () => {
+  it('腕は 1 秒に 0.42 rad 回り、2〜3 秒で 48〜72° 回る (前は 1 秒に 2° ほど)', () => {
+    expect(MIST_SPIN).toBe(-0.42);
+    const deg = (s: number) => (Math.abs(MIST_SPIN) * s * 180) / Math.PI;
+    expect(deg(2)).toBeGreaterThan(45);
+    expect(deg(3)).toBeLessThan(75);
+  });
+
+  it('霧の下の地面の高さを 64 × 64 の表に焼き (余韻で広がる所まで)、中心と半径が変わったときだけ焼き直す', () => {
+    const pass = new AtmospherePass(new PerspectiveCamera(), new DirectionalLight());
+    let calls = 0;
+    // 東へ 10% の上り坂 (x = −50 で 1 m)
+    const heightAt = (x: number) => {
+      calls++;
+      return 6 + x * 0.1;
+    };
+    pass.setMist({ x: -50, y: 1, z: 20 }, 40, 1, 0, heightAt);
+    expect(calls).toBe(64 * 64);
+    const u = pass.mat.uniforms;
+    const g = u.uMistGround.value as Vector4;
+    const size = 40 * 1.45 * 2;
+    expect(g.x).toBeCloseTo(-50 - size / 2, 6);
+    expect(g.y).toBeCloseTo(20 - size / 2, 6);
+    expect(g.z).toBeCloseTo(size, 6);
+    const h = u.uMistGroundH.value as Vector2;
+    // 表の目の中心の高さの幅: 端の目は縁から半目内側
+    const cell = size / 64;
+    expect(h.x).toBeCloseTo(6 + (g.x + cell / 2) * 0.1, 5);
+    expect(h.y).toBeCloseTo((size - cell) * 0.1, 5);
+    const tex = u.tMistGround.value as DataTexture;
+    const data = tex.image.data as Uint8Array;
+    // 西の端は 0、東の端は 255、真ん中の列は半ば。北から南へは変わらない
+    expect(data[0]).toBe(0);
+    expect(data[63]).toBe(255);
+    expect(Math.abs(data[32] - 128)).toBeLessThanOrEqual(3);
+    expect(data[63 * 64 + 63]).toBe(255);
+    // 同じ霧のうちは焼き直さない (毎コマ呼ばれる)
+    pass.setMist({ x: -50, y: 1, z: 20 }, 40, 0.5, 0.3, heightAt);
+    expect(calls).toBe(64 * 64);
+    // 霧が消えている間 (濃さ 0) は焼かない、新しい霧では焼き直す
+    pass.setMist({ x: 0, y: 1, z: 0 }, 40, 0, 0, heightAt);
+    expect(calls).toBe(64 * 64);
+    pass.setMist({ x: 0, y: 1, z: 0 }, 40, 1, 0, heightAt);
+    expect(calls).toBe(2 * 64 * 64);
+    pass.dispose();
   });
 });
