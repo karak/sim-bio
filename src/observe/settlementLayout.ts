@@ -24,9 +24,18 @@ export const HUT_OFFSETS: readonly (readonly [number, number])[] = [
  * (M23-09 のやり直しで変更: 32 → 36 m (32.4〜39.6 m、3 棟は 37.4・34.4・36.8 m)。ユーザーの判断「30mだと明らかに違いがわかる」で遠距離版を
  *  hut と同じ石・板・蔓・葉の形にし、切り替えも遠ざけた。36 m は集落の俯瞰で小屋が近い形に戻らない上限 (俯瞰が回っても小屋まで 38 m より遠い)。
  *  集落の寄せ先では手前の小屋 (17 m) と画の右の端の小屋 (35 m) が近い形、奥の小屋 (44 m) が遠距離版)
+ * (M23-09 の 3 回目で変更: 36 → 60 m (54〜66 m、3 棟は 62.3・57.3・61.4 m)。ユーザーの判断「36mという距離にこだわる理由は？」に答え、
+ *  60 m と安い遠距離版 (2,460 三角形、observe_settlement.py の hut(far=True, lite=True)) で合意した (2026-09-24 23:19)。
+ *  集落の俯瞰が回ると 72 向きのうち 53 向きで 1 棟以上が遠距離版になる (替わる小屋はどれも 57 m より遠い)。
+ *  前の遠距離版 (5,296 三角形) は HUT_FAR_FULL=1 で書き出せる)
  */
-export const HUT_NEAR_M = 36;
+export const HUT_NEAR_M = 60;
 export const HUT_NEAR_SPREAD = 0.2;
+/**
+ * (M23-09 の 3 回目で追加) 小屋でない集落の部品 (灯り柱・石垣・L 字の石垣・立石・船台・衝立) を遠距離版 (settlement.glb の <名前>_lod1) に
+ * 替える距離 (m、小屋と同じくカメラの高さも入れた距離、置き場所ごとに HUT_NEAR_SPREAD で揺らす)。小屋と同じ 60 m
+ */
+export const PROP_NEAR_M = HUT_NEAR_M;
 
 /** 小屋の中心から炉までの距離 (m、戸口の側)。observe_settlement.py の炉 (Blender の y = −0.3) と同じ */
 export const HEARTH_M = 0.3;
