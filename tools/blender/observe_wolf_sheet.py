@@ -18,6 +18,9 @@ raw, out = sys.argv[1], sys.argv[2]
 # 頭の寄り (head-*) の前後を <prefix>-head.png に並べる
 PRE = sys.argv[3] if len(sys.argv) > 3 else "wolf"
 BEFORE = sys.argv[4] if len(sys.argv) > 4 else None
+# (灰狼の 3 回目で追加) 5・6 つ目の引数で頭の寄りの前後の札を変える (既定 before / after。3 回目は "round 2" / "round 3")
+LB_BEFORE = sys.argv[5] if len(sys.argv) > 5 else "before"
+LB_AFTER = sys.argv[6] if len(sys.argv) > 6 else "after"
 os.makedirs(out, exist_ok=True)
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 REF = Image.open(os.path.join(ROOT, "assets/textures/board/creatures/wolf.png")).convert("RGB")
@@ -106,8 +109,8 @@ if os.path.exists(os.path.join(raw, "head-q34.png")):
     heads = ["side", "front", "q34"]
     rows = [row([label(REF.crop(HEAD_BOX[v]), f"ref {v}") for v in heads], 300)]
     if BEFORE:
-        rows.append(row([label(trim(Image.open(os.path.join(BEFORE, f"head-{v}.png")).convert("RGB")), f"before {v}") for v in heads], 300))
-    rows.append(row([label(trim(rimg(f"head-{v}.png")), f"after {v}") for v in heads], 300))
-    rows.append(row([label(trim(rimg(f"head-{a}.png")), f"after {a}") for a in ("stalk", "pounce")], 300))
+        rows.append(row([label(trim(Image.open(os.path.join(BEFORE, f"head-{v}.png")).convert("RGB")), f"{LB_BEFORE} {v}") for v in heads], 300))
+    rows.append(row([label(trim(rimg(f"head-{v}.png")), f"{LB_AFTER} {v}") for v in heads], 300))
+    rows.append(row([label(trim(rimg(f"head-{a}.png")), f"{LB_AFTER} {a}") for a in ("stalk", "pounce")], 300))
     stack(rows, gap=10).save(os.path.join(out, f"{PRE}-head.png"))
 print("sheets written to", out)

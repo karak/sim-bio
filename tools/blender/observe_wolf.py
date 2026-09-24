@@ -110,6 +110,7 @@ def make_materials():
             vc = nt.nodes.new("ShaderNodeVertexColor")
             vc.layer_name = "Col"
             nt.links.new(vc.outputs["Color"], bsdf.inputs["Base Color"])
+        if name == "wolf_body" and FUR_TEXTURE:  # (灰狼の 3 回目で追加) テクスチャは FUR_TEXTURE のときだけ (既定は切る)
             # (灰狼の作り直しで追加) 毛皮のテクスチャ × 頂点色。glTF には baseColorTexture と COLOR_0 として出る (GLTFLoader が両方を掛ける)
             tx = nt.nodes.new("ShaderNodeTexImage")
             tx.image = make_fur_image()
@@ -874,6 +875,11 @@ BROW = [(0.050, -0.668, 0.632), (0.072, -0.642, 0.662), (0.090, -0.612, 0.688)]
 #   - 脚を太く、足に指と爪。脚の焦げ茶は材質を分けず頂点色で持つ
 #   - 毛皮のテクスチャ (筆の毛並みを numpy で生成、FUR_PATH) を毛の材質に掛ける。UV は部品の軸に沿う円筒の展開で、毛並みは軸の向き
 # 元の部品の関数 (build_head・build_nose・build_ears・build_eye・build_tufts・build_spikes・build_paw) は記録として残し、build_lod から新しい関数を呼ぶ
+# (灰狼の 3 回目で追加) ユーザーの判断「テクスチャが細かすぎる。もとの絵画的ないい意味で荒い毛並みを再現すること。また、目も口元も悪役すぎる。
+# 神の使いの穏やかさと神々しさを出すように」。細かい毛のテクスチャはやめ (FUR_TEXTURE = False)、毛並みは頂点色の大きな筆の塗り (STROKES) と
+# 面の明暗、毛の房で持つ。テクスチャを持たない材質は観察画面の bake.ts で 1 つにまとまるので、1 頭 1 draw call に戻る。
+# 生成の関数 (make_fur_image・uv_faces) は残し、FUR_TEXTURE = True で 2 回目のテクスチャに戻せる
+FUR_TEXTURE = False
 FUR_TILE = 0.36  # 毛皮のテクスチャ 1 枚が覆う長さ (m)
 FUR_SIZE = 512
 FUR_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "textures", "observe", "wolf_fur.png")
@@ -1000,8 +1006,8 @@ HEAD2_KEYS = [
     (-0.462, [(0, 0.695), (0.030, 0.693), (0.048, 0.685), (0.060, 0.668), (0.070, 0.645), (0.074, 0.618), (0.070, 0.592), (0.058, 0.568), (0.030, 0.553), (0, 0.550)]),
     (-0.500, [(0, 0.745), (0.040, 0.742), (0.066, 0.730), (0.084, 0.708), (0.096, 0.675), (0.102, 0.635), (0.097, 0.590), (0.080, 0.548), (0.042, 0.527), (0, 0.522)]),
     (-0.553, [(0, 0.766), (0.045, 0.763), (0.074, 0.750), (0.094, 0.725), (0.106, 0.685), (0.122, 0.635), (0.108, 0.585), (0.088, 0.540), (0.046, 0.512), (0, 0.507)]),
-    (-0.600, [(0, 0.757), (0.045, 0.754), (0.074, 0.744), (0.096, 0.716), (0.086, 0.674), (0.128, 0.622), (0.104, 0.577), (0.078, 0.540), (0.042, 0.518), (0, 0.513)]),
-    (-0.638, [(0, 0.738), (0.044, 0.737), (0.072, 0.727), (0.094, 0.701), (0.068, 0.652), (0.104, 0.604), (0.080, 0.576), (0.066, 0.560), (0.034, 0.549), (0, 0.546)]),
+    (-0.600, [(0, 0.757), (0.045, 0.754), (0.073, 0.743), (0.092, 0.714), (0.090, 0.676), (0.128, 0.622), (0.104, 0.577), (0.078, 0.540), (0.042, 0.518), (0, 0.513)]),
+    (-0.638, [(0, 0.738), (0.043, 0.736), (0.070, 0.725), (0.088, 0.697), (0.076, 0.654), (0.104, 0.604), (0.080, 0.576), (0.066, 0.560), (0.034, 0.549), (0, 0.546)]),
     (-0.672, [(0, 0.690), (0.040, 0.689), (0.058, 0.683), (0.068, 0.670), (0.069, 0.641), (0.076, 0.606), (0.072, 0.575), (0.066, 0.558), (0.036, 0.552), (0, 0.550)]),
     (-0.709, [(0, 0.671), (0.036, 0.670), (0.052, 0.665), (0.062, 0.654), (0.065, 0.630), (0.069, 0.600), (0.070, 0.570), (0.067, 0.550), (0.037, 0.544), (0, 0.543)]),
     (-0.764, [(0, 0.650), (0.033, 0.649), (0.048, 0.645), (0.057, 0.636), (0.060, 0.612), (0.063, 0.585), (0.064, 0.557), (0.061, 0.538), (0.034, 0.533), (0, 0.532)]),
@@ -1126,7 +1132,8 @@ def build_teeth2(bm, lod, upper):
         if upper:
             y = ty + 0.036
             x, z = lip_at(y)
-            cone(bm, Vector((sx * (x - 0.004), y, z + 0.006)), Vector((sx * 0.08, 0.14, -1)), 0.022, 0.0066, n=5, flat=0.8)
+            # (灰狼の 3 回目で変更: 口を閉じたときに牙を見せない。下顎の内へ 4 → 9 mm 寄せ、長さ 22 → 15 mm。元は x - 0.004・0.022)
+            cone(bm, Vector((sx * (x - 0.009), y, z + 0.006)), Vector((sx * 0.02, 0.14, -1)), 0.015, 0.0062, n=5, flat=0.8)
             for xi in (0.006, 0.0135, 0.021):
                 x0, z0 = lip_at(ty + 0.006)
                 cone(bm, Vector((sx * xi, ty + 0.007 + xi * 0.25, z0 + 0.003)), Vector((0, 0.1, -1)), 0.008, 0.0032, n=4)
@@ -1136,7 +1143,7 @@ def build_teeth2(bm, lod, upper):
         else:
             y = ty + 0.020
             x, z = jaw_at(y)
-            cone(bm, Vector((sx * (x - 0.009), y, z - 0.006)), Vector((sx * 0.05, -0.12, 1)), 0.020, 0.006, n=5, flat=0.8)
+            cone(bm, Vector((sx * (x - 0.011), y, z - 0.006)), Vector((sx * 0.02, -0.12, 1)), 0.014, 0.0056, n=5, flat=0.8)  # (灰狼の 3 回目で変更: 元は x - 0.009・0.020)
             for xi in (0.006, 0.012, 0.018):
                 x0, z0 = jaw_at(ty + 0.010)
                 cone(bm, Vector((sx * xi, ty + 0.011 + xi * 0.25, z0 - 0.003)), Vector((0, -0.1, 1)), 0.007, 0.003, n=4)
@@ -1167,19 +1174,26 @@ def build_nose2(bm, lod):
     cap(bm, list(reversed(rings[0])), NOSE)
 
 
+ALMOND_P, ALMOND_TOP = 0.85, 0.85  # (灰狼の 3 回目で追加) 瞼を丸く、上瞼を平らにしすぎない (元は 1.0, 0.7)
+
+
 def almond(k, L, H, tail=1.3):
     """アーモンドの輪郭 (u, v)。u > 0 が目頭 (前、丸め)、u < 0 が目尻 (後ろ、尖らせて tail 倍に伸ばす)。上瞼は平ら、下瞼は丸い"""
     out = []
     for i in range(k):
         a = 2 * math.pi * i / k
         ca, sa = math.cos(a), math.sin(a)
-        p = 1.9 if ca < 0 else 1.25
-        h = H * math.copysign(abs(sa) ** p, sa) * (0.7 if sa > 0 else 1.0)
+        p = (1.9 if ca < 0 else 1.25) * ALMOND_P  # (灰狼の 3 回目で変更: 瞼の丸み。元は ALMOND_P を掛けない)
+        h = H * math.copysign(abs(sa) ** p, sa) * (ALMOND_TOP if sa > 0 else 1.0)
         out.append((L * ca * (tail if ca < 0 else 1.0), h))
     return out
 
 
 EYE2 = Vector((0.077, -0.650, 0.651))  # 眼窩の中ほど (+X 側)
+# (灰狼の 3 回目で追加) 穏やかな顔: 目の周りの隈 (0.85 → 0.3 倍)・涙の線 (0.7 → 0.15 倍) を薄く、唇の黒い帯を 8.5 → 5.5 mm に細く。
+# 目は吊り上がりを 29° → 12° に、目尻の伸びを 1.55 → 1.2 倍に、大きさを 1.25 倍に (EYE_*)
+MASK_K, TEAR_K, LIP_W = 0.3, 0.15, 0.0055
+EYE_UP, EYE_TAIL, EYE_S = 0.21, 1.25, 1.2
 
 
 def build_eye2(bm, bvh_head, lod, side):
@@ -1191,7 +1205,7 @@ def build_eye2(bm, bvh_head, lod, side):
     if loc is None:
         loc, n = E, facing
     n = (n + facing).normalized()
-    u = Vector((0, -1, -0.55))
+    u = Vector((0, -1, -EYE_UP))  # (灰狼の 3 回目で変更: 目頭の下がりを -0.55 → -EYE_UP)
     u = (u - n * u.dot(n)).normalized()  # 目頭の向き
     v = n.cross(u).normalized()
     if v.z < 0:
@@ -1213,12 +1227,13 @@ def build_eye2(bm, bvh_head, lod, side):
                 f.normal_flip()
 
     if hero:
-        fan(0.029, 0.0125, 0.003, 0.003, NOSE, 1.55)
-    fan(0.022, 0.0080, 0.0050, 0.0050, GLOW, 1.35)
+        fan(0.029 * EYE_S, 0.0125 * EYE_S * 1.1, 0.003, 0.003, NOSE, EYE_TAIL + 0.1)  # (灰狼の 3 回目で変更: 元は 0.029, 0.0125, …, 1.55)
+    fan(0.022 * EYE_S, 0.0080 * EYE_S * 1.1, 0.0050, 0.0055, GLOW, EYE_TAIL)  # (灰狼の 3 回目で変更: 元は 0.022, 0.0080, …, 1.35)
 
 
 # 光る線 (+X 側、-X は鏡映): 眉 (目頭の上から眉の稜に沿って耳の側へ) と頬 (目尻の下から頬骨に沿って後ろへ)
 BROW2 = [(0.058, -0.668, 0.688), (0.080, -0.646, 0.699), (0.093, -0.612, 0.716)]
+BROW2 = [(0.056, -0.666, 0.703), (0.079, -0.645, 0.708), (0.092, -0.614, 0.709)]  # (灰狼の 3 回目で追加) 眉の光を寝かせる (上がりを 2.8 → 1.4 cm、しかめ面にしない)
 CHEEK2 = [(0.090, -0.640, 0.618), (0.112, -0.605, 0.628), (0.108, -0.565, 0.652)]
 
 
@@ -1325,11 +1340,17 @@ def tuft(bm, cl, uvl, root, d, L, W, T, bend, c0, c1, n=4, glow_front=False, lig
         if glow_front and tip in f.verts and f.normal.dot(Vector((0, -0.5, 1)).normalized()) > 0.2:
             f.material_index = GLOW
     ct = mix(c1, WHITE, 0.05) if lighten else c1
+    ct = mix(c0, ct, 0.7)  # (灰狼の 3 回目で追加) 先の明るさを根元の色へ寄せる (淡い破片に見せない)
     for vv in rings[0]:
         vv[cl] = (*fur_gain(c0), 1.0)
     for vv in rings[1]:
         vv[cl] = (*fur_gain(mix(c0, c1, 0.6)), 1.0)
     tip[cl] = (*fur_gain(ct), 1.0)
+    # (灰狼の 3 回目で追加) 房の法線を根元の面の法線に寄せる (TUFT_NRM)。房が面と同じ明暗で塗られ、光る破片でなく毛の筆の跡に見える
+    if normal is not None and TUFT_NRM > 0:
+        nl = bm.verts.layers.float_vector.get("tnrm") or bm.verts.layers.float_vector.new("tnrm")
+        for vv in rings[0] + rings[1] + [tip]:
+            vv[nl] = Vector(normal).normalized()
     if uvl is not None:
         for f in faces:
             for lp in f.loops:
@@ -1339,6 +1360,9 @@ def tuft(bm, cl, uvl, root, d, L, W, T, bend, c0, c1, n=4, glow_front=False, lig
                 ang_ = math.atan2(q.dot(up), q.dot(side)) / (2 * math.pi)
                 lp[uvl].uv = (ang_ * 0.5, tt * L / FUR_TILE)
     return faces
+
+
+TUFT_NRM = 0.8  # (灰狼の 3 回目で追加) 房の法線を根元の面の法線へ寄せる割合
 
 
 def surface_point(bvh, p):
@@ -1352,6 +1376,7 @@ def tufts_region(bm, bvh, lod, region):
     hero = lod["name"] == "hero"
     cl = bm_colors(bm)
     uvl = bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
+    bm.verts.layers.float_vector.get("tnrm") or bm.verts.layers.float_vector.new("tnrm")  # (灰狼の 3 回目で追加) 頂点を作る前に層を作る
     n = 5 if hero else 3
     pale, fur, top = PAL["pale"], PAL["fur"], PAL["fur_top"]
     items = []  # (根元の目安, 向き, 長さ, 幅, 厚さ, 曲がり, 根元の色, 先の色, 先を光らせる)
@@ -1380,13 +1405,13 @@ def tufts_region(bm, bvh, lod, region):
                     low = smoothstep(10, -60, deg)
                     d = Vector((sx * 0.22 * math.cos(a), 0.9, 0.12 * math.sin(a) - 0.45 * low))
                     items.append((p, d, 0.070 + 0.015 * rk, 0.040, 0.008, Vector((0, 0.05, -0.15)),
-                                  mix(fur, pale, low), mix(mix(top, pale, low), WHITE, 0.12), False))
+                                  mix(fur, pale, low), mix(mix(fur, top, 0.3), pale, low), False))  # (灰狼の 3 回目で変更: 先の色を抑える。元は mix(mix(top, pale, low), WHITE, 0.12))
         elif region == "hackle":
             # 背の逆立つ毛 (首の上から肩): 中心線の両脇に後ろへ寝かせ、先 (上・前を向く面) が光る
             spikes = SPIKES_HERO if hero else SPIKES_LOD1
             for y, h, ln in spikes:
                 p = Vector((sx * 0.026, y, 1.2))
-                items.append((p, Vector((sx * 0.15, 0.85, 0.50)), h * 1.05, 0.034, 0.008, Vector((0, 0.3, -0.1)), fur, top, True))
+                items.append((p, Vector((sx * 0.15, 0.85, 0.50)), h * 1.05, 0.034, 0.008, Vector((0, 0.3, -0.1)), fur, mix(fur, top, 0.35), True))  # (灰狼の 3 回目で変更: 先の色 top → mix(fur, top, 0.35)。観察画面で白い鋸の歯に見えた)
         elif region == "chest":
             # 胸の飾り毛 (淡い、下へ寝かせる)
             if sx > 0:
@@ -1421,7 +1446,7 @@ def tufts_region(bm, bvh, lod, region):
                 dark = smoothstep(0.62, 0.85, t)
                 c0 = mix(fur, PAL["dark"], dark * 0.7)
                 items.append((p0 + sd * 0.05, d + sd * 0.25 + Vector((0, 0, -0.1)), 0.075, 0.042, 0.009, d * 0.15, c0,
-                              mix(mix(top, PAL["dark"], dark * 0.8), WHITE, 0.05), False))
+                              mix(mix(mix(fur, top, 0.35), PAL["dark"], dark * 0.8), WHITE, 0.05), False))  # (灰狼の 3 回目で変更: 先の色 top → mix(fur, top, 0.35))
                 if sx > 0:
                     under = Vector((0, -0.3, -1))
                     items.append((p0 + Vector((0, 0, -0.04)), d + under * 0.35, 0.075, 0.042, 0.009, d * 0.15, mix(c0, pale, 0.3 * (1 - dark)),
@@ -1522,13 +1547,13 @@ def col_head2(part, co, n):
     c = mix(c, PAL["pale"], smoothstep(zm + 0.010, zm - 0.012, z))
     # 目の周りの暗い隈と、目頭から前下への涙の線
     e = Vector((math.copysign(EYE2.x, co.x), EYE2.y, EYE2.z))
-    c = mix(c, PAL["mask"], smoothstep(0.042, 0.020, (co - e).length) * 0.85)
+    c = mix(c, PAL["mask"], smoothstep(0.042, 0.020, (co - e).length) * 0.85 * MASK_K)
     a, b = e + Vector((0, -0.018, -0.008)), e + Vector((-math.copysign(0.012, co.x), -0.048, -0.040))
-    c = mix(c, PAL["mask"], smoothstep(0.010, 0.004, seg_dist(co, a, b)) * 0.7)
+    c = mix(c, PAL["mask"], smoothstep(0.010, 0.004, seg_dist(co, a, b)) * 0.7 * TEAR_K)
     # 唇 (口の縁の黒) と口の中
     if y < MOUTH_Y + 0.004:
         xl, zl = lip_at(y)
-        c = mix(c, PAL["lip"], smoothstep(0.0085, 0.0035, z - zl))
+        c = mix(c, PAL["lip"], smoothstep(LIP_W, 0.0035, z - zl))
     return c
 
 
@@ -1565,10 +1590,73 @@ def col_tail2(part, co, n):
 COLOR2 = {"head2": col_head2, "jaw2": col_jaw2, "leg2": col_leg2, "paw2": col_paw2, "tail2": col_tail2}
 
 
+def make_strokes():
+    """(灰狼の 3 回目で追加) 絵の筆の塗り: 体の横から見た (y, z) の太い筆の跡。毛並みの向き (後ろ下へ、脚は下へ) に長く、幅 5〜9 cm。
+    明るい跡 (背の面の色・房の先の色へ) と暗い跡 (陰の赤みへ) を交互に。乱数の種は固定"""
+    import random
+    rng = random.Random(11)
+    out = []
+    for side in (-1, 1):
+        # 胴・首: 肩から尻へ、背から腹へ 3 段
+        for i in range(40):
+            y = rng.uniform(-0.50, 0.36)
+            top = interp([(k[0], k[1]) for k in BODY_KEYS], max(-0.44, min(0.36, y)))
+            bot = interp([(k[0], k[2]) for k in BODY_KEYS], max(-0.44, min(0.36, y)))
+            z = rng.uniform(bot + 0.06, top + 0.02)
+            ang_ = math.radians(rng.uniform(-38, -12))  # 後ろ (+y) へ下る
+            L = rng.uniform(0.16, 0.30)
+            W = rng.uniform(0.07, 0.12)
+            out.append((side, "body", Vector((0, y, z)), Vector((0, math.cos(ang_), math.sin(ang_))), L, W, 1 if i % 2 == 0 else -1))
+        # 脚: 腿・肩から下へ 2 本ずつ
+        for pre in ("fl", "hl"):
+            top = joint(f"{pre}_{'L' if side < 0 else 'R'}", 0)
+            for k in range(2):
+                y = top.y + rng.uniform(-0.05, 0.05)
+                out.append((side, "leg", Vector((0, y, top.z - 0.02)), Vector((0, rng.uniform(-0.25, 0.25), -1)).normalized(),
+                            rng.uniform(0.18, 0.28), rng.uniform(0.035, 0.05), 1 if k == 0 else -1))
+        # 尾: 付け根から先へ 2 本
+        for k in range(2):
+            out.append((side, "tail", Vector((0, 0.33, 0.55 - 0.04 * k)), Vector((0, 0.62, -0.78)), 0.30, 0.04, 1 if k == 0 else -1))
+    return out
+
+
+STROKES = []
+
+
+def paint(part, co, n, c):
+    """(灰狼の 3 回目で追加) 頂点色 c に STROKES の筆の跡を重ねる。顔の前 (目・鼻づら) には塗らない (穏やかな顔を保つ)"""
+    if not STROKES:
+        STROKES.extend(make_strokes())
+    kind = "leg" if part.startswith("leg") else "tail" if part.startswith("tail") else "body"
+    if part.startswith("head") and co.y < -0.60:
+        return c
+    side = 1 if co.x > 0 else -1
+    p = Vector((0, co.y, co.z))
+    for sd, k, a, d, L, W, tone in STROKES:
+        if sd != side or (k != kind and not (kind == "body" and k == "body")):
+            continue
+        t = (p - a).dot(d) / L
+        if t < -0.1 or t > 1.1:
+            continue
+        dist = (p - (a + d * (L * max(0.0, min(1.0, t))))).length
+        w = W * (0.55 + 0.45 * math.sin(math.pi * max(0.0, min(1.0, t))))  # 筆の入りと抜きを細く
+        k_ = smoothstep(w, w * 0.45, dist) * (1 - smoothstep(0.9, 1.1, t)) * smoothstep(-0.1, 0.1, t)
+        if k_ <= 0:
+            continue
+        if tone > 0:
+            c = mix(c, mix(PAL["fur_top"], PAL["tip"], 0.5), k_ * 0.8)
+        else:
+            c = mix(c, mix(PAL["fur_shade"], PAL["mask"], 0.3), k_ * 0.5)
+    return c
+
+
 def color_for2(part, co, n):
     """(灰狼の作り直しで追加) 新しい部品の頂点色。元の部品の名前は color_for へ。毛の色 (白でないもの) は fur_gain で明るく戻す"""
     fn = COLOR2.get(part.split("_")[0])
     c = fn(part, co, n) if fn else color_for(part, co, n)
+    # (灰狼の 3 回目で追加) 毛の部品 (胴・首・頭・脚・尾) には筆の塗りを重ねる
+    if c != WHITE and part.split("_")[0] in ("body", "neck", "head2", "leg2", "tail2"):
+        c = paint(part, co, n, c)
     return c if c == WHITE else fur_gain(c)
 
 
@@ -1592,8 +1680,19 @@ def make_part(name, bm, part, cands, mats, recalc=True, smooth=True, sharp=None)
     bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
     me = bpy.data.meshes.new(name)
     bm.normal_update()
+    # (灰狼の 3 回目で追加) 房の法線 (tnrm) があれば、頂点の法線と TUFT_NRM の割合で混ぜて自前の法線にする
+    tl = bm.verts.layers.float_vector.get("tnrm")
+    custom = None
+    if tl is not None:
+        bm.verts.index_update()
+        custom = [(v.normal.lerp(Vector(v[tl]), TUFT_NRM) if Vector(v[tl]).length > 0.5 else v.normal).normalized() for v in bm.verts]
     bm.to_mesh(me)
     bm.free()
+    if custom is not None:
+        me.normals_split_custom_set_from_vertices([tuple(c) for c in custom])
+    if not FUR_TEXTURE:  # (灰狼の 3 回目で追加) テクスチャを使わないので UV は書き出さない
+        while me.uv_layers:
+            me.uv_layers.remove(me.uv_layers[0])
     # (灰狼の作り直しで追加) sharp (度) より折れた辺を硬い辺にする (眉の稜・口の縁・耳の縁を立てる。曲面はなめらかなまま)
     if sharp is not None:
         me.set_sharp_from_angle(angle=math.radians(sharp))
@@ -1713,6 +1812,15 @@ def build_lod(lod, obj_name, mats):
 # (灰狼の作り直しで追加) 作り直した部品で組む LOD。build_lod と同じ並び (胴・首・頭・尾・耳・目・脚・足 → 継ぎ目・稜線・毛の房) で、
 # 頭は上の顎 (build_head2)・下顎 (build_jaw2)・歯・鼻・目・眉と頬の光に、背の棘は前の面が光る毛の房に、飾り毛は部位ごとの毛の房にした
 HERO.update(head2=22, jaw2=10, body=(15, 18))
+def densify(bm, lod):
+    """(灰狼の 3 回目で追加) 近 LOD の胴と首の辺を 1 回ずつ割る (形は変えない)。筆の塗り (STROKES) を頂点色で細かく受けるため
+    (脚・尾も割ると近 LOD が 10,255 三角形になり予算を超えるので、胴・首だけ)"""
+    if lod["name"] == "hero":
+        bmesh.ops.subdivide_edges(bm, edges=list(bm.edges), cuts=1, use_grid_fill=True)
+
+
+HERO.update(body=(12, 18))  # (灰狼の 3 回目で追加) 胴は densify で割るので、断面を 15 → 12 に減らして三角形を返す
+FACET = 28  # (灰狼の 3 回目で追加) 胴・脚の面を立てる角 (度)。基準画の絵の大きな面 (背・脇・腹、肩・腿の板) を硬い辺で区切る
 LOD1.update(head2=8, jaw2=4)
 
 
@@ -1752,10 +1860,12 @@ def build_lod2(lod, obj_name, mats):
     rigid_head = lambda co: [("head", 1.0)]  # noqa: E731
     bm = bmesh.new()
     build_body2(bm, lod)
+    densify(bm, lod)
     add(bm, (shell_v, shell_f), (top_v, top_f), (skin_v, skin_f))
-    parts.append(make_part(obj_name + "_body", bm, "body", lambda co: weights_for(co, body_cands(co)), mats))
+    parts.append(make_part(obj_name + "_body", bm, "body", lambda co: weights_for(co, body_cands(co)), mats, sharp=FACET))
     bm = bmesh.new()
     build_neck(bm, lod)
+    densify(bm, lod)
     uv_faces(bm, bm.faces, [(0, -0.56, 0.60), (0, -0.45, 0.62), (0, -0.36, 0.645), (0, -0.27, 0.62)], 0.14)
     add(bm, (shell_v, shell_f), (top_v, top_f), (skin_v, skin_f))
     parts.append(make_part(obj_name + "_neck", bm, "neck", neck_cands(None), mats))
@@ -1804,7 +1914,7 @@ def build_lod2(lod, obj_name, mats):
             build_leg(bm, lod, name)
             uv_faces(bm, bm.faces, [joint(name, i) for i in range(5)] + ([joint(name, 4) + Vector((0, -0.05, 0))] if not lod["paw"] else []), 0.05)
             add(bm, (shell_v, shell_f), (skin_v, skin_f))
-            parts.append(make_part(f"{obj_name}_leg_{name}", bm, f"leg2_{name}", [(b, 1.0) for b in bones] + [(parent, 0.5)], mats))
+            parts.append(make_part(f"{obj_name}_leg_{name}", bm, f"leg2_{name}", [(b, 1.0) for b in bones] + [(parent, 0.5)], mats, sharp=FACET))
             if lod["paw"]:
                 bm = bmesh.new()
                 build_paw2(bm, lod, name)
@@ -2100,6 +2210,7 @@ def pose_stalk(rig, t):
     b["ear_L"] = rot_basis(D(10), 0, D(-4))
     b["ear_R"] = rot_basis(D(10), 0, D(4))
     b["jaw"] = rot_basis(D(7) + D(1.5) * math.sin(ph))  # (灰狼の作り直しで追加) 忍び寄りは口を少し開けて牙と歯を見せる
+    b["jaw"] = rot_basis(D(2) + D(0.8) * math.sin(ph))  # (灰狼の 3 回目で変更: 忍び寄りは口をわずかに開けるだけ (歯を剥かない))
     # 尾は低く、先をわずかに揺らす (後ろ向きの骨は X 回りの正で先が上がる)
     b["tail1"] = rot_basis(-D(4), 0, D(3) * math.sin(ph))
     b["tail2"] = rot_basis(D(3), 0, D(3) * math.sin(ph - 0.8))
@@ -2128,6 +2239,7 @@ def pose_run(rig, t):
     b["ear_L"] = rot_basis(-D(35), 0, D(-12))
     b["ear_R"] = rot_basis(-D(35), 0, D(12))
     b["jaw"] = rot_basis(D(10) + D(3) * math.sin(2 * ph))  # (灰狼の作り直しで追加) 走るときは口を開けて息をする
+    b["jaw"] = rot_basis(D(7) + D(2) * math.sin(2 * ph))  # (灰狼の 3 回目で変更: 息の口を 10° → 7°)
     # 尾は後ろへ真っ直ぐ伸ばす (後ろ向きの骨は X 回りの正で先が上がる)
     b["tail1"] = rot_basis(D(26) + D(6) * math.sin(ph), 0, 0)
     b["tail2"] = rot_basis(D(12) + D(6) * math.sin(ph - 0.6))
@@ -2159,6 +2271,7 @@ def pose_pounce(rig, t):
     b["neck2"] = rot_basis(D(2) * crouch)
     b["head"] = rot_basis(-D(4) * crouch + D(2) * lunge)
     b["jaw"] = rot_basis(D(32) * ease(0.4, 0.55, t) * (1 - ease(0.62, 0.8, t)) + D(6) * crouch)  # (灰狼の作り直しで変更: 顎を 26° → 32°、溜めで少し開く)
+    b["jaw"] = rot_basis(D(22) * ease(0.4, 0.55, t) * (1 - ease(0.62, 0.8, t)))  # (灰狼の 3 回目で変更: 飛びかかりの顎を 32° → 22°、溜めでは開かない)
     b["ear_L"] = rot_basis(D(-20) * crouch + D(25) * lunge, 0, D(-6))
     b["ear_R"] = rot_basis(D(-20) * crouch + D(25) * lunge, 0, D(6))
     b["tail1"] = rot_basis(-D(8) * crouch + D(24) * lunge)
