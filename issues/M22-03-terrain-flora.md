@@ -51,6 +51,8 @@ M22-02
   6 つの寄せ先で draw call・三角形は前と同じ(集落 98 / 31.1 万、船台 91 / 24.4 万、群れ 78 / 23.1 万、林 91 / 31.6 万、狼 103 / 36.4 万、海岸 74 / 24.4 万。`npm run bench:observe`、前 6895d7d)。fps は GPU を分け合った測りで、前後 2 組とも 184〜459 に揺れて差は言えない(未確認)。
   比較画 `docs/design/qa/observe/ground2-{before,after}-{coast,settle,plaza,path,sand,rock,grove}.png`(同じ視点、台の時計でコマを進めて動物の立ち位置も揃えた。前は feat/m21 6895d7d の地面)。単体テスト `tests/unit/observe.groundDetail.test.ts`(決定論・継ぎ目・小石の数と大きさの散らばり・明暗の幅)。
   見えたこと: 海岸の寄せ先(55 m から見下ろす)では近い升が消えるので差は小さい。近い画では草地の土の塊が強まり、低い目の画で丸い塊の並びが石畳に近く見えるところがある。岩の広い升は対岸の斜面で 3 m ほどの板の並びに見える。
+- 2026-09-25 下草の 4 回目(審査台 t3-flora 不合格「小花の根元の茎と草の位置がずれているのはなぜ？」): `tools/blender/observe_flora.py` の `flower_patch()` の茎 7 本の付け根を、中心から 4〜20 cm の輪から葉のロゼットの中心(葉の付け根の間、中心から 1〜2.2 cm、`FLOWER_STEM_FOOT`)へ移し、花は前と同じ所に咲かせて茎を外へ傾けた(上から見た花の輪は前と同じ、株の幅 0.56 × 0.62 m も同じ)。茎の中ほどは付け根と花を結ぶ線から内へ寄せ(`FLOWER_STEM_BOW`)、根元が葉の間を立ち上がってから外へ撓む。遠距離版 `flower_patch_lod1()` も同じ食い違い(茎 5 本が 4〜20 cm の輪)だったので同じく直した。
+  三角形は前後で同じ(`flower_patch` 307、`flower_patch_lod1` 54)。flora.glb は 2 回書き出して同じ(sha1 d50a50bb)。比較画 `docs/design/qa/observe/trees4-flower.png`(Blender の単体の前後: 横・根元の寄り・上から・遠距離版、ゲーム内の前後: 林の寄せ先からいちばん近い小花の株に 1.1 m と 2 m で寄った同じ株・同じカメラ)。単体テスト `tests/unit/observe.bake.test.ts`。
 
 ## 残り(ユーザーの判断で積んだ順)
 
