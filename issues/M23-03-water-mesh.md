@@ -1,11 +1,11 @@
 ---
 id: M23-03
 title: 海の分割の作り直し
-status: todo
+status: review
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-01]
-evidence: ["ccb0b44 tests/unit/observe.water.test.ts"]
+evidence: ["21ebb4d tests/unit/observe.water.test.ts"]
 ---
 
 # 海の分割の作り直し
