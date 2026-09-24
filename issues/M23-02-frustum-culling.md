@@ -1,11 +1,11 @@
 ---
 id: M23-02
 title: インスタンスごとの視錐台カリング
-status: todo
+status: review
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-01]
-evidence: []
+evidence: ["c503f67 tests/unit/observe.cull.test.ts"]
 ---
 
 # インスタンスごとの視錐台カリング

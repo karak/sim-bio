@@ -5,7 +5,7 @@ status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: []
-evidence: ["c81aee5 tools/bench-observe.ts tools/bench-observe-compare.ts package.json (bench:observe・bench:observe:compare)", "tests/unit/bench-observe.compare.test.ts 4 件", "2 回の走りで 6 画の三角形・draw call・内訳が一致(下の作業ログ)"]
+evidence: ["c81aee5 tests/unit/bench-observe.compare.test.ts"]
 ---
 
 # 計測の台(6 画の内訳と fps)
