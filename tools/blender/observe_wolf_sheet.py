@@ -14,6 +14,10 @@ import sys
 from PIL import Image, ImageDraw
 
 raw, out = sys.argv[1], sys.argv[2]
+# (灰狼の作り直しで追加) 3 つ目の引数で出力の名前の頭を変える (既定 wolf。作り直しの後は wolf2)。4 つ目に作り直し前の撮影 (<raw_dir>) を渡すと、
+# 頭の寄り (head-*) の前後を <prefix>-head.png に並べる
+PRE = sys.argv[3] if len(sys.argv) > 3 else "wolf"
+BEFORE = sys.argv[4] if len(sys.argv) > 4 else None
 os.makedirs(out, exist_ok=True)
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 REF = Image.open(os.path.join(ROOT, "assets/textures/board/creatures/wolf.png")).convert("RGB")
@@ -82,18 +86,28 @@ mods1 = [label(trim(rimg(f"view-{v}.png")), f"model {v}") for v in views]
 refs2 = [label(REF.crop(REF_BOX[p]), f"ref {p}") for p in poses]
 mods2 = [label(trim(rimg(f"pose-{p}.png")), f"model {p}") for p in poses]
 H = 300
-stack([row(refs1, H), row(mods1, H), row(refs2, H), row(mods2, H)], gap=10).save(os.path.join(out, "wolf-compare.png"))
+stack([row(refs1, H), row(mods1, H), row(refs2, H), row(mods2, H)], gap=10).save(os.path.join(out, f"{PRE}-compare.png"))
 for v in views + ["rear34"]:
-    rimg(f"view-{v}.png").resize((512, 512), Image.LANCZOS).save(os.path.join(out, f"wolf-view-{v}.png"))
+    rimg(f"view-{v}.png").resize((512, 512), Image.LANCZOS).save(os.path.join(out, f"{PRE}-view-{v}.png"))
 
 lod = [label(trim(rimg("view-side.png")), "hero (LOD0)"), label(trim(rimg("lod1-side.png")), "crowd (LOD1)"),
        label(trim(rimg("view-q34.png")), "hero q34"), label(trim(rimg("lod1-q34.png")), "crowd q34")]
-row(lod, 300).save(os.path.join(out, "wolf-lod.png"))
+row(lod, 300).save(os.path.join(out, f"{PRE}-lod.png"))
 
 anim = [label(trim(rimg(f"anim-{a}.png")), a) for a in ("idle", "walk", "stalk", "run", "pounce", "fall")]
-row(anim, 280).save(os.path.join(out, "wolf-anim.png"))
+row(anim, 280).save(os.path.join(out, f"{PRE}-anim.png"))
 
 for name in ("walk", "stalk", "run", "pounce", "fall"):
     frames = sorted(f for f in os.listdir(raw) if f.startswith(f"seq-{name}-"))
-    row([label(rimg(f), f.split("-")[-1][:-4]) for f in frames], 260).save(os.path.join(out, f"wolf-seq-{name}.png"))
+    row([label(rimg(f), f.split("-")[-1][:-4]) for f in frames], 260).save(os.path.join(out, f"{PRE}-seq-{name}.png"))
+# (灰狼の作り直しで追加) 頭の寄り: 上段 基準画の頭 (側面・正面・斜め前)、中段 作り直し前、下段 作り直し後。最後に忍び寄り・飛びかかりの口
+HEAD_BOX = {"side": (420, 60, 640, 280), "front": (680, 40, 840, 280), "q34": (1150, 40, 1330, 220)}
+if os.path.exists(os.path.join(raw, "head-q34.png")):
+    heads = ["side", "front", "q34"]
+    rows = [row([label(REF.crop(HEAD_BOX[v]), f"ref {v}") for v in heads], 300)]
+    if BEFORE:
+        rows.append(row([label(trim(Image.open(os.path.join(BEFORE, f"head-{v}.png")).convert("RGB")), f"before {v}") for v in heads], 300))
+    rows.append(row([label(trim(rimg(f"head-{v}.png")), f"after {v}") for v in heads], 300))
+    rows.append(row([label(trim(rimg(f"head-{a}.png")), f"after {a}") for a in ("stalk", "pounce")], 300))
+    stack(rows, gap=10).save(os.path.join(out, f"{PRE}-head.png"))
 print("sheets written to", out)
