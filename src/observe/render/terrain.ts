@@ -10,6 +10,16 @@ export const ELEV_M = 96;
 /** 1 セルを何分割して地面を作るか */
 const SUB = 6;
 
+/**
+ * (M23-03 のやり直し) 地面の頂点の格子 (createTerrainMesh と同じ数え方)。頂点 i の x は −half + i × step (z も同じ)。
+ * 海は水深を画素ごとにこの格子・同じ三角形の切り方で読み、水際を描いた地面の形に合わせる
+ */
+export function terrainGrid(field: Pick<TerrainField, 'window'>): { n: number; half: number; step: number } {
+  const span = field.window * 2 + 1;
+  const n = span * SUB + 1;
+  return { n, half: (span * CELL_M) / 2, step: (span * CELL_M) / (n - 1) };
+}
+
 export type TerrainField = {
   /** 区域の中心 (集落) のセル */
   home: number;
