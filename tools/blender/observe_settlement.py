@@ -498,8 +498,8 @@ def hut():
     n.add(K.box((2.95, 2.55, 0.07), jitter=0.01, seed=1), M["straw"], matrix=K.trs((0, 0.02, H_G + 0.02)),
           shade=with_ao(K.shade_const(0.95)))
     for x, tone in ((-0.4, 0.95), (0.05, 0.78), (0.5, 0.95)):
-        n.add(K.box((0.45, 0.95, 0.02)), M["weave"], matrix=K.trs((x + 0.35, 0.62, H_G + 0.065), (0, 0, 2)),
-              shade=with_ao(K.shade_const(tone)))
+        n.add(K.box((0.45, 0.95, 0.02)), M["straw"], matrix=K.trs((x + 0.35, 0.62, H_G + 0.065), (0, 0, 2)),
+              shade=with_ao(K.shade_const(tone * 0.78)))  # 両面の weave にすると焼きの両面の組 (draw call 2 つ) が増える
     # 戸口の敷居 (広場へ下りる敷石は、斜面に沿わせるためゲーム側が stepping_stone を地面に置く)
     pstone(n, rnd, (0, -H_PY - 0.02, H_G - 0.02), (1.1, 0.38, 0.12), yaw=1, bevel=0.03, jitter=0.02, ao=ao)
     # 斜面の土台: 壁と柱の下に大きな石を 1 m 埋める (斜面では小屋を戸口の側の地面に合わせて上げるので、下り側に土台が覗く)
