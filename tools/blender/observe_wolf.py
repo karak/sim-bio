@@ -4,6 +4,7 @@
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/observe_wolf.py -- assets/models/observe
 出力: <out_dir>/wolf.glb と wolf.blend
   - メッシュ `wolf` (近 LOD、~2,500 三角形)、`wolf_lod1` (群れ LOD、~800)。どちらも同じアーマチュア `wolf_rig` にスキン
+  - (M23-08) メッシュ `wolf_far` (遠い段、~150 三角形): 群れ LOD を島ごとに削った形 (creature_far.py)。背の稜線・耳・脚は多く残す。描画は切ってある (hide_render)
   - アクション idle (4 s)・walk (1.1 s)・stalk (1.6 s)・run (0.5 s)・pounce (1.2 s、ループしない)・fall (2 s、ループしない)。30 fps、その場 (root は動かさない)
   - 材質 wolf_body (頂点色で喉・胸・腹・鼻づらの下を淡く) / wolf_dark (脚の下) / wolf_pale (頬と胸の飾り毛) / wolf_nose / wolf_glow (発光 #8FF5E6)
 基準画: assets/textures/board/creatures/wolf.png (承認済み)。造形の元は assets/textures/concept/wolf-angular.png と tools/blender/wolf.py (ローポリ版)。
@@ -26,6 +27,9 @@ import bmesh
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from creature_far import build_far  # noqa: E402  (M23-08)
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT_DIR = argv[0] if argv else "assets/models/observe"
@@ -261,6 +265,18 @@ def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
 #  継ぎ目と眉の光を足した分の三角形をここで返す)
 HERO = dict(name="hero", body=(14, 18), neck=(6, 14), head=(11, 14), leg=(10, 8), paw=6, ear=(4, 8), tail=(8, 10),
             crest=36, ribbon_seg=8, eye=10, sq=2.3, spikes=True, tufts=True, brow=True)
+def far_ratio(c, mats, n):
+    """(M23-08) 遠い段で群れ LOD の島を削る割合 (creature_far.build_far)。光る島は背の稜線 (10 三角形以上) を半分残し、脇の細い帯と棘は除く。
+    脚 (wolf_dark) は関節の曲がりが読めるよう 3 割、耳 (0.7 m より上) は半分、胴・首・頭・尾・鼻は 2 割"""
+    if "wolf_glow" in mats:
+        return 0.0 if n < 10 else 0.5
+    if "wolf_dark" in mats:
+        return 0.3
+    if c.z > 0.7:
+        return 0.5
+    return 0.2
+
+
 LOD1 = dict(name="lod1", body=(7, 10), neck=(3, 8), head=(6, 8), leg=(6, 5), paw=0, ear=(2, 4), tail=(4, 6),
             crest=14, ribbon_seg=3, eye=4, sq=2.2, spikes=True, tufts=False, brow=False)
 
@@ -1416,6 +1432,7 @@ def main():
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
     bake_actions(rig, meshes[0])  # (M22-05 残りの手直しで変更: 接地を合わせるため近 LOD を渡す。元は bake_actions(rig))
+    build_far(meshes[1], "wolf_far", rig, far_ratio)  # (M23-08) 遠い段
     scene.frame_set(0)
     for o in scene.objects:
         o.select_set(True)
