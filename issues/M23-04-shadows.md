@@ -1,11 +1,11 @@
 ---
 id: M23-04
 title: 影の軽量化
-status: todo
+status: review
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-02]
-evidence: []
+evidence: ["656922f tests/unit/observe.shadowOnly.test.ts"]
 ---
 
 # 影の軽量化
