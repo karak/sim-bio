@@ -11,6 +11,8 @@ import { CELL_M, terrainGrid, type TerrainField } from './terrain';
 const SHALLOW = new Color('#6FC7C0');
 const DEEP = new Color('#2C6E8E');
 const FOAM = new Color('#F4F7EF');
+/** (M22-07 の手直し) 沈んだ陸の濁った水の色 */
+const MURK = new Color('#8FA17A');
 
 export type Water = {
   mesh: Mesh;
@@ -19,6 +21,15 @@ export type Water = {
   setLevel(level: number): void;
   /** (M23-03 のやり直し) 水の shader が読む地面の高さと陸の縁からの距離の表 (試験と調整用。setLevel で距離を書き直す) */
   heights: HeightGrid;
+  /**
+   * (M22-07 の手直し、沈む海岸「波立ちがない。流れが見えない。」) 沈む間の波立ちと流れ (0〜1)。
+   * 波を高くし、細かい波立ちと白波、陸へ押し寄せる泡の筋と岸へ寄せる波の線、沈んだ陸の濁りを画素で塗る。0 なら前と同じ海
+   */
+  setSurge(amount: number): void;
+  /** (M22-07 の手直し、雨「水たまりと波紋がない」) 雨の強さ (0〜1)。海面に雨の波紋の輪を塗る */
+  setRain(amount: number): void;
+  /** (M22-07 の手直し) 試験用: 波立ち・波の高さの倍率・雨の波紋の今の値 */
+  fxState(): { surge: number; waveAmp: number; rain: number };
 };
 
 /**
@@ -270,6 +281,65 @@ const SHORE_DIST_MAX = 6;
 
 /** (M23-03 のやり直し) 波の高さ。頂点シェーダの揺れ (begin_vertex の行) と同じ式を、画素の水深にも使う */
 const WAVE_GLSL = 'sin(P.x * 0.18 + uTime * 0.9) * 0.08 + sin(P.y * 0.23 - uTime * 0.7) * 0.06';
+// (M22-07 の手直しで変更: 波の高さは uWaveAmp 倍 (沈む間の波立ちで 1 → WAVE_SURGE_AMP)。頂点の揺れと画素の水深の両方に掛ける)
+/** (M22-07 の手直し) 沈む間の波の高さの倍率 (波 ±0.14 m → ±0.5 m ほど) */
+export const WAVE_SURGE_AMP = 3.5;
+
+/**
+ * (M22-07 の手直し) 沈む間の波立ちと流れ・雨の波紋の画素の式 (color_fragment の後、wCol を決めた所に差し込む)。
+ * - 流れの向き: 地面の高さの勾配 (陸の側、上り) を表から 4 点で読む。沈む海は陸へ押し寄せるので、泡の筋をこの向きに伸ばして陸へ流す
+ * - 岸までの距離の見積り: 水深 ÷ 勾配。岸へ寄せる波の線を、この距離で岸に平行に引いて岸へ進める (表の距離は 6 m で頭打ちなので使わない)
+ * - 沈んだ陸 (地面が元の海面より高い所) は濁った浅い色にする
+ * - 雨の波紋: 1.1 m の升ごとに 1 つの輪が広がって消える。升を 2 枚ずらして重ね、遠くは (画素の大きさで) 薄める
+ */
+const FX_GLSL = /* glsl */ `
+  if (uSurge > 0.001) {
+    float e = 3.0;
+    float gx = wTerrain(P + vec2(e, 0.0)).x - wTerrain(P - vec2(e, 0.0)).x;
+    float gz = wTerrain(P + vec2(0.0, e)).x - wTerrain(P - vec2(0.0, e)).x;
+    vec2 grad = vec2(gx, gz) / (2.0 * e);
+    float slope = length(grad);
+    vec2 dir = slope > 1e-4 ? grad / slope : vec2(0.0, 1.0);
+    vec2 side = vec2(-dir.y, dir.x);
+    // 細かい波立ち (2 つの向きに流れる雑音)。明暗と白波
+    float ch = wNoise(P * 0.55 + vec2(uTime * 0.9, uTime * 0.35)) + wNoise(P * 1.3 - vec2(uTime * 0.6, -uTime * 1.1)) * 0.6;
+    ch /= 1.6;
+    wCol *= 1.0 + (ch - 0.5) * 0.55 * uSurge;
+    // 遠くの白波は画素より細かくちらつくので、画素の大きさで薄める
+    float fpx = length(fwidth(P));
+    float caps = smoothstep(0.66, 0.8, ch) * smoothstep(0.3, 2.5, wDepth) * smoothstep(0.9, 0.2, fpx);
+    // 岸へ寄せる波の線: 岸までの距離の見積りで岸に平行な線を引き、岸へ進める。線は雑音で千切る
+    float toShore = wDepth / max(slope, 0.015);
+    float roll = pow(0.5 + 0.5 * sin(toShore * 0.42 + uTime * 1.5 + wNoise(P * 0.12) * 2.5), 10.0);
+    roll *= smoothstep(34.0, 6.0, toShore) * smoothstep(0.3, 0.55, wNoise(P * 0.35 + side * uTime * 0.2));
+    // 陸へ流れる泡の筋: 流れの向きに長く、横に細い雑音を陸の側へ流す
+    vec2 fp = vec2(dot(P, dir) * 0.35 - uTime * 1.1, dot(P, side) * 1.8);
+    float streak = smoothstep(0.6, 0.85, wNoise(fp) * 0.7 + wNoise(fp * vec2(1.9, 2.3) + 7.1) * 0.3);
+    float nearLand = smoothstep(2.2, 0.3, wDepth);
+    // 沈んだ陸は濁る (元の海面 0.02 より高かった地面)
+    float drowned = smoothstep(0.0, 0.25, wT.x - 0.02) * smoothstep(-0.05, 0.3, wDepth);
+    wCol = mix(wCol, uMurk, drowned * 0.55 * uSurge);
+    // 水際の泡の帯は流れの向きに揺らして、押し寄せては引く
+    float surf = smoothstep(0.9, 0.0, wDepth) * smoothstep(-0.1, 0.05, wDepth) * smoothstep(0.35, 0.7, wNoise(vec2(dot(P, dir) * 0.5 - uTime * 1.3, dot(P, side) * 0.25)));
+    float foamAmt = max(max(caps * 0.7, surf), max(roll * 0.8, streak * max(nearLand, drowned) * 0.85));
+    wCol = mix(wCol, uFoam, clamp(foamAmt, 0.0, 1.0) * uSurge);
+  }
+  if (uRain > 0.001) {
+    float rings = 0.0;
+    for (int k = 0; k < 2; k++) {
+      vec2 q = P / 1.1 + float(k) * vec2(0.5, 0.37);
+      vec2 cell = floor(q);
+      vec2 h = fract(sin(vec2(dot(cell, vec2(127.1, 311.7)), dot(cell, vec2(269.5, 183.3)))) * 43758.5453);
+      float ph = fract(uTime * 1.4 + h.x * 7.0);
+      vec2 c = cell + 0.3 + 0.4 * h;
+      float d = length(q - c);
+      float r = ph * 0.3;
+      rings += smoothstep(0.035, 0.0, abs(d - r)) * (1.0 - ph);
+    }
+    float px = length(fwidth(P));
+    wCol = mix(wCol, uFoam, clamp(rings, 0.0, 1.0) * uRain * 0.6 * smoothstep(0.12, 0.03, px));
+  }
+`;
 
 export function createWater(field: TerrainField, extent: number): Water {
   // 区域の近くは細かく、遠くは地平まで伸ばすので分割を増やしすぎない (1 辺 240 分割)
@@ -296,18 +366,27 @@ export function createWater(field: TerrainField, extent: number): Water {
     uDeep: { value: DEEP },
     uFoam: { value: FOAM },
     uReach: { value: FOAM_REACH_M },
+    // (M22-07 の手直し) 沈む間の波立ちと流れ・雨の波紋
+    uSurge: { value: 0 },
+    uWaveAmp: { value: 1 },
+    uRain: { value: 0 },
+    uMurk: { value: MURK },
   };
   // 海面の高さ (沈降で上がる)。水深と泡の帯は海面から測り直す
   let level = 0;
+  // (M22-07 の手直し) 陸の縁からの距離を書き直した海面。沈む海は毎コマ少しずつ上がるので、海面の uniform は毎回変え、表の書き直しは 5 cm ごと
+  let painted = 0;
   // (M23-03 のやり直し) 画素の水深 = 描いた海面 (0.02 + 海面 + 波) − 地面 (地面の三角形と同じ補い)。色の式は前の頂点の色と同じ
   const colorGlsl = () =>
     [
       'vec2 P = vWaterXZ;',
       'vec2 wT = wTerrain(P);',
-      `float wDepth = uLevel + 0.02 + ${WAVE_GLSL} - wT.x;`,
+      `float wDepth = uLevel + 0.02 + (${WAVE_GLSL}) * uWaveAmp - wT.x;`,
       'vec3 wCol = mix(uShallow, uDeep, clamp(wDepth / 6.0, 0.0, 1.0));',
       // 岸 (水深 0〜0.5 m) に泡の帯
       'if (wDepth < 0.5 && wDepth > -0.2) wCol = mix(wCol, uFoam, 0.55 * (1.0 - abs(wDepth - 0.15) / 0.35) * (1.0 - smoothstep(uReach.x, uReach.y, wT.y)));',
+      // (M22-07 の手直し) 沈む間の波立ちと流れ・雨の波紋
+      FX_GLSL,
       'diffuseColor.rgb *= wCol;',
       // (M23-03 のやり直し) 水際の 8 cm で水を透かし、地面との境の線 (地面の 1.67 m の三角形と海面の交わり) の角を和らげる
       'diffuseColor.a *= smoothstep(0.0, 0.08, wDepth);',
@@ -322,12 +401,13 @@ export function createWater(field: TerrainField, extent: number): Water {
     baseCompile.call(mat, shader, renderer);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec2 vWaterXZ;')
+      // (M22-07 の手直しで変更: 波の高さの倍率 uWaveAmp を足す)
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uWaveAmp;\nvarying vec2 vWaterXZ;')
       .replace(
         '#include <begin_vertex>',
         [
           '#include <begin_vertex>',
-          'transformed.y += sin(position.x * 0.18 + uTime * 0.9) * 0.08 + sin(position.z * 0.23 - uTime * 0.7) * 0.06;',
+          'transformed.y += (sin(position.x * 0.18 + uTime * 0.9) * 0.08 + sin(position.z * 0.23 - uTime * 0.7) * 0.06) * uWaveAmp;',
           // (M23-03 のやり直し) 画素の水深を求める位置 (海は水平には動かさないので、世界の x・z)
           'vWaterXZ = (modelMatrix * vec4(position, 1.0)).xz;',
         ].join('\n'),
@@ -346,7 +426,22 @@ export function createWater(field: TerrainField, extent: number): Water {
           'uniform vec3 uDeep;',
           'uniform vec3 uFoam;',
           'uniform vec2 uReach;',
+          'uniform float uSurge;',
+          'uniform float uWaveAmp;',
+          'uniform float uRain;',
+          'uniform vec3 uMurk;',
           'varying vec2 vWaterXZ;',
+          // (M22-07 の手直し) 波立ち・泡の筋の値の雑音
+          'float wNoise(vec2 p) {',
+          '  vec2 i = floor(p);',
+          '  vec2 f = fract(p);',
+          '  f = f * f * (3.0 - 2.0 * f);',
+          '  float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);',
+          '  float b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);',
+          '  float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);',
+          '  float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);',
+          '  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);',
+          '}',
           // (M23-03 のやり直し) 地面の高さ (sampleHeightGrid と同じ式)
           // (x は高さ、y は陸の縁からの距離)
           'vec2 wTerrain(vec2 p) {',
@@ -372,12 +467,22 @@ export function createWater(field: TerrainField, extent: number): Water {
     heights: grid,
     update: (t) => (uniforms.uTime.value = t),
     setLevel(l) {
-      if (Math.abs(l - level) < 0.05) return;
+      // (M22-07 の手直しで変更: 海面は毎回そのまま変え、陸の縁からの距離は painted から 5 cm 動いたときだけ書き直す)
       level = l;
       uniforms.uLevel.value = level;
+      mesh.position.y = 0.02 + level;
+      if (Math.abs(l - painted) < 0.05) return;
+      painted = l;
       paintShoreDistance(grid, 0.02 + DRY_M + level, SHORE_DIST_MAX, grid.half);
       heights.needsUpdate = true;
-      mesh.position.y = 0.02 + level;
     },
+    setSurge(a) {
+      uniforms.uSurge.value = a;
+      uniforms.uWaveAmp.value = 1 + (WAVE_SURGE_AMP - 1) * a;
+    },
+    setRain(a) {
+      uniforms.uRain.value = a;
+    },
+    fxState: () => ({ surge: uniforms.uSurge.value, waveAmp: uniforms.uWaveAmp.value, rain: uniforms.uRain.value }),
   };
 }

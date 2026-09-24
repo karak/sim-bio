@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Raycaster, Vector3 } from 'three';
-import { bakeHeightGrid, buildWaterGeometry, createWater, paintShoreDistance, sampleHeightGrid } from '../../src/observe/render/water';
+import { bakeHeightGrid, buildWaterGeometry, createWater, paintShoreDistance, sampleHeightGrid, WAVE_SURGE_AMP } from '../../src/observe/render/water';
 import { createTerrainField, createTerrainMesh, terrainGrid, type TerrainField } from '../../src/observe/render/terrain';
 import { fakeSnapshot, OBS_HOME, OBS_SIZE } from './observeFixtures';
 
@@ -195,7 +195,26 @@ describe('観察画面の海 (M23-03 のやり直し): 沈降で海面を上げ�
     expect(sampleHeightGrid(w.heights, 18.8, 0, 1)).toBeCloseTo(6, 5);
     // 高さの値はそのまま
     expect(sampleHeightGrid(w.heights, 40, 0)).toBeCloseTo(2, 4);
+    // (M22-07 の手直しで変更: 沈む海は毎コマ少しずつ上がるので、海面 (面の高さ) は 5 cm 未満でもそのまま動かし、陸の縁からの距離の表だけ書き直さない)
+    const before = sampleHeightGrid(w.heights, 48.8, 0, 1);
     w.setLevel(3.03);
-    expect(w.mesh.position.y).toBeCloseTo(3.02, 5);
+    expect(w.mesh.position.y).toBeCloseTo(3.05, 5);
+    expect(sampleHeightGrid(w.heights, 48.8, 0, 1)).toBe(before);
+    // 書き直した海面 (3) から 5 cm 動くと表を書き直す: 陸の縁は高さ 3.24 m、x = 52.4 m へ
+    w.setLevel(3.06);
+    expect(sampleHeightGrid(w.heights, 49.4, 0, 1)).toBeCloseTo(3, 1);
+  });
+
+  it('(M22-07 の手直し) setSurge は波の高さの倍率を 1 → WAVE_SURGE_AMP にし、setRain は雨の波紋の強さを渡す。0 に戻すと前の海と同じ', () => {
+    const w = createWater(slope(), 3000);
+    expect(w.fxState()).toEqual({ surge: 0, waveAmp: 1, rain: 0 });
+    w.setSurge(1);
+    expect(w.fxState().waveAmp).toBeCloseTo(WAVE_SURGE_AMP, 6);
+    expect(w.fxState().surge).toBe(1);
+    w.setSurge(0.5);
+    expect(w.fxState().waveAmp).toBeCloseTo(1 + (WAVE_SURGE_AMP - 1) * 0.5, 6);
+    w.setSurge(0);
+    w.setRain(0.7);
+    expect(w.fxState()).toEqual({ surge: 0, waveAmp: 1, rain: 0.7 });
   });
 });

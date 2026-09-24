@@ -114,6 +114,8 @@ const AirShader = {
     uMistAt: { value: new Vector4(0, 0, 0, 1) },
     uMistAmt: { value: 0 },
     uMistColor: { value: new Color('#8C8298') },
+    // (M22-07 の手直し) 霧が消えていく段 (0〜1、fx.ts の mistEnvelope)
+    uMistFade: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -145,6 +147,7 @@ const AirShader = {
     uniform vec4 uMistAt;
     uniform float uMistAmt;
     uniform vec3 uMistColor;
+    uniform float uMistFade;
     varying vec2 vUv;
 
     float vnoise(vec2 p) {
@@ -215,7 +218,9 @@ const AirShader = {
       #endif
       // 疫病の霧 (M22-08、sheets/effects の 2): 地を這う平たい楕円体の中を視線が通る長さだけ、紫がかった灰の霧を掛け、渦を巻かせる
       if (uMistAmt > 0.0) {
-        vec3 sc = vec3(uMistAt.w, uMistAt.w * 0.22, uMistAt.w);
+        // (M22-07 の手直し、「渦巻きの動き」「消えるところの余韻」): 余韻 (uMistFade) の間は楕円体を広げて少し持ち上げ、薄く散らす
+        float mf = uMistFade;
+        vec3 sc = vec3(uMistAt.w * (1.0 + 0.35 * mf), uMistAt.w * (0.22 + 0.2 * mf), uMistAt.w * (1.0 + 0.35 * mf));
         vec3 o = (uCamPos - uMistAt.xyz) / sc;
         vec3 dd = rd / sc;
         float a = dot(dd, dd);
@@ -231,17 +236,28 @@ const AirShader = {
             float seg = (t1 - t0) / 8.0;
             float m = 0.0;
             vec2 flow = vec2(sin(uTime * 0.13), cos(uTime * 0.09)) * 3.0 + uTime * vec2(0.05, 0.02);
+            // (M22-07 の手直しで変更: 渦は、中心の周りを回る 3 本の対数らせんの腕と、同じ速さで回る雑音で作る。
+            //  回転は剛体の回転 (半径で速さを変えない) なので時間が経っても巻き込みすぎず、腕の位相を進めて中心へ巻き込むように見せる。
+            //  雑音の数は前と同じ (1 点 1 回の fbm)、足したのは回転と log・cos だけ)
+            float spin = uTime * 0.16;
+            mat2 rot = mat2(cos(spin), -sin(spin), sin(spin), cos(spin));
             for (int i = 0; i < 8; i++) {
               vec3 p = uCamPos + rd * (t0 + (float(i) + 0.5) * seg);
               vec2 q = p.xz - uMistAt.xz;
+              vec2 qr = rot * q;
+              float r = length(q) / uMistAt.w;
               float ang = atan(q.y, q.x) + length(q) * 0.05 - uTime * 0.04;
-              float swirl = fbm(vec2(ang * 2.5, length(q) * 0.12) + flow);
-              float band = smoothstep(0.38, 0.72, swirl);
-              float low = exp(-max(p.y - uMistAt.y, 0.0) * 0.3);
+              float swirl = fbm(qr * 0.11 + flow * 0.4);
+              float arms = 0.5 + 0.5 * cos(3.0 * (ang - spin) + 4.5 * log(r + 0.08) + uTime * 0.5 + swirl * 3.0);
+              swirl = mix(swirl, arms * (0.6 + 0.4 * swirl), 0.55);
+              // 余韻では筋に千切れる (閾値を上げる)
+              float band = smoothstep(0.38 + 0.2 * mf, 0.72 + 0.12 * mf, swirl);
+              float low = exp(-max(p.y - uMistAt.y - 2.5 * mf, 0.0) * 0.3 * (1.0 - 0.5 * mf));
               m += band * low * seg;
             }
             float Tm = exp(-m * 0.22 * uMistAmt);
-            outc = outc * Tm + uMistColor * (1.0 - Tm);
+            // (M22-07 の手直し) 余韻では霧の色を空気の色へ寄せる (紫が抜けて灰色に散っていく)
+            outc = outc * Tm + mix(uMistColor, uFogColor, 0.45 * mf) * (1.0 - Tm);
             Tt *= Tm;
           }
         }
@@ -288,9 +304,11 @@ export class AtmospherePass extends Pass {
   }
 
   /** 疫病の霧の中心 (m) と半径 (m)、濃さ (0 で消える) */
-  setMist(at: { x: number; y: number; z: number }, radiusM: number, amount: number): void {
+  // (M22-07 の手直し) fade は消えていく段 (0〜1、fx.ts の mistEnvelope)。余韻で霧を広げ、持ち上げ、筋に千切る
+  setMist(at: { x: number; y: number; z: number }, radiusM: number, amount: number, fade = 0): void {
     (this.mat.uniforms.uMistAt.value as Vector4).set(at.x, at.y, at.z, radiusM);
     this.mat.uniforms.uMistAmt.value = amount;
+    this.mat.uniforms.uMistFade.value = fade;
   }
 
   setDay(day: Daylight, t: number): void {
