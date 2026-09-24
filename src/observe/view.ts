@@ -723,7 +723,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     return true;
   };
   const fx = (dt: number) => {
-    band.step(dt);
+    band.step(performance.now());
     if (lampsTarget === 0 && snap.ship && snap.civ && snap.civ.stage >= 5) lampsTarget = 1;
     lamps += (lampsTarget - lamps) * Math.min(1, dt / 3);
     motes.setLamps(lamps);
