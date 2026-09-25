@@ -516,12 +516,62 @@ def head_corners_face4(rx, rt, rb, pinch, y):
     return corners, tones
 
 
+# (月鹿の手直し 5 で追加) 細い鼻筋と正面寄りの眼窩 (審査台 d4-deer「鼻筋はもっと細く、眼窩の角度はもっと正面向きよりで良い。
+# 正面からみたときに鼻筋と両眼が３分割くらい。」)。基準画 creatures/deer.png の正面は、目の高さの顔の幅を左の目・鼻筋・右の目がおよそ分け合い、
+# 目は前・外を向く面に載る。頭の断面の上の半分 (鼻筋・眉の稜・窪み・頬の線) の横の幅を別の表 (HEAD5_UP) にし、目のところで急に絞る
+# (眼窩の面が前へ約 45° 向く)。目の前の鼻筋は細く、鼻の載る鼻先で少し戻す。下の半分 (新しい頬の張り・顎の縁) は手直し 4 の幅 (HEAD4_RX) の
+# ままにして、正面の U の輪郭を保つ。側面の輪郭 (HEAD_KEYS の上下の高さ) は変えない。
+HEAD_FACE5 = True
+HEAD5_NSEC = 16  # 近 LOD の頭の断面の数 (前は 12。目のところの急な絞りを面で受ける)
+HEAD5_UP = [(-0.64, 0.178), (-0.76, 0.174), (-0.80, 0.168), (-0.895, 0.058), (-1.00, 0.054), (-1.06, 0.058), (-1.12, 0.070), (-1.165, 0.064)]
+HEAD5_BRIDGE = (0.52, 0.44)  # 鼻筋の縁の半幅: 上の幅に対する割合、下の幅に対する上限の割合
+# facet_ring の並び: 0 頭頂、1-2 / 17-16 鼻筋の縁、3 / 15 眉の稜、4-5 / 14-13 窪みの底、6 / 12 頬の線、7 / 11 頬の張り、8 / 10 顎の縁、9 顎の下
+HEAD5_SHARP = (1, 2, 17, 16, 3, 15, 4, 14, 5, 13, 6, 12)
+HEAD5_CHEEK = (6, 12)  # 頬の線 (窪みの前で硬いエッジを消す)
+EYE5_AT = (-0.723, 1.833)  # 目を載せる狙いの (y, z)。視線 EYE5_DIR が眼窩の面の中ほどに当たる
+EYE5_DIR = (0.72, -0.69, 0.08)  # 狙いへ向かう視線 (x は side を掛ける)。前は (1.0, -0.30, 0.08)
+EYE5_TILT = 0.15  # 目の長軸の前下がり。面が前を向いた分だけ正面での傾きが増えるので、前 (0.42) より小さく
+HEAD5_UP_SHADE = 0.0  # 窪みの底の上の角の陰の強さ (前は 1。面が前を向くと目の上の陰が眉をしかめた線に読めるので、陰は目の下と脇に寄せる)
+HEAD5_LO_SHADE = 0.7  # 窪みの底の下の角の陰の強さ (前は 1。前を向いた面は光を受けて窪みの形で読めるので、塗りの陰は控えめに)
+
+
+def head5_up(y):
+    ks = HEAD5_UP
+    if y >= ks[0][0]:
+        return ks[0][1]
+    for (ya, ra), (yb, rb) in zip(ks, ks[1:]):
+        if ya >= y >= yb:
+            return ra + (rb - ra) * (ya - y) / (ya - yb)
+    return ks[-1][1]
+
+
+def head_corners_face5(rx, rt, rb, pinch, y):
+    """(月鹿の手直し 5 で追加) 頭の断面の角 (右半分、上から下): 頭頂・鼻筋の縁・眉の稜・窪みの底 (上・下)・頬の線・頬の張り・顎の縁・顎の下。
+    上の半分は HEAD5_UP の幅、頬の張りから下は HEAD4_RX の幅。戻り値は (角の列, 各角の塗り)"""
+    lo_w = head4_rx(y)
+    up_w = min(head5_up(y), lo_w)
+    win = head4_window(y)
+    dep = (HEAD4_SOCKET[0] + HEAD4_SOCKET[1] * smoothstep(-0.76, -0.96, y)) * win
+    s = smoothstep(-0.72, -0.95, y)
+    bridge = min(HEAD5_BRIDGE[0] * up_w, HEAD5_BRIDGE[1] * lo_w)
+    brow = Vector((0.94 * up_w, 0.72 * rt))
+    cheek = Vector((min(lo_w, 1.02 * up_w), -(0.50 - 0.40 * s) * rb))
+    up, lo = brow.lerp(cheek, 0.07), brow.lerp(cheek, 0.84)
+    up.x -= dep
+    lo.x -= dep
+    jowl = (lo_w, -(0.62 - 0.17 * s) * rb)
+    corners = [(0.0, rt), (bridge, 0.97 * rt), tuple(brow), tuple(up), tuple(lo), tuple(cheek), jowl,
+               (0.66 * lo_w * (1 - 0.4 * pinch), -0.80 * rb), (0.0, -rb)]
+    tones = [None, None, ("lit", 0.55 * win), ("shade", HEAD5_UP_SHADE * win), ("shade", HEAD5_LO_SHADE * win), ("lit", 0.35 * win), None, None, None]
+    return corners, tones
+
+
 def build_head4(bm, lod):
     """(月鹿の手直し 4 で追加) 近 LOD の頭: head_corners_face4 の断面のロフト。鼻先は縮めた断面を平らな面で閉じる (尖らせない)"""
-    secs = resample(HEAD_KEYS, HEAD4_NSEC)
+    secs = resample(HEAD_KEYS, HEAD5_NSEC if HEAD_FACE5 else HEAD4_NSEC)  # (月鹿の手直し 5 で変更: 断面 12 → 16)
     rings = []
     for y, zc, rx, rt, rb, pinch in secs:
-        corners, tones = head_corners_face4(rx, rt, rb, pinch, y)
+        corners, tones = (head_corners_face5 if HEAD_FACE5 else head_corners_face4)(rx, rt, rb, pinch, y)  # (月鹿の手直し 5 で変更)
         rg = facet_ring(bm, Vector((0, y, zc)), X, Z, corners, HEAD4_PAIRS, bevel=0.18)
         tl = [tones[0]] + [tones[1]] * 2 + tones[2:-1] + [tones[-1]]
         tl = tl + list(reversed(tl[1:-1]))
@@ -539,8 +589,8 @@ def build_head4(bm, lod):
     for (ya, ra), (yb, rb_) in zip(zip([q[0] for q in secs], rings), zip([q[0] for q in secs[1:]] + [y - 0.012], rings[1:] + [tip])):
         if max(ya, yb) > HEAD_FACE_SHARP_Y:
             continue
-        for j in HEAD4_SHARP:
-            if j in (6, 10) and min(ya, yb) < HEAD4_SOCKET_Y[3]:
+        for j in (HEAD5_SHARP if HEAD_FACE5 else HEAD4_SHARP):  # (月鹿の手直し 5 で変更: 断面に頬の張りの角が増えた分、並びがずれる)
+            if j in (HEAD5_CHEEK if HEAD_FACE5 else (6, 10)) and min(ya, yb) < HEAD4_SOCKET_Y[3]:
                 continue  # 頬の線の角は窪みの前で消す (正面から見て鼻づらの脇に棚が立たない)
             e = bm.edges.get((ra[j], rb_[j]))
             if e is not None:
@@ -1089,11 +1139,16 @@ def build_eye(bm, bvh_head, lod, side):
     if lod["name"] == "hero" and HEAD_FACE4:  # (月鹿の手直し 4 で追加) 窪みの底の中ほど (EYE4_AT) に載せる。向きは底の面の法線
         dd = Vector((side * EYE4_DIR[0], *EYE4_DIR[1:])).normalized()
         loc, n, _, _ = bvh_head.ray_cast(Vector((0, *EYE4_AT)) + dd, -dd)
+    if lod["name"] == "hero" and HEAD_FACE4 and HEAD_FACE5:  # (月鹿の手直し 5 で追加) 前へ向いた眼窩の面の中ほど (EYE5_AT) に載せる
+        dd = Vector((side * EYE5_DIR[0], *EYE5_DIR[1:])).normalized()
+        loc, n, _, _ = bvh_head.ray_cast(Vector((0, *EYE5_AT)) + dd, -dd)
     if n.dot(Vector((side, 0, 0))) < 0:
         n = -n
     u = Vector((0, -1, -0.25))  # (M22-05 残りの手直しで変更: -0.12 → -0.25。頭の面の傾きと合わせて、真横から目頭が 20° ほど下がって見える)
     if lod["name"] == "hero" and HEAD_FACE:
         u = Vector((0, -1, -EYE_FACE_TILT))  # (月鹿の手直し 3 で追加) 正面から目頭が鼻へ向かって下がって見えるように
+    if lod["name"] == "hero" and HEAD_FACE4 and HEAD_FACE5:
+        u = Vector((0, -1, -EYE5_TILT))  # (月鹿の手直し 5 で追加) 面が前を向いた分、正面での目頭の下がりが強くなりすぎないように
     u = (u - n * u.dot(n)).normalized()  # 目の長軸 (鼻先へ少し下がる)
     v = n.cross(u).normalized()
     if v.z < 0:
