@@ -112,6 +112,50 @@ EAR_MID = 0.46  # 耳の 1 本目の骨の長さ (付け根からの割合)
 # 前脚の付け根に肩 (肩甲・上腕) の塊 (build_shoulder) を胸の脇へ張り出させ、前脚をその下へ外へ出す (FL_X4)。折るときは肘を外へ開く (FL_SPLAY4)
 SHOULDER4 = True
 FL_X4 = 0.052  # 前脚の骨の横の位置 (元は 0.040)
+# (土兎の手直し 5 で追加) 審査台 r4-rabbit「目の縁の茶色はいらない。また正面から見た時の顔の形が左右に膨らんで見える。
+# 鼻部分を今の半分くらいまで削ってその分顔を水平に潰す方向で」。頭を組んだあと (目・鼻・口を載せる前) に頭の頂点を face5 で動かす:
+# 鼻づら (FACE5_Y0 より前) の前への出を FACE5_K 倍に縮め、顔の横幅を後頭部 (FACE5_WY[0]) から顔 (FACE5_WY[1]) へ FACE5_W 倍まで詰める。
+# 頭の色と重みの y のしきい値は元の頭の座標で読む (face5_y_inv)。瞼の線 (build_eye_lid) は付けない (LID5_OFF)
+FACE5 = True
+FACE5_Y0 = -0.10
+FACE5_K = 0.6
+FACE5_W = 0.85
+FACE5_WY = (-0.095, -0.135)
+FACE5_TIP_W, FACE5_TIP_Y = 0.65, (-0.165, -0.255)  # 鼻づらの横幅をさらに詰める割合 (元の y の範囲で 1 → FACE5_TIP_W)
+FACE5_CHIN_W, FACE5_CHIN_Z = 0.80, (0.27, 0.235)  # 顔の下 (口と顎) の横幅をさらに詰める割合 (z の範囲で 1 → FACE5_CHIN_W)
+LID5_OFF = True
+EYE5_DIR = (0.86, -0.50, 0.10)  # 近 LOD の目を載せる向き (EYE4 の dir は (0.67, -0.73, 0.10))
+EYE5_AXIS = (0, -1, -0.60)  # 目の長軸 (EYE4 の axis は (0, -1, -0.50))
+EYE5_SCALE = 0.85  # 目の大きさ (EYE4 の形に対して。形の比と尖りはそのまま)
+
+
+def face5_ramp(x, a, b):
+    """(土兎の手直し 5 で追加) a → b で 0 → 1 のなめらかな段 (smoothstep と同じ。smoothstep より前に定義が要るため)"""
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
+def face5_y(y):
+    """(土兎の手直し 5 で追加) 鼻づらの前後を縮める (FACE5_Y0 より後ろは動かさない)"""
+    return FACE5_Y0 + (y - FACE5_Y0) * FACE5_K if FACE5 and y < FACE5_Y0 else y
+
+
+def face5_y_inv(y):
+    """(土兎の手直し 5 で追加) face5_y の逆 (動かした頭の頂点の y から元の y へ)"""
+    return FACE5_Y0 + (y - FACE5_Y0) / FACE5_K if FACE5 and y < FACE5_Y0 else y
+
+
+def face5(co):
+    """(土兎の手直し 5 で追加) 頭の頂点を動かす: 鼻づらの前後を縮め、顔の横幅を詰める (元の y で詰める割合を決める)"""
+    if not FACE5:
+        return co
+    t = face5_ramp(co[1], *FACE5_WY)
+    m = min(1.0, max(0.0, (co[1] - FACE5_TIP_Y[0]) / (FACE5_TIP_Y[1] - FACE5_TIP_Y[0])))  # 鼻づらの先ほど細く (正面で顔の下半分が V に絞れる)
+    c = face5_ramp(co[2], *FACE5_CHIN_Z) * t
+    w = (1.0 + (FACE5_W - 1.0) * t) * (1.0 + (FACE5_TIP_W - 1.0) * m) * (1.0 + (FACE5_CHIN_W - 1.0) * c)
+    return (co[0] * w, face5_y(co[1]), co[2])
+
+
 BONES = {
     "root": ((0, 0, 0), (0, -0.1, 0), None),
     "pelvis": ((0, 0.11, 0.14), (0, 0.02, 0.17), "root"),
@@ -141,6 +185,10 @@ for s, sx in (("L", -1), ("R", 1)):
             bn = f"{pre}_{nm}_{s}"
             BONES[bn] = (pts[i], pts[i + 1], prev)
             prev = bn
+if FACE5:  # (土兎の手直し 5 で追加) 頭の骨の先と鼻の骨を縮めた鼻づらへ
+    for k in ("head", "nose"):
+        h, t, p = BONES[k]
+        BONES[k] = (face5(h) if k == "nose" else h, face5(t), p)
 BONES = {k: (Vector(h), Vector(t), p) for k, (h, t, p) in BONES.items()}
 LEG_BONES = {f"{pre}_{s}": [f"{pre}_{nm}_{s}" for nm in names]
              for s in "LR" for pre, names in (("fl", ("upper", "fore", "paw")), ("hl", ("thigh", "shin", "foot")))}
@@ -1035,6 +1083,10 @@ def build_eye(bm, bvh_head, lod, side):
     es4 = EYE4 if lod["name"] == "hero" and EYE4 else None  # (土兎の手直し 4 で追加) 近 LOD はより鋭い目 (EYE4)
     if es4:
         d = Vector((side * es4["dir"][0], *es4["dir"][1:])).normalized()
+    if FACE5:  # (土兎の手直し 5 で追加) 狙う点も縮めた頭の上の同じ所へ
+        aim = Vector(face5(aim))
+    if es4 and FACE5:  # (土兎の手直し 5 で追加) 鼻づらを縮めた頭では目を横寄りへ向け、頬の脇 (正面で顔の縁の内) に載せる
+        d = Vector((side * EYE5_DIR[0], *EYE5_DIR[1:])).normalized()
     loc, n, _, _ = bvh_head.ray_cast(aim + d * 1.0, -d)
     if n.dot(d) < 0:
         n = -n
@@ -1063,6 +1115,13 @@ def build_eye(bm, bvh_head, lod, side):
             v = -v
         k = es4["k"]
         shape = eye_lens(k, *es4["shape"], pf=es4["pf"], pb=es4["pb"], lift=es4["lift"])
+        if FACE5:  # (土兎の手直し 5 で追加) 短くした頭に合わせて同じレンズの形のまま縮め、長軸を正面で「\ /」に傾ける
+            u = Vector(EYE5_AXIS)
+            u = (u - n * u.dot(n)).normalized()
+            v = n.cross(u).normalized()
+            if v.z < 0:
+                v = -v
+            shape = [(x * EYE5_SCALE, y * EYE5_SCALE) for x, y in shape]
     c = bm.verts.new(loc + n * 0.006)
     vs = []
     for i in range(k):
@@ -1221,6 +1280,7 @@ def color_for(part, co, n):
         c = mix(PAL["fur"], PAL["light"], smoothstep(-0.1, -0.7, n.y) * 0.3)
         return mix(c, PAL["fur_shade"], smoothstep(0.0, -0.6, n.z) * 0.5)  # (M22-05 残りの手直しで追加) 顎の下の陰
     if part == "head":
+        co = Vector((co.x, face5_y_inv(co.y), co.z))  # (土兎の手直し 5 で追加) 縮めた鼻づらの頂点も元の頭の座標で塗る
         c = mix(PAL["fur"], PAL["fur_lit"], smoothstep(0.4, 0.9, n.z) * 0.8)  # (M22-05 残りの手直しで追加) 頭頂・額の面は明るく
         c = mix(c, PAL["light"], smoothstep(-0.205, -0.245, co.y) * 0.7)
         c = mix(c, PAL["light"], smoothstep(-0.2, -0.7, n.z) * 0.6)
@@ -1367,6 +1427,7 @@ def thigh_weights(co):
 
 
 def head_weights(co):
+    co = Vector((co.x, face5_y_inv(co.y), co.z))  # (土兎の手直し 5 で追加) 縮めた鼻づらの頂点も元の頭の座標で重みを決める
     wn = smoothstep(-0.215, -0.245, co.y)  # 鼻先は nose の骨
     out = [("head", 1.0 - wn)]
     if wn > 0.02:
@@ -1556,6 +1617,9 @@ def build_lod(lod, obj_name, mats):
 
     bm = bmesh.new()
     build_head(bm, lod)
+    if FACE5:  # (土兎の手直し 5 で追加) 鼻づらを縮め、顔の横幅を詰める (目・鼻・口はこの頭へ載せる)
+        for v in bm.verts:
+            v.co = face5(v.co)
     bm.normal_update()
     bvh_head = BVHTree.FromBMesh(bm)
     parts.append(make_part(obj_name + "_head", bm, "head", head_weights, mats))
@@ -1573,7 +1637,7 @@ def build_lod(lod, obj_name, mats):
         bm = bmesh.new()
         eye = build_eye(bm, bvh_head, lod, side)  # (土兎の手直し 4 で変更: 目の縁の点を受け取る)
         parts.append(make_part(f"{obj_name}_eye_{s}", bm, "glow", lambda co: [("head", 1.0)], mats, recalc=False))
-        if lod["name"] == "hero" and EYE4:  # (土兎の手直し 4 で追加) 瞼の線
+        if lod["name"] == "hero" and EYE4 and not LID5_OFF:  # (土兎の手直し 4 で追加) 瞼の線 (土兎の手直し 5 で変更: LID5_OFF で付けない)
             bm = bmesh.new()
             build_eye_lid(bm, bvh_head, eye)
             parts.append(make_part(f"{obj_name}_lid_{s}", bm, "lid", lambda co: [("head", 1.0)], mats, recalc=False))
@@ -1877,6 +1941,7 @@ def pose_run(rig, t):
 
 
 GRAZE4 = dict(lift=0.036, pelvis=18, spine=8, chest=2, neck=52, head=-34)  # (土兎の手直し 4 で追加) 採食の姿勢 (元は 0.030 / 18 / 14 / 8 / 24 / -25)
+GRAZE5 = dict(lift=0.036, pelvis=22, spine=8, chest=2, neck=60, head=-40, paw=0.075, paw_z=0.012)  # (土兎の手直し 5 で追加) 短い鼻づらで鼻先を地面へ届かせる採食の姿勢 (GRAZE4 の代わり)
 
 
 def pose_graze(rig, t):
@@ -1902,6 +1967,14 @@ def pose_graze(rig, t):
         b["chest"] = rot_basis(D(GRAZE4["chest"]) * down)
         b["neck"] = rot_basis(D(GRAZE4["neck"]) * down + D(1.5) * nib)
         b["head"] = rot_basis(D(GRAZE4["head"]) * down + D(2.5) * nib, 0, D(4) * math.sin(2 * math.pi * t / 2) * chew)
+    if FACE5:
+        # (土兎の手直し 5 で追加) 鼻づらを縮めたので鼻先が地面から 1.5 → 6.6 cm に浮いた。首をもう少し下げ、頭の起こしを弱めて鼻先を地面へ
+        b["pelvis"] = pelvis_basis(rig, Vector((0, -0.004 * down, GRAZE5["lift"] * down)), wrot=Quaternion(X, D(GRAZE5["pelvis"]) * down),
+                                   pivot=Vector((0, 0.12, 0.03)))
+        b["spine"] = rot_basis(D(GRAZE5["spine"]) * down)
+        b["chest"] = rot_basis(D(GRAZE5["chest"]) * down)
+        b["neck"] = rot_basis(D(GRAZE5["neck"]) * down + D(1.5) * nib)
+        b["head"] = rot_basis(D(GRAZE5["head"]) * down + D(2.5) * nib, 0, D(4) * math.sin(2 * math.pi * t / 2) * chew)
     b["nose"] = rot_basis(D(10) * math.sin(2 * math.pi * 7 * t) * chew)
     # 耳は頭が下がった分だけ後ろへ寝かせ、上へ立てたままにする (基準画の採食)
     b["ear1_L"] = rot_basis(-D(40) * down, 0, D(8) * down)
@@ -1910,6 +1983,10 @@ def pose_graze(rig, t):
     b["tail"] = rot_basis(D(5) * math.sin(2 * math.pi * t / 2))
     for leg in LEG_BONES:
         planted(rig, b, leg)
+    if FACE5:  # (土兎の手直し 5 で追加) 胸を下げる分、前足を前へ置き直して上腕を胸から離す
+        for leg in LEG_BONES:
+            if leg.startswith("fl"):
+                solve_leg(rig, b, leg, joint(leg, 2) + Vector((0, -GRAZE5["paw"] * down, GRAZE5["paw_z"] * down)), 0.0)
     return b
 
 
