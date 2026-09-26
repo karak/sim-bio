@@ -1,7 +1,7 @@
 import type { Command, DisasterKind } from '../simulation/types';
 import type { Chronicle, Digest } from '../harbor/chronicle';
 import type { PublishInput } from '../harbor/client';
-import type { InscriptionId } from '../harbor/contract';
+import type { Cargo, InscriptionId } from '../harbor/contract';
 
 /**
  * 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる。
@@ -20,6 +20,13 @@ export const SPAWN_RADIUS = 1;
  */
 export const spawnClick = (speciesId: string, cell: number): Command => ({ type: 'spawn_species', speciesId, cell, amount: SPAWN_AMOUNT, radius: SPAWN_RADIUS });
 export const disasterClick = (kind: DisasterKind, cell: number): Command => ({ type: 'disaster', kind, cell, radius: DISASTER_RADIUS[kind] });
+
+/**
+ * 漂着を受け取る 1 クリック (M19-10)。港の口の「受け取る」と台本が、積荷の種ごとに 1 つの放流を着いた浜のセルへ打つ。
+ * 外来種は既存の放流の命令で入るので、年代記に載り、回し直しても同じ結末になる。量は積荷の量をそのまま amount にする
+ */
+export const receiveCargoClick = (cargo: Cargo, cell: number): Command[] =>
+  cargo.items.map(({ speciesId, amount }) => ({ type: 'spawn_species', speciesId, cell, amount, radius: SPAWN_RADIUS }));
 
 /**
  * 出港の 1 クリック (M19-09)。判定の板の「出港する」と台本が、判定の瞬間の年代記と要約に、碑文のカタログから選んだひとことを添えて港へ出す
