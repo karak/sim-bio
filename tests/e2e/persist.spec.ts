@@ -173,6 +173,7 @@ const storedScenario = (page: Page, scenarioId: string): Promise<{ tick: number;
   );
 
 test('M19-14: シナリオの途中で閉じて開き直すと、同じ年・同じ石板の状態 (力・年表・年代記) から続く', async ({ context }) => {
+  test.setTimeout(180_000);
   const first = await context.newPage();
   const firstLogs = collectLogs(first);
   await first.goto('/?scenario=test-quick');
@@ -187,9 +188,9 @@ test('M19-14: シナリオの途中で閉じて開き直すと、同じ年・同
   const clickedAt = await shownTick(first);
   await expect.poll(() => storedScenario(first, 'test-quick')).toEqual({ tick: clickedAt, commands: 1 });
 
-  // test-quick は 2 年目に滅ぶので、1 年目のうちに止めて閉じる
-  await first.click('#speed-100');
-  await expect(first.locator('#tablet-year')).toHaveText('1 / 5 年', { timeout: 30_000 });
+  // test-quick は 2 年目に滅ぶので、1 年目のうちに止めて閉じる。100 倍速では 1 年目が数秒で過ぎ、並べて回すと止め損ねるので 10 倍速にする
+  await first.click('#speed-10');
+  await expect(first.locator('#tablet-year')).toHaveText('1 / 5 年', { timeout: 90_000 });
   await first.click('#speed-0');
   const pausedAt = await shownTick(first);
   expect(pausedAt).toBeLessThan(2 * TICKS_PER_YEAR);
