@@ -1,4 +1,6 @@
+import type { Parsed } from '../core/parse';
 import type { SaveData } from '../simulation/types';
+import { parseChronicle, type Chronicle } from '../chronicle/contract';
 import { SLOTS, type SlotId, type SlotSummary } from './slots';
 
 /** 島の手元の保存 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */
@@ -10,6 +12,10 @@ export type IslandStore = {
   list(): Promise<readonly SlotSummary[]>;
   /** 読めない枠 (版違いなど) を saves の別の key へ移し、枠を空ける。移した先の key を返す */
   setAside(slot: SlotId): Promise<string>;
+  /** 石板ごとに最後の年代記を 1 本置く (M19-06)。同じ石板へ書けば上書き */
+  saveChronicle(scenarioId: string, c: Chronicle): Promise<void>;
+  /** 無ければ null。置き場の値は境界として parseChronicle に通し、読めなければ拒否の理由を返す */
+  loadChronicle(scenarioId: string): Promise<Parsed<Chronicle> | null>;
 };
 
 const DB_NAME = 'biotope-island';
@@ -22,6 +28,10 @@ const UPGRADES: readonly ((db: IDBDatabase) => void)[] = [
   (db) => {
     db.createObjectStore('saves');
     db.createObjectStore('slots', { keyPath: 'slot' });
+  },
+  // 版 2 (M19-06): 年代記。key は scenarioId
+  (db) => {
+    db.createObjectStore('chronicles');
   },
 ];
 
@@ -81,6 +91,15 @@ export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => 
       };
       await transactionDone(tx);
       return key;
+    },
+    async saveChronicle(scenarioId, c) {
+      const tx = db.transaction('chronicles', 'readwrite');
+      tx.objectStore('chronicles').put(c, scenarioId);
+      await transactionDone(tx);
+    },
+    async loadChronicle(scenarioId) {
+      const raw: unknown = await requestDone(db.transaction('chronicles').objectStore('chronicles').get(scenarioId));
+      return raw === undefined ? null : parseChronicle(raw);
     },
   };
 }

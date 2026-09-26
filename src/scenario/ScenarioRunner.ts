@@ -72,6 +72,8 @@ export type ScenarioRunner = {
   warnings(): Warning[];
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
   timeline(): TimelineEvent[];
+  /** 年の境目ごとの評価で見た種の総数。年 0 から 1 年に 1 件 (年代記の折れ線、M19-06) */
+  totalsByYear(): readonly Readonly<Record<string, number>>[];
   /** 石板に出す予言の節目 (M10-02)。迎撃で取り消した隕石の年の節目は消える */
   milestones(): { atYear: number; text: string }[];
   /** 迎撃で取り消せる次の予定隕石の年 (M10-02)。無ければ null。HUD が迎撃の可否に使う */
@@ -293,6 +295,7 @@ export function createScenarioRunner(
     prayer: () => (currentPrayer ? { kind: currentPrayer.kind, yearsLeft: Math.max(0, currentPrayer.deadlineYear - currentYear) } : null),
     warnings: () => warnings,
     timeline: () => timeline,
+    totalsByYear: () => history,
     milestones: () => {
       const gone = new Set([...cancelled].map((idx) => def.schedule[idx].atYear));
       return (def.milestones ?? []).filter((m) => !gone.has(m.atYear));
