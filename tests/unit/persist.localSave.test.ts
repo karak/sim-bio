@@ -9,6 +9,18 @@ import type { SlotSummary } from '../../src/persist/slots';
 import { testConfig } from './helpers';
 
 const EVERY = 90;
+
+/** 置き場の API を通さず、saves の key を直に読む (脇へ退けた記録を確かめる) */
+const rawSave = (indexedDB: IDBFactory, key: string): Promise<SaveData | undefined> =>
+  new Promise((resolve, reject) => {
+    const open = indexedDB.open('biotope-island');
+    open.onsuccess = () => {
+      const req = open.result.transaction('saves').objectStore('saves').get(key);
+      req.onsuccess = () => resolve(req.result as SaveData | undefined);
+      req.onerror = () => reject(req.error);
+    };
+    open.onerror = () => reject(open.error);
+  });
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const world = () => World.create(testConfig(), { log: createMemorySink() });
 const restore = (s: SaveData) => World.restore(s, { log: createMemorySink() });
@@ -128,7 +140,7 @@ describe('閉じて開き直すと続きから (M19-05)', () => {
     expect(await autoTick()).toBe(190);
   });
 
-  it('読めない自動の枠 (版違いなど) からは再開せず、利用者が島を差し替えるまで上書きしない', async () => {
+  it('読めない自動の枠 (版違いなど) からは再開せず、脇へ退けて残し、新しい島を普段どおり自動保存する', async () => {
     const first = await setup();
     await play(first.local, world(), 1, 100);
     const second = await setup({ indexedDB: first.indexedDB });
@@ -136,17 +148,16 @@ describe('閉じて開き直すと続きから (M19-05)', () => {
       throw new Error('unsupported save version');
     };
     expect(await second.local.resume(broken)).toBeNull();
-    expect(second.logs).toEqual([expect.objectContaining({ level: 'warn', event: 'persist.resume.failed', error: 'Error: unsupported save version' })]);
+    expect(second.logs).toEqual([
+      expect.objectContaining({ level: 'warn', event: 'persist.resume.failed', error: 'Error: unsupported save version', setAside: 'unreadable:auto' }),
+    ]);
+    expect(await second.autoTick()).toBeNull();
+    expect(await second.local.list()).toEqual([]);
+    expect((await rawSave(first.indexedDB, 'unreadable:auto'))?.tick).toBe(100);
 
     const fresh = world();
-    await play(second.local, fresh, 3, 100);
-    second.local.flush(() => fresh.serialize());
-    await settle();
-    expect(await second.autoTick()).toBe(100);
-
-    second.local.replaced(fresh.serialize());
-    await settle();
-    expect(await second.autoTick()).toBe(300);
+    await play(second.local, fresh, 1, 90);
+    expect(await second.autoTick()).toBe(90);
   });
 });
 
@@ -157,9 +168,21 @@ describe('手動の枠 (M19-05)', () => {
     w.step(400);
     await local.saveSlot('manual-1', w.serialize());
     expect(saved).toEqual([{ slot: 'manual-1', savedAt: 1000, year: 1 }]);
-    expect((await local.loadSlot('manual-1'))?.tick).toBe(400);
+    expect((await local.loadSlot('manual-1', restore))?.snapshot().tick).toBe(400);
     expect(await local.list()).toEqual([{ slot: 'manual-1', savedAt: 1000, year: 1 }]);
     expect(await autoTick()).toBeNull();
+  });
+
+  it('枠の島が読めない (restore が投げる) ときは null を返し、warn の記録に原因を残す', async () => {
+    const { local, logs } = await setup();
+    await local.saveSlot('manual-3', world().serialize());
+    const broken = () => {
+      throw new Error('unsupported save version');
+    };
+    expect(await local.loadSlot('manual-3', broken)).toBeNull();
+    expect(logs.filter((l) => l.level === 'warn')).toEqual([
+      expect.objectContaining({ event: 'persist.load.failed', slot: 'manual-3', error: 'Error: unsupported save version' }),
+    ]);
   });
 
   it('書き込みの失敗は warn の記録に原因を残し、例外にしない', async () => {
@@ -167,6 +190,7 @@ describe('手動の枠 (M19-05)', () => {
       save: () => Promise.reject(new Error('QuotaExceededError')),
       load: () => Promise.resolve(null),
       list: () => Promise.resolve([]),
+      setAside: () => Promise.resolve('unreadable:auto'),
     };
     const { local, logs, saved } = await setup({ store: failing });
     await local.saveSlot('manual-2', world().serialize());
@@ -181,7 +205,7 @@ describe('手動の枠 (M19-05)', () => {
     await local.saveSlot('manual-1', w.serialize());
     expect(saved).toEqual([]);
     expect(await local.resume(restore)).toBeNull();
-    expect(await local.loadSlot('manual-1')).toBeNull();
+    expect(await local.loadSlot('manual-1', restore)).toBeNull();
     expect(await local.list()).toEqual([]);
   });
 });

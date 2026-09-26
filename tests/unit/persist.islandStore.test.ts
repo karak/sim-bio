@@ -55,6 +55,18 @@ describe('手元の保存の置き場 (M19-05、IndexedDB)', () => {
     expect((await store.load('manual-1'))?.tick).toBe(360);
   });
 
+  it('脇へ退けた枠は一覧と読込から消え、退けた先の key を返す', async () => {
+    const store = await openIslandStore({ indexedDB: new IDBFactory(), now: () => 1000 });
+    const a = world();
+    a.step(10);
+    await store.save('auto', a.serialize());
+    await store.save('manual-1', a.serialize());
+
+    expect(await store.setAside('auto')).toBe('unreadable:auto');
+    expect(await store.load('auto')).toBeNull();
+    expect(await store.list()).toEqual([{ slot: 'manual-1', savedAt: 1000, year: 0 }]);
+  });
+
   it('開き直しても (同じ IndexedDB の別の接続でも) 保存が残る', async () => {
     const indexedDB = new IDBFactory();
     const first = await openIslandStore({ indexedDB, now: () => 1000 });

@@ -336,7 +336,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     if (slot !== 'auto') h.onSlotSave(slot);
   });
   $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
-  $('new-island').addEventListener('click', () => h.onNewIsland());
+  $('new-island').addEventListener('click', () => {
+    // 自動の枠をその場で上書きするので、押し間違いで島を失わないよう確かめる
+    if (window.confirm('今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)')) h.onNewIsland();
+  });
   renderSlots();
 
   const canvas = $<HTMLCanvasElement>('graph');

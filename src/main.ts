@@ -21,13 +21,13 @@ import { createLocalSave } from './persist/localSave';
 const AUTOSAVE_TICKS = 90;
 
 async function boot(): Promise<void> {
-  let storeError: unknown = null;
+  const log = createConsoleSink();
   const [base, species, scenarios, store] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
     fetch('/data/scenarios.json').then((r) => r.json() as Promise<ScenarioDef[]>),
     openIslandStore({ indexedDB, now: Date.now }).catch((e: unknown) => {
-      storeError = e;
+      log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.unavailable', error: String(e) });
       return null;
     }),
   ]);
@@ -50,10 +50,8 @@ async function boot(): Promise<void> {
       config.volcanoCell = scenario.start.volcanoCell === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : scenario.start.volcanoCell;
     }
   }
-  const log = createConsoleSink();
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
     log.write({ ts: new Date().toISOString(), tick, year: Math.floor(tick / config.ticksPerYear), level, event, ...extra });
-  if (storeError) persistLog('warn', 'persist.unavailable', 0, { error: String(storeError) });
   const localSave = createLocalSave({
     store,
     mode: scenario ? 'scenario' : 'free',
@@ -97,10 +95,11 @@ async function boot(): Promise<void> {
   };
 
   const replaceWorld = (next: World) => {
-    const shownSize = world.snapshot().size;
+    const shown = world.snapshot();
     world = next;
     const { size, species: nextSpecies } = world.snapshot();
-    if (size !== shownSize) {
+    // 描き分けの表は種から作るので、大きさか種の並びが変われば作り直す
+    if (size !== shown.size || nextSpecies.map((d) => d.id).join() !== shown.species.map((d) => d.id).join()) {
       view.dispose();
       view = createSceneView(canvas, { assets: buildAssetTable(nextSpecies), size });
     }
@@ -119,10 +118,12 @@ async function boot(): Promise<void> {
     onSave: () => world.serialize(),
     onLoad: load,
     onSlotSave: (slot) => void localSave.saveSlot(slot, world.serialize()),
-    onSlotLoad: (slot) =>
-      void localSave.loadSlot(slot).then((save) => {
-        if (save) load(save);
-      }),
+    onSlotLoad: (slot) => {
+      if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
+      void localSave.loadSlot(slot, (save) => World.restore(save, { log })).then((w) => {
+        if (w) replaceWorld(w);
+      });
+    },
     onNewIsland: () => {
       if (runner) return;
       replaceWorld(World.create(config, { log }));

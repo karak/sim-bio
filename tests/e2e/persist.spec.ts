@@ -68,8 +68,9 @@ test('M19-05: 閉じて開き直すと、止めた所の続きから遊べる (�
   const second = await context.newPage();
   const secondLogs = collectLogs(second);
   await second.goto('/');
-  await expect(second.locator('#hud-year')).toHaveText(`Year ${Math.floor(pausedAt / TICKS_PER_YEAR)}`);
-  await expect(second.locator('#hud-season')).toHaveText(new RegExp(`Day ${pausedAt % TICKS_PER_YEAR}$`));
+  // 開き直した島は 1 倍速で進むので、HUD は止めた tick 以上 (ちょうどの値は persist.resumed の tick で見る)
+  await expect.poll(() => shownTick(second)).toBeGreaterThanOrEqual(pausedAt);
+  expect(await shownTick(second)).toBeLessThan(pausedAt + 60);
   await expect.poll(() => secondLogs.filter((l) => l.event === 'persist.resumed')).toEqual([expect.objectContaining({ slot: 'auto', tick: pausedAt })]);
   await expect(second.locator('#slot-select option[value="auto"]')).toHaveText(`自動 · Year ${Math.floor(pausedAt / TICKS_PER_YEAR)}`);
 });
@@ -100,12 +101,17 @@ test('M19-05: 手動の枠に保存し、先へ進めてから読み込むと保
   await expect(page.locator('#slot-select option[value="manual-2"]')).toHaveText(`枠 2 · ${savedYear}`);
 });
 
-test('M19-05: 「新しい島」で Year 0 から作り直し、開き直しても新しい島から続く', async ({ page }) => {
+test('M19-05: 「新しい島」は確かめてから Year 0 に作り直し (取り消せば今の島のまま)、開き直しても新しい島から続く', async ({ page }) => {
   const logs = collectLogs(page);
   await page.goto('/');
   await runUntilAutosaved(page, logs, TICKS_PER_YEAR);
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0');
 
+  page.once('dialog', (d) => void d.dismiss());
+  await page.click('#new-island');
+  await expect(page.locator('#hud-year')).not.toHaveText('Year 0');
+
+  page.once('dialog', (d) => void d.accept());
   await page.click('#new-island');
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
   await expect.poll(() => storedAutoTick(page)).toBe(0);

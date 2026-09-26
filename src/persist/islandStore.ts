@@ -1,13 +1,15 @@
 import type { SaveData } from '../simulation/types';
 import { SLOTS, type SlotId, type SlotSummary } from './slots';
 
-/** 島の置き場 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */
+/** 島の手元の保存 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */
 export type IslandStore = {
   /** 書いた枠の一覧の 1 行を返す (一覧を読み直さずに表示を更新できる) */
   save(slot: SlotId, data: SaveData): Promise<SlotSummary>;
   load(slot: SlotId): Promise<SaveData | null>;
   /** 保存のある枠だけを SLOTS の順に返す */
   list(): Promise<readonly SlotSummary[]>;
+  /** 読めない枠 (版違いなど) を saves の別の key へ移し、枠を空ける。移した先の key を返す */
+  setAside(slot: SlotId): Promise<string>;
 };
 
 const DB_NAME = 'biotope-island';
@@ -66,6 +68,19 @@ export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => 
     async list() {
       const rows: SlotSummary[] = await requestDone(db.transaction('slots').objectStore('slots').getAll());
       return rows.sort((a, b) => SLOTS.indexOf(a.slot) - SLOTS.indexOf(b.slot));
+    },
+    async setAside(slot) {
+      const key = `unreadable:${slot}`;
+      const tx = db.transaction(['saves', 'slots'], 'readwrite');
+      const saves = tx.objectStore('saves');
+      const req = saves.get(slot);
+      req.onsuccess = () => {
+        saves.put(req.result, key);
+        saves.delete(slot);
+        tx.objectStore('slots').delete(slot);
+      };
+      await transactionDone(tx);
+      return key;
     },
   };
 }
