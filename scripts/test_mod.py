@@ -39,8 +39,10 @@ def run_main(argv, run=subprocess.run):
 
 
 class ParseChronicleIdTest(unittest.TestCase):
-    def test_accepts_a_sha256_hex_and_lowercases_it(self):
-        self.assertEqual(mod.parse_chronicle_id(ID_B.upper()), ID_B)
+    def test_accepts_the_same_form_as_the_harbor_contract(self):
+        self.assertEqual(mod.parse_chronicle_id(ID_B), ID_B)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            mod.parse_chronicle_id(ID_B.upper())
 
     def test_rejects_anything_that_could_break_out_of_the_sql_literal(self):
         for text in [

@@ -60,13 +60,15 @@ class Target:
 
 
 def parse_chronicle_id(text: str) -> str:
-    """SQL の文字列に埋めるので、16 進 64 文字だけを通す (wrangler d1 execute は bind できない)。"""
-    lowered = text.lower()
-    if not re.fullmatch(r"[0-9a-f]{64}", lowered):
+    """SQL の文字列に埋めるので、16 進 64 文字だけを通す (wrangler d1 execute は bind できない)。
+
+    港の契約 src/harbor/contract.ts の parseChronicleId と同じ形 (小文字だけ)。
+    """
+    if not re.fullmatch(r"[0-9a-f]{64}", text):
         raise argparse.ArgumentTypeError(
-            f"年代記の id は SHA-256 の 16 進 64 文字: {text!r}"
+            f"年代記の id は SHA-256 の 16 進 64 文字 (小文字): {text!r}"
         )
-    return lowered
+    return text
 
 
 def wrangler_argv(target: Target, sql: str) -> list[str]:
