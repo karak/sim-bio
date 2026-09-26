@@ -77,7 +77,7 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 | 2 | 静的配信: 今のビルドを Workers Static Assets で配る。`.blend` と `textures/concept/**` は配らない | B1 |
 | 3 | 手元の保存: SaveData と年代記を IndexedDB に置く(自動保存と手動の枠)。サーバーは関わらない | B2 |
 | 4 | 年代記の記録: UI の `dispatch` の外側で、tick 付きの命令を積む。本体は変えない | B4・Q3 |
-| 5 | HTTP LogSink(M19-01)とログの受け口(M19-02)。warn/error と年ごとの要約だけを送る。受けたログは Workers Logs(7 日)に書き、D1 には入れない | B3 |
+| 5 | HTTP LogSink(M19-01)とログの受け口(M19-02)。warn/error と年ごとの要約だけを送る。受けたログは Workers Logs(無料は 3 日保持)に書き、D1 には入れない | B3 |
 | 6 | 港の API: 年代記の出港・一覧・1 件・通報・取り下げ | B4 |
 | 7 | 訪問者の再生の照合: Web Worker で年代記を回し直してダイジェストを比べ、確認と不一致の数を積む | B4・Q2 |
 | 8 | 舟の積荷: 積荷を流す、漂着をランダムに 1 件引く。受け取るかは UI で選ばせ、受け取ったら外来種として `dispatch` する(年代記に載る) | B5 |
@@ -116,7 +116,7 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 | API(港) | **Cloudflare Worker 1 本**、TypeScript、フレームワークなし(ルート表 1 枚)。`/api/*` だけ fetch handler に入る | ルートは 10 本ほど。依存を増やさない今の流儀に合わせる。枠はアカウント単位なので、Worker を分けても枠は分かれない | Hono(8〜10 ルートに対して重い) |
 | データベース | **D1**(SQLite)。港の帳簿(年代記・通報・積荷・回避の集計・日次予算) | 新しい順の一覧・ランダムに 1 件・集計の加算が SQL 1 文で書ける。超えるとクエリが失敗するだけで、課金にならない | KV、Durable Objects SQLite(この規模では D1 1 つで足り、置き場が 2 つになる。リアルタイムの多人数を始めるときの候補) |
 | 契約 | 手書きのパーサー `src/harbor/contract.ts` をクライアントと Worker が同じファイルで import する | 型と検証を 1 か所に置く | zod |
-| ログ | **Workers Logs**(`console.log` に JSON を 1 行) | 無料プランに含まれ、7 日保持。D1 の書き枠を使わない | Analytics Engine(無料での枠を確かめていない)、Logpush(有料) |
+| ログ | **Workers Logs**(`console.log` に JSON を 1 行) | 無料プランに含まれ、3 日保持・1 日 200,000 件(7 日は Paid)。D1 の書き枠を使わない | Analytics Engine(無料での枠を確かめていない)、Logpush(有料) |
 | 人間確認 | **Turnstile**(出港と通報だけ) | 無料。siteverify は Worker から外への subrequest 1 回 | reCAPTCHA(外部依存・個人情報) |
 | 回数制限 | **Rate Limiting binding**(送り手のハッシュごと)。**使えなくても成り立つ**ようにし、最後の砦は D1 の日次予算にする | GA(2025-09-19)。無料プランで使えるかは docs に記載が無い(要確認) | D1 だけで数える(書きが倍になる) |
 | 定期処理 | 同じ Worker の `scheduled`(Cron 1 本、毎日) | 古い積荷・隠した記録・予算行の掃除と、保存量の集計 | — |
@@ -137,7 +137,7 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 | D1 の行の読み | 5,000,000/日 | 約 25 万行(一覧 1 回 約 25 行、索引つき) | 約 20 倍 | [pricing#d1](https://developers.cloudflare.com/workers/platform/pricing/#d1) |
 | D1 の行の書き | 100,000/日 | 約 4,200 行 | 約 24 倍。アプリの日次予算で最悪でも約 4.3 万行に抑える(§6) | 同上 |
 | D1 の保存 | 1 データベース 500 MB、アカウント合計 5 GB、1 行 2 MB、1 呼び出し 50 クエリ | 年代記 1 件 多くても 10 KB。4 万件で約 400 MB | 400 MB で内部の栓(§6) | [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) |
-| Workers Logs | 無料プランに含む、7 日保持 | 1 日 数千件 | — | [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) |
+| Workers Logs | 無料プランに含む、3 日保持・1 日 200,000 件 | 1 日 数千件 | — | [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)、[pricing#workers-logs](https://developers.cloudflare.com/workers/platform/pricing/#workers-logs)(2026-09-26 に M19-02 で確認: 無料は 3 日) |
 | Turnstile | 無料、1 アカウント 20 ウィジェット。トークンは 300 秒・1 回きり、siteverify 必須 | 1 ウィジェット | — | [Turnstile plans](https://developers.cloudflare.com/turnstile/plans/) |
 | Cron | 5 本/アカウント | 1 本 | — | limits |
 
@@ -210,7 +210,7 @@ flowchart TB
       assets["静的配信<br/>[コンテナ: Workers Static Assets]<br/>ビルド成果物を配る。Worker を起こさない(無料・無制限)"]:::container
       api["港<br/>[コンテナ: Cloudflare Worker, TypeScript]<br/>年代記・積荷・回避率・ログの受け口。<br/>形の検証、回数制限、日次予算、閉港の返事。毎日の掃除(Cron)"]:::container
       db[("港の帳簿<br/>[コンテナ: D1 / SQLite]<br/>年代記・通報・積荷・回避の集計・日次予算")]:::container
-      logs[("運用ログ<br/>[コンテナ: Workers Logs]<br/>構造化ログを 7 日保持")]:::container
+      logs[("運用ログ<br/>[コンテナ: Workers Logs]<br/>構造化ログを 3 日保持")]:::container
     end
   end
 
@@ -408,7 +408,7 @@ fable の案から取り入れたもの:
 - **スナップショットは預けない。** 代わりに、容量は 1/50 で済む。本体の版が上がると、過去の年代記は要約だけになる。
 - **島に名前を付けさせない。** 代わりに、モデレーションを人手にしない。
 - **アカウントを作らない。** 代わりに、取り下げ鍵を失うと自分の島を取り下げられない。通報で隠れるので、実害は「消せない」より「消される」に寄る。
-- **ログは 7 日しか残さない。** 長期に残るのは回避率の集計だけで、再現は年代記で足りる。
+- **ログは 3 日しか残さない(無料の保持期間)。** 長期に残るのは回避率の集計だけで、再現は年代記で足りる。
 
 ### 他の案(落選)
 
