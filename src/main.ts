@@ -20,6 +20,9 @@ import { createLocalSave } from './persist/localSave';
 import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
 import type { InterveneResult } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';
+import { digestOf } from './chronicle/digest';
+import { createPlayback, type Playback } from './chronicle/playback';
+import { mountHarbor, visitIdOf } from './ui/Harbor';
 
 /** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
 const AUTOSAVE_TICKS = 90;
@@ -57,6 +60,8 @@ async function boot(): Promise<void> {
       config.volcanoCell = scenario.start.volcanoCell === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : scenario.start.volcanoCell;
     }
   }
+  // 他人の島を訪れている (M19-09)。介入を受けず、年代記を書かず、港から引いた命令を記録の tick で打ち直す
+  const visitId = visitIdOf(params, scenario);
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
     log.write({ ts: new Date().toISOString(), tick, year: Math.floor(tick / config.ticksPerYear), level, event, ...extra });
   const localSave = createLocalSave({
@@ -90,12 +95,13 @@ async function boot(): Promise<void> {
   let recorder: ChronicleRecorder<InterveneResult> | null = null;
   /** 年代記は石板ごとに最後の 1 本を置く。続きからの復帰 (島と runner を戻す) はまだ無いので、読むのは港への出港 (M19-09) */
   const saveChronicle = () => {
-    if (!store || !recorder || !scenario) return;
+    if (!store || !recorder || !scenario || visitId) return;
     const tick = world.snapshot().tick;
     store.saveChronicle(scenario.id, recorder.current()).catch((e: unknown) => persistLog('warn', 'persist.chronicle.failed', tick, { error: String(e) }));
   };
   /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
   const intervene = (c: Command): boolean => {
+    if (visitId) return false;
     if (!recorder) {
       world.dispatch(c);
       return true;
@@ -165,6 +171,16 @@ async function boot(): Promise<void> {
     (id) => hud.showSpeciesLayer(id),
   );
   hud.setReplaceable(!scenario);
+  const harbor = mountHarbor(app, {
+    scenarios,
+    speciesIds: species.map((d) => d.id),
+    simVersion: SIM_VERSION,
+    baseUrl: import.meta.env.VITE_HARBOR_URL,
+    sitekey: import.meta.env.VITE_TURNSTILE_SITEKEY,
+    visit: visitId && scenario ? { id: visitId, island: { def: scenario, config } } : null,
+    log: (level, event, extra) => persistLog(level, event, world.snapshot().tick, extra),
+  });
+  let playback: Playback | null = null;
   void localSave.list().then((list) => list.forEach(hud.setSlot));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'hidden') return;
@@ -180,7 +196,7 @@ async function boot(): Promise<void> {
   });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
-    { step: (n) => (runner?.verdict().status === 'running' ? stepByYear(world, runner, n) : world.step(n)), snapshot: () => world.snapshot() },
+    { step: (n) => (runner?.verdict().status === 'running' ? (visitId ? playback?.step(n) : stepByYear(world, runner, n)) : world.step(n)), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
         localSave.onTick(s.tick, () => world.serialize());
@@ -219,6 +235,8 @@ async function boot(): Promise<void> {
         saveChronicle();
         // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
         tablet.showVerdict(v, v.status === 'escaped' ? exportCargo(world.snapshot()) : undefined);
+        const chronicle = recorder?.current();
+        if (chronicle && v.status !== 'running') void digestOf(world.snapshot(), v.status).then((digest) => harbor.offerPublish({ chronicle, digest }));
         log.write({ ts: new Date().toISOString(), tick: world.snapshot().tick, year: world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
       },
       onWarning: (w) => {
@@ -243,6 +261,14 @@ async function boot(): Promise<void> {
     );
     // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る
     scenarioRunner.update(world.snapshot());
+    if (visitId) {
+      void harbor.visitChronicle().then((c) => {
+        if (!c) return;
+        playback = createPlayback(world, scenarioRunner, c.commands);
+        document.getElementById('speed-10')?.click();
+        requestAnimationFrame(() => void observe.enter());
+      });
+    }
   }
 
   // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す
