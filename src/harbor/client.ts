@@ -4,13 +4,16 @@ import { visitHref } from '../ui/clicks';
 import type { Chronicle, Digest } from './chronicle';
 import {
   chronicleId,
+  parseCargo,
   parseChronicleId,
   parseDigest,
   parseInscription,
   parsePublicChronicle,
   type BrowseCursor,
+  type Cargo,
   type ChronicleCard,
   type ChronicleId,
+  type DrawnCargo,
   type HarborCatalog,
   type HarborRequest,
   type HarborResponses,
@@ -37,6 +40,9 @@ export type PublishResult =
   /** 契約違反・版違い・満杯など、送り直しても通らないもの。outbox に残さない */
   | { kind: 'rejected'; reason: string };
 
+/** 引いた漂着。received は、その積荷をこの手元でもう受け取ったか (同じ積荷を二度受け取らせない) */
+export type DrawResult = { kind: 'ok'; drawn: null } | { kind: 'ok'; drawn: DrawnCargo; received: boolean } | { kind: 'closed' };
+
 /** 人間確認 (Turnstile) の答え。unavailable は widget が読めない (網が無い) ので閉港と同じに扱う */
 export type HumanAnswer = { kind: 'token'; token: TurnstileToken } | { kind: 'failed' } | { kind: 'unavailable' };
 
@@ -54,6 +60,19 @@ export type Harbor = {
   withdraw(id: ChronicleId): Promise<'ok' | 'closed' | 'forbidden'>;
   /** 手元に取り下げ鍵のある年代記 (自分が出港したもの) */
   ownIds(): Promise<ReadonlySet<ChronicleId>>;
+  /** 空の舟の積荷を港に流す (M19-10)。outbox は持たない。閉港なら流れずに closed */
+  castCargo(c: Cargo): Promise<'ok' | 'closed' | 'rejected'>;
+  /** 漂着をランダムに 1 件引く */
+  drawCargo(): Promise<DrawResult>;
+  /**
+   * 引いた積荷を受け取る。land は島へ外来種を放ち、放てたかを返す。手元の控えで 1 つの積荷を 1 回だけ land に渡し、
+   * 放てなければ控えを外す (あとで受け取れる)
+   */
+  receiveCargo(d: DrawnCargo, land: () => boolean): Promise<'received' | 'already' | 'refused'>;
+  /** 終えた石板の結末を回避率に数える (M19-11)。同じ年代記は手元の控えで 1 回だけ。閉港なら控えを外す */
+  reportOutcome(island: { chronicle: Chronicle; digest: Digest }): Promise<'counted' | 'already' | 'closed' | 'rejected'>;
+  /** 石板の結末の数え。閉港なら null */
+  avoidance(scenarioId: string): Promise<{ finished: number; avoided: number } | null>;
 };
 
 export type HarborLog = (level: 'info' | 'warn', event: string, extra?: Record<string, unknown>) => void;
@@ -241,5 +260,40 @@ export function createHarbor(deps: HarborDeps): Harbor {
       return r.refusal.error === 'forbidden' ? 'forbidden' : 'closed';
     },
     ownIds: () => store.ownIds(),
+    async castCargo(c) {
+      const cargo = parseCargo(c, catalog);
+      if (!cargo.ok) return 'rejected';
+      const r = await tell({ kind: 'cast_cargo', cargo: cargo.value });
+      log(r.ok ? 'info' : 'warn', `harbor.cargo.${r.ok ? 'cast' : 'dropped'}`, { items: cargo.value.items.length });
+      return r.ok ? 'ok' : 'closed';
+    },
+    async drawCargo() {
+      const got = await ask('draw_cargo', { kind: 'draw_cargo' });
+      if (!got.ok) return { kind: 'closed' };
+      const { drawn } = got.value;
+      if (drawn === null) return { kind: 'ok', drawn };
+      return { kind: 'ok', drawn, received: await store.has({ kind: 'received', id: drawn.id }) };
+    },
+    async receiveCargo(d, land) {
+      const mark = { kind: 'received', id: d.id } as const;
+      if (!(await store.claim(mark))) return 'already';
+      if (land()) return 'received';
+      await store.release(mark);
+      return 'refused';
+    },
+    async reportOutcome({ chronicle, digest }) {
+      const c = parsePublicChronicle(chronicle, catalog);
+      if (!c.ok) return 'rejected';
+      const mark = { kind: 'counted', id: await chronicleId(c.value) } as const;
+      if (!(await store.claim(mark))) return 'already';
+      const r = await tell({ kind: 'report_outcome', scenarioId: c.value.scenarioId, verdict: digest.verdict });
+      if (r.ok) return 'counted';
+      await store.release(mark);
+      return 'closed';
+    },
+    async avoidance(scenarioId) {
+      const got = await ask('avoidance', { kind: 'avoidance', scenarioId });
+      return got.ok ? got.value : null;
+    },
   };
 }
