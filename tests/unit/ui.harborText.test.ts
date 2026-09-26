@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { digestOf } from '../../src/chronicle/digest';
-import type { ChronicleId } from '../../src/harbor/contract';
-import { confirmText, endingText, publishText, readResultOf, readText, readingText, reportText, resentText, withdrawText } from '../../src/ui/harborText';
+import type { CargoId, ChronicleId } from '../../src/harbor/contract';
+import { avoidanceText, cargoItemsText, castText, confirmText, DISMISSED_TEXT, drawText, endingText, publishText, receiveText, readResultOf, readText, readingText, reportText, resentText, withdrawText } from '../../src/ui/harborText';
 
 const id = 'a'.repeat(64) as ChronicleId;
 
@@ -50,5 +50,44 @@ describe('港の画面の言葉 (M19-09)', () => {
     );
     expect(readingText(37, 100)).toBe('37 / 100 年を読んだ');
     expect(readingText(101, 100)).toBe('100 / 100 年を読んだ');
+  });
+});
+
+describe('積荷と回避率の言葉 (M19-10・11)', () => {
+  const cargo = { items: [{ speciesId: 'rabbit', amount: 2.5 }, { speciesId: 'wolf', amount: 0.3 }, { speciesId: 'moss', amount: 1 }] };
+  const drawn = { id: 'c0ffee' as CargoId, cargo };
+
+  it('積荷の中身は種の名と量 (名の無い種は id)', () => {
+    expect(cargoItemsText(cargo, { rabbit: '兎', wolf: '狼' })).toBe('兎 2.5・狼 0.3・moss 1');
+  });
+
+  it('流した結末', () => {
+    expect(castText('ok')).toBe('積荷を港に流した。どこかの見守り手の浜に流れ着く');
+    expect(castText('closed')).toBe('港は今日は閉まっている。積荷は流れなかった');
+    expect(castText('rejected')).toBe('港が受け取れない積荷だった');
+  });
+
+  it('引いた漂着: 閉港・空の浜・もう受け取った積荷・新しい積荷', () => {
+    expect(drawText({ kind: 'closed' })).toBe('港は今日は閉まっている。遊ぶ・保存するはそのまま続けられる');
+    expect(drawText({ kind: 'ok', drawn: null })).toBe('浜には何も流れ着いていない');
+    expect(drawText({ kind: 'ok', drawn, received: true })).toBe('この積荷はもう受け取った');
+    expect(drawText({ kind: 'ok', drawn, received: false })).toBe('積荷が流れ着いた。受け取れば、外来種として島の浜に放たれる');
+  });
+
+  it('受け取りの結末ごとに、何が起き、次に何ができるかを言う', () => {
+    expect(receiveText('ok')).toBe('積荷を受け取った。外来種が島の浜に放たれた');
+    expect(receiveText('already')).toBe('この積荷はもう受け取った');
+    expect(receiveText('budget')).toBe('星の力が足りない。力が溜まってから、もう一度受け取る');
+    expect(receiveText('no_shore')).toBe('この島には積荷の着く浜が無い');
+    expect(receiveText('refused')).toBe('今は受け取れない (判定の出た石板・訪れている島)');
+    expect(DISMISSED_TEXT).toBe('積荷を沖へ返した');
+  });
+
+  it('回避率は百分率に丸める。閉港 (null) と、まだ誰も終えていない石板は出さない', () => {
+    expect(avoidanceText({ finished: 8, avoided: 1 })).toBe('この予言を越えた見守り手は 13%');
+    expect(avoidanceText({ finished: 3, avoided: 3 })).toBe('この予言を越えた見守り手は 100%');
+    expect(avoidanceText({ finished: 5, avoided: 0 })).toBe('この予言を越えた見守り手は 0%');
+    expect(avoidanceText({ finished: 0, avoided: 0 })).toBeNull();
+    expect(avoidanceText(null)).toBeNull();
   });
 });

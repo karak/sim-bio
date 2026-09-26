@@ -13,6 +13,7 @@ import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
 import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import { SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/slots';
+import { seasonOf } from '../core/season';
 import './hud.css';
 
 /**
@@ -110,7 +111,6 @@ export type Hud = {
   setReplaceable(on: boolean): void;
 };
 
-const SEASONS = ['春', '夏', '秋', '冬'];
 /** セル時系列: サンプリング間隔 (tick)、保持年数、平均を取る半径 */
 const LOCAL_SAMPLE_TICKS = 10;
 const LOCAL_YEARS = 5;
@@ -432,7 +432,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       tempEl.value = String(s.climate.tempOffset);
       $('temp-offset-v').textContent = (s.climate.tempOffset >= 0 ? '+' : '') + s.climate.tempOffset.toFixed(1);
     }
-    $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
+    $('hud-season').textContent = `${seasonOf(s.dayOfYear)} · Day ${s.dayOfYear}`;
     const civText = formatCiv(s.civ, s.dreamEater != null);
     const civEl = $('hud-civ');
     civEl.hidden = civText === null;

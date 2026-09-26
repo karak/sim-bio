@@ -1,6 +1,7 @@
+import type { LandResult } from '../harbor/cargo';
 import type { Chronicle, Digest } from '../harbor/chronicle';
 import { createHarbor, type HarborLog, type PublishResult } from '../harbor/client';
-import { chronicleId, parseChronicleId, type BrowseCursor, type ChronicleCard, type ChronicleId, type InscriptionId } from '../harbor/contract';
+import { chronicleId, parseChronicleId, type BrowseCursor, type Cargo, type ChronicleCard, type ChronicleId, type DrawnCargo, type InscriptionId } from '../harbor/contract';
 import { inscriptionText, islandName, parseInscriptions, type Inscription } from '../harbor/names';
 import { createTurnstile, TEST_SITEKEY } from '../harbor/turnstile';
 import { createMemoryHarborStore, openHarborStore, type HarborStore } from '../persist/harborStore';
@@ -8,7 +9,23 @@ import type { ScenarioDef } from '../scenario/types';
 import { publishClick, visitHref } from './clicks';
 import { el } from './el';
 import { mountVisit, type HarborContext, type Visit } from './HarborVisit';
-import { confirmText, endingText, HARBOR_CLOSED_TEXT, HARBOR_EMPTY_TEXT, otherVersionText, publishText, reportText, resentText, withdrawText } from './harborText';
+import {
+  avoidanceText,
+  cargoItemsText,
+  castText,
+  confirmText,
+  DISMISSED_TEXT,
+  drawText,
+  endingText,
+  HARBOR_CLOSED_TEXT,
+  HARBOR_EMPTY_TEXT,
+  otherVersionText,
+  publishText,
+  receiveText,
+  reportText,
+  resentText,
+  withdrawText,
+} from './harborText';
 import './harbor.css';
 
 /**
@@ -18,6 +35,8 @@ import './harbor.css';
 export type HarborUi = {
   /** 石板の判定の直後。判定の板に「港へ出す」を出す */
   offerPublish(island: { chronicle: Chronicle; digest: Digest }): void;
+  /** 判定の後の港の仕事 (M19-10・11)。結末を回避率に 1 回数えて石板に回避率を出し直し、空の舟の積荷があれば港に流す */
+  settle(island: { chronicle: Chronicle; digest: Digest }, cargo: Cargo | null): void;
   /** 訪問の年代記を引く。この島で回し直せる (同じ版・同じ石板・同じ seed) なら返し、ほかは訪問の板に理由を出して null */
   visitChronicle(): Promise<Chronicle | null>;
 };
@@ -31,6 +50,12 @@ export type HarborUiDeps = {
   sitekey?: string;
   /** 訪問の道 (?scenario=…&visit=…) で開いたとき。island は照合の再生に渡す、main.ts が組んだその石板の島 */
   visit: Visit | null;
+  /** 自分の島の石板。判定の後に閉じた島 (M19-14 の直し) を港の板から出港できるようにする。自由モードと訪問では null */
+  scenarioId: string | null;
+  /** 種 id → 表示名。積荷の中身に使う */
+  speciesNames: Readonly<Record<string, string>>;
+  /** 漂着を島の浜に放つ (M19-10)。訪問では null (浜の漂着を出さない) */
+  land: ((d: DrawnCargo) => LandResult) | null;
   log: HarborLog;
 };
 
@@ -103,6 +128,15 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     dock.setAttribute('aria-label', n === 0 ? '港を開く' : `港を開く (預けた年代記 ${n} 件)`);
   };
 
+  const finishedSlot = el('div', { class: 'harbor-finished', hidden: '' });
+  /** 判定の出た最後の島 (手元に残したもの)。判定の板を閉じた後・開き直した後も、ここから港へ出せる */
+  const showFinished = async (scenarioId: string) => {
+    const ctx = await ready;
+    const island = await ctx.harbor.finished(scenarioId);
+    finishedSlot.hidden = island === null;
+    finishedSlot.replaceChildren(...(island ? [el('p', { class: 'harbor-sub' }, 'この石板で最後に判定の出た島'), publishPanel(ctx, island, refreshCount)] : []));
+  };
+  if (deps.scenarioId) void showFinished(deps.scenarioId);
   const drawerState = el('p', { class: 'harbor-line harbor-state', id: 'harbor-state' });
   const list = el('ul', { class: 'harbor-list', 'aria-label': '流れ着いた年代記' });
   const more = el('button', { class: 'harbor-chip', hidden: '' }, 'もっと古い年代記');
@@ -111,6 +145,8 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     'aside',
     { class: 'harbor-stone harbor-drawer', id: 'harbor-drawer', 'aria-label': '港', hidden: '' },
     el('header', { class: 'harbor-head' }, el('h2', { class: 'harbor-title' }, '港'), el('p', { class: 'harbor-sub' }, '流れ着いた島の年代記'), close),
+    deps.land && driftSection(ready, deps.speciesNames, deps.land),
+    finishedSlot,
     drawerState,
     list,
     more,
@@ -156,10 +192,29 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   void refreshCount().then(resend);
   setInterval(() => void resend(), RESEND_MS);
 
+  // 回避率 (M19-11) は判定の後に、石板と判定の板に出す。閉港とまだ誰も終えていない石板では出さない。
+  // 起動では港に問い合わせない (M19-09 の不変条件の E2E)
+  const showAvoidance = async (scenarioId: string) => {
+    const text = avoidanceText(await (await ready).harbor.avoidance(scenarioId));
+    for (const line of app.querySelectorAll<HTMLElement>('#tablet-avoidance, #verdict-avoidance')) {
+      line.hidden = text === null;
+      line.textContent = text ?? '';
+    }
+  };
+
   return {
     offerPublish(island) {
       const slot = app.querySelector<HTMLElement>('#verdict-harbor');
       if (slot) void ready.then((ctx) => slot.replaceChildren(publishPanel(ctx, island, refreshCount)));
+    },
+    settle(island, cargo) {
+      void ready.then(async (ctx) => {
+        await ctx.harbor.keepFinished(island);
+        await showFinished(island.chronicle.scenarioId);
+        await ctx.harbor.reportOutcome(island);
+        await showAvoidance(island.chronicle.scenarioId);
+        if (cargo) say(castText(await ctx.harbor.castCargo(cargo)));
+      });
     },
     visitChronicle: () => (deps.visit ? mountVisit(app, ready, deps.visit) : Promise.resolve(null)),
   };
@@ -218,7 +273,7 @@ function publishPanel(ctx: HarborContext, island: { chronicle: Chronicle; digest
     choices.append(b);
   }
   const send = el('button', { class: 'harbor-chip harbor-primary', ...(chosen === undefined ? { disabled: '' } : {}) }, '出港する');
-  const status = el('p', { class: 'harbor-line', id: 'harbor-publish-status', role: 'status' });
+  const status = el('p', { class: 'harbor-line harbor-publish-status', role: 'status' });
   const link = el('div', { class: 'harbor-link', hidden: '' });
   const lead = el('p', { class: 'harbor-line harbor-dim' }, 'ひとことを刻んで、この島を港に並べる');
   void chronicleId(island.chronicle).then((id) => (lead.textContent = `ひとことを刻んで、${islandName(id)}として港に並べる`));
@@ -247,4 +302,46 @@ function showLink(link: HTMLElement, r: PublishResult) {
     );
   });
   link.replaceChildren(field, copy, el('a', { class: 'harbor-chip', href: r.url }, 'この島を訪れる'));
+}
+
+/** 浜の漂着 (M19-10)。港から 1 件引き、受け取るか追い払うかを選ばせる。受け取れば land が外来種として島の浜に放つ */
+function driftSection(ready: Promise<Ready>, names: Readonly<Record<string, string>>, land: (d: DrawnCargo) => LandResult): HTMLElement {
+  const status = el('p', { class: 'harbor-line', id: 'harbor-drift-status', role: 'status' }, 'ほかの見守り手の空の舟が流した積荷が、浜に着くことがある');
+  const items = el('p', { class: 'harbor-inscription', id: 'harbor-drift-items', hidden: '' });
+  const look = el('button', { class: 'harbor-chip' }, '浜を見る');
+  const take = el('button', { class: 'harbor-chip harbor-primary', hidden: '' }, '受け取る');
+  const shoo = el('button', { class: 'harbor-chip', hidden: '' }, '追い払う');
+  let offered: DrawnCargo | null = null;
+  const offer = (d: DrawnCargo | null) => {
+    offered = d;
+    take.hidden = d === null;
+    shoo.hidden = d === null;
+    look.hidden = d !== null;
+  };
+  look.addEventListener('click', async () => {
+    look.disabled = true;
+    const r = await (await ready).harbor.drawCargo();
+    look.disabled = false;
+    status.textContent = drawText(r);
+    const drawn = r.kind === 'ok' ? r.drawn : null;
+    items.hidden = drawn === null;
+    items.textContent = drawn ? cargoItemsText(drawn.cargo, names) : '';
+    offer(r.kind === 'ok' && r.drawn && !r.received ? r.drawn : null);
+  });
+  take.addEventListener('click', async () => {
+    const d = offered;
+    if (!d) return;
+    take.disabled = true;
+    let landed: LandResult = 'refused';
+    const r = await (await ready).harbor.receiveCargo(d, () => (landed = land(d)) === 'ok');
+    take.disabled = false;
+    status.textContent = receiveText(r === 'received' ? 'ok' : r === 'already' ? 'already' : landed);
+    if (r !== 'refused') offer(null);
+  });
+  shoo.addEventListener('click', () => {
+    status.textContent = DISMISSED_TEXT;
+    items.hidden = true;
+    offer(null);
+  });
+  return el('section', { class: 'harbor-drift', 'aria-label': '浜の漂着' }, el('h3', { class: 'harbor-publish-title' }, '浜の漂着'), status, items, el('div', { class: 'harbor-actions' }, look, take, shoo));
 }

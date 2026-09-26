@@ -10,6 +10,14 @@ import { stepByYear } from '../../src/scenario/stepByYear';
 import { recordChronicle } from '../../src/chronicle/recorder';
 import { SIM_VERSION } from '../../src/simulation/version';
 import { resumeIsland } from '../fixtures/resumeIsland';
+import { digestOf } from '../../src/chronicle/digest';
+import { createHarbor } from '../../src/harbor/client';
+import { openHarborStore } from '../../src/persist/harborStore';
+import { catalogFrom } from '../fixtures/fakeHarbor';
+import { readFileSync } from 'node:fs';
+
+const read = (name: string) => JSON.parse(readFileSync(`assets/data/${name}.json`, 'utf8')) as { id: string }[];
+const catalog = catalogFrom({ scenarios: read('scenarios'), species: read('species'), inscriptions: read('inscriptions') });
 
 const EVERY = 90;
 const island = resumeIsland('test-quick', 5);
@@ -160,5 +168,36 @@ describe('石板の途中の島の置き場 (M19-14、IndexedDB の版 3)', () =
     const s = scenarioIsland();
     await store.saveScenario(head.scenarioId, s.capture());
     expect((await store.loadScenario(head.scenarioId))?.save.tick).toBe(0);
+  });
+});
+
+describe('判定の出た年代記は、次の挑戦の自動保存に上書きされない (M19-14 の直し)', () => {
+  it('判定の後に閉じて開き直し、次の挑戦が 90 tick 進んで書いても、終わった年代記と要約は港へ出せるまま残る', async () => {
+    const indexedDB = new IDBFactory();
+    const store = tracked(await openIslandStore({ indexedDB, now: () => 1000 }));
+    const harbor = createHarbor({ linkBase: 'https://island.test', store: await openHarborStore({ indexedDB }), catalog, turnstile: async () => ({ kind: 'unavailable' }) });
+    const logs: Logged[] = [];
+    const log: SaveLog = (level, event, tick, extra = {}) => logs.push({ level, event, tick, ...extra });
+
+    const done = scenarioIsland();
+    expect(done.recorder.dispatch({ type: 'set_climate', rainScale: 1.1 }).ok).toBe(true);
+    stepByYear(done.world, done.runner, 10 * 360);
+    const status = done.runner.verdict().status;
+    if (status === 'running') throw new Error('判定が出ていない');
+    createScenarioAutosave({ store, scenarioId: head.scenarioId, every: EVERY, log, from: 0, capture: done.capture }).flush();
+    const finished = { chronicle: done.recorder.current(), digest: await digestOf(done.world.snapshot(), status) };
+    await harbor.keepFinished(finished);
+    await settle();
+
+    expect(await resumeScenario({ store, head, log }, restoreTick)).toBeNull();
+    const next = scenarioIsland();
+    const autosave = createScenarioAutosave({ store, scenarioId: head.scenarioId, every: EVERY, log, from: 0, capture: next.capture });
+    stepByYear(next.world, next.runner, EVERY);
+    autosave.onTick(next.world.snapshot().tick);
+    await settle();
+
+    expect(await store.loadChronicle(head.scenarioId)).toEqual({ ok: true, value: next.recorder.current() });
+    expect(next.recorder.current().commands).toEqual([]);
+    expect(await harbor.finished(head.scenarioId)).toEqual(finished);
   });
 });

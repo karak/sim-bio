@@ -13,7 +13,9 @@ import type { Command } from './simulation/types';
 import { resolveCivilizationStart } from './simulation/civilization';
 import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
-import { disasterClick, spawnClick } from './ui/clicks';
+import { disasterClick, receiveCargoClick, spawnClick } from './ui/clicks';
+import { cargoOfHold, landingCell, type LandResult } from './harbor/cargo';
+import type { DrawnCargo } from './harbor/contract';
 import { createObserveEntry } from './observe/entry';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
@@ -180,6 +182,24 @@ async function boot(): Promise<void> {
     (id) => hud.showSpeciesLayer(id),
   );
   hud.setReplaceable(!scenario);
+  const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
+  /** 受け取った漂着 (M19-10) を浜のセルに放つ。石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
+  const landCargo = (d: DrawnCargo): LandResult => {
+    const s = world.snapshot();
+    const cell = landingCell(d.id, { elevation: s.layers.elevation, size: s.size });
+    if (cell === null) return 'no_shore';
+    const commands = receiveCargoClick(d.cargo, cell);
+    if (runner && runner.verdict().status !== 'running') return 'refused';
+    const power = runner?.budget()?.power;
+    const cost = scenario?.budget?.costs.spawn;
+    if (power !== undefined && cost !== undefined && power < cost * commands.length) {
+      tablet.flash();
+      return 'budget';
+    }
+    if (!commands.every(intervene)) return 'refused';
+    hud.addMarker(s.year, `漂着 (${d.cargo.items.map((x) => speciesNames[x.speciesId] ?? x.speciesId).join('・')})`, '#8FEADF');
+    return 'ok';
+  };
   const harbor = mountHarbor(app, {
     scenarios,
     speciesIds: species.map((d) => d.id),
@@ -187,6 +207,9 @@ async function boot(): Promise<void> {
     baseUrl: import.meta.env.VITE_HARBOR_URL,
     sitekey: import.meta.env.VITE_TURNSTILE_SITEKEY,
     visit: visitId && scenario ? { id: visitId, island: { def: scenario, config } } : null,
+    scenarioId: scenario && !visitId ? scenario.id : null,
+    speciesNames,
+    land: visitId ? null : landCargo,
     log: (level, event, extra) => persistLog(level, event, world.snapshot().tick, extra),
   });
   /** 判定の前の石板の島の進め方。訪問では港から年代記が届くまで止め、届いたら記録の tick で打ち直す (M19-09) */
@@ -249,9 +272,17 @@ async function boot(): Promise<void> {
         loop.setSpeed(0);
         saveChronicle();
         // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
-        tablet.showVerdict(v, v.status === 'escaped' ? exportCargo(world.snapshot()) : undefined);
+        const hold = v.status === 'escaped' ? exportCargo(world.snapshot()) : undefined;
+        tablet.showVerdict(v, hold);
         const chronicle = recorder?.current();
-        if (chronicle && v.status !== 'running') void digestOf(world.snapshot(), v.status).then((digest) => harbor.offerPublish({ chronicle, digest }));
+        // 空の舟の積荷 (M19-10) は持ち出しと同じ瞬間の snapshot から作り、港に流す
+        const cargo = hold ? cargoOfHold(hold) : null;
+        if (chronicle && v.status !== 'running') {
+          void digestOf(world.snapshot(), v.status).then((digest) => {
+            harbor.offerPublish({ chronicle, digest });
+            harbor.settle({ chronicle, digest }, cargo);
+          });
+        }
         log.write({ ts: new Date().toISOString(), tick: world.snapshot().tick, year: world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
       },
       onWarning: (w) => {

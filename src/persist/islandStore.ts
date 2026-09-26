@@ -55,6 +55,14 @@ const UPGRADES: readonly ((db: IDBDatabase) => void)[] = [
   (db) => {
     db.createObjectStore('scenarios');
   },
+  // 版 5 (M19-10・11): 手元の控え (受け取った積荷・回避率に数えた年代記)。key は "received:<積荷の id>" と "counted:<年代記の id>" (persist/harborStore.ts)
+  (db) => {
+    db.createObjectStore('marks');
+  },
+  // 版 6 (M19-14 の直し): 判定の出た島 ({chronicle, digest})。key は scenarioId (persist/harborStore.ts)
+  (db) => {
+    db.createObjectStore('finished');
+  },
 ];
 
 export const requestDone = <T>(req: IDBRequest<T>): Promise<T> =>

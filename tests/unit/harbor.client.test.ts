@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { digestOf } from '../../src/chronicle/digest';
-import { chronicleId, type ChronicleId, type InscriptionId, type TurnstileToken, type WithdrawKey } from '../../src/harbor/contract';
+import { chronicleId, type CargoId, type ChronicleId, type InscriptionId, type TurnstileToken, type WithdrawKey } from '../../src/harbor/contract';
 import { writeRefusal, type WireRequest } from '../../src/harbor/wire';
 import { createHarbor, type HumanAnswer } from '../../src/harbor/client';
 import { createMemoryHarborStore, type HarborStore } from '../../src/persist/harborStore';
@@ -226,5 +226,128 @@ describe('港のクライアント createHarbor (M19-09、設計書 §5.2)', () 
     expect(await h.harbor.withdraw(id)).toBe('ok');
     expect(await h.store.keyOf(id)).toBeNull();
     expect(h.fake.ledger.size).toBe(0);
+  });
+});
+
+describe('港のクライアントの積荷 (M19-10、設計書 B5)', () => {
+  const cargo = { items: [{ speciesId: 'rabbit', amount: 2.5 }, { speciesId: 'wolf', amount: 0.3 }] };
+
+  it('積荷を流すと港に 1 件並び、ほかの見守り手が引ける。浜に何も無ければ drawn は null', async () => {
+    const h = harness();
+    expect(await h.harbor.drawCargo()).toEqual({ kind: 'ok', drawn: null });
+    expect(await h.harbor.castCargo(cargo)).toBe('ok');
+    expect(h.sent.at(-1)).toMatchObject({ method: 'POST', path: '/api/v1/cargo' });
+    const got = await harness().harbor.drawCargo();
+    expect(got).toEqual({ kind: 'ok', drawn: null });
+    const drawn = await h.harbor.drawCargo();
+    expect(drawn).toEqual({ kind: 'ok', drawn: { id: h.fake.cargo[0].id, cargo }, received: false });
+  });
+
+  it('契約に合わない積荷は港へ送る前に断る (カタログに無い種・量が 10 を越える)', async () => {
+    const h = harness();
+    expect(await h.harbor.castCargo({ items: [{ speciesId: 'dragon', amount: 1 }] })).toBe('rejected');
+    expect(await h.harbor.castCargo({ items: [{ speciesId: 'wolf', amount: 10.5 }] })).toBe('rejected');
+    expect(h.sent).toEqual([]);
+  });
+
+  it.each(CLOSED_REPLIES)('閉港 (%s) は流すも引くも closed', async (_name, closed) => {
+    const h = harness();
+    h.answerWith(closed);
+    expect(await h.harbor.castCargo(cargo)).toBe('closed');
+    expect(await h.harbor.drawCargo()).toEqual({ kind: 'closed' });
+  });
+
+  it('baseUrl が無ければ網に出ずに closed', async () => {
+    const h = harness({ baseUrl: undefined });
+    expect(await h.harbor.castCargo(cargo)).toBe('closed');
+    expect(await h.harbor.drawCargo()).toEqual({ kind: 'closed' });
+    expect(h.sent).toEqual([]);
+  });
+
+  it('受け取りは 1 つの積荷に 1 回だけ: 二度目は land を呼ばずに already。二度押し (同時) でも land は 1 回', async () => {
+    const h = harness();
+    const drawn = { id: 'c0ffee' as CargoId, cargo };
+    const landed: string[] = [];
+    const land = () => (landed.push(drawn.id), true);
+    expect(await Promise.all([h.harbor.receiveCargo(drawn, land), h.harbor.receiveCargo(drawn, land)])).toEqual(['received', 'already']);
+    expect(await h.harbor.receiveCargo(drawn, land)).toBe('already');
+    expect(landed).toEqual(['c0ffee']);
+    expect(await h.harbor.receiveCargo({ id: 'beef' as CargoId, cargo }, land)).toBe('received');
+  });
+
+  it('島が受け取れなかった (力が足りない・浜が無い) ときは控えを残さず、あとで受け取れる', async () => {
+    const h = harness();
+    const drawn = { id: 'c0ffee' as CargoId, cargo };
+    expect(await h.harbor.receiveCargo(drawn, () => false)).toBe('refused');
+    expect(await h.harbor.receiveCargo(drawn, () => true)).toBe('received');
+  });
+
+  it('引いた積荷をもう受け取っていれば received を添える (同じ積荷をもう一度引いても、受け取らせない)', async () => {
+    const h = harness();
+    await h.harbor.castCargo(cargo);
+    const first = await h.harbor.drawCargo();
+    if (first.kind !== 'ok' || !first.drawn) throw new Error('積荷が無い');
+    expect(first.received).toBe(false);
+    await h.harbor.receiveCargo(first.drawn, () => true);
+    expect(await h.harbor.drawCargo()).toEqual({ kind: 'ok', drawn: first.drawn, received: true });
+  });
+});
+
+const dead = { chronicle: FIXTURE_CHRONICLE, digest: await digestOf({ year: 3, totals: { deer: 0 } }, 'dead') };
+
+describe('港のクライアントの回避率 (M19-11、設計書 B6)', () => {
+
+  it('終えた石板を 1 回数え、回避率を引ける。同じ年代記は二度数えない (網にも出ない)', async () => {
+    const h = harness();
+    expect(await h.harbor.avoidance('sinking')).toEqual({ finished: 0, avoided: 0 });
+    expect(await h.harbor.reportOutcome(island)).toBe('counted');
+    expect(h.sent.at(-1)).toMatchObject({ method: 'POST', path: '/api/v1/outcomes' });
+    const sent = h.sent.length;
+    expect(await h.harbor.reportOutcome(island)).toBe('already');
+    expect(await h.harbor.reportOutcome(dead)).toBe('already');
+    expect(h.sent.length).toBe(sent);
+    expect(await h.harbor.avoidance('sinking')).toEqual({ finished: 1, avoided: 1 });
+  });
+
+  it('ほかの年代記の滅びも数える: 越えた 1 と滅びた 1 で 2 件中 1 件', async () => {
+    const h = harness();
+    await h.harbor.reportOutcome(island);
+    await h.harbor.reportOutcome({ chronicle: { ...FIXTURE_CHRONICLE, seed: 7 }, digest: dead.digest });
+    expect(await h.harbor.avoidance('sinking')).toEqual({ finished: 2, avoided: 1 });
+  });
+
+  it.each(CLOSED_REPLIES)('閉港 (%s) なら数えられず (控えを外し、開いてから同じ年代記を数えられる)、回避率は null', async (_name, closed) => {
+    const h = harness();
+    h.answerWith(closed);
+    expect(await h.harbor.reportOutcome(island)).toBe('closed');
+    expect(await h.harbor.avoidance('sinking')).toBeNull();
+    h.openAgain();
+    expect(await h.harbor.reportOutcome(island)).toBe('counted');
+  });
+
+  it('契約に合わない (カタログに無い石板) は数えずに rejected', async () => {
+    const h = harness();
+    expect(await h.harbor.reportOutcome({ ...island, chronicle: { ...FIXTURE_CHRONICLE, scenarioId: 'nowhere' } })).toBe('rejected');
+    expect(h.sent).toEqual([]);
+  });
+});
+
+describe('判定の出た島を手元に残す (M19-14 の直し)', () => {
+  it('石板ごとに最後の 1 つを残し、港の契約で読み直して返す。無い石板は null', async () => {
+    const h = harness();
+    await h.harbor.keepFinished(island);
+    expect(await h.harbor.finished('sinking')).toEqual({ chronicle: island.chronicle, digest: island.digest });
+    expect(await h.harbor.finished('test-quick')).toBeNull();
+    await h.harbor.keepFinished(dead);
+    expect(await h.harbor.finished('sinking')).toEqual(dead);
+  });
+
+  it('置き場の値が読めなければ (手で書き換えた・版を上げてカタログから種が消えた) null', async () => {
+    const store = createMemoryHarborStore();
+    const h = harness({ store });
+    await store.keepFinished('sinking', { chronicle: { ...FIXTURE_CHRONICLE, commands: 'x' as never }, digest });
+    expect(await h.harbor.finished('sinking')).toBeNull();
+    await store.keepFinished('sinking', { chronicle: FIXTURE_CHRONICLE, digest: { ...digest, totals: { dragon: 1 } } });
+    expect(await h.harbor.finished('sinking')).toBeNull();
   });
 });

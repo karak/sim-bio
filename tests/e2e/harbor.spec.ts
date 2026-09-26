@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { chronicleId } from '../../src/harbor/contract';
-import type { WireRequest } from '../../src/harbor/wire';
+import { writeRequest, type WireRequest } from '../../src/harbor/wire';
 import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
 
 /**
@@ -109,6 +109,10 @@ test('M19-09: 出港 → リンク → 訪問 (3D 観察画面) → 照合 (年�
   await expect(page.locator('#observe-layer')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('#speed-10')).toHaveClass(/on/);
   await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^\d+ 年/, { timeout: 90_000 });
+  // 訪問の再生が進めた年と季節が、観察画面の下の帯に渡る (M19-09 の直し)。10 倍速では 1 年が 36 秒、季節は 9 秒ごと
+  const bar = page.locator('#observe-layer .o-stats');
+  await expect(bar).toHaveText('0 年 · 夏', { timeout: 30_000 });
+  await expect(bar).toHaveText('1 年 · 春', { timeout: 60_000 });
   await shot(page, '04-visit-observe');
 
   // 照合: 明示の操作で Web Worker が回し直し、進みを見せ、終われば港へ結末を送る。港の写しが hash を比べて確認を数える
@@ -190,4 +194,156 @@ test('M19-09 不変条件: main.ts は静的アセット以外のネットワー
   }
   // ログの送り (M19-02) は失敗しても本体を止めない。港 (出港・一覧) には、起動では問い合わせない
   expect(refused.filter((p) => p !== '/api/v1/logs')).toEqual([]);
+});
+
+/** 手元の置き場 (IndexedDB) の値を直に読む */
+const stored = (page: Page, store: string, key: string) =>
+  page.evaluate(
+    ([name, id]) =>
+      new Promise<unknown>((resolve, reject) => {
+        const open = indexedDB.open('biotope-island');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const req = open.result.transaction(name).objectStore(name).get(id);
+          req.onsuccess = () => {
+            open.result.close();
+            resolve(req.result ?? null);
+          };
+          req.onerror = () => reject(req.error);
+        };
+      }),
+    [store, key],
+  );
+/** 石板の年代記の命令 (M19-06 の置き場) */
+const storedCommands = async (page: Page, scenarioId: string) =>
+  ((await stored(page, 'chronicles', scenarioId)) as { commands: { tick: number; command: Record<string, unknown> }[] } | null)?.commands ?? null;
+
+test('M19-10: 浜の漂着を引き、追い払う・受け取る。受け取った積荷は外来種の放流として年代記に載り、二度は受け取れない (開き直しても)', async ({ page }) => {
+  const harbor = await routeHarbor(page);
+  // ほかの見守り手が流した積荷 (本物の wire で港の写しに流す)
+  await harbor.fake.serve(writeRequest({ kind: 'cast_cargo', cargo: { items: [{ speciesId: 'rabbit', amount: 2.5 }, { speciesId: 'wolf', amount: 0.3 }] } }));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#tablet-power')).toHaveText('10 / 30');
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  const drift = page.getByRole('region', { name: '浜の漂着' });
+  const status = drift.locator('#harbor-drift-status');
+
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await expect(status).toHaveText('積荷が流れ着いた。受け取れば、外来種として島の浜に放たれる');
+  await expect(drift.locator('#harbor-drift-items')).toHaveText('ウサギ 2.5・狼 0.3');
+  await shot(page, '08-drift-drawn');
+  await drift.getByRole('button', { name: '追い払う' }).click();
+  await expect(status).toHaveText('積荷を沖へ返した');
+  await expect(drift.getByRole('button', { name: '受け取る' })).toBeHidden();
+  await expect(page.locator('#tablet-power')).toHaveText('10 / 30');
+
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await drift.getByRole('button', { name: '受け取る' }).click();
+  await expect(status).toHaveText('積荷を受け取った。外来種が島の浜に放たれた');
+  await expect(page.locator('#tablet-power')).toHaveText('4 / 30');
+  await shot(page, '09-drift-received');
+  await expect.poll(async () => (await storedCommands(page, 'test-quick'))?.length).toBe(2);
+  const commands = (await storedCommands(page, 'test-quick')) ?? [];
+  expect(commands.map((c) => c.command)).toEqual([
+    { type: 'spawn_species', speciesId: 'rabbit', cell: commands[0].command.cell, amount: 2.5, radius: 1 },
+    { type: 'spawn_species', speciesId: 'wolf', cell: commands[0].command.cell, amount: 0.3, radius: 1 },
+  ]);
+
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await expect(status).toHaveText('この積荷はもう受け取った');
+  await expect(drift.getByRole('button', { name: '受け取る' })).toBeHidden();
+
+  await page.reload();
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await expect(status).toHaveText('この積荷はもう受け取った');
+  await expect(drift.getByRole('button', { name: '受け取る' })).toBeHidden();
+});
+
+test('M19-10: 星の力が足りなければ積荷を受け取らず (1 種も放たない)、控えも残さない', async ({ page }) => {
+  const harbor = await routeHarbor(page);
+  const items = ['rabbit', 'wolf', 'deer', 'grass'].map((speciesId) => ({ speciesId, amount: 1 }));
+  await harbor.fake.serve(writeRequest({ kind: 'cast_cargo', cargo: { items } }));
+  await page.goto('/?scenario=test-quick');
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  const drift = page.getByRole('region', { name: '浜の漂着' });
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await drift.getByRole('button', { name: '受け取る' }).click();
+  await expect(drift.locator('#harbor-drift-status')).toHaveText('星の力が足りない。力が溜まってから、もう一度受け取る');
+  await expect(page.locator('#tablet-power')).toHaveText('10 / 30');
+  await expect(drift.getByRole('button', { name: '受け取る' })).toBeVisible();
+  expect(await storedCommands(page, 'test-quick')).toBeNull();
+});
+
+test('M19-10: 空の舟で次の島へ逃れると、積荷 (種と量) を港に流す', async ({ page }) => {
+  const harbor = await routeHarbor(page);
+  await page.goto('/?scenario=test-ship');
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict-title')).toHaveText('次の島へ', { timeout: 30_000 });
+  await expect(page.locator('#harbor-toast')).toHaveText('積荷を港に流した。どこかの見守り手の浜に流れ着く');
+  const cast = harbor.sent.filter((w) => w.method === 'POST' && w.path === '/api/v1/cargo');
+  expect(cast).toHaveLength(1);
+  expect(harbor.fake.cargo).toHaveLength(1);
+  const { items } = harbor.fake.cargo[0].cargo;
+  expect(items.length).toBeGreaterThanOrEqual(1);
+  expect(items.length).toBeLessThanOrEqual(5);
+  for (const item of items) {
+    expect(catalog.species.has(item.speciesId)).toBe(true);
+    expect(item.amount).toBeGreaterThan(0);
+    expect(item.amount).toBeLessThanOrEqual(10);
+  }
+  await shot(page, '10-cargo-cast');
+});
+
+test('M19-11: 石板を終えると 1 回数え、石板と判定の板に回避率を出す。同じ年代記は二度数えない', async ({ page }) => {
+  test.setTimeout(120_000);
+  const harbor = await routeHarbor(page);
+  await harbor.fake.serve(writeRequest({ kind: 'report_outcome', scenarioId: 'test-civ', verdict: 'dead' }));
+  await page.goto('/?scenario=test-civ');
+  await expect(page.locator('#tablet-avoidance')).toBeHidden();
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict-title')).toHaveText('島は生き延びた', { timeout: 90_000 });
+  await expect(page.locator('#verdict-avoidance')).toHaveText('この予言を越えた見守り手は 50%');
+  await expect(page.locator('#tablet-avoidance')).toHaveText('この予言を越えた見守り手は 50%');
+  await shot(page, '11-avoidance');
+  expect(harbor.fake.outcomes.get('test-civ')).toEqual({ finished: 2, avoided: 1 });
+
+  // 同じ石板を介入なしでもう一度 (同じ年代記) 終えても、数えは増えない
+  await page.locator('#verdict-retry').click();
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict-avoidance')).toHaveText('この予言を越えた見守り手は 50%', { timeout: 90_000 });
+  expect(harbor.fake.outcomes.get('test-civ')).toEqual({ finished: 2, avoided: 1 });
+  expect(harbor.sent.filter((w) => w.method === 'POST' && w.path === '/api/v1/outcomes')).toHaveLength(1);
+});
+
+test('M19-11: 閉港なら回避率を出さない', async ({ page }) => {
+  test.setTimeout(120_000);
+  const harbor = await routeHarbor(page);
+  harbor.state.closed = true;
+  await playToVerdict(page, 'test-quick');
+  await expect(page.locator('#verdict-harbor')).toContainText('港へ出す');
+  await expect.poll(() => harbor.sent.filter((w) => w.path.startsWith('/api/v1/outcomes')).length).toBeGreaterThanOrEqual(1);
+  await expect(page.locator('#verdict-avoidance')).toBeHidden();
+  await expect(page.locator('#tablet-avoidance')).toBeHidden();
+});
+
+test('M19-14 の直し: 判定の後に閉じて開き直し、次の挑戦が進んでも、判定の出た島を港の板から出港できる', async ({ page }) => {
+  test.setTimeout(120_000);
+  const harbor = await routeHarbor(page);
+  await playToVerdict(page, 'test-quick');
+  await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
+  await expect(publishFrom(page).getByRole('button', { name: '出港する' })).toBeVisible();
+  await expect.poll(() => stored(page, 'finished', 'test-quick')).not.toBeNull();
+  await page.reload();
+  await page.click('#speed-100');
+  await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 30_000 });
+  await page.click('#speed-0');
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  const drawer = page.getByRole('complementary', { name: '港' });
+  await expect(drawer.locator('.harbor-finished')).toContainText('この石板で最後に判定の出た島');
+  await drawer.getByRole('region', { name: '港へ出す' }).getByRole('button', { name: '出港する' }).click();
+  await expect(drawer.getByRole('region', { name: '港へ出す' }).getByRole('status').first()).toHaveText('港へ出した。リンクを渡せば、誰でもこの島をたどれる');
+  const [id] = [...harbor.fake.ledger.keys()];
+  expect(harbor.fake.ledger.get(id)?.card).toMatchObject({ scenarioId: 'test-quick', verdict: 'dead' });
+  await shot(page, '12-finished-publish');
 });

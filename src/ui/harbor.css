@@ -79,7 +79,7 @@
 .harbor-inscriptions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
 .harbor-carve { font: 13px/1.5 var(--harbor-carve); letter-spacing: 0.06em; color: var(--harbor-dim); background: rgba(8, 18, 18, 0.45); border: 1px solid rgba(126, 145, 139, 0.45); border-radius: 2px; padding: 3px 10px; cursor: pointer; }
 .harbor-carve[aria-checked='true'] { color: var(--harbor-text); border-color: var(--harbor-glow); box-shadow: inset 0 0 8px rgba(143, 234, 223, 0.3); }
-#harbor-publish-status { margin-top: 8px; color: #c9d6cd; font-size: 12px; }
+.harbor-publish-status { margin-top: 8px; color: #c9d6cd; font-size: 12px; }
 .harbor-link { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .harbor-link[hidden] { display: none; }
 .harbor-url { flex: 1 1 100%; min-width: 0; font: 11px/1.6 ui-monospace, Menlo, monospace; color: var(--harbor-text); background: rgba(8, 18, 18, 0.6); border: 1px solid rgba(126, 145, 139, 0.5); padding: 3px 6px; }
@@ -103,3 +103,9 @@
 @media (prefers-reduced-motion: reduce) {
   .harbor-track i { transition: none; }
 }
+
+/* 浜の漂着 (M19-10)。港の板の頭の下、一覧の上に置く */
+.harbor-drift { margin: 8px 0 10px; padding: 8px 0 10px; border-top: 1px solid rgba(126, 145, 139, 0.45); border-bottom: 1px solid rgba(126, 145, 139, 0.45); }
+.harbor-drift[hidden], .harbor-drift [hidden] { display: none; }
+/* 判定の出た最後の島 (M19-14 の直し)。開き直した後も港の板から出港できる */
+.harbor-finished { margin: 4px 0 8px; }

@@ -1,6 +1,7 @@
 import type { Digest, ReplayOutcome } from '../harbor/chronicle';
-import type { PublishResult } from '../harbor/client';
-import type { ChronicleCard } from '../harbor/contract';
+import type { LandResult } from '../harbor/cargo';
+import type { DrawResult, PublishResult } from '../harbor/client';
+import type { Cargo, ChronicleCard } from '../harbor/contract';
 
 /**
  * 港の画面の言葉 (M19-09)。閉港は誤りではなく普段の状態なので、何が起き、何ができるかを書く (設計書 §6.2)。
@@ -110,4 +111,50 @@ export function withdrawText(r: 'ok' | 'closed' | 'forbidden'): string {
     case 'forbidden':
       return 'この島の取り下げ鍵が手元に無いので、取り下げられない';
   }
+}
+
+/** 積荷の中身 (M19-10)。「兎 2.5・狼 0.3」。名の無い種は id */
+export function cargoItemsText(cargo: Cargo, names: Readonly<Record<string, string>>): string {
+  return cargo.items.map((d) => `${names[d.speciesId] ?? d.speciesId} ${d.amount}`).join('・');
+}
+
+export function castText(r: 'ok' | 'closed' | 'rejected'): string {
+  switch (r) {
+    case 'ok':
+      return '積荷を港に流した。どこかの見守り手の浜に流れ着く';
+    case 'closed':
+      return '港は今日は閉まっている。積荷は流れなかった';
+    case 'rejected':
+      return '港が受け取れない積荷だった';
+  }
+}
+
+export function drawText(r: DrawResult): string {
+  if (r.kind === 'closed') return HARBOR_CLOSED_TEXT;
+  if (r.drawn === null) return '浜には何も流れ着いていない';
+  return r.received ? RECEIVED_ALREADY_TEXT : '積荷が流れ着いた。受け取れば、外来種として島の浜に放たれる';
+}
+
+const RECEIVED_ALREADY_TEXT = 'この積荷はもう受け取った';
+export const DISMISSED_TEXT = '積荷を沖へ返した';
+
+export function receiveText(r: LandResult | 'already'): string {
+  switch (r) {
+    case 'ok':
+      return '積荷を受け取った。外来種が島の浜に放たれた';
+    case 'already':
+      return RECEIVED_ALREADY_TEXT;
+    case 'budget':
+      return '星の力が足りない。力が溜まってから、もう一度受け取る';
+    case 'no_shore':
+      return 'この島には積荷の着く浜が無い';
+    case 'refused':
+      return '今は受け取れない (判定の出た石板・訪れている島)';
+  }
+}
+
+/** 回避率 (M19-11、設計書 B6)。検証できない数なので順位は作らず、割合だけを言う。閉港とまだ誰も終えていない石板は出さない */
+export function avoidanceText(a: { finished: number; avoided: number } | null): string | null {
+  if (a === null || a.finished === 0) return null;
+  return `この予言を越えた見守り手は ${Math.round((100 * a.avoided) / a.finished)}%`;
 }

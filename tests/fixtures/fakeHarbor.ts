@@ -1,6 +1,6 @@
 import { sha256Hex } from '../../src/chronicle/digest';
 import type { Chronicle } from '../../src/harbor/chronicle';
-import { chronicleId, type ChronicleCard, type ChronicleId, type HarborCatalog } from '../../src/harbor/contract';
+import { chronicleId, type ChronicleCard, type ChronicleId, parseCargoId, type DrawnCargo, type HarborCatalog } from '../../src/harbor/contract';
 import { readRequest, writeRefusal, writeResponse, type Refusal, type WireRequest } from '../../src/harbor/wire';
 
 /**
@@ -21,6 +21,11 @@ export function catalogFrom(data: { scenarios: readonly { id: string }[]; specie
 export function createFakeHarbor(catalog: HarborCatalog, opts: { now?: () => number } = {}) {
   const now = opts.now ?? (() => 1_790_000_000_000);
   const ledger = new Map<ChronicleId, Entry>();
+  /** 流れている積荷。漂着は乱数の代わりに順繰りに引く (決定論のため) */
+  const cargo: DrawnCargo[] = [];
+  let draws = 0;
+  /** 石板ごとの結末の数え (D1 の outcomes の代わり)。越えたとみなす判定は Worker の ledger.ts と同じ alive・escaped */
+  const outcomes = new Map<string, { finished: number; avoided: number }>();
   const refuse = (refusal: Refusal): FakeReply => {
     const { status, body } = writeRefusal(refusal);
     return { status, body, headers: JSON_HEADERS };
@@ -71,10 +76,24 @@ export function createFakeHarbor(catalog: HarborCatalog, opts: { now?: () => num
         ledger.delete(req.id);
         return empty;
       }
+      case 'cast_cargo': {
+        const id = parseCargoId((await sha256Hex(`cargo:${cargo.length}`)).slice(0, 32));
+        if (id.ok) cargo.push({ id: id.value, cargo: req.cargo });
+        return empty;
+      }
+      case 'draw_cargo':
+        return ok(200, writeResponse('draw_cargo', { drawn: cargo.length === 0 ? null : cargo[draws++ % cargo.length] }));
+      case 'report_outcome': {
+        const n = outcomes.get(req.scenarioId) ?? { finished: 0, avoided: 0 };
+        outcomes.set(req.scenarioId, { finished: n.finished + 1, avoided: n.avoided + (req.verdict === 'dead' ? 0 : 1) });
+        return empty;
+      }
+      case 'avoidance':
+        return ok(200, writeResponse('avoidance', outcomes.get(req.scenarioId) ?? { finished: 0, avoided: 0 }));
       default:
         return refuse({ error: 'not_found' });
     }
   }
 
-  return { serve, ledger };
+  return { serve, ledger, cargo, outcomes };
 }

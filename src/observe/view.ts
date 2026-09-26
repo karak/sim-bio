@@ -26,6 +26,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import { createNoticeBand } from './notice';
+import { observeYearText } from '../core/season';
 import { mulberry32 } from '../simulation/rng';
 import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh, groundLayers, wearTerrain, type Worn } from './render/terrain';
 import { createWater } from './render/water';
@@ -996,7 +997,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
-      if (host.debug === false) stats.textContent = `${st.year} 年`;
+      if (host.debug === false) stats.textContent = observeYearText(snap);
       else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps${st.res < 1 ? ` (解像度 ×${st.res})` : ''} · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
     }
     if (running) handle = requestAnimationFrame(loop);

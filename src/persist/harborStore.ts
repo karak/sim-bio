@@ -1,9 +1,13 @@
 import type { Chronicle, Digest } from '../harbor/chronicle';
-import { parseChronicleId, parseWithdrawKey, type ChronicleId, type InscriptionId, type WithdrawKey } from '../harbor/contract';
+import { parseChronicleId, parseWithdrawKey, type CargoId, type ChronicleId, type InscriptionId, type WithdrawKey } from '../harbor/contract';
 import { openDb, requestDone, transactionDone } from './islandStore';
 
 /** 港へ出す 1 件 (M19-09)。閉港のあいだ outbox に置き、同じ id・同じ鍵で送り直す */
 export type Outbound = { id: ChronicleId; chronicle: Chronicle; digest: Digest; inscription: InscriptionId };
+
+/** 手元の控え。受け取った積荷 (M19-10) と、回避率に数えた年代記 (M19-11) を、二度しないために残す */
+export type Mark = { kind: 'received'; id: CargoId } | { kind: 'counted'; id: ChronicleId };
+const markKey = (m: Mark) => `${m.kind}:${m.id}`;
 
 /**
  * 港のクライアントの手元の置き場 (設計書 §3.1 の outbox・keys)。島の置き場 (islandStore) と同じ DB の別の store に置く。
@@ -21,6 +25,18 @@ export type HarborStore = {
   forgetKey(id: ChronicleId): Promise<void>;
   /** 読める鍵を持つ年代記 (自分が出港したもの) */
   ownIds(): Promise<ReadonlySet<ChronicleId>>;
+  /** 控えが無ければ置いて true、あれば false。1 つの transaction で読んで書くので、同時に claim しても true は 1 つ */
+  claim(m: Mark): Promise<boolean>;
+  has(m: Mark): Promise<boolean>;
+  /** claim した後にやり遂げられなかった (受け取れなかった・港が閉まっていた) ときに控えを外す */
+  release(m: Mark): Promise<void>;
+  /**
+   * 判定の出た島 (年代記と要約) を石板ごとに 1 つ残す (M19-14 の直し)。chronicles の年代記は次の挑戦の自動保存が上書きするので、
+   * 判定の後に閉じてからでも港へ出せるよう、別の store に置く
+   */
+  keepFinished(scenarioId: string, island: { chronicle: Chronicle; digest: Digest }): Promise<void>;
+  /** 無ければ null。値は境界として港のクライアントがカタログで parse し直す */
+  finishedOf(scenarioId: string): Promise<unknown>;
 };
 
 const readKey = (v: unknown): WithdrawKey | null => {
@@ -39,7 +55,7 @@ const ownOf = (entries: Iterable<[unknown, unknown]>): ReadonlySet<ChronicleId> 
 
 export async function openHarborStore(deps: { indexedDB: IDBFactory }): Promise<HarborStore> {
   const db = await openDb(deps.indexedDB);
-  const write = async (store: 'outbox' | 'keys', f: (s: IDBObjectStore) => void) => {
+  const write = async (store: 'outbox' | 'keys' | 'marks' | 'finished', f: (s: IDBObjectStore) => void) => {
     const tx = db.transaction(store, 'readwrite');
     f(tx.objectStore(store));
     await transactionDone(tx);
@@ -70,6 +86,23 @@ export async function openHarborStore(deps: { indexedDB: IDBFactory }): Promise<
       const [ids, keys] = await Promise.all([requestDone<IDBValidKey[]>(store.getAllKeys()), requestDone<unknown[]>(store.getAll())]);
       return ownOf(ids.map((id, i) => [id, keys[i]]));
     },
+    async claim(m) {
+      const tx = db.transaction('marks', 'readwrite');
+      const marks = tx.objectStore('marks');
+      const claimed = new Promise<boolean>((resolve) => {
+        const req = marks.getKey(markKey(m));
+        req.onsuccess = () => {
+          if (req.result === undefined) marks.put(true, markKey(m));
+          resolve(req.result === undefined);
+        };
+      });
+      await transactionDone(tx);
+      return claimed;
+    },
+    has: async (m) => (await requestDone(db.transaction('marks').objectStore('marks').getKey(markKey(m)))) !== undefined,
+    release: (m) => write('marks', (s) => s.delete(markKey(m))),
+    keepFinished: (scenarioId, island) => write('finished', (s) => s.put(island, scenarioId)),
+    finishedOf: async (scenarioId) => (await requestDone<unknown>(db.transaction('finished').objectStore('finished').get(scenarioId))) ?? null,
   };
 }
 
@@ -77,6 +110,8 @@ export async function openHarborStore(deps: { indexedDB: IDBFactory }): Promise<
 export function createMemoryHarborStore(): HarborStore {
   const outbox = new Map<string, Outbound>();
   const keys = new Map<ChronicleId, WithdrawKey>();
+  const marks = new Set<string>();
+  const finished = new Map<string, unknown>();
   return {
     enqueue: async (o) => void outbox.set(o.id, structuredClone(o)),
     queued: async () => [...outbox.values()].map((o) => structuredClone(o)),
@@ -89,5 +124,14 @@ export function createMemoryHarborStore(): HarborStore {
     keyOf: async (id) => readKey(keys.get(id)),
     forgetKey: async (id) => void keys.delete(id),
     ownIds: async () => ownOf(keys.entries()),
+    async claim(m) {
+      if (marks.has(markKey(m))) return false;
+      marks.add(markKey(m));
+      return true;
+    },
+    has: async (m) => marks.has(markKey(m)),
+    release: async (m) => void marks.delete(markKey(m)),
+    keepFinished: async (scenarioId, island) => void finished.set(scenarioId, structuredClone(island)),
+    finishedOf: async (scenarioId) => structuredClone(finished.get(scenarioId)) ?? null,
   };
 }
