@@ -1,4 +1,4 @@
-import { fail, isObject, type Parsed } from '../core/parse';
+import { fail, isObject, under, type Parsed } from '../core/parse';
 import {
   HARBOR_LIMITS,
   parseCard,
@@ -14,6 +14,7 @@ import {
   parseVerdict,
   parseWithdrawKey,
   type Cargo,
+  type ChronicleCard,
   type HarborCatalog,
   type HarborRequest,
   type HarborResponses,
@@ -29,8 +30,9 @@ import type { Chronicle, Digest } from './chronicle';
 export type WireRequest = { method: 'GET' | 'POST' | 'DELETE'; path: string; headers: Readonly<Record<string, string>>; body: string | null };
 
 /** Worker は Content-Length をこれと比べてから本文を読む。出港 (年代記 16 KB と要約) が最も大きい。道ごとのもっと狭い上限は readRequest が見る */
-export const MAX_BODY_BYTES = 20 * 1024;
+export const MAX_BODY_BYTES = HARBOR_LIMITS.chronicleBytes + 4 * 1024;
 const SMALL_BODY_BYTES = 2 * 1024;
+const NO_BODY = 0;
 /** 一覧の 1 頁 (50 件) と訪問 (年代記とカード) が収まる大きさ。クライアントが読む応答の上限 */
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
@@ -66,14 +68,14 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
     maxBytes: MAX_BODY_BYTES,
     write: ({ chronicle, digest, inscription, turnstile }) => ({ headers: { [TURNSTILE_HEADER]: turnstile }, body: { chronicle, digest, inscription } }),
     read: (m, catalog) => {
-      const turnstile = parseTurnstile(m.headers[TURNSTILE_HEADER], `headers.${TURNSTILE_HEADER}`);
+      const turnstile = under(`headers.${TURNSTILE_HEADER}`, parseTurnstile(m.headers[TURNSTILE_HEADER]));
       if (!turnstile.ok) return turnstile;
       if (!isObject(m.body)) return fail('', 'not_object');
       const chronicle = under('chronicle', parsePublicChronicle(m.body.chronicle, catalog));
       if (!chronicle.ok) return chronicle;
-      const digest = parseDigest(m.body.digest, catalog, 'digest');
+      const digest = under('digest', parseDigest(m.body.digest, catalog));
       if (!digest.ok) return digest;
-      const inscription = parseInscription(m.body.inscription, catalog, 'inscription');
+      const inscription = under('inscription', parseInscription(m.body.inscription, catalog));
       if (!inscription.ok) return inscription;
       return { ok: true, value: { kind: 'publish', chronicle: chronicle.value, digest: digest.value, inscription: inscription.value, turnstile: turnstile.value } };
     },
@@ -81,14 +83,14 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
   browse: {
     method: 'GET',
     path: ['chronicles'],
-    maxBytes: 0,
+    maxBytes: NO_BODY,
     write: ({ scenarioId, before }) => ({ query: { ...(scenarioId === null ? {} : { scenario: scenarioId }), ...(before === null ? {} : { before }) } }),
     read: (m, catalog) => {
       const scenario = m.query.get('scenario');
-      const scenarioId = scenario === null ? null : parseScenarioId(scenario, catalog, 'query.scenario');
+      const scenarioId = scenario === null ? null : under('query.scenario', parseScenarioId(scenario, catalog));
       if (scenarioId && !scenarioId.ok) return scenarioId;
       const cursor = m.query.get('before');
-      const before = cursor === null ? null : parseCursor(cursor, 'query.before');
+      const before = cursor === null ? null : under('query.before', parseCursor(cursor));
       if (before && !before.ok) return before;
       return { ok: true, value: { kind: 'browse', scenarioId: scenarioId?.value ?? null, before: before?.value ?? null } };
     },
@@ -96,22 +98,22 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
   visit: {
     method: 'GET',
     path: ['chronicles', PARAM],
-    maxBytes: 0,
+    maxBytes: NO_BODY,
     write: ({ id }) => ({ param: id }),
     read: (m) => {
-      const id = parseChronicleId(m.param, 'id');
+      const id = under('id', parseChronicleId(m.param));
       return id.ok ? { ok: true, value: { kind: 'visit', id: id.value } } : id;
     },
   },
   withdraw: {
     method: 'DELETE',
     path: ['chronicles', PARAM],
-    maxBytes: 0,
+    maxBytes: NO_BODY,
     write: ({ id, key }) => ({ param: id, headers: { authorization: `Bearer ${key}` } }),
     read: (m) => {
-      const id = parseChronicleId(m.param, 'id');
+      const id = under('id', parseChronicleId(m.param));
       if (!id.ok) return id;
-      const key = parseWithdrawKey(BEARER.exec(m.headers.authorization ?? '')?.[1], 'headers.authorization');
+      const key = under('headers.authorization', parseWithdrawKey(BEARER.exec(m.headers.authorization ?? '')?.[1]));
       return key.ok ? { ok: true, value: { kind: 'withdraw', id: id.value, key: key.value } } : key;
     },
   },
@@ -121,22 +123,22 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
     maxBytes: SMALL_BODY_BYTES,
     write: ({ id, digest }) => ({ param: id, body: { digest } }),
     read: (m, catalog) => {
-      const id = parseChronicleId(m.param, 'id');
+      const id = under('id', parseChronicleId(m.param));
       if (!id.ok) return id;
       if (!isObject(m.body)) return fail('', 'not_object');
-      const digest = parseDigest(m.body.digest, catalog, 'digest');
+      const digest = under('digest', parseDigest(m.body.digest, catalog));
       return digest.ok ? { ok: true, value: { kind: 'confirm', id: id.value, digest: digest.value } } : digest;
     },
   },
   report: {
     method: 'POST',
     path: ['chronicles', PARAM, 'report'],
-    maxBytes: 0,
+    maxBytes: NO_BODY,
     write: ({ id, turnstile }) => ({ param: id, headers: { [TURNSTILE_HEADER]: turnstile } }),
     read: (m) => {
-      const id = parseChronicleId(m.param, 'id');
+      const id = under('id', parseChronicleId(m.param));
       if (!id.ok) return id;
-      const turnstile = parseTurnstile(m.headers[TURNSTILE_HEADER], `headers.${TURNSTILE_HEADER}`);
+      const turnstile = under(`headers.${TURNSTILE_HEADER}`, parseTurnstile(m.headers[TURNSTILE_HEADER]));
       return turnstile.ok ? { ok: true, value: { kind: 'report', id: id.value, turnstile: turnstile.value } } : turnstile;
     },
   },
@@ -147,14 +149,14 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
     write: ({ cargo }) => ({ body: { cargo } }),
     read: (m, catalog) => {
       if (!isObject(m.body)) return fail('', 'not_object');
-      const cargo = parseCargo(m.body.cargo, catalog, 'cargo');
+      const cargo = under('cargo', parseCargo(m.body.cargo, catalog));
       return cargo.ok ? { ok: true, value: { kind: 'cast_cargo', cargo: cargo.value } } : cargo;
     },
   },
   draw_cargo: {
     method: 'GET',
     path: ['cargo'],
-    maxBytes: 0,
+    maxBytes: NO_BODY,
     write: () => ({}),
     read: () => ({ ok: true, value: { kind: 'draw_cargo' } }),
   },
@@ -165,19 +167,19 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
     write: ({ scenarioId, verdict }) => ({ body: { scenarioId, verdict } }),
     read: (m, catalog) => {
       if (!isObject(m.body)) return fail('', 'not_object');
-      const scenarioId = parseScenarioId(m.body.scenarioId, catalog, 'scenarioId');
+      const scenarioId = under('scenarioId', parseScenarioId(m.body.scenarioId, catalog));
       if (!scenarioId.ok) return scenarioId;
-      const verdict = parseVerdict(m.body.verdict, 'verdict');
+      const verdict = under('verdict', parseVerdict(m.body.verdict));
       return verdict.ok ? { ok: true, value: { kind: 'report_outcome', scenarioId: scenarioId.value, verdict: verdict.value } } : verdict;
     },
   },
   avoidance: {
     method: 'GET',
     path: ['outcomes', PARAM],
-    maxBytes: 0,
+    maxBytes: NO_BODY,
     write: ({ scenarioId }) => ({ param: scenarioId }),
     read: (m, catalog) => {
-      const scenarioId = parseScenarioId(m.param, catalog, 'scenarioId');
+      const scenarioId = under('scenarioId', parseScenarioId(m.param, catalog));
       return scenarioId.ok ? { ok: true, value: { kind: 'avoidance', scenarioId: scenarioId.value } } : scenarioId;
     },
   },
@@ -224,22 +226,22 @@ type ResponseReaders = { readonly [K in keyof HarborResponses]: (v: unknown, cat
 const RESPONSES: ResponseReaders = {
   publish: (v) => {
     if (!isObject(v)) return fail('', 'not_object');
-    const id = parseChronicleId(v.id, 'id');
+    const id = under('id', parseChronicleId(v.id));
     if (!id.ok) return id;
-    const withdrawKey = parseWithdrawKey(v.withdrawKey, 'withdrawKey');
+    const withdrawKey = under('withdrawKey', parseWithdrawKey(v.withdrawKey));
     return withdrawKey.ok ? { ok: true, value: { id: id.value, withdrawKey: withdrawKey.value } } : withdrawKey;
   },
   browse: (v, catalog) => {
     if (!isObject(v)) return fail('', 'not_object');
     if (!Array.isArray(v.cards)) return fail('cards', 'not_array');
     if (v.cards.length > HARBOR_LIMITS.cardsPerPage) return fail('cards', 'too_many');
-    const cards: HarborResponses['browse']['cards'][number][] = [];
+    const cards: ChronicleCard[] = [];
     for (const [i, c] of v.cards.entries()) {
-      const card = parseCard(c, catalog, `cards[${i}]`);
+      const card = under(`cards[${i}]`, parseCard(c, catalog));
       if (!card.ok) return card;
       cards.push(card.value);
     }
-    const next = v.next === null ? null : parseCursor(v.next, 'next');
+    const next = v.next === null ? null : under('next', parseCursor(v.next));
     if (next && !next.ok) return next;
     return { ok: true, value: { cards, next: next?.value ?? null } };
   },
@@ -248,16 +250,16 @@ const RESPONSES: ResponseReaders = {
     if (!isObject(v)) return fail('', 'not_object');
     const chronicle = under('chronicle', parsePublicChronicle(v.chronicle, catalog));
     if (!chronicle.ok) return chronicle;
-    const card = parseCard(v.card, catalog, 'card');
+    const card = under('card', parseCard(v.card, catalog));
     return card.ok ? { ok: true, value: { chronicle: chronicle.value, card: card.value } } : card;
   },
   draw_cargo: (v, catalog) => {
     if (!isObject(v)) return fail('', 'not_object');
     if (v.drawn === null) return { ok: true, value: { drawn: null } };
     if (!isObject(v.drawn)) return fail('drawn', 'not_object');
-    const id = parseCargoId(v.drawn.id, 'drawn.id');
+    const id = under('drawn.id', parseCargoId(v.drawn.id));
     if (!id.ok) return id;
-    const cargo = parseCargo(v.drawn.cargo, catalog, 'drawn.cargo');
+    const cargo = under('drawn.cargo', parseCargo(v.drawn.cargo, catalog));
     return cargo.ok ? { ok: true, value: { drawn: { id: id.value, cargo: cargo.value } } } : cargo;
   },
   avoidance: (v) => {
@@ -283,11 +285,6 @@ function readJson(text: string | null, maxBytes: number): Parsed<unknown> {
   } catch {
     return fail('', 'not_json');
   }
-}
-
-/** 入れ子の parse の拒否の場所に、外側の鍵を前置する */
-function under<T>(key: string, p: Parsed<T>): Parsed<T> {
-  return p.ok ? p : fail(p.error.path === '' ? key : `${key}.${p.error.path}`, p.error.reason);
 }
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;

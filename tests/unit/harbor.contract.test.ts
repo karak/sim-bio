@@ -111,17 +111,17 @@ describe('parseDigest (M19-07)', () => {
   it('判定・年・総数・絶滅・hash の誤りを、場所を付けて弾く', async () => {
     const d = await digestOf({ year: 3, totals: { deer: 12.5, wolf: 0 } }, 'dead');
     const cases: [unknown, string, string][] = [
-      [null, 'digest', 'not_object'],
-      [{ ...d, verdict: 'running' }, 'digest.verdict', 'invalid'],
-      [{ ...d, year: 1.5 }, 'digest.year', 'invalid'],
-      [{ ...d, year: -1 }, 'digest.year', 'invalid'],
-      [{ ...d, totals: { deer: -1 } }, 'digest.totals.deer', 'invalid'],
-      [{ ...d, totals: { deer: Infinity } }, 'digest.totals.deer', 'invalid'],
-      [{ ...d, totals: { deer: 1, 'free text': 2 } }, 'digest.totals.free text', 'unknown_species'],
-      [{ ...d, extinct: [] }, 'digest.extinct', 'inconsistent'],
-      [{ ...d, extinct: ['wolf', 'deer'] }, 'digest.extinct', 'inconsistent'],
-      [{ ...d, hash: 'not-a-hash' }, 'digest.hash', 'invalid'],
-      [{ ...d, hash: d.hash.toUpperCase() }, 'digest.hash', 'invalid'],
+      [null, '', 'not_object'],
+      [{ ...d, verdict: 'running' }, 'verdict', 'invalid'],
+      [{ ...d, year: 1.5 }, 'year', 'invalid'],
+      [{ ...d, year: -1 }, 'year', 'invalid'],
+      [{ ...d, totals: { deer: -1 } }, 'totals.deer', 'invalid'],
+      [{ ...d, totals: { deer: Infinity } }, 'totals.deer', 'invalid'],
+      [{ ...d, totals: { deer: 1, 'free text': 2 } }, 'totals.free text', 'unknown_species'],
+      [{ ...d, extinct: [] }, 'extinct', 'inconsistent'],
+      [{ ...d, extinct: ['wolf', 'deer'] }, 'extinct', 'inconsistent'],
+      [{ ...d, hash: 'not-a-hash' }, 'hash', 'invalid'],
+      [{ ...d, hash: d.hash.toUpperCase() }, 'hash', 'invalid'],
     ];
     for (const [input, path, reason] of cases) expect(refused(parseDigest(input, catalog)), JSON.stringify(input)).toEqual({ path, reason });
   });
@@ -138,26 +138,26 @@ describe('parseCargo (M19-07): 積荷は 1〜5 件、量は (0, 10]、種はカ�
   });
 
   it('0 件と 6 件は弾く', () => {
-    expect(refused(parseCargo({ items: [] }, catalog))).toEqual({ path: 'cargo.items', reason: 'empty' });
-    expect(refused(parseCargo({ items: [...five, 'forest'].map((s) => item(s, 1)) }, catalog))).toEqual({ path: 'cargo.items', reason: 'too_many' });
+    expect(refused(parseCargo({ items: [] }, catalog))).toEqual({ path: 'items', reason: 'empty' });
+    expect(refused(parseCargo({ items: [...five, 'forest'].map((s) => item(s, 1)) }, catalog))).toEqual({ path: 'items', reason: 'too_many' });
   });
 
   it('量の境界: 0・負・10 を越える・数でないものは弾く', () => {
     for (const amount of [0, -1, 10.000001, 11, NaN, Infinity, '5', null]) {
-      expect(refused(parseCargo({ items: [{ speciesId: 'deer', amount }] }, catalog)), String(amount)).toEqual({ path: 'cargo.items[0].amount', reason: 'invalid' });
+      expect(refused(parseCargo({ items: [{ speciesId: 'deer', amount }] }, catalog)), String(amount)).toEqual({ path: 'items[0].amount', reason: 'invalid' });
     }
   });
 
   it('カタログに無い種・自由文・同じ種の重ねは弾く', () => {
-    expect(refused(parseCargo({ items: [item('dragon', 1)] }, catalog))).toEqual({ path: 'cargo.items[0].speciesId', reason: 'unknown_species' });
-    expect(refused(parseCargo({ items: [item('buy cheap pills at example.com', 1)] }, catalog))).toEqual({ path: 'cargo.items[0].speciesId', reason: 'unknown_species' });
-    expect(refused(parseCargo({ items: [item('deer', 10), item('deer', 10)] }, catalog))).toEqual({ path: 'cargo.items[1].speciesId', reason: 'duplicate_species' });
+    expect(refused(parseCargo({ items: [item('dragon', 1)] }, catalog))).toEqual({ path: 'items[0].speciesId', reason: 'unknown_species' });
+    expect(refused(parseCargo({ items: [item('buy cheap pills at example.com', 1)] }, catalog))).toEqual({ path: 'items[0].speciesId', reason: 'unknown_species' });
+    expect(refused(parseCargo({ items: [item('deer', 10), item('deer', 10)] }, catalog))).toEqual({ path: 'items[1].speciesId', reason: 'duplicate_species' });
   });
 
   it('形の誤り (object でない・items が配列でない・品が object でない)', () => {
-    expect(refused(parseCargo([], catalog))).toEqual({ path: 'cargo', reason: 'not_object' });
-    expect(refused(parseCargo({ items: { deer: 1 } }, catalog))).toEqual({ path: 'cargo.items', reason: 'not_array' });
-    expect(refused(parseCargo({ items: ['deer'] }, catalog))).toEqual({ path: 'cargo.items[0]', reason: 'not_object' });
+    expect(refused(parseCargo([], catalog))).toEqual({ path: '', reason: 'not_object' });
+    expect(refused(parseCargo({ items: { deer: 1 } }, catalog))).toEqual({ path: 'items', reason: 'not_array' });
+    expect(refused(parseCargo({ items: ['deer'] }, catalog))).toEqual({ path: 'items[0]', reason: 'not_object' });
   });
 });
 
@@ -181,15 +181,15 @@ describe('parseCard (M19-07): 一覧の 1 件に自由文は無い', () => {
 
   it('碑文・石板がカタログに無い、id が SHA-256 の形でない、数が負や小数なら弾く', () => {
     const cases: [unknown, string, string][] = [
-      [{ ...card, inscription: 'hello, world' }, 'card.inscription', 'unknown_inscription'],
-      [{ ...card, scenarioId: 'nowhere' }, 'card.scenarioId', 'unknown_scenario'],
-      [{ ...card, id: 'abc' }, 'card.id', 'invalid'],
-      [{ ...card, verdict: 'running' }, 'card.verdict', 'invalid'],
-      [{ ...card, confirms: -1 }, 'card.confirms', 'invalid'],
-      [{ ...card, mismatches: 0.5 }, 'card.mismatches', 'invalid'],
-      [{ ...card, publishedAt: '2026-09-26' }, 'card.publishedAt', 'invalid'],
-      [{ ...card, seed: 1.5 }, 'card.seed', 'invalid'],
-      [{ ...card, simVersion: 'lol' }, 'card.simVersion', 'invalid'],
+      [{ ...card, inscription: 'hello, world' }, 'inscription', 'unknown_inscription'],
+      [{ ...card, scenarioId: 'nowhere' }, 'scenarioId', 'unknown_scenario'],
+      [{ ...card, id: 'abc' }, 'id', 'invalid'],
+      [{ ...card, verdict: 'running' }, 'verdict', 'invalid'],
+      [{ ...card, confirms: -1 }, 'confirms', 'invalid'],
+      [{ ...card, mismatches: 0.5 }, 'mismatches', 'invalid'],
+      [{ ...card, publishedAt: '2026-09-26' }, 'publishedAt', 'invalid'],
+      [{ ...card, seed: 1.5 }, 'seed', 'invalid'],
+      [{ ...card, simVersion: 'lol' }, 'simVersion', 'invalid'],
     ];
     for (const [input, path, reason] of cases) expect(refused(parseCard(input, catalog)), JSON.stringify(input)).toEqual({ path, reason });
   });
