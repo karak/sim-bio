@@ -1,4 +1,4 @@
-import type { ReplayOutcome } from './contract';
+import type { ReplayOutcome } from '../harbor/chronicle';
 import type { ReplayIsland, ReplayMessage, ReplayRequest } from './replay';
 
 /** 再生を回す先の継ぎ目。既定は Web Worker。テストは同じ handleReplayRequest を手元で回す偽物を渡す */

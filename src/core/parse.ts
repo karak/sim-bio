@@ -14,3 +14,12 @@ export function fail(path: string, reason: string): { ok: false; error: ParseErr
 export function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
+
+/** 入れ子の parse の拒否の場所 (その値から見た相対の道) に、外側の鍵を前置する */
+export function under<T>(key: string, p: Parsed<T>): Parsed<T> {
+  return p.ok ? p : fail(p.error.path === '' ? key : `${key}.${p.error.path}`, p.error.reason);
+}
+
+export const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+export const isInt = (v: unknown, min: number, max = Number.MAX_SAFE_INTEGER): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;

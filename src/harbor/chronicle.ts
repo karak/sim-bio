@@ -1,10 +1,12 @@
-import { fail, isObject, type ParseError, type Parsed } from '../core/parse';
+import { fail, isFiniteNumber, isInt, isObject, type ParseError, type Parsed } from '../core/parse';
 import type { ScenarioStatus } from '../scenario/types';
 import type { Command, DisasterKind } from '../simulation/types';
 
 /**
  * 年代記の契約 (M19-06、設計書 2026-09-26-cloudflare-architecture.md §5.1・§5.2)。
  * 港の契約 (M19-07) が src/harbor/contract.ts へ移すまで、ここに置く。依存は core/parse と本体の型だけにしてある
+ * M19-07 で chronicle/contract.ts から harbor/chronicle.ts へ移した。呼び手も移し、古い口は残していない (年代記は港でクライアントと Worker が共有する単位なので)。
+ * 港に出すときの約束 (カタログ・id・積荷・要求と応答) は harbor/contract.ts に置く。ここは手元 (記録・保存・再生) でも使う年代記の形だけ
  */
 
 /** 見守り手が UI から打ち、受理された命令。予言が出す命令 (fromStar:false) は含めない (再生で同じ ScenarioRunner が再現する) */
@@ -45,16 +47,14 @@ export type ChronicleLimits = { maxCommands: number };
 export const CHRONICLE_LIMITS: ChronicleLimits = { maxCommands: 4000 };
 /** 折れ線の点の数の上限。300 年でも 10 種 × 48 点ほどで 5 KB に収まる */
 export const YEARLY_POINTS = 48;
-const MAX_SPECIES = 32;
+export const MAX_SPECIES = 32;
 /** 半径は referenceSize (128) 基準。島より大きい環は要らない。大きすぎる値は 1 回の適用で重くなる */
 const MAX_RADIUS = 128;
-const MAX_AMOUNT = 10;
+export const MAX_AMOUNT = 10;
 
 const DISASTER_KINDS: readonly DisasterKind[] = ['meteor', 'volcano', 'wildfire', 'plague'];
 const EDICTS = ['stop_mining', 'resume_mining'] as const;
 
-const isInt = (v: unknown, min: number, max = Number.MAX_SAFE_INTEGER): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
-const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isId = (v: unknown): v is string => typeof v === 'string' && /^[a-z0-9_-]{1,40}$/.test(v);
 const optionalFinite = (o: Record<string, unknown>, key: string): { ok: true; value?: number } | { ok: false } => {
   if (o[key] === undefined) return { ok: true };
