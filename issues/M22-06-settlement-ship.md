@@ -106,6 +106,27 @@ M22-02
 - 試験: `tests/unit/observe.hutLod.test.ts` の三角形の数を新しい形に合わせた(hut 27,142・hut_lod1 2,540・部品の近い形と遠距離版)。関係する単体試験 5 ファイル 30 件(hutLod・settlementLayout・bake・shadowOnly・breakdown)と `npx playwright test tests/e2e/observe.spec.ts` 4 件が通る。vitest の通しは回していない。
 - 確かめていないこと: 夜の見た目、ユーザーの審査台での判断、M4 以外の GPU での fps。北側の苔はノードの +Y(小屋では奥)に寄せているので、置いた向きによっては世界の北と一致しない。
 - 2026-09-26 12:28 手元の審査台での判断(s1-settlement、12ddb43)不合格「L字の石垣の苔はもう少し薄く、散在するように。あとはOKとします 苔の向きは既知の問題として許容。記録すること 影やLODといった軽量化をタスクに積むこと」
-  - [ ] L 字の石垣の苔を薄く、散在させる(ほかは OK)
+  - [x] L 字の石垣の苔を薄く、散在させる(ほかは OK) → settle2(下の作業ログ、`docs/design/qa/observe/settle2-corner.png`)。審査待ち
   - [x] 既知の問題として許容(記録): 苔を寄せる「北側」は部品のローカルの +Y で決めていて、置いた向きによっては世界の北と一致しない
   - [x] 軽量化をタスクに積んだ → issues/M23-10-settlement-shadow-lod.md
+
+## 作業ログ(2026-09-26、集落 2 回目 settle2: L 字の石垣の苔)
+
+審査台 s1-settlement(12ddb43)のユーザーのメモ(原文): 「L字の石垣の苔はもう少し薄く、散在するように。あとはOKとします 苔の向きは既知の問題として許容。記録すること 影やLODといった軽量化をタスクに積むこと」
+
+直したところ(`tools/blender/observe_settlement.py` → `assets/models/observe/settlement.glb`。ゲーム側のコードは変えていない):
+
+- L 字の石垣(`stone_wall_corner` とその遠距離版 `stone_wall_corner_lod1`)だけ、組む間 `MOSS_SPARSE` に `CORNER_MOSS` を置き、`weather` の苔の斑を替える。苔の斑は面を覆う低い周波数のノイズ(2.3)ではなく、細かい別のノイズ(4.6)を閾値 0.63・縁を 3.2 倍に立てて切り(斑を小さく、少なく)、苔の濃さに 0.75 を掛ける(薄く)。天端・根元・継ぎ目・北側のどの苔も同じに扱う。雨の筋・泥・地衣・石の色は変えていない。
+- ほかの部品は「OK」なので変えていない: 前の .glb(12ddb43、md5 dc2762fe…)と比べて、属性のバイトが違うのは `stone_wall_corner`・`stone_wall_corner_lod1` の `COLOR_0` だけ(位置・法線・添字、ほかの 14 ノードは同じ)。
+- 形・乱数は変えていないので、三角形は同じ(`stone_wall_corner` 6,262 / 508)。`tests/unit/observe.hutLod.test.ts` の期待は変えていない。
+- 苔の向き(北側をノードの +Y で決めている)は既知の問題として許容済みなので直していない。軽量化(影・LOD)は issues/M23-10-settlement-shadow-lod.md に積んだ。今回はやっていない。
+
+比較画 `docs/design/qa/observe/settle2-corner.png`(ゲームの画は 1280×720 @2x、朝 time=0.12・freeze=1・ship=60・auto=0、`__observeAir` で同じカメラに置いた。前の画は 12ddb43 の settlement.glb で撮った):
+
+- 1 段目: L 字の石垣の寄り 5 m(settle1-detail.png の最下段と同じカメラ)の前後。
+- 2 段目: L 字の石垣を上から 3.4 m(天端の苔の斑を見る)の前後。
+- 3 段目: ゲーム内の集落の寄せ先の前後。255 のうち 8 を超える画素の割合は 0.02%(L 字の石垣は寄せ先ではほとんど写らない)。寄りの 5 m では 15.79%。draw call は寄せ先 97・寄り 78 で前後同じ。
+
+- glTF-Validator: errors 0 / warnings 0 / infos 0。2 回書き出して同じ .glb になった(md5 044bd52f…)。4.42 MB のまま。
+- 試験: 関係する単体試験 6 ファイル 34 件(hutLod・settlementLayout・bake・shadowOnly・breakdown・render.settlement)と `npx playwright test tests/e2e/observe.spec.ts` 4 件が通る。vitest の通しは回していない。
+- 確かめていないこと: 夜の見た目、ユーザーの審査台での判断。

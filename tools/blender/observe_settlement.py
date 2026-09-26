@@ -117,6 +117,9 @@ STREAK = hex_rgb("#3E3C36")      # 雨の筋 (上から垂れた汚れ)
 DIRT = hex_rgb("#6B5A45")        # 地面際の泥のはね
 LICHEN = hex_rgb("#B7B08C")      # 天端の淡い地衣
 MOSS_BRIGHT = hex_rgb("#86A83E")  # 日の当たる苔
+# (settle2 で追加) 審査台 s1-settlement「L字の石垣の苔はもう少し薄く、散在するように」: 組む間だけ (濃さ, 斑の周波数, 斑の閾値, 縁の鋭さ) を置く。
+# weather の苔の斑を細かい別のノイズで切り (斑を小さく)、閾値を上げて縁を立て (斑を減らし、散らす)、濃さを掛ける (薄く)。None なら今までどおり
+MOSS_SPARSE = None
 
 
 def damp_wood(v, ground=0.0, reach=0.7):
@@ -222,6 +225,7 @@ def weather(mul, hue, seed, z1, has_moss, bottom, height, coarse=False, ground=N
                  for i in range(3))
     g0 = GROUND if ground is None else ground
     height = max(height, 0.1)
+    sparse = MOSS_SPARSE  # (settle2 で追加)
 
     def f(co, n):
         g = co.z - g0
@@ -232,14 +236,18 @@ def weather(mul, hue, seed, z1, has_moss, bottom, height, coarse=False, ground=N
         fine = K.vnoise(co.x * 3.5, co.y * 3.5, co.z * 3.5, seed + 3.0)
         side = abs(n.z) < 0.5
         lz = co.z - bottom
-        m = clamp01((0.55 - g) / 0.55) * smooth01((patch - 0.28) * 2.6) * 0.9
+        mp, amt = patch, 1.0
+        if sparse:  # (settle2 で追加) 苔の斑だけを細かく・少なく・薄く (汚れ・地衣・雨の筋は変えない)
+            amt, freq, thr, sharp = sparse
+            mp = 0.3 + (K.vnoise(co.x * freq, co.y * freq, co.z * freq, seed + 21.0) - thr) * sharp
+        m = clamp01((0.55 - g) / 0.55) * smooth01((mp - 0.28) * 2.6) * 0.9
         if has_moss and n.z > 0.5:
-            m += smooth01((patch - 0.3) * 3.0) * (0.75 + 0.25 * fine)
+            m += smooth01((mp - 0.3) * 3.0) * (0.75 + 0.25 * fine)
         if side and not coarse and lz < 0.08:
-            m += 0.55 * smooth01((patch - 0.28) * 3.0)
+            m += 0.55 * smooth01((mp - 0.28) * 3.0)
         if side and n.y > 0.35:
-            m += 0.5 * smooth01((patch - 0.36) * 3.0) * clamp01(1.1 - lz / height)
-        m = min(0.95, m)
+            m += 0.5 * smooth01((mp - 0.36) * 3.0) * clamp01(1.1 - lz / height)
+        m = min(0.95, m) * amt
         col = base
         if side:
             tx = co.x * -n.y + co.y * n.x
@@ -1482,6 +1490,21 @@ def stone_wall_corner():
     角と腕 A の端に太い立石 (端の石の正面に浅く彫った六角の枠)"""
     # (集落の建物の作り直しで変更: 腕は一つずつの石の 4 段 (腕 B は崩れかけて上の段が短い)。端の立石を 1.05 m にし、
     #  紋は彫り込んだ四角の枠の中の六角と、その上下の短い溝 (基準画の端の石の刻み。字に見えないよう線は枠と紋だけ))
+    # (settle2 で変更: 審査台 s1-settlement「L字の石垣の苔はもう少し薄く、散在するように」。苔の斑を細かく・少なく・薄くする
+    #  (MOSS_SPARSE、遠距離版 (far_of) も同じ)。形・乱数は変えない)
+    global MOSS_SPARSE
+    MOSS_SPARSE = CORNER_MOSS
+    try:
+        return stone_wall_corner_build()
+    finally:
+        MOSS_SPARSE = None
+
+
+CORNER_MOSS = (0.75, 4.6, 0.63, 3.2)  # (settle2 で追加) L 字の石垣の苔 (濃さ, 斑の周波数, 斑の閾値, 縁の鋭さ)
+
+
+def stone_wall_corner_build():
+    """(settle2 で追加) stone_wall_corner の中身 (苔の設定の下で組む)"""
     n = K.Node("stone_wall_corner")
     rnd = random.Random(707)
     T = 0.55  # 壁の厚み
