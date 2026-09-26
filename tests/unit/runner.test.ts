@@ -29,6 +29,22 @@ describe('createRunner', () => {
     expect(w.ticks()).toBe(0);
     expect(frames).toBe(2);
   });
+  it('step の中で速度が 0 にされても (判定の onVerdict、M19-04)、次のフレームの前に速度を戻せば進む', () => {
+    let t = 0;
+    let stopInside = true;
+    const r = createRunner(
+      { step(n = 1) { t += n; if (stopInside) { stopInside = false; r.setSpeed(0); } }, snapshot: () => ({ tick: t }) as never },
+      { onFrame: () => {}, raf: () => 0, caf: () => {} },
+    );
+    r.setSpeed(10);
+    r.frame(0);
+    r.frame(1000);
+    expect(t).toBe(10);
+    expect(r.getSpeed()).toBe(0);
+    r.setSpeed(10);
+    r.frame(2000);
+    expect(t).toBe(20);
+  });
   it('caps ticks per frame', () => {
     const w = fakeWorld();
     const r = createRunner(w, { onFrame: () => {}, raf: () => 0, caf: () => {}, maxTicksPerFrame: 50 });
