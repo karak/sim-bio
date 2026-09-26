@@ -716,6 +716,106 @@ def build_mouth4(bm, bvh):
         ribbon_on(bm, [cast_around(bvh, phi, y, z, side) for phi, y, z in dense(MOUTH4_LIP)], MOUTH4_W, off=0.003)
 
 
+# (月鹿の手直し 6 で追加) 顔の縦横の比 (審査台 d5-deer「目と鼻の水平の比率についてはOK。だが、そもそもの顔の縦横比率がだいぶ扁平より。
+# 顔の横幅は0.5-1割削り、鼻から顎までの領域については、垂直方向に1.8-2.0倍くらいまで伸ばして 口元の線は正面から見てもっと左右短く、
+# 鼻の領域の1-2割増し程度。」)。手直し 5 の頭 (断面・窪み・目・鼻) を組んだあと、頭の頂点を動かす (face6):
+# 横は頭の幅を FACE6_X 倍に (目と鼻も同じ倍率なので正面の目・鼻筋の比は変わらない)。縦は鼻の上の辺 (FACE6_Z[0]) より下を下へ伸ばす。
+# 伸ばし方は帯ごと: 鼻 (上の辺 → 下の角) は FACE6_K[0] 倍、鼻の下 → 口の線は FACE6_K[1] 倍、口の線 → 顎の下は FACE6_K[2] 倍。
+# 鼻と口は大きく伸ばさず (基準画の正面は鼻のすぐ下に口)、口の下の顎を長くする。縦の伸ばしは目の前 (FACE6_Y) から鼻先へ効かせ、
+# 後頭部・喉は動かさない。口の線は伸ばしたあとの頭へ貼り直し、正面の幅を鼻の幅の 1.1〜1.2 倍に短くする (MOUTH6_LIP)
+HEAD_FACE6 = True
+FACE6_X = 0.93  # 顔の横幅の倍率 (0.5〜1 割削る)
+FACE6_X_Y = (-0.50, -0.58)  # 横の倍率を効かせ始める y (後頭部の首の付け根は元の幅)
+FACE6_Z = (1.785, 1.726, 1.7095)  # 鼻の上の辺・鼻の下の角・口の線の下の縁の高さ (手直し 5 の頭で測った値)
+FACE6_K = (1.45, 1.4, 2.9)  # 帯ごとの縦の倍率 (鼻・鼻の下・口の下の顎)。鼻の上の辺 → 顎の下が手直し 5 の 1.85 倍
+FACE6_Y = (-0.72, -1.10)  # 縦の伸ばしを効かせ始める y・効かせ切る y (この間は一直線に強める。顎の下の線が喉へまっすぐ上がる)
+FACE6_SHEAR = 0.9  # 鼻の下の角より下の、下へ動いた量の何倍だけ後ろへ引くか (顎を鼻先より後ろへ引く。前へ丸く膨らませない)
+# 口の線: (φ 度, y, z)。z は伸ばす前の高さ (face6_z で写す)。口角を正面の面の上で少し上げる (前は φ 90° の真横まで回って後ろへ)
+MOUTH6_PHILTRUM = [(0, -1.10, 1.752), (0, -1.10, 1.716)]
+MOUTH6_LIP = [(-5, -1.10, 1.714), (0, -1.10, 1.714), (14, -1.10, 1.7145), (26, -1.10, 1.716), (35, -1.10, 1.719), (41, -1.10, 1.723)]
+MOUTH6_W = (0.0065, 0.0055, 0.0035)
+
+
+def face6_w(y):
+    return max(0.0, min(1.0, (y - FACE6_Y[0]) / (FACE6_Y[1] - FACE6_Y[0])))
+
+
+def face6_back(y, z):
+    """鼻の下の角より下の頂点を後ろへ引く量 (下へ動いた量のうち、鼻の帯の分を除いたもの × FACE6_SHEAR)"""
+    return FACE6_SHEAR * max(0.0, (min(z, FACE6_Z[1]) - face6_z(y, z)) - (FACE6_Z[1] - face6_z(y, FACE6_Z[1])))
+
+
+def face6_z(y, z):
+    """伸ばす前の高さ z → 後の高さ (y で縦の伸ばしを弱める)"""
+    w = face6_w(y)
+    if w <= 0 or z >= FACE6_Z[0]:
+        return z
+    ks = [1 + (k - 1) * w for k in FACE6_K]
+    edges = FACE6_Z
+    out = edges[0]
+    lo = edges[0]
+    for i, k in enumerate(ks):
+        nxt = edges[i + 1] if i + 1 < len(edges) else -1e9
+        seg = lo - max(z, nxt)
+        out -= seg * k
+        if z >= nxt:
+            return out
+        lo = nxt
+    return out
+
+
+def face6_z_inv(y, z):
+    """後の高さ → 伸ばす前の高さ (重みを伸ばす前の口の線で配るため)"""
+    w = face6_w(y)
+    if w <= 0 or z >= FACE6_Z[0]:
+        return z
+    ks = [1 + (k - 1) * w for k in FACE6_K]
+    edges = FACE6_Z
+    src, dst = edges[0], edges[0]
+    for i, k in enumerate(ks):
+        nxt = edges[i + 1] if i + 1 < len(edges) else -1e9
+        dnxt = dst - (src - nxt) * k if nxt > -1e8 else -1e9
+        if z >= dnxt:
+            return src - (dst - z) / k
+        src, dst = nxt, dnxt
+    return z
+
+
+def face6_x(y):
+    return 1 - (1 - FACE6_X) * smoothstep(FACE6_X_Y[0], FACE6_X_Y[1], y)
+
+
+def face6(verts, tones=False):
+    """(月鹿の手直し 6 で追加) 頂点を動かす。tones は窪みの塗り (HEAD_TONE、位置で引く) を動かした先へ付け替える"""
+    moved = []
+    for v in verts:
+        k0 = tuple(round(q, 4) for q in v.co)
+        x, y, z = v.co
+        v.co = Vector((x * face6_x(y), y + face6_back(y, z), face6_z(y, z)))
+        if tones and k0 in HEAD_TONE:
+            moved.append((v, HEAD_TONE.pop(k0)))
+    for v, t in moved:
+        HEAD_TONE[tuple(round(q, 4) for q in v.co)] = t
+
+
+def build_mouth6(bm, bvh):
+    """(月鹿の手直し 6 で追加) 伸ばしたあとの頭へ口の線を貼る (線の幅は伸ばさない)"""
+    def keys(ks):
+        return [(phi, y, face6_z(y, z)) for phi, y, z in dense(ks)]
+    ribbon_on(bm, [cast_around(bvh, phi, y, z, 1) for phi, y, z in keys(MOUTH6_PHILTRUM)], (MOUTH6_W[0], MOUTH6_W[0]), off=0.003)
+    for side in (-1, 1):
+        ribbon_on(bm, [cast_around(bvh, phi, y, z, side) for phi, y, z in keys(MOUTH6_LIP)], MOUTH6_W, off=0.003)
+
+
+def head_weights6(co):
+    """(月鹿の手直し 6 で追加) 伸ばす前の位置で head_weights を引く (顎の骨の重みの境は伸ばす前の口の線)"""
+    y = co.y
+    for _ in range(6):  # 後ろへ引いた分を戻す (y は引く量にしか効かないので数回で収まる)
+        z = face6_z_inv(y, co.z)
+        y = co.y - face6_back(y, z)
+    return head_weights(Vector((co.x, y, face6_z_inv(y, co.z))))
+
+
 def build_head(bm, lod):
     if lod["name"] == "hero" and HEAD_FACE4:  # (月鹿の手直し 4 で追加) 近 LOD は平らな顔・窪み・丸い鼻づらの断面 (build_head4)
         return build_head4(bm, lod)
@@ -1368,18 +1468,30 @@ def build_lod(lod, obj_name, mats, antlers=True):
     build_head(bm, lod)
     bm.normal_update()
     bvh_head = BVHTree.FromBMesh(bm)
-    parts.append(make_part(obj_name + "_head", bm, "head", head_weights, mats))
+    face6_on = lod["name"] == "hero" and HEAD_FACE4 and HEAD_FACE6  # (月鹿の手直し 6 で追加) 組んだ頭の幅を削り、鼻から下を伸ばす
+    bvh_head0 = bvh_head  # 伸ばす前の頭 (鼻と目はここへ載せてから頭と一緒に動かす)
+    if face6_on:
+        face6(bm.verts, tones=True)
+        bm.normal_update()
+        bvh_head = BVHTree.FromBMesh(bm)
+    parts.append(make_part(obj_name + "_head", bm, "head", head_weights6 if face6_on else head_weights, mats))
     if lod["name"] == "hero" and HEAD_FACE4:  # (月鹿の手直し 4 で追加) 鼻と口の線 (頭の面の上に貼る。重みは下の面と同じ head_weights)
         bm = bmesh.new()
-        build_nose4(bm, bvh_head)
-        build_mouth4(bm, bvh_head)
-        parts.append(make_part(obj_name + "_nose", bm, "rigid", head_weights, mats, recalc=False))
+        build_nose4(bm, bvh_head0)
+        if face6_on:  # (月鹿の手直し 6 で追加) 鼻は頭と一緒に動かし、口の線は伸ばしたあとの頭へ短く貼る
+            face6(bm.verts)
+            build_mouth6(bm, bvh_head)
+        else:
+            build_mouth4(bm, bvh_head)
+        parts.append(make_part(obj_name + "_nose", bm, "rigid", head_weights6 if face6_on else head_weights, mats, recalc=False))
     for side, s in ((-1, "L"), (1, "R")):
         bm = bmesh.new()
         EAR_FRONT[f"ear_{s}"] = build_ears(bm, lod, side)
         parts.append(make_part(f"{obj_name}_ear_{s}", bm, f"ear_{s}", [(f"ear_{s}", 1.0), ("head", 0.25)], mats))
         bm = bmesh.new()
-        build_eye(bm, bvh_head, lod, side)
+        build_eye(bm, bvh_head0 if face6_on else bvh_head, lod, side)
+        if face6_on:  # (月鹿の手直し 6 で追加) 目は伸ばす前の頭へ載せ、頭と同じ横の倍率で動かす (正面の目・鼻筋の比を保つ)
+            face6(list(bm.verts))
         if antlers:
             build_antler(bm, lod, side)
         parts.append(make_part(f"{obj_name}_headgear_{s}", bm, "rigid", lambda co: [("head", 1.0)], mats, recalc=False))
