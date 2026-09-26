@@ -175,6 +175,67 @@ def face6(co):
     return (co[0] * (1.0 + FACE6_A * k), co[1], co[2])
 
 
+# (土兎の手直し 7 で追加) 審査台 r6-rabbit「はりすぎではない。むしろまだ頬と首が一部めり込んでいる。頬の頂点、顎、鼻頭のいちそのものは
+# 違和感がないので、頬を丸くふくらませる and 口鼻全体を前方に伸ばし、そのうえで形を３方位からみたシルエットを整える」。
+# (1) 頬を丸く: 近 LOD の頭の断面の顎の縁の角 (頬の張り → 顎の下の間) を外へ出して (FACE7_JAW)、頬の張りの下の面を内へ切れ込む斜面から
+#     外へふくらむ面にする。頬の張りの 2 本の硬いエッジはなめらかにする (眉・鼻筋の角は硬いまま)。群れ LOD の断面も同じ向きへ (FACE7_JAW_LOD1)
+# (2) 口鼻を前へ: face6 のあと、頬の頂点より前 (FACE7_Y0 より前) の頭の頂点の前への出を FACE7_K 倍に伸ばす (face7)。正面から見た
+#     x・z は動かさないので、正面の頬の頂点・顎・鼻頭の位置はそのまま。伸ばし始めはなめらかに (FACE7_W の幅で傾きを 1 → FACE7_K)
+# (1) で頬の下 (z 0.235〜0.26) の横幅が首の上の側面より片側 1.4〜2.2 cm 外へ出て、(2) で顎が首の前より前へ張り出す (首は変えていない)
+FACE7 = True
+FACE7_JAW = (0.70, 0.80, 0.30)  # 顎の縁の角 (横の割合、下の割合、下側の絞りの効き)。元は (0.64, 0.80, 0.5)
+FACE7_JAW_LOD1 = (0.84, 0.72, 0.15)  # 群れ LOD の顎の縁の角。元は (0.66, 0.78, 0.5)
+FACE7_FAR = 0.18  # 遠い段で頭の島を削る割合 (ほかは 0.2)
+GRAZE7_NECK, GRAZE7_HEAD = 55, -42  # 採食の首の下げと頭の起こし (GRAZE5 の neck / head)
+FACE7_SMOOTH = (5, 6, 10, 11)  # 硬いエッジから外す頬の張りの角 (HEAD_SHARP_EDGES の並び)
+FACE7_Y0 = -0.140
+FACE7_W = 0.020
+FACE7_K = 1.45
+
+
+def face7_dy(y):
+    """(土兎の手直し 7 で追加) 頬の頂点より前の y を前へ伸ばす量 (傾きを FACE7_W の幅で 1 → FACE7_K へなめらかに上げる)"""
+    s = FACE7_Y0 - y
+    if not FACE7 or s <= 0:
+        return 0.0
+    k = FACE7_K - 1.0
+    if s < FACE7_W:
+        t = s / FACE7_W
+        return -k * FACE7_W * (t ** 3 - t ** 4 / 2)
+    return -k * (FACE7_W / 2 + (s - FACE7_W))
+
+
+def face7_y(y):
+    """(土兎の手直し 7 で追加)"""
+    return y + face7_dy(y)
+
+
+def face7_y_inv(y):
+    """(土兎の手直し 7 で追加) face7_y の逆 (二分法。face7_y は単調に増える)"""
+    if not FACE7 or y >= FACE7_Y0:
+        return y
+    lo, hi = y - 0.2, FACE7_Y0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if face7_y(mid) < y:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def face7(co):
+    """(土兎の手直し 7 で追加) 口鼻を前へ伸ばす (face6 のあとの座標で。x・z は動かさない)"""
+    if not FACE7:
+        return co
+    return (co[0], face7_y(co[1]), co[2])
+
+
+def face_y_inv(y):
+    """(土兎の手直し 7 で追加) 動かした頭の y から元の頭の y へ (face7 → face5 の順に戻す)"""
+    return face5_y_inv(face7_y_inv(y))
+
+
 BONES = {
     "root": ((0, 0, 0), (0, -0.1, 0), None),
     "pelvis": ((0, 0.11, 0.14), (0, 0.02, 0.17), "root"),
@@ -208,6 +269,10 @@ if FACE5:  # (土兎の手直し 5 で追加) 頭の骨の先と鼻の骨を縮�
     for k in ("head", "nose"):
         h, t, p = BONES[k]
         BONES[k] = (face5(h) if k == "nose" else h, face5(t), p)
+if FACE7:  # (土兎の手直し 7 で追加) 頭の骨の先と鼻の骨を伸ばした鼻づらへ
+    for k in ("head", "nose"):
+        h, t, p = BONES[k]
+        BONES[k] = (face7(h) if k == "nose" else h, face7(t), p)
 BONES = {k: (Vector(h), Vector(t), p) for k, (h, t, p) in BONES.items()}
 LEG_BONES = {f"{pre}_{s}": [f"{pre}_{nm}_{s}" for nm in names]
              for s in "LR" for pre, names in (("fl", ("upper", "fore", "paw")), ("hl", ("thigh", "shin", "foot")))}
@@ -323,6 +388,8 @@ def far_ratio(c, mats, n):
         return 0.0
     if "rabbit_ear" in mats:
         return 0.4
+    if FACE7 and c.y < -0.12 and c.z > 0.2:  # (土兎の手直し 7 で追加) 頭の形を変えて削った後の三角形が 2 つ増えたので、頭の島だけ少し多く削る
+        return FACE7_FAR
     return 0.2
 
 
@@ -405,9 +472,20 @@ HEAD_KEYS = [
 ]
 
 
-def head_corners(rx, rt, rb, pinch):
+def face7_jaw(jaw, spec, rx, rb, pinch, y):
+    """(土兎の手直し 7 で追加) 顎の縁の角を spec (横の割合、下の割合、絞りの効き) の位置へ、頭の前 (元の y) ほど強く寄せる"""
+    fx, fz, fp = spec
+    w = smoothstep(-0.100, -0.140, y)
+    new = (fx * rx * (1 - fp * pinch), -fz * rb)
+    return (jaw[0] + (new[0] - jaw[0]) * w, jaw[1] + (new[1] - jaw[1]) * w)
+
+
+def head_corners(rx, rt, rb, pinch, y=None):
     """(M22-05 残りの手直しで追加) 頭の断面の角 (右半分、上から下): 頭頂の平ら・額と頬の境・頬の張り (最も広い、目の下)・顎の縁・顎の下"""
-    return [(0.0, rt), (0.62 * rx, 0.86 * rt), (rx, -0.08 * rb), (0.66 * rx * (1 - 0.5 * pinch), -0.78 * rb), (0.0, -rb)]
+    jaw = (0.66 * rx * (1 - 0.5 * pinch), -0.78 * rb)
+    if FACE7 and y is not None:  # (土兎の手直し 7 で追加) 群れ LOD も顎の縁の角を外へ
+        jaw = face7_jaw(jaw, FACE7_JAW_LOD1, rx, rb, pinch, y)
+    return [(0.0, rt), (0.62 * rx, 0.86 * rt), (rx, -0.08 * rb), jaw, (0.0, -rb)]
 
 
 # (土兎の手直し 3 で追加) 顔つきをシャープに (審査台 r2-rabbit「顔つきと目はもっとシャープなので、正面を見比べて忠実度をあげて」)。
@@ -426,8 +504,11 @@ def head_corners_sharp(rx, rt, rb, pinch, y):
     鼻づら (y < -0.2) では鼻筋の縁を内へ寄せて細い鼻筋にする"""
     bridge = 0.50 - 0.16 * smoothstep(-0.17, -0.235, y)
     rb *= 1.0 + HEAD_SHARP_MUZZLE * smoothstep(-0.215, -0.25, y)  # 鼻の下の面 (口の載る面) を前へ立てる
+    jaw = (0.64 * rx * (1 - 0.5 * pinch), -0.80 * rb)
+    if FACE7:  # (土兎の手直し 7 で追加) 顎の縁の角を外へ出して、頬の張りの下を外へふくらむ面に (後頭部はそのまま)
+        jaw = face7_jaw(jaw, FACE7_JAW, rx, rb, pinch, y)
     return [(0.0, rt), (bridge * rx, 0.97 * rt), (0.90 * rx, 0.56 * rt), (rx, -0.22 * rb),
-            (0.64 * rx * (1 - 0.5 * pinch), -0.80 * rb), (0.0, -rb)]
+            jaw, (0.0, -rb)]
 
 
 def build_head(bm, lod):
@@ -442,7 +523,8 @@ def build_head(bm, lod):
         rings = [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners_sharp(rx * 1.08, rt, rb, pinch, y), HEAD_SHARP_PAIRS, bevel=0.16)
                  for y, zc, rx, rt, rb, pinch in secs]
     else:
-        rings = [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners(rx * 1.08, rt, rb, pinch), pairs) for y, zc, rx, rt, rb, pinch in secs]
+        rings = [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners(rx * 1.08, rt, rb, pinch, y if FACE7 else None), pairs)
+                 for y, zc, rx, rt, rb, pinch in secs]  # (土兎の手直し 7 で変更: 元の頭の y を渡す)
     back = bm.verts.new((0, secs[0][0] + 0.006, secs[0][1]))
     tip = bm.verts.new((0, secs[-1][0] - 0.007, secs[-1][1]))
     loft(bm, [back] + rings + [tip])
@@ -452,6 +534,8 @@ def build_head(bm, lod):
             if max(ya, yb) > HEAD_SHARP_Y:
                 continue
             for j in HEAD_SHARP_EDGES:
+                if FACE7 and j in FACE7_SMOOTH:  # (土兎の手直し 7 で追加) 頬の張りの角はなめらかに (丸い頬)
+                    continue
                 e = bm.edges.get((ra[j], rb_[j]))
                 if e is not None:
                     e.smooth = False
@@ -1300,6 +1384,8 @@ def color_for(part, co, n):
         return mix(c, PAL["fur_shade"], smoothstep(0.0, -0.6, n.z) * 0.5)  # (M22-05 残りの手直しで追加) 顎の下の陰
     if part == "head":
         co = Vector((co.x, face5_y_inv(co.y), co.z))  # (土兎の手直し 5 で追加) 縮めた鼻づらの頂点も元の頭の座標で塗る
+        if FACE7:  # (土兎の手直し 7 で追加) 伸ばした鼻づらも元の頭の座標で (face7 → face5 の順に戻す)
+            co = Vector((co.x, face_y_inv(face5_y(co.y)), co.z))
         c = mix(PAL["fur"], PAL["fur_lit"], smoothstep(0.4, 0.9, n.z) * 0.8)  # (M22-05 残りの手直しで追加) 頭頂・額の面は明るく
         c = mix(c, PAL["light"], smoothstep(-0.205, -0.245, co.y) * 0.7)
         c = mix(c, PAL["light"], smoothstep(-0.2, -0.7, n.z) * 0.6)
@@ -1447,6 +1533,8 @@ def thigh_weights(co):
 
 def head_weights(co):
     co = Vector((co.x, face5_y_inv(co.y), co.z))  # (土兎の手直し 5 で追加) 縮めた鼻づらの頂点も元の頭の座標で重みを決める
+    if FACE7:  # (土兎の手直し 7 で追加) 伸ばした鼻づらも元の頭の座標で
+        co = Vector((co.x, face_y_inv(face5_y(co.y)), co.z))
     wn = smoothstep(-0.215, -0.245, co.y)  # 鼻先は nose の骨
     out = [("head", 1.0 - wn)]
     if wn > 0.02:
@@ -1642,6 +1730,9 @@ def build_lod(lod, obj_name, mats):
     if FACE6:  # (土兎の手直し 6 で追加) 頬・口・顎を横へ膨らませる (目・鼻・口はこの頭へ載せる)
         for v in bm.verts:
             v.co = face6(v.co)
+    if FACE7:  # (土兎の手直し 7 で追加) 口鼻を前へ伸ばす (目・鼻・口はこの頭へ載せる)
+        for v in bm.verts:
+            v.co = face7(v.co)
     bm.normal_update()
     bvh_head = BVHTree.FromBMesh(bm)
     parts.append(make_part(obj_name + "_head", bm, "head", head_weights, mats))
@@ -1964,6 +2055,8 @@ def pose_run(rig, t):
 
 GRAZE4 = dict(lift=0.036, pelvis=18, spine=8, chest=2, neck=52, head=-34)  # (土兎の手直し 4 で追加) 採食の姿勢 (元は 0.030 / 18 / 14 / 8 / 24 / -25)
 GRAZE5 = dict(lift=0.036, pelvis=22, spine=8, chest=2, neck=60, head=-40, paw=0.075, paw_z=0.012)  # (土兎の手直し 5 で追加) 短い鼻づらで鼻先を地面へ届かせる採食の姿勢 (GRAZE4 の代わり)
+if FACE7:  # (土兎の手直し 7 で追加) 口鼻を前へ伸ばしたので鼻先が地面と前足へ届きすぎる。首の下げを浅くする (元は neck=60, head=-40)
+    GRAZE5 = dict(GRAZE5, neck=GRAZE7_NECK, head=GRAZE7_HEAD)
 
 
 def pose_graze(rig, t):
