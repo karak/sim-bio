@@ -1,6 +1,7 @@
-import type { Parsed } from '../core/parse';
+import { fail, type Parsed } from '../core/parse';
 import type { SaveData } from '../simulation/types';
 import { parseChronicle, type Chronicle } from '../harbor/chronicle';
+import type { RunnerState } from '../scenario/ScenarioRunner';
 import { SLOTS, type SlotId, type SlotSummary } from './slots';
 
 /** 島の手元の保存 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */
@@ -16,7 +17,19 @@ export type IslandStore = {
   saveChronicle(scenarioId: string, c: Chronicle): Promise<void>;
   /** 無ければ null。置き場の値は境界として parseChronicle に通し、読めなければ拒否の理由を返す */
   loadChronicle(scenarioId: string): Promise<Parsed<Chronicle> | null>;
+  /**
+   * 石板の途中の島 (M19-14)。島・runner の状態・年代記の 3 つを 1 つの transaction で書く (同じ tick のものしか並ばない)。
+   * 島と runner は石板ごとに 1 つ (scenarios)、年代記は saveChronicle と同じ置き場 (chronicles) に書く
+   */
+  saveScenario(scenarioId: string, s: ScenarioSave): Promise<void>;
+  /** 無ければ null。年代記は loadChronicle と同じく parseChronicle に通す */
+  loadScenario(scenarioId: string): Promise<{ save: SaveData; runner: RunnerState; chronicle: Parsed<Chronicle> } | null>;
+  /** 読めない石板の途中の島を scenarios の別の key へ移す。年代記は残す (港への出港に使える)。移した先の key を返す */
+  setAsideScenario(scenarioId: string): Promise<string>;
 };
+
+/** 石板の途中で閉じた島の続き (M19-14) */
+export type ScenarioSave = { save: SaveData; runner: RunnerState; chronicle: Chronicle };
 
 const DB_NAME = 'biotope-island';
 /**
@@ -32,6 +45,10 @@ const UPGRADES: readonly ((db: IDBDatabase) => void)[] = [
   // 版 2 (M19-06): 年代記。key は scenarioId
   (db) => {
     db.createObjectStore('chronicles');
+  },
+  // 版 3 (M19-14): 石板の途中の島と runner の状態 ({save, runner})。key は scenarioId
+  (db) => {
+    db.createObjectStore('scenarios');
   },
 ];
 
@@ -100,6 +117,33 @@ export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => 
     async loadChronicle(scenarioId) {
       const raw: unknown = await requestDone(db.transaction('chronicles').objectStore('chronicles').get(scenarioId));
       return raw === undefined ? null : parseChronicle(raw);
+    },
+    async saveScenario(scenarioId, { save, runner, chronicle }) {
+      const tx = db.transaction(['scenarios', 'chronicles'], 'readwrite');
+      tx.objectStore('scenarios').put({ save, runner }, scenarioId);
+      tx.objectStore('chronicles').put(chronicle, scenarioId);
+      await transactionDone(tx);
+    },
+    async loadScenario(scenarioId) {
+      const tx = db.transaction(['scenarios', 'chronicles']);
+      const [island, raw] = await Promise.all([
+        requestDone<{ save: SaveData; runner: RunnerState } | undefined>(tx.objectStore('scenarios').get(scenarioId)),
+        requestDone<unknown>(tx.objectStore('chronicles').get(scenarioId)),
+      ]);
+      if (!island) return null;
+      return { ...island, chronicle: raw === undefined ? fail('', 'missing') : parseChronicle(raw) };
+    },
+    async setAsideScenario(scenarioId) {
+      const key = `unreadable:${scenarioId}`;
+      const tx = db.transaction('scenarios', 'readwrite');
+      const scenarios = tx.objectStore('scenarios');
+      const req = scenarios.get(scenarioId);
+      req.onsuccess = () => {
+        scenarios.put(req.result, key);
+        scenarios.delete(scenarioId);
+      };
+      await transactionDone(tx);
+      return key;
     },
   };
 }
