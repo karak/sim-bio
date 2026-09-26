@@ -1,0 +1,7 @@
+packages:
+  - worker
+
+# pnpm 10 は依存の install スクリプトを既定で止める。npm の時と同じく、この 2 つだけは走らせる
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

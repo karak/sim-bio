@@ -8,7 +8,7 @@ export default defineConfig({
   timeout: 60_000,
   use: { baseURL: `http://localhost:${port}`, headless: true },
   webServer: {
-    command: `npm run dev -- --port ${port} --strictPort`,
+    command: `pnpm run dev --port ${port} --strictPort`,
     url: `http://localhost:${port}`,
     reuseExistingServer: true,
     timeout: 30_000,
