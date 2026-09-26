@@ -1,6 +1,6 @@
 import { World } from './simulation/World';
 import type { DisasterKind, SaveData, SpeciesDef, WorldConfig } from './simulation/types';
-import { createConsoleSink } from './core/log/consoleSink';
+import { createAppLogSink } from './core/log/appSink';
 import { createRunner } from './core/runner';
 import { createSceneView, type SceneView } from './render/SceneView';
 import { buildAssetTable } from './render/assetTable';
@@ -21,7 +21,10 @@ import { createLocalSave } from './persist/localSave';
 const AUTOSAVE_TICKS = 90;
 
 async function boot(): Promise<void> {
-  const log = createConsoleSink();
+  const { log, flushViaBeacon } = createAppLogSink({
+    url: import.meta.env.VITE_LOG_URL,
+    sendBeacon: (url, data) => navigator.sendBeacon(url, data),
+  });
   const [base, species, scenarios, store] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
@@ -151,7 +154,9 @@ async function boot(): Promise<void> {
   hud.setReplaceable(!scenario);
   void localSave.list().then((list) => list.forEach(hud.setSlot));
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') localSave.flush(() => world.serialize());
+    if (document.visibilityState !== 'hidden') return;
+    localSave.flush(() => world.serialize());
+    flushViaBeacon();
   });
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
   const observe = createObserveEntry(app, {
