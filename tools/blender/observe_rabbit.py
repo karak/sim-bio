@@ -152,8 +152,27 @@ def face5(co):
     t = face5_ramp(co[1], *FACE5_WY)
     m = min(1.0, max(0.0, (co[1] - FACE5_TIP_Y[0]) / (FACE5_TIP_Y[1] - FACE5_TIP_Y[0])))  # 鼻づらの先ほど細く (正面で顔の下半分が V に絞れる)
     c = face5_ramp(co[2], *FACE5_CHIN_Z) * t
-    w = (1.0 + (FACE5_W - 1.0) * t) * (1.0 + (FACE5_TIP_W - 1.0) * m) * (1.0 + (FACE5_CHIN_W - 1.0) * c)
+    chin_w = 1.0 if FACE6 else FACE5_CHIN_W  # (土兎の手直し 6 で変更: 口と顎を詰めるのをやめる)
+    w = (1.0 + (FACE5_W - 1.0) * t) * (1.0 + (FACE5_TIP_W - 1.0) * m) * (1.0 + (chin_w - 1.0) * c)
     return (co[0] * w, face5_y(co[1]), co[2])
+
+
+# (土兎の手直し 6 で追加) 審査台 r5-rabbit「正面からのシルエットについて、間違った修正をしている。顔の上半分はよくなっている。
+# 顔の下半分は、悪くなっている。頬がなくなり、首の中にめり込んでいるレベル。頬を膨らませて丸みを。」
+# 手直し 5 の口と顎の詰め (FACE5_CHIN_W) をやめ、face5 のあとに頭の頂点を face6 で横へ膨らませる: 目の下 (FACE6_Z[0]) から
+# 顎 (FACE6_Z[1]) へ横幅を 1 → 1 + FACE6_A 倍へなめらかに増やす (目より上の顔の上半分は動かさない)。後頭部 (FACE6_Y[0] より後ろ) も動かさない
+FACE6 = True
+FACE6_A = 0.65
+FACE6_Z = (0.287, 0.240)
+FACE6_Y = (-0.095, -0.120)
+
+
+def face6(co):
+    """(土兎の手直し 6 で追加) 頭の頂点の顔の下半分 (頬・口・顎) を横へ膨らませる (face5 のあとの座標で)"""
+    if not FACE6:
+        return co
+    k = face5_ramp(co[2], *FACE6_Z) * face5_ramp(co[1], *FACE6_Y)
+    return (co[0] * (1.0 + FACE6_A * k), co[1], co[2])
 
 
 BONES = {
@@ -1620,6 +1639,9 @@ def build_lod(lod, obj_name, mats):
     if FACE5:  # (土兎の手直し 5 で追加) 鼻づらを縮め、顔の横幅を詰める (目・鼻・口はこの頭へ載せる)
         for v in bm.verts:
             v.co = face5(v.co)
+    if FACE6:  # (土兎の手直し 6 で追加) 頬・口・顎を横へ膨らませる (目・鼻・口はこの頭へ載せる)
+        for v in bm.verts:
+            v.co = face6(v.co)
     bm.normal_update()
     bvh_head = BVHTree.FromBMesh(bm)
     parts.append(make_part(obj_name + "_head", bm, "head", head_weights, mats))
