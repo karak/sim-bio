@@ -30,9 +30,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      # scripts/ の Python (課金にしない構成検査・運用スクリプト、M19-12) を uv で回す
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: pnpm run build:cloudflare
+      # 配る直前の dist と wrangler.jsonc が無料枠の内か。外なら deploy しない (設計書 §3.3、M19-12)
+      - run: pnpm run check:free-tier
       # トークンは GitHub Secrets にだけ置く (README「Cloudflare へ配る」)
       - run: pnpm exec wrangler deploy
         env:
