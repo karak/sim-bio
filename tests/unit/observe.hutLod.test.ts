@@ -184,10 +184,11 @@ describe('settlement.glb の小屋の 3 つの形 (M23-09 のやり直し)', () 
     };
   };
 
-  it('遠距離版 hut_lod1 は 60 m より先の軽い形 (2,460 三角形、hut の 4 分の 1 より少ない)、影の形 hut_shadow は前の遠距離版 (1,249)', () => {
+  it('遠距離版 hut_lod1 は 60 m より先の軽い形 (2,540 三角形、hut の 4 分の 1 より少ない)、影の形 hut_shadow は前の遠距離版 (1,249)', () => {
     const [hut, far, shadow] = ['hut', 'hut_lod1', 'hut_shadow'].map(nodeOf);
-    expect(hut.triangles).toBe(10178);
-    expect(far.triangles).toBe(2460);
+    // (settle1 で変更: 石の積みの細やかさ (rock の格子・間詰め石・目地の芯) で hut 10,178 → 27,142、遠距離版は目地の芯と苔で 2,460 → 2,540)
+    expect(hut.triangles).toBe(27142);
+    expect(far.triangles).toBe(2540);
     expect(far.triangles).toBeLessThan(hut.triangles / 4);
     expect(shadow.triangles).toBe(1249);
     // 遠距離版は hut と同じ材質で塗る (屋根板・石の頂点色の白の材質、蔓、紋・灯籠の光)
@@ -206,12 +207,13 @@ describe('settlement.glb の小屋の 3 つの形 (M23-09 のやり直し)', () 
         return [name, [near.triangles, far.triangles]];
       }),
     );
+    // (settle1 で変更: 近い形の石は rock (格子の丸めた箱)、石垣の遠距離版は目地の芯の分だけ増える)
     expect(counts).toEqual({
-      lantern_post: [586, 130],
-      megalith: [596, 172],
-      slipway: [1982, 1020],
-      stone_wall: [948, 230],
-      stone_wall_corner: [1544, 484],
+      lantern_post: [1486, 130],
+      megalith: [1708, 172],
+      slipway: [17902, 1020],
+      stone_wall: [5002, 238],
+      stone_wall_corner: [6262, 508],
       woven_screen: [1060, 884],
     });
   });
