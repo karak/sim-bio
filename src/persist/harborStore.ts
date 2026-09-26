@@ -66,6 +66,7 @@ export async function openHarborStore(deps: { indexedDB: IDBFactory }): Promise<
     forgetKey: (id) => write('keys', (s) => s.delete(id)),
     async ownIds() {
       const store = db.transaction('keys').objectStore('keys');
+      // 同じ transaction の getAllKeys と getAll は、同じ中身を同じ鍵の順で返す
       const [ids, keys] = await Promise.all([requestDone<IDBValidKey[]>(store.getAllKeys()), requestDone<unknown[]>(store.getAll())]);
       return ownOf(ids.map((id, i) => [id, keys[i]]));
     },

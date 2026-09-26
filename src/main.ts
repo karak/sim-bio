@@ -21,7 +21,7 @@ import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
 import type { InterveneResult } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';
 import { digestOf } from './chronicle/digest';
-import { createPlayback, type Playback } from './chronicle/playback';
+import { createPlayback } from './chronicle/playback';
 import { mountHarbor, visitIdOf } from './ui/Harbor';
 
 /** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
@@ -60,7 +60,7 @@ async function boot(): Promise<void> {
       config.volcanoCell = scenario.start.volcanoCell === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : scenario.start.volcanoCell;
     }
   }
-  // 他人の島を訪れている (M19-09)。介入を受けず、年代記を書かず、港から引いた命令を記録の tick で打ち直す
+  // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
   const visitId = visitIdOf(params, scenario);
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
     log.write({ ts: new Date().toISOString(), tick, year: Math.floor(tick / config.ticksPerYear), level, event, ...extra });
@@ -95,7 +95,7 @@ async function boot(): Promise<void> {
   let recorder: ChronicleRecorder<InterveneResult> | null = null;
   /** 年代記は石板ごとに最後の 1 本を置く。続きからの復帰 (島と runner を戻す) はまだ無いので、読むのは港への出港 (M19-09) */
   const saveChronicle = () => {
-    if (!store || !recorder || !scenario || visitId) return;
+    if (!store || !recorder || !scenario) return;
     const tick = world.snapshot().tick;
     store.saveChronicle(scenario.id, recorder.current()).catch((e: unknown) => persistLog('warn', 'persist.chronicle.failed', tick, { error: String(e) }));
   };
@@ -180,7 +180,12 @@ async function boot(): Promise<void> {
     visit: visitId && scenario ? { id: visitId, island: { def: scenario, config } } : null,
     log: (level, event, extra) => persistLog(level, event, world.snapshot().tick, extra),
   });
-  let playback: Playback | null = null;
+  /** 判定の前の石板の島の進め方。訪問では港から年代記が届くまで止め、届いたら記録の tick で打ち直す (M19-09) */
+  let scenarioStep: (n?: number) => void = visitId
+    ? () => {}
+    : (n) => {
+        if (runner) stepByYear(world, runner, n);
+      };
   void localSave.list().then((list) => list.forEach(hud.setSlot));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'hidden') return;
@@ -196,7 +201,7 @@ async function boot(): Promise<void> {
   });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
-    { step: (n) => (runner?.verdict().status === 'running' ? (visitId ? playback?.step(n) : stepByYear(world, runner, n)) : world.step(n)), snapshot: () => world.snapshot() },
+    { step: (n) => (runner?.verdict().status === 'running' ? scenarioStep(n) : world.step(n)), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
         localSave.onTick(s.tick, () => world.serialize());
@@ -254,7 +259,7 @@ async function boot(): Promise<void> {
       },
     });
     const scenarioRunner = runner;
-    recorder = recordChronicle(
+    recorder = visitId ? null : recordChronicle(
       { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => world.snapshot() },
       { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
       () => scenarioRunner.totalsByYear(),
@@ -264,7 +269,7 @@ async function boot(): Promise<void> {
     if (visitId) {
       void harbor.visitChronicle().then((c) => {
         if (!c) return;
-        playback = createPlayback(world, scenarioRunner, c.commands);
+        scenarioStep = createPlayback(world, scenarioRunner, c.commands).step;
         document.getElementById('speed-10')?.click();
         requestAnimationFrame(() => void observe.enter());
       });

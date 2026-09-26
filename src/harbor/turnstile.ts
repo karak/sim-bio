@@ -57,6 +57,7 @@ export function createTurnstile(opts: { sitekey: string; host: (show: boolean) =
     const host = opts.host(true);
     const slot = document.createElement('div');
     host.appendChild(slot);
+    let widget: string | undefined;
     const answer = await new Promise<HumanAnswer>((resolve) => {
       const timer = setTimeout(() => resolve({ kind: 'unavailable' }), WAIT_MS);
       const done = (a: HumanAnswer) => {
@@ -64,7 +65,7 @@ export function createTurnstile(opts: { sitekey: string; host: (show: boolean) =
         resolve(a);
       };
       try {
-        const widget = api.render(slot, {
+        widget = api.render(slot, {
           sitekey: opts.sitekey,
           callback: (raw) => {
             const token = parseTurnstile(raw);
@@ -74,12 +75,11 @@ export function createTurnstile(opts: { sitekey: string; host: (show: boolean) =
           'expired-callback': () => done({ kind: 'failed' }),
           'timeout-callback': () => done({ kind: 'failed' }),
         });
-        slot.dataset.widget = widget;
       } catch {
         done({ kind: 'unavailable' });
       }
     });
-    if (slot.dataset.widget) api.remove(slot.dataset.widget);
+    if (widget !== undefined) api.remove(widget);
     slot.remove();
     opts.host(false);
     return answer;

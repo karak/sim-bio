@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { digestOf } from '../../src/chronicle/digest';
 import type { ChronicleId } from '../../src/harbor/contract';
-import { confirmText, endingText, publishText, readResultOf, readText, readingText, resentText } from '../../src/ui/harborText';
+import { confirmText, endingText, publishText, readResultOf, readText, readingText, reportText, resentText, withdrawText } from '../../src/ui/harborText';
 
 const id = 'a'.repeat(64) as ChronicleId;
 
@@ -27,6 +27,14 @@ describe('港の画面の言葉 (M19-09)', () => {
     expect(publishText({ kind: 'rejected', reason: 'chronicle.scenarioId: unknown_scenario' })).toBe('港が受け取れない年代記だった (chronicle.scenarioId: unknown_scenario)');
     expect(resentText(0)).toBeNull();
     expect(resentText(2)).toBe('預けていた年代記 2 件を港へ出した');
+  });
+
+  it('通報と取り下げの結末 (閉港は普段の言葉で)', () => {
+    expect(reportText('ok')).toBe('通報した。3 件集まると、港から隠れる');
+    expect(reportText('closed')).toBe('港は今日は閉まっている。遊ぶ・保存するはそのまま続けられる');
+    expect(reportText('not_human')).toBe('人の手と確かめられなかった。もう一度「通報」を押す');
+    expect(withdrawText('ok')).toBe('取り下げた。港にはもう並ばない');
+    expect(withdrawText('forbidden')).toBe('この島の取り下げ鍵が手元に無いので、取り下げられない');
   });
 
   it('照合: 判定と年が港の記録と合えば同じ結末、違えば読んだ結末を添える', async () => {

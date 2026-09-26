@@ -84,3 +84,30 @@ export function readText(r: ReadResult, scenarioTitle: string): string {
 export function readingText(year: number, years: number): string {
   return `${Math.min(year, years)} / ${years} 年を読んだ`;
 }
+
+export const VISIT_MISSING_TEXT = 'この年代記は港に無い (取り下げられたか、隠された)';
+export const VISIT_MISMATCH_TEXT = 'この石板の島と年代記の島が合わない。一覧から訪れ直す';
+
+export function reportText(r: 'ok' | 'closed' | 'not_human' | 'slow_down'): string {
+  switch (r) {
+    case 'ok':
+      return '通報した。3 件集まると、港から隠れる';
+    case 'closed':
+      return HARBOR_CLOSED_TEXT;
+    case 'not_human':
+      return '人の手と確かめられなかった。もう一度「通報」を押す';
+    case 'slow_down':
+      return '港が混んでいる。少し待ってから、もう一度「通報」を押す';
+  }
+}
+
+export function withdrawText(r: 'ok' | 'closed' | 'forbidden'): string {
+  switch (r) {
+    case 'ok':
+      return '取り下げた。港にはもう並ばない';
+    case 'closed':
+      return HARBOR_CLOSED_TEXT;
+    case 'forbidden':
+      return 'この島の取り下げ鍵が手元に無いので、取り下げられない';
+  }
+}

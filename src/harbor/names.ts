@@ -20,12 +20,12 @@ export function islandName(id: ChronicleId): string {
   return syllables.join('') + KIND[nibble(id, 5) % KIND.length];
 }
 
-export type Inscription = { id: string; text: string };
+export type Inscription = { id: InscriptionId; text: string };
 
-/** 碑文のカタログ (assets/data/inscriptions.json、静的アセット) を境界で読む。形の違う行は捨てる */
+/** 碑文のカタログ (assets/data/inscriptions.json、静的アセット) を境界で読む。形の違う行は捨てる。ここに読めた id が港の受ける碑文になる */
 export function parseInscriptions(v: unknown): Inscription[] {
   if (!Array.isArray(v)) return [];
-  return v.flatMap((row) => (isObject(row) && typeof row.id === 'string' && typeof row.text === 'string' ? [{ id: row.id, text: row.text }] : []));
+  return v.flatMap((row) => (isObject(row) && typeof row.id === 'string' && typeof row.text === 'string' ? [{ id: row.id as InscriptionId, text: row.text }] : []));
 }
 
 /** 碑文の id から文。カタログに無い id (版を上げて外した) は、刻みの消えた石として空の文を返す */
