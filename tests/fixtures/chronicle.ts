@@ -1,4 +1,4 @@
-import type { Chronicle } from '../../src/chronicle/contract';
+import type { Chronicle } from '../../src/harbor/contract';
 import type { ReplayIsland } from '../../src/chronicle/replay';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';

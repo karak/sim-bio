@@ -1,6 +1,6 @@
 import type { Parsed } from '../core/parse';
 import type { SaveData } from '../simulation/types';
-import { parseChronicle, type Chronicle } from '../chronicle/contract';
+import { parseChronicle, type Chronicle } from '../harbor/contract';
 import { SLOTS, type SlotId, type SlotSummary } from './slots';
 
 /** 島の手元の保存 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */

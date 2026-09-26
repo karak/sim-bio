@@ -5,6 +5,7 @@ import type { Command, DisasterKind } from '../simulation/types';
 /**
  * 年代記の契約 (M19-06、設計書 2026-09-26-cloudflare-architecture.md §5.1・§5.2)。
  * 港の契約 (M19-07) が src/harbor/contract.ts へ移すまで、ここに置く。依存は core/parse と本体の型だけにしてある
+ * M19-07 で chronicle/contract.ts からここへ移した。呼び手も移し、古い口は残していない (年代記は港でクライアントと Worker が共有する単位なので)
  */
 
 /** 見守り手が UI から打ち、受理された命令。予言が出す命令 (fromStar:false) は含めない (再生で同じ ScenarioRunner が再現する) */

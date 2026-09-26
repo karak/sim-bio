@@ -1,5 +1,5 @@
 import type { WorldSnapshot } from '../simulation/types';
-import type { Digest } from './contract';
+import type { Digest } from '../harbor/contract';
 
 type Json = null | boolean | number | string | readonly Json[] | { readonly [k: string]: Json };
 

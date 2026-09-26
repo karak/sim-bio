@@ -5,7 +5,7 @@ import type { ScenarioDef } from '../scenario/types';
 import type { WorldConfig, WorldSnapshot } from '../simulation/types';
 import { SIM_VERSION } from '../simulation/version';
 import { World } from '../simulation/World';
-import { parseChronicle, type ReplayOutcome, type TimedCommand } from './contract';
+import { parseChronicle, type ReplayOutcome, type TimedCommand } from '../harbor/contract';
 import { digestOf } from './digest';
 
 /**
