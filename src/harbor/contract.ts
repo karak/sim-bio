@@ -16,6 +16,10 @@ export type ChronicleId = string & { readonly __brand: 'ChronicleId' };
 export type InscriptionId = string & { readonly __brand: 'InscriptionId' };
 /** 以下は港が発行し、手元では中身を読まない札 */
 export type CargoId = string & { readonly __brand: 'CargoId' };
+/**
+ * M19-08 で、取り下げ鍵だけは手元が作る札にした (乱数 32 B の base64url)。出港に添えて送り、港は SHA-256 だけを置く。
+ * 港が作って返すと、応答が失われたあとの outbox の再送 (INSERT OR IGNORE で 1 件のまま) で鍵が手元に届かない
+ */
 export type WithdrawKey = string & { readonly __brand: 'WithdrawKey' };
 export type BrowseCursor = string & { readonly __brand: 'BrowseCursor' };
 export type TurnstileToken = string & { readonly __brand: 'TurnstileToken' };
@@ -49,7 +53,7 @@ export type DrawnCargo = { id: CargoId; cargo: Cargo };
 
 /** 港への要求。wire.ts が HTTP の形 (道・header・本文) と行き来する */
 export type HarborRequest =
-  | { kind: 'publish'; chronicle: Chronicle; digest: Digest; inscription: InscriptionId; turnstile: TurnstileToken }
+  | { kind: 'publish'; chronicle: Chronicle; digest: Digest; inscription: InscriptionId; turnstile: TurnstileToken; key: WithdrawKey }
   | { kind: 'browse'; scenarioId: string | null; before: BrowseCursor | null }
   | { kind: 'visit'; id: ChronicleId }
   | { kind: 'confirm'; id: ChronicleId; digest: Digest }
@@ -62,7 +66,7 @@ export type HarborRequest =
 
 /** 本文のある応答。ほかの要求 (照合・通報・取り下げ・積荷を流す・結末の報告) は本文の無い 204 で答える */
 export type HarborResponses = {
-  publish: { id: ChronicleId; withdrawKey: WithdrawKey };
+  publish: { id: ChronicleId };
   browse: { cards: readonly ChronicleCard[]; next: BrowseCursor | null };
   visit: { chronicle: Chronicle; card: ChronicleCard };
   draw_cargo: { drawn: DrawnCargo | null };

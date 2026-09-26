@@ -36,6 +36,7 @@ ALLOWED_KEYS: Mapping[str, str] = {
     "triggers": "Cron。無料は 5 本/アカウント、設計は 1 本",
     "d1_databases": "D1。無料枠を超えるとクエリが失敗するだけで、課金にならない (M19-08)",
     "ratelimits": "Rate Limiting binding (M19-08)",
+    "secrets": "secret の名前だけ (値は wrangler secret put)。型の生成と手元の警告に使う (M19-08)",
     "env": "環境ごとの設定。中身も同じ表で見る",
 }
 

@@ -9,7 +9,8 @@
     "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"],
     "skipLibCheck": true,
     "isolatedModules": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true
   },
   "include": ["src", "test"]
 }

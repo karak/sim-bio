@@ -19,6 +19,13 @@
              hidden_at TEXT)        -- 隠した時刻。NULL なら見える
   daily_budget(day TEXT PRIMARY KEY  -- UTC の YYYY-MM-DD,
                publish INTEGER, cargo INTEGER, report INTEGER)
+
+M19-08 で、マイグレーション (worker/migrations/0001_harbor.sql) の本物の表と列に合わせた (上の仮の形は M19-12 の記録):
+  chronicles(id TEXT PRIMARY KEY  -- 正規化した年代記の SHA-256 の 16 進 64 文字,
+             reports INTEGER,       -- 通報の数。3 で Worker が自動で隠す
+             hidden_at INTEGER)     -- 隠した時刻 (epoch ms)。NULL なら見える
+  reports(chronicle_id, day, sender)  -- 通報の送り手 (その日だけ。chronicles を消すと一緒に消える)
+  daily_budget(day TEXT  -- UTC の YYYY-MM-DD, bucket TEXT  -- 道の種類, used INTEGER)
 """
 
 from __future__ import annotations
@@ -39,11 +46,22 @@ WRANGLER = REPO / "node_modules" / ".bin" / "wrangler"
 DATABASE = "HARBOR"
 
 # 日次予算の上限 (設計書 §6.1 の仮の値)。M19-08 の Worker の値と合わせる
+# M19-08: 道ごと (bucket) の上限にした。worker/src/policy.ts の BUDGETS の cap と同じ値 (test_mod.py が食い違いを落とす)
 BUDGET_CAPS = {
+    "logs": ("ログ", 10_000),
+    "confirm": ("確認", 5_000),
+    "report_outcome": ("結末", 5_000),
+    "browse": ("一覧", 20_000),
+    "avoidance": ("回避率", 10_000),
+    "cast_cargo": ("積荷", 5_000),
+    "draw_cargo": ("漂着", 10_000),
     "publish": ("出港", 2_000),
-    "cargo": ("積荷", 5_000),
     "report": ("通報", 1_000),
+    "withdraw": ("取り下げ", 1_000),
+    "visit": ("訪問", 40_000),
 }
+# 日の合計でいちばん後ろの段 (訪問の shedAt)。これに達すると港の道はすべて閉じる
+DAY_TOTAL_CAP = 45_000
 
 Run = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -108,15 +126,22 @@ def execute(
     return payload[-1]["results"]
 
 
+NOW_MS = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)"
+HIDDEN_SINCE = "strftime('%Y-%m-%dT%H:%M:%SZ', hidden_at / 1000, 'unixepoch')"
+
+
 def hide_sql(chronicle_id: str) -> str:
     return (
-        "UPDATE chronicles SET hidden_at = COALESCE(hidden_at, datetime('now')) "
-        f"WHERE id = '{chronicle_id}' RETURNING id, hidden_at"
+        f"UPDATE chronicles SET hidden_at = COALESCE(hidden_at, {NOW_MS}) "
+        f"WHERE id = '{chronicle_id}' RETURNING id, {HIDDEN_SINCE} AS hidden_at"
     )
 
 
 def restore_sql(chronicle_id: str) -> str:
-    return f"UPDATE chronicles SET hidden_at = NULL, report_count = 0 WHERE id = '{chronicle_id}' RETURNING id"
+    return (
+        f"DELETE FROM reports WHERE chronicle_id = '{chronicle_id}'; "
+        f"UPDATE chronicles SET hidden_at = NULL, reports = 0 WHERE id = '{chronicle_id}' RETURNING id"
+    )
 
 
 def delete_sql(chronicle_id: str) -> str:
@@ -131,19 +156,31 @@ ROW_OPS: dict[str, tuple[Callable[[str], str], str]] = {
 
 
 def budget_sql(days: int) -> str:
-    return f"SELECT day, publish, cargo, report FROM daily_budget ORDER BY day DESC LIMIT {days}"
+    return (
+        "SELECT day, bucket, used FROM daily_budget WHERE day IN "
+        f"(SELECT DISTINCT day FROM daily_budget ORDER BY day DESC LIMIT {days}) "
+        "ORDER BY day DESC"
+    )
 
 
 def format_budget(rows: list[dict[str, object]]) -> list[str]:
     if not rows:
-        return ["daily_budget に行が無い (まだ誰も出港していない)"]
-    lines = []
+        return ["daily_budget に行が無い (まだ誰も港を使っていない)"]
+    days: dict[str, dict[str, int]] = {}
     for row in rows:
-        cells = [
-            f"{label} {row[key]:,}/{cap:,} ({row[key] / cap:.0%})"
-            for key, (label, cap) in BUDGET_CAPS.items()
-        ]
-        lines.append(f"{row['day']}  " + "  ".join(cells))
+        days.setdefault(str(row["day"]), {})[str(row["bucket"])] = int(str(row["used"]))
+    lines = []
+    for day, used in days.items():
+        total = sum(used.values())
+        order = [b for b in BUDGET_CAPS if b in used] + sorted(
+            set(used) - set(BUDGET_CAPS)
+        )
+        cells = [f"合計 {total:,}/{DAY_TOTAL_CAP:,} ({total / DAY_TOTAL_CAP:.0%})"]
+        for bucket in order:
+            label, cap = BUDGET_CAPS.get(bucket, (bucket, 0))
+            share = f" ({used[bucket] / cap:.0%})" if cap else ""
+            cells.append(f"{label} {used[bucket]:,}/{cap:,}{share}")
+        lines.append(f"{day}  " + "  ".join(cells))
     return lines
 
 

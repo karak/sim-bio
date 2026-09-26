@@ -1,4 +1,7 @@
 import type { Command, DisasterKind } from '../simulation/types';
+import type { Chronicle, Digest } from '../harbor/chronicle';
+import type { PublishInput } from '../harbor/client';
+import type { InscriptionId } from '../harbor/contract';
 
 /**
  * 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる。
@@ -17,3 +20,14 @@ export const SPAWN_RADIUS = 1;
  */
 export const spawnClick = (speciesId: string, cell: number): Command => ({ type: 'spawn_species', speciesId, cell, amount: SPAWN_AMOUNT, radius: SPAWN_RADIUS });
 export const disasterClick = (kind: DisasterKind, cell: number): Command => ({ type: 'disaster', kind, cell, radius: DISASTER_RADIUS[kind] });
+
+/**
+ * 出港の 1 クリック (M19-09)。判定の板の「出港する」と台本が、判定の瞬間の年代記と要約に、碑文のカタログから選んだひとことを添えて港へ出す
+ */
+export const publishClick = (island: { chronicle: Chronicle; digest: Digest }, inscription: InscriptionId): PublishInput => ({ chronicle: island.chronicle, digest: island.digest, inscription });
+
+/**
+ * 訪問の 1 クリック (M19-09)。出港のリンク・一覧のカード・台本が同じ道を開く。
+ * 石板を道に載せるので、main.ts は港に問い合わせる前に、その石板の島を普段どおりに組める (起動が港に頼らない)
+ */
+export const visitHref = (card: { id: string; scenarioId: string }): string => `/?${new URLSearchParams({ scenario: card.scenarioId, visit: card.id })}`;

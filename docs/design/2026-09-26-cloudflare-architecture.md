@@ -296,7 +296,7 @@ export type PublishResult =
 
 export type Harbor = {
   publish(c: Chronicle, d: Digest): Promise<PublishResult>;
-  withdraw(id: ChronicleId): Promise<'ok' | 'closed' | 'forbidden'>;   // 手元の取り下げ鍵で
+  withdraw(id: ChronicleId): Promise<'ok' | 'closed' | 'forbidden'>;   // 手元の取り下げ鍵で(鍵は出港の前に手元で作る、M19-08)
   browse(q: { scenarioId?: string; before?: string }): Promise<{ kind: 'ok'; cards: ChronicleCard[] } | { kind: 'closed' }>;
   visit(id: ChronicleId): Promise<{ kind: 'ok'; chronicle: Chronicle; card: ChronicleCard } | { kind: 'closed' | 'missing' }>;
   confirm(id: ChronicleId, d: Digest): Promise<void>;                  // 失敗は握りつぶす(照合は善意の付加物)
@@ -368,7 +368,7 @@ export function replay(c: Chronicle, onYear?: (year: number) => void, signal?: A
 | 壊れた年代記で訪問者のタブを落とす | parse の不変条件で弾く。再生は Web Worker の中で、tick の上限と中断を持つ |
 | 積荷で他人の島を壊す | 1〜5 件、量は (0, 10]、種はカタログのみ。受け取るかは UI で選ばせる。受け取れば本体の `dispatch` の門を通り、年代記に載る |
 | 通報の悪用 | 通報にも人間確認と回数制限をかける。3 件で自動的に隠し、運営が CLI で戻せる |
-| 他人の島の取り下げ | 出港時に返す取り下げ鍵(D1 にはハッシュだけ)を持つ人だけができる |
+| 他人の島の取り下げ | 取り下げ鍵を持つ人だけができる。鍵は手元で作り、出港に `Authorization: Bearer` で添える(D1 にはハッシュだけ)。港が作って返す形だと、応答が失われて outbox から再送したときに鍵が手元に届かないので、M19-08 で手元で作る形に変えた |
 | 回数制限のための送り手の識別 | IP は保存しない。日付ごとに salt を変えた HMAC でハッシュにし、その日の数えにだけ使う |
 
 ---

@@ -2,6 +2,8 @@ import argparse
 import contextlib
 import io
 import json
+import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -15,20 +17,10 @@ MISSING = "f" * 64
 
 # 港の表の仮の形 (設計書 §5・§6)。M19-08 のマイグレーションができたら、ここを消して
 # `wrangler d1 migrations apply --local` をかけ、mod.py の SQL を本物の列に合わせる
-PROVISIONAL_SCHEMA = """
-CREATE TABLE chronicles (
-  id TEXT PRIMARY KEY,
-  published_at TEXT NOT NULL,
-  report_count INTEGER NOT NULL DEFAULT 0,
-  hidden_at TEXT
-);
-CREATE TABLE daily_budget (
-  day TEXT PRIMARY KEY,
-  publish INTEGER NOT NULL DEFAULT 0,
-  cargo INTEGER NOT NULL DEFAULT 0,
-  report INTEGER NOT NULL DEFAULT 0
-);
-"""
+# M19-08: 仮の形の代わりに、Worker と同じマイグレーション (worker/migrations) をローカルの D1 に当てる
+MIGRATIONS = mod.REPO / "worker" / "migrations"
+POLICY = mod.REPO / "worker" / "src" / "policy.ts"
+HIDDEN_AT = 1_790_388_000_000  # 2026-09-26T02:00:00Z (epoch ms)
 
 
 def run_main(argv, run=subprocess.run):
@@ -141,8 +133,26 @@ class CommandLineTest(unittest.TestCase):
         self.assertIn("no such table: chronicles", err)
 
 
+class PolicySyncTest(unittest.TestCase):
+    def test_budget_caps_match_the_worker_policy(self):
+        text = POLICY.read_text(encoding="utf-8")
+        found = {
+            bucket: (int(cap.replace("_", "")), int(shed.replace("_", "")))
+            for bucket, cap, shed in re.findall(
+                r"(\w+): \{ cap: ([\d_]+), shedAt: ([\d_]+),", text
+            )
+        }
+        self.assertEqual(
+            {bucket: cap for bucket, (cap, _) in found.items()},
+            {bucket: cap for bucket, (_, cap) in mod.BUDGET_CAPS.items()},
+        )
+        self.assertEqual(max(shed for _, shed in found.values()), mod.DAY_TOTAL_CAP)
+
+
 class LocalD1Test(unittest.TestCase):
     """ローカルの D1 (wrangler d1 execute --local) に仮の表を作って、各操作を通す。"""
+
+    # M19-08: 仮の表ではなく、Worker と同じマイグレーション (worker/migrations) を当てる
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -158,6 +168,7 @@ class LocalD1Test(unittest.TestCase):
                             "binding": mod.DATABASE,
                             "database_name": "biotope-island-harbor",
                             "database_id": "00000000-0000-0000-0000-000000000000",
+                            "migrations_dir": str(MIGRATIONS),
                         }
                     ],
                 }
@@ -171,15 +182,47 @@ class LocalD1Test(unittest.TestCase):
             "--persist-to",
             str(root / "d1"),
         ]
+        migrated = subprocess.run(
+            [
+                str(mod.WRANGLER),
+                "d1",
+                "migrations",
+                "apply",
+                mod.DATABASE,
+                "--local",
+                "--config",
+                str(self.config),
+                "--persist-to",
+                str(root / "d1"),
+            ],
+            cwd=mod.REPO,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CI": "true"},
+            check=False,
+        )
+        self.assertEqual(migrated.returncode, 0, migrated.stderr or migrated.stdout)
+        columns = (
+            "sim_version, scenario_id, seed, inscription, verdict, year, "
+            "digest_hash, body, bytes, published_at, withdraw_hash"
+        )
+        values = (
+            "'1', 'sinking', 1, 'still-here', 'alive', 3, "
+            f"'{'0' * 64}', '{{}}', 2, 1790000000000, '{'1' * 64}'"
+        )
         self.sql(
-            PROVISIONAL_SCHEMA
-            + f"""
-            INSERT INTO chronicles (id, published_at, report_count) VALUES
-              ('{ID_A}', '2026-09-26T00:00:00Z', 3),
-              ('{ID_B}', '2026-09-26T01:00:00Z', 0);
-            INSERT INTO daily_budget (day, publish, cargo, report) VALUES
-              ('2026-09-25', 1500, 10, 0),
-              ('2026-09-26', 12, 250, 1000);
+            f"""
+            INSERT INTO chronicles (id, {columns}, reports) VALUES
+              ('{ID_A}', {values}, 3),
+              ('{ID_B}', {values}, 0);
+            INSERT INTO reports (chronicle_id, day, sender) VALUES
+              ('{ID_A}', '2026-09-26', 's1'),
+              ('{ID_A}', '2026-09-26', 's2'),
+              ('{ID_A}', '2026-09-26', 's3');
+            INSERT INTO daily_budget (day, bucket, used) VALUES
+              ('2026-09-25', 'publish', 1500), ('2026-09-25', 'cast_cargo', 10),
+              ('2026-09-26', 'publish', 12), ('2026-09-26', 'cast_cargo', 250),
+              ('2026-09-26', 'report', 1000);
             """
         )
 
@@ -194,7 +237,12 @@ class LocalD1Test(unittest.TestCase):
 
     def row(self, chronicle_id):
         return self.sql(
-            f"SELECT report_count, hidden_at FROM chronicles WHERE id = '{chronicle_id}'"
+            f"SELECT reports, hidden_at FROM chronicles WHERE id = '{chronicle_id}'"
+        )
+
+    def reports(self, chronicle_id):
+        return self.sql(
+            f"SELECT sender FROM reports WHERE chronicle_id = '{chronicle_id}'"
         )
 
     def test_hide_is_idempotent_and_restore_clears_the_reports(self):
@@ -202,30 +250,28 @@ class LocalD1Test(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn(f"隠した: {ID_A}", out)
         [first] = self.row(ID_A)
-        self.assertIsNotNone(first["hidden_at"])
+        self.assertIsInstance(first["hidden_at"], int)
 
-        self.sql(
-            f"UPDATE chronicles SET hidden_at = '2026-09-26 02:00:00' WHERE id = '{ID_A}'"
-        )
+        self.sql(f"UPDATE chronicles SET hidden_at = {HIDDEN_AT} WHERE id = '{ID_A}'")
         code, out, _ = run_main([*self.target, "hide", ID_A])
         self.assertEqual(code, 0)
-        self.assertIn("2026-09-26 02:00:00", out)
-        self.assertEqual(
-            self.row(ID_A), [{"report_count": 3, "hidden_at": "2026-09-26 02:00:00"}]
-        )
+        self.assertIn("(2026-09-26T02:00:00Z から)", out)
+        self.assertEqual(self.row(ID_A), [{"reports": 3, "hidden_at": HIDDEN_AT}])
 
         code, out, _ = run_main([*self.target, "restore", ID_A])
         self.assertEqual(code, 0)
         self.assertIn(f"戻した: {ID_A}", out)
-        self.assertEqual(self.row(ID_A), [{"report_count": 0, "hidden_at": None}])
-        self.assertEqual(self.row(ID_B), [{"report_count": 0, "hidden_at": None}])
+        self.assertEqual(self.row(ID_A), [{"reports": 0, "hidden_at": None}])
+        self.assertEqual(self.reports(ID_A), [])
+        self.assertEqual(self.row(ID_B), [{"reports": 0, "hidden_at": None}])
 
-    def test_delete_removes_only_that_chronicle(self):
-        code, out, _ = run_main([*self.target, "delete", ID_B, "--yes"])
+    def test_delete_removes_only_that_chronicle_and_its_reports(self):
+        code, out, _ = run_main([*self.target, "delete", ID_A, "--yes"])
         self.assertEqual(code, 0)
-        self.assertIn(f"消した: {ID_B}", out)
-        self.assertEqual(self.row(ID_B), [])
-        self.assertEqual(len(self.row(ID_A)), 1)
+        self.assertIn(f"消した: {ID_A}", out)
+        self.assertEqual(self.row(ID_A), [])
+        self.assertEqual(self.reports(ID_A), [])
+        self.assertEqual(len(self.row(ID_B)), 1)
 
     def test_unknown_id_fails_for_every_operation(self):
         for argv in [
@@ -239,22 +285,21 @@ class LocalD1Test(unittest.TestCase):
                 self.assertIn(f"見つからない: {MISSING}", err)
 
     def test_budget_shows_the_newest_days_against_the_caps(self):
+        today = (
+            "2026-09-26  合計 1,262/45,000 (3%)  積荷 250/5,000 (5%)"
+            "  出港 12/2,000 (1%)  通報 1,000/1,000 (100%)"
+        )
         code, out, _ = run_main([*self.target, "budget", "--days", "1"])
         self.assertEqual(code, 0)
-        self.assertEqual(
-            out.splitlines(),
-            [
-                "2026-09-26  出港 12/2,000 (1%)  積荷 250/5,000 (5%)  通報 1,000/1,000 (100%)"
-            ],
-        )
+        self.assertEqual(out.splitlines(), [today])
 
         code, out, _ = run_main([*self.target, "budget"])
         self.assertEqual(code, 0)
         self.assertEqual(
             out.splitlines(),
             [
-                "2026-09-26  出港 12/2,000 (1%)  積荷 250/5,000 (5%)  通報 1,000/1,000 (100%)",
-                "2026-09-25  出港 1,500/2,000 (75%)  積荷 10/5,000 (0%)  通報 0/1,000 (0%)",
+                today,
+                "2026-09-25  合計 1,510/45,000 (3%)  積荷 10/5,000 (0%)  出港 1,500/2,000 (75%)",
             ],
         )
 
@@ -263,7 +308,7 @@ class LocalD1Test(unittest.TestCase):
         code, out, _ = run_main([*self.target, "budget"])
         self.assertEqual(code, 0)
         self.assertEqual(
-            out.splitlines(), ["daily_budget に行が無い (まだ誰も出港していない)"]
+            out.splitlines(), ["daily_budget に行が無い (まだ誰も港を使っていない)"]
         )
 
 

@@ -220,3 +220,30 @@ test('M19-14: シナリオの途中で閉じて開き直すと、同じ年・同
   await second.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
   await expect.poll(async () => (await storedScenario(second, 'test-quick'))?.commands).toBe(2);
 });
+
+test('M19-14: 同じ石板の他人の島を訪れても (M19-09 の ?visit)、自分の続きから戻さず、訪れた島を自分の続きとして書かない', async ({ context }) => {
+  const own = await context.newPage();
+  await own.goto('/?scenario=test-quick');
+  await own.click('#speed-0');
+  const box = await own.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  await own.click('#spawn-grass');
+  await own.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(own.locator('#tablet-power')).toHaveText('7 / 30');
+  const clickedAt = await shownTick(own);
+  const mine = { tick: clickedAt, commands: 1 };
+  await expect.poll(() => storedScenario(own, 'test-quick')).toEqual(mine);
+  await own.close();
+
+  const visit = await context.newPage();
+  const logs = collectLogs(visit);
+  // 港は閉じている (訪れた島の年代記は届かず、島は Year 0 で止まったまま)
+  await visit.route((url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs', (route) => route.abort('failed'));
+  await visit.goto(`/?scenario=test-quick&visit=${'a'.repeat(64)}`);
+  await expect(visit.locator('#tablet-power')).toHaveText('10 / 30');
+  await expect(visit.locator('#tablet-year')).toHaveText('0 / 5 年');
+  await hideTab(visit);
+  await visit.waitForTimeout(500);
+  expect(await storedScenario(visit, 'test-quick')).toEqual(mine);
+  expect(logs.filter((l) => l.event.startsWith('persist.scenario.'))).toEqual([]);
+});

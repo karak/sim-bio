@@ -172,8 +172,8 @@ describe('Origin の門', () => {
 });
 
 describe('/api/* のほか', () => {
-  it.each(['/api/v1/chronicles', '/api/v2/logs', '/api/', '/api/v1/logs/extra', '/api/constructor', '/api/__proto__'])(
-    '%s はまだ無いので 404',
+  it.each(['/api/v2/logs', '/api/', '/api/v1/logs/extra', '/api/constructor', '/api/__proto__', '/api/v1/constructor'])(
+    '%s は道が無いので 404',
     async (path) => {
       const res = await exports.default.fetch(`${ORIGIN}${path}`, { method: 'POST', headers: { origin: ORIGIN }, body: '{}' });
 

@@ -37,6 +37,12 @@ jobs:
       - run: pnpm run build:cloudflare
       # 配る直前の dist と wrangler.jsonc が無料枠の内か。外なら deploy しない (設計書 §3.3、M19-12)
       - run: pnpm run check:free-tier
+      # 港の帳簿 (D1) のマイグレーション。当て済みのものは飛ばす (M19-08)。新しい表や列を使う Worker より先に当てる
+      - run: pnpm exec wrangler d1 migrations apply biotope-harbor --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
       # トークンは GitHub Secrets にだけ置く (README「Cloudflare へ配る」)
       - run: pnpm exec wrangler deploy
         env:
