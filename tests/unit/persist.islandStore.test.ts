@@ -2,13 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
-import { openIslandStore, parseSlotId } from '../../src/persist/islandStore';
-import { createAutosave } from '../../src/persist/autosave';
+import { openIslandStore } from '../../src/persist/islandStore';
 import { testConfig } from './helpers';
 
 const world = () => World.create(testConfig(), { log: createMemorySink() });
 
-describe('手元の保存 (M19-05)', () => {
+describe('手元の保存の置き場 (M19-05、IndexedDB)', () => {
   it('手動の枠に保存した島を読み込むと、続きが同じに進む', async () => {
     const store = await openIslandStore({ indexedDB: new IDBFactory(), now: () => 1000 });
     const a = world();
@@ -65,111 +64,6 @@ describe('手元の保存 (M19-05)', () => {
 
     const second = await openIslandStore({ indexedDB, now: () => 2000 });
     expect((await second.load('auto'))?.tick).toBe(10);
-  });
-
-  it('枠の id は決まった 4 つだけを受ける (select の値は境界で読む)', () => {
-    expect(parseSlotId('auto')).toBe('auto');
-    expect(parseSlotId('manual-3')).toBe('manual-3');
-    expect(parseSlotId('manual-4')).toBeNull();
-    expect(parseSlotId('')).toBeNull();
-  });
-});
-
-describe('自動保存 (N tick ごと)', () => {
-  const nextFrame = () => new Promise((r) => setTimeout(r, 0));
-
-  it('開始から N tick 進むたびに 1 回だけ書く (1 フレームで何 tick 飛んでも 1 回)', async () => {
-    const writes: number[] = [];
-    const auto = createAutosave({ every: 90, startTick: 0, write: (tick) => { writes.push(tick); return Promise.resolve(); }, onError: () => {} });
-    for (const t of [30, 89, 90, 150, 179, 180, 600]) {
-      auto.onTick(t);
-      await nextFrame();
-    }
-    expect(writes).toEqual([90, 180, 600]);
-  });
-
-  it('再開した島では、再開した tick から数える', async () => {
-    const writes: number[] = [];
-    const auto = createAutosave({ every: 90, startTick: 1000, write: (tick) => { writes.push(tick); return Promise.resolve(); }, onError: () => {} });
-    for (const t of [1000, 1089, 1090]) {
-      auto.onTick(t);
-      await nextFrame();
-    }
-    expect(writes).toEqual([1090]);
-  });
-
-  it('古い保存を読み込んで tick が戻ったら、戻った tick から数え直す', async () => {
-    const writes: number[] = [];
-    const auto = createAutosave({ every: 90, startTick: 0, write: (tick) => { writes.push(tick); return Promise.resolve(); }, onError: () => {} });
-    for (const t of [900, 100, 189, 190]) {
-      auto.onTick(t);
-      await nextFrame();
-    }
-    expect(writes).toEqual([900, 190]);
-  });
-
-  it('前の書き込みが終わるまで次を書かない (重い serialize を重ねない)', async () => {
-    const writes: number[] = [];
-    let finish = () => {};
-    const auto = createAutosave({
-      every: 90,
-      startTick: 0,
-      write: (tick) => {
-        writes.push(tick);
-        return new Promise<void>((resolve) => { finish = resolve; });
-      },
-      onError: () => {},
-    });
-    auto.onTick(90);
-    auto.onTick(180);
-    expect(writes).toEqual([90]);
-    finish();
-    await nextFrame();
-    auto.onTick(200);
-    expect(writes).toEqual([90, 200]);
-  });
-
-  it('書き込みの失敗は onError に渡し、次の周期でまた書く', async () => {
-    const writes: number[] = [];
-    const errors: unknown[] = [];
-    const auto = createAutosave({
-      every: 90,
-      startTick: 0,
-      write: (tick) => {
-        writes.push(tick);
-        return tick === 90 ? Promise.reject(new Error('quota')) : Promise.resolve();
-      },
-      onError: (e) => errors.push(e),
-    });
-    auto.onTick(90);
-    await nextFrame();
-    auto.onTick(180);
-    expect(writes).toEqual([90, 180]);
-    expect(errors).toEqual([new Error('quota')]);
-  });
-
-  it('自動保存の枠に World を N tick ごとに書き、開き直すと最後に書いた tick から続く', async () => {
-    const indexedDB = new IDBFactory();
-    const store = await openIslandStore({ indexedDB, now: () => 1000 });
-    const a = world();
-    const pending: Promise<unknown>[] = [];
-    const auto = createAutosave({
-      every: 90,
-      startTick: 0,
-      write: () => {
-        const p = store.save('auto', a.serialize());
-        pending.push(p);
-        return p;
-      },
-      onError: (e) => { throw e; },
-    });
-    for (let i = 0; i < 5; i++) {
-      a.step(40);
-      auto.onTick(a.snapshot().tick);
-      await Promise.all(pending);
-    }
-
-    const reopened = await openIslandStore({ indexedDB, now: () => 2000 });
-    expect((await reopened.load('auto'))?.tick).toBe(120);
+    expect(await second.list()).toEqual([{ slot: 'auto', savedAt: 1000, year: 0 }]);
   });
 });

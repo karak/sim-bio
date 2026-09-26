@@ -12,7 +12,7 @@ import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
 import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
-import { parseSlotId, SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/islandStore';
+import { SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/slots';
 import './hud.css';
 
 /**
@@ -78,6 +78,8 @@ export type HudHandlers = {
   /** 手元の保存の枠 (M19-05)。自動の枠へは自動保存だけが書く */
   onSlotSave(slot: ManualSlot): void;
   onSlotLoad(slot: SlotId): void;
+  /** 自由モードの島を作り直す (自動保存から再開するので、開き直しても新しい島にはならない) */
+  onNewIsland(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
@@ -104,8 +106,8 @@ export type Hud = {
   showSpeciesLayer(id: string): void;
   /** 枠の一覧の 1 行を出す (書いたら上書き) */
   setSlot(s: SlotSummary): void;
-  /** 読込 (ファイルと枠) を受け付けるか。シナリオ中は予言と矛盾するので false */
-  setLoadable(on: boolean): void;
+  /** 島の差し替え (ファイルと枠の読込、新しい島) を受け付けるか。シナリオ中は予言と矛盾するので false */
+  setReplaceable(on: boolean): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -166,6 +168,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <select id="slot-select" class="chip">${SLOTS.map((s) => `<option value="${s}"${s === 'manual-1' ? ' selected' : ''}></option>`).join('')}</select>
     <button id="slot-save" class="chip">枠へ保存</button>
     <button id="slot-load" class="chip">枠から読込</button>
+    <button id="new-island" class="chip">新しい島</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>
@@ -309,24 +312,23 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   });
 
   const slots = new Map<SlotId, SlotSummary>();
-  let loadable = true;
+  let replaceable = true;
   const slotSelect = $<HTMLSelectElement>('slot-select');
-  const selectedSlot = (): SlotId => parseSlotId(slotSelect.value) ?? 'manual-1';
+  // option は SLOTS から同じ順に作っている
+  const selectedSlot = (): SlotId => SLOTS[slotSelect.selectedIndex];
   const renderSlots = () => {
-    for (const opt of Array.from(slotSelect.options)) {
-      const slot = parseSlotId(opt.value);
-      if (!slot) continue;
+    SLOTS.forEach((slot, i) => {
       const s = slots.get(slot);
-      opt.textContent = `${SLOT_NAMES[slot]} · ${s ? `Year ${s.year}` : '空き'}`;
-    }
+      slotSelect.options[i].textContent = `${SLOT_NAMES[slot]} · ${s ? `Year ${s.year}` : '空き'}`;
+    });
     const slot = selectedSlot();
     $<HTMLButtonElement>('slot-save').disabled = slot === 'auto';
-    $<HTMLButtonElement>('slot-load').disabled = !loadable || !slots.has(slot);
+    $<HTMLButtonElement>('slot-load').disabled = !replaceable || !slots.has(slot);
     const loadInput = $<HTMLInputElement>('load-input');
-    loadInput.disabled = !loadable;
-    const why = loadable ? '' : 'シナリオ中は読み込めない (予言と矛盾する)';
-    $('slot-load').title = why;
-    if (loadInput.parentElement) loadInput.parentElement.title = why;
+    loadInput.disabled = !replaceable;
+    $<HTMLButtonElement>('new-island').disabled = !replaceable;
+    const why = replaceable ? '' : 'シナリオ中は島を差し替えられない (予言と矛盾する)';
+    for (const el of [$('slot-load'), $('new-island'), loadInput.parentElement]) if (el) el.title = why;
   };
   slotSelect.addEventListener('change', renderSlots);
   $('slot-save').addEventListener('click', () => {
@@ -334,6 +336,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     if (slot !== 'auto') h.onSlotSave(slot);
   });
   $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
+  $('new-island').addEventListener('click', () => h.onNewIsland());
   renderSlots();
 
   const canvas = $<HTMLCanvasElement>('graph');
@@ -547,8 +550,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       slots.set(s.slot, s);
       renderSlots();
     },
-    setLoadable: (on) => {
-      loadable = on;
+    setReplaceable: (on) => {
+      replaceable = on;
       renderSlots();
     },
   };

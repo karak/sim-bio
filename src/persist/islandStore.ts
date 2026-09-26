@@ -1,14 +1,7 @@
 import type { SaveData } from '../simulation/types';
+import { SLOTS, type SlotId, type SlotSummary } from './slots';
 
-export const MANUAL_SLOTS = ['manual-1', 'manual-2', 'manual-3'] as const;
-export type ManualSlot = (typeof MANUAL_SLOTS)[number];
-export type SlotId = 'auto' | ManualSlot;
-export const SLOTS: readonly SlotId[] = ['auto', ...MANUAL_SLOTS];
-
-export type SlotSummary = { slot: SlotId; savedAt: number; year: number };
-type SaveRecord = SlotSummary & { data: SaveData };
-
-/** 島の手元の保存 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */
+/** 島の置き場 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */
 export type IslandStore = {
   /** 書いた枠の一覧の 1 行を返す (一覧を読み直さずに表示を更新できる) */
   save(slot: SlotId, data: SaveData): Promise<SlotSummary>;
@@ -20,13 +13,15 @@ export type IslandStore = {
 const DB_NAME = 'biotope-island';
 /**
  * 版 n への移行は UPGRADES[n - 1]。年代記 (M19-06) や outbox・取り下げ鍵 (M19-09) の store は、使う版で末尾に足す。
- * 並びを変えたり消したりすると、既に開いた利用者の DB と食い違う
+ * 並びを変えたり消したりすると、既に開いた利用者の DB と食い違う。
+ * slots は一覧の行だけを持つ。一覧のために saves を読むと、Chromium で 4 枠 130 ms ほどかかる (size 128)
  */
-const UPGRADES: readonly ((db: IDBDatabase) => void)[] = [(db) => db.createObjectStore('saves', { keyPath: 'slot' })];
-
-export function parseSlotId(value: string): SlotId | null {
-  return SLOTS.find((s) => s === value) ?? null;
-}
+const UPGRADES: readonly ((db: IDBDatabase) => void)[] = [
+  (db) => {
+    db.createObjectStore('saves');
+    db.createObjectStore('slots', { keyPath: 'slot' });
+  },
+];
 
 const requestDone = <T>(req: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
@@ -34,11 +29,11 @@ const requestDone = <T>(req: IDBRequest<T>): Promise<T> =>
     req.onerror = () => reject(req.error);
   });
 
+// error の event の時点では tx.error がまだ null なので、abort で原因を受け取る
 const transactionDone = (tx: IDBTransaction): Promise<void> =>
   new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'));
   });
 
 function openDb(indexedDB: IDBFactory): Promise<IDBDatabase> {
@@ -55,24 +50,22 @@ function openDb(indexedDB: IDBFactory): Promise<IDBDatabase> {
 
 export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => number }): Promise<IslandStore> {
   const db = await openDb(deps.indexedDB);
-  const saves = (mode: IDBTransactionMode) => db.transaction('saves', mode).objectStore('saves');
   return {
     async save(slot, data) {
       const summary: SlotSummary = { slot, savedAt: deps.now(), year: Math.floor(data.tick / data.config.ticksPerYear) };
-      const store = saves('readwrite');
-      store.put({ ...summary, data } satisfies SaveRecord);
-      await transactionDone(store.transaction);
+      const tx = db.transaction(['saves', 'slots'], 'readwrite');
+      tx.objectStore('saves').put(data, slot);
+      tx.objectStore('slots').put(summary);
+      await transactionDone(tx);
       return summary;
     },
     async load(slot) {
-      const record: SaveRecord | undefined = await requestDone(saves('readonly').get(slot));
-      return record?.data ?? null;
+      const data: SaveData | undefined = await requestDone(db.transaction('saves').objectStore('saves').get(slot));
+      return data ?? null;
     },
     async list() {
-      const records: SaveRecord[] = await requestDone(saves('readonly').getAll());
-      return records
-        .map(({ slot, savedAt, year }) => ({ slot, savedAt, year }))
-        .sort((a, b) => SLOTS.indexOf(a.slot) - SLOTS.indexOf(b.slot));
+      const rows: SlotSummary[] = await requestDone(db.transaction('slots').objectStore('slots').getAll());
+      return rows.sort((a, b) => SLOTS.indexOf(a.slot) - SLOTS.indexOf(b.slot));
     },
   };
 }

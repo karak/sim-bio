@@ -14,17 +14,22 @@ import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
 import { createObserveEntry } from './observe/entry';
-import { openIslandStore, type IslandStore, type SlotId } from './persist/islandStore';
-import { createAutosave } from './persist/autosave';
+import { openIslandStore } from './persist/islandStore';
+import { createLocalSave } from './persist/localSave';
 
 /** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
 const AUTOSAVE_TICKS = 90;
 
 async function boot(): Promise<void> {
-  const [base, species, scenarios] = await Promise.all([
+  let storeError: unknown = null;
+  const [base, species, scenarios, store] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
     fetch('/data/scenarios.json').then((r) => r.json() as Promise<ScenarioDef[]>),
+    openIslandStore({ indexedDB, now: Date.now }).catch((e: unknown) => {
+      storeError = e;
+      return null;
+    }),
   ]);
   // ?scenario=<id> で石板を選ぶ。無ければ自由モード
   const params = new URLSearchParams(location.search);
@@ -48,24 +53,16 @@ async function boot(): Promise<void> {
   const log = createConsoleSink();
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
     log.write({ ts: new Date().toISOString(), tick, year: Math.floor(tick / config.ticksPerYear), level, event, ...extra });
-  const store: IslandStore | null = await openIslandStore({ indexedDB, now: Date.now }).catch((e: unknown) => {
-    persistLog('warn', 'persist.unavailable', 0, { error: String(e) });
-    return null;
+  if (storeError) persistLog('warn', 'persist.unavailable', 0, { error: String(storeError) });
+  const localSave = createLocalSave({
+    store,
+    mode: scenario ? 'scenario' : 'free',
+    every: AUTOSAVE_TICKS,
+    log: persistLog,
+    onSaved: (s) => hud.setSlot(s),
   });
-  // 閉じる前の続きから (M19-05)。シナリオは自動保存から戻さない (シナリオ中の読込は予言と矛盾する)
-  const resumeAuto = async (s: IslandStore): Promise<World | null> => {
-    try {
-      const save = await s.load('auto');
-      if (!save) return null;
-      const w = World.restore(save, { log });
-      persistLog('info', 'persist.resumed', save.tick, { slot: 'auto' });
-      return w;
-    } catch (e) {
-      persistLog('warn', 'persist.resume.failed', 0, { error: String(e) });
-      return null;
-    }
-  };
-  let world = (!scenario && store ? await resumeAuto(store) : null) ?? World.create(config, { log });
+  // 閉じる前の続きから (M19-05)
+  let world = (await localSave.resume((save) => World.restore(save, { log }))) ?? World.create(config, { log });
   const selectScenario = (id: string | null) => {
     const q = new URLSearchParams(location.search);
     if (id) q.set('scenario', id);
@@ -76,7 +73,7 @@ async function boot(): Promise<void> {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const app = document.getElementById('app');
   if (!app) throw new Error('#app missing');
-  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(species), size: world.snapshot().size });
+  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(world.snapshot().species), size: world.snapshot().size });
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
   /** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
@@ -99,25 +96,21 @@ async function boot(): Promise<void> {
     return result.ok;
   };
 
-  const load = (save: SaveData) => {
-    if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
+  const replaceWorld = (next: World) => {
     const shownSize = world.snapshot().size;
-    world = World.restore(save, { log });
-    if (save.config.size !== shownSize) {
+    world = next;
+    const { size, species: nextSpecies } = world.snapshot();
+    if (size !== shownSize) {
       view.dispose();
-      view = createSceneView(canvas, { assets: buildAssetTable(save.config.species), size: save.config.size });
+      view = createSceneView(canvas, { assets: buildAssetTable(nextSpecies), size });
     }
     selected = null;
+    localSave.replaced(world.serialize());
   };
-  const saveTo = (slot: SlotId): Promise<void> => {
-    if (!store) return Promise.resolve();
-    const data = world.serialize();
-    return store.save(slot, data).then((summary) => {
-      hud.setSlot(summary);
-      persistLog('info', 'persist.saved', data.tick, { slot });
-    });
+  const load = (save: SaveData) => {
+    if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
+    replaceWorld(World.restore(save, { log }));
   };
-  const saveFailed = (slot: SlotId) => (e: unknown) => persistLog('warn', 'persist.save.failed', world.snapshot().tick, { slot, error: String(e) });
 
   const hud = createHud(app, {
     onCommand: intervene,
@@ -125,16 +118,14 @@ async function boot(): Promise<void> {
     onLayer: (l) => view.setLayer(l),
     onSave: () => world.serialize(),
     onLoad: load,
-    onSlotSave: (slot) => {
-      saveTo(slot).catch(saveFailed(slot));
-    },
-    onSlotLoad: (slot) => {
-      store
-        ?.load(slot)
-        .then((save) => {
-          if (save) load(save);
-        })
-        .catch((e: unknown) => persistLog('warn', 'persist.load.failed', world.snapshot().tick, { slot, error: String(e) }));
+    onSlotSave: (slot) => void localSave.saveSlot(slot, world.serialize()),
+    onSlotLoad: (slot) =>
+      void localSave.loadSlot(slot).then((save) => {
+        if (save) load(save);
+      }),
+    onNewIsland: () => {
+      if (runner) return;
+      replaceWorld(World.create(config, { log }));
     },
     onDisasterArm: (k) => {
       armed = k;
@@ -156,16 +147,11 @@ async function boot(): Promise<void> {
     Object.fromEntries(species.map((d) => [d.id, d.name])),
     (id) => hud.showSpeciesLayer(id),
   );
-  hud.setLoadable(!scenario);
-  store
-    ?.list()
-    .then((list) => list.forEach(hud.setSlot))
-    .catch((e: unknown) => persistLog('warn', 'persist.list.failed', 0, { error: String(e) }));
-  // シナリオの島は自動の枠に書かない。書くと次に自由モードで開いたとき、シナリオの途中の島が続きとして出てしまう
-  const autosave =
-    store && !scenario
-      ? createAutosave({ every: AUTOSAVE_TICKS, startTick: world.snapshot().tick, write: () => saveTo('auto'), onError: saveFailed('auto') })
-      : null;
+  hud.setReplaceable(!scenario);
+  void localSave.list().then((list) => list.forEach(hud.setSlot));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') localSave.flush(() => world.serialize());
+  });
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
   const observe = createObserveEntry(app, {
     names: Object.fromEntries(species.map((d) => [d.id, d.name])),
@@ -176,7 +162,7 @@ async function boot(): Promise<void> {
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
-        autosave?.onTick(s.tick);
+        localSave.onTick(s.tick, () => world.serialize());
         observe.push(s, runner?.timeline());
         if (!observe.active()) view.update(s);
         hud.update(s);
