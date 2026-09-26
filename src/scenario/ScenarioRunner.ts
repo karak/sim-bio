@@ -57,6 +57,8 @@ export type ScenarioRunner = {
   intervene(cmd: Command): InterveneResult;
   /** 開始からの年 */
   yearOf(s: WorldSnapshot): number;
+  /** 次の年の境目までの tick 数 (1〜ticksPerYear)。境目ちょうどなら ticksPerYear。stepByYear が 1 回の step をここで切る (M19-04) */
+  ticksToNextYear(s: WorldSnapshot): number;
   verdict(): Verdict;
   interventions(): number;
   /** 現在の星の力。budget のないシナリオでは常に 0 */
@@ -273,6 +275,7 @@ export function createScenarioRunner(
   return {
     def,
     yearOf,
+    ticksToNextYear: (s) => ticksPerYear - ((s.tick - startTick) % ticksPerYear),
     interventions: () => interventions,
     verdict: () => verdict,
     power: () => power,

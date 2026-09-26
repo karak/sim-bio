@@ -6,12 +6,14 @@ import { createMemorySink } from '../../src/core/log/memorySink';
 import { createRunner, type Speed } from '../../src/core/runner';
 import { createScenarioRunner, type ScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import { stepByYear } from '../../src/scenario/stepByYear';
+import { SIM_VERSION } from '../../src/simulation/version';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, SpeciesDef, WorldConfig } from '../../src/simulation/types';
+import { disasterClick, spawnClick } from '../../src/ui/clicks';
 
 /**
  * 決定論の刻み (M19-04、設計書 2026-09-26-cloudflare-architecture.md §1.3 C6)。
- * 同じ seed・同じ介入なら、速度とフレームの刻みに依らず同じ結末になる。
+ * 同じ seed・同じ介入なら、速度とフレームの刻みに依らず同じ結末になる。golden replay は本体の結末を版ごとに固定する。
  */
 const species = JSON.parse(readFileSync('assets/data/species.json', 'utf8')) as SpeciesDef[];
 const base = JSON.parse(readFileSync('assets/data/world.default.json', 'utf8')) as Omit<WorldConfig, 'species'>;
@@ -107,5 +109,57 @@ describe('決定論の刻み (M19-04): 速度とフレームの刻みに依ら�
     stepByYear(world, spy, 3 * ticksPerYear + 100);
     expect(years).toEqual([1, 2, 3]);
     expect(world.snapshot().tick).toBe(3 * ticksPerYear + 100);
+  });
+});
+
+/** 固定の年代記: 石板・seed・tick 付きの介入。本体の係数を変えると結末が変わる */
+const CHRONICLE: { scenarioId: string; years: number; commands: readonly { tick: number; command: Command }[] } = {
+  scenarioId: 'sinking',
+  years: 6,
+  commands: [
+    { tick: 0, command: { type: 'set_climate', rainScale: 1.25 } },
+    { tick: 400, command: spawnClick('deer', 16 * SIZE + 16) },
+    { tick: 725, command: spawnClick('rabbit', 12 * SIZE + 18) },
+    { tick: 1500, command: disasterClick('plague', 16 * SIZE + 16) },
+  ],
+};
+
+/**
+ * 版ごとの golden。本体 (係数・規則) を変えてこのテストが落ちたら、SIM_VERSION を上げ、新しい版の行を足す。
+ * 古い行は消さない (過去の年代記がどの版で何になったかの記録)
+ */
+const GOLDEN: Readonly<Record<string, string>> = {
+  '1': 'a7b5c4c5909f4c4d748cfe7a489882d3d17aae9c6469f5adcce8b5256d8a0aa2',
+};
+
+/** 設計書 §5.1 の Digest の中身 (年・判定・種ごとの総数 toPrecision(6)・絶滅した種) の正規化 JSON の SHA-256 */
+function replayDigest(): { hash: string; year: number; verdict: string } {
+  const def = scenario(CHRONICLE.scenarioId, CHRONICLE.years);
+  const { world, runner } = setup(def);
+  runner.update(world.snapshot());
+  for (const { tick, command } of CHRONICLE.commands) {
+    stepByYear(world, runner, tick - world.snapshot().tick);
+    runner.intervene(command);
+  }
+  stepByYear(world, runner, Number.MAX_SAFE_INTEGER);
+  const s = world.snapshot();
+  const verdict = runner.verdict().status;
+  const ids = Object.keys(s.totals).sort();
+  const totals = Object.fromEntries(ids.map((id) => [id, Number(s.totals[id].toPrecision(6))]));
+  const extinct = ids.filter((id) => s.totals[id] === 0);
+  return { hash: sha256({ year: s.year, verdict, totals, extinct }), year: s.year, verdict };
+}
+
+describe('golden replay (M19-04)', () => {
+  it(`固定の年代記の結末ダイジェストが SIM_VERSION ${SIM_VERSION} の golden と一致する`, () => {
+    const d = replayDigest();
+    expect(d.year).toBe(CHRONICLE.years);
+    expect(d.verdict).not.toBe('running');
+    expect(d.hash, `本体の結末が変わった。SIM_VERSION を上げ、GOLDEN に '${String(Number(SIM_VERSION) + 1)}': '${d.hash}' を足す`).toBe(GOLDEN[SIM_VERSION]);
+  });
+  it('GOLDEN の最新の版が SIM_VERSION で、版ごとの hash はすべて違う', () => {
+    const versions = Object.keys(GOLDEN).map(Number);
+    expect(Math.max(...versions)).toBe(Number(SIM_VERSION));
+    expect(new Set(Object.values(GOLDEN)).size).toBe(versions.length);
   });
 });
