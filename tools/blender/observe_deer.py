@@ -735,9 +735,29 @@ MOUTH6_PHILTRUM = [(0, -1.10, 1.752), (0, -1.10, 1.716)]
 MOUTH6_LIP = [(-5, -1.10, 1.714), (0, -1.10, 1.714), (14, -1.10, 1.7145), (26, -1.10, 1.716), (35, -1.10, 1.719), (41, -1.10, 1.723)]
 MOUTH6_W = (0.0065, 0.0055, 0.0035)
 
+# (月鹿の手直し 7 で追加) 審査台 d6-deer「顎が縦にながすぎている。倍で済んでいない（情報の基準点の認識がずれているように思える）」。
+# 手直し 6 の帯ごとの倍率 (FACE6_K) をやめ、正面から見た鼻 (逆三角の鼻の面) の下端 FACE7_Z0 から顎の下端までを 1 つの倍率 FACE7_K で一様に伸ばす。
+# 基準点は鼻の下端に固定し、鼻そのものとそれより上は伸ばさない。倍率は喉 (FACE7_Y[0]) から顎の下の一番低い所 (FACE7_Y[1]) へ強め、
+# そこより前は FACE7_K のまま。横の倍率 (FACE6_X)・顎を後ろへ引く量 (FACE6_SHEAR)・短い口の線 (MOUTH6_LIP) は手直し 6 のまま。
+# 案は FACE7_K = 1.3 / 1.6 / 1.9 (FACE7_OPTIONS)。書き出しの既定は 1.3 (頭頂〜顎 / 横幅が基準画の 1.07 に一番近い)。
+# 撮り比べのときは `-- <out_dir> <倍率>` で 2 つ目の引数に倍率を渡す
+HEAD_FACE7 = True
+FACE7_OPTIONS = (1.3, 1.6, 1.9)
+FACE7_K = float(argv[1]) if len(argv) > 1 else 1.3  # 鼻の下端 → 顎の下端の縦の倍率
+FACE7_Y = (-0.72, -0.92)  # 縦の伸ばしを効かせ始める y・効かせ切る y。手直し 6 の FACE6_Y (-1.10 で効かせ切る) では、正面で一番低い顎の下 (y -0.91) に倍率の半分しか効かなかった
+FACE7_Z0 = 1.726  # 鼻の下端 (逆三角の鼻の面の下の角、手直し 5 の頭で測った値。FACE6_Z[1] と同じ)
+
+
+def face6_bands():
+    """(月鹿の手直し 7 で追加) 縦の伸ばしの帯の境と倍率。手直し 7 は鼻の帯を 1 倍、鼻の下端から下を FACE7_K 倍"""
+    if HEAD_FACE7:
+        return (FACE6_Z[0], FACE7_Z0), (1.0, FACE7_K)
+    return FACE6_Z, FACE6_K
+
 
 def face6_w(y):
-    return max(0.0, min(1.0, (y - FACE6_Y[0]) / (FACE6_Y[1] - FACE6_Y[0])))
+    y0, y1 = FACE7_Y if HEAD_FACE7 else FACE6_Y  # (月鹿の手直し 7 で変更: 顎の下の一番低い所 (y -0.91) で倍率を効かせ切る)
+    return max(0.0, min(1.0, (y - y0) / (y1 - y0)))
 
 
 def face6_back(y, z):
@@ -750,8 +770,8 @@ def face6_z(y, z):
     w = face6_w(y)
     if w <= 0 or z >= FACE6_Z[0]:
         return z
-    ks = [1 + (k - 1) * w for k in FACE6_K]
-    edges = FACE6_Z
+    edges, kset = face6_bands()  # (月鹿の手直し 7 で変更: 帯の境と倍率を face6_bands から引く)
+    ks = [1 + (k - 1) * w for k in kset]
     out = edges[0]
     lo = edges[0]
     for i, k in enumerate(ks):
@@ -769,8 +789,8 @@ def face6_z_inv(y, z):
     w = face6_w(y)
     if w <= 0 or z >= FACE6_Z[0]:
         return z
-    ks = [1 + (k - 1) * w for k in FACE6_K]
-    edges = FACE6_Z
+    edges, kset = face6_bands()  # (月鹿の手直し 7 で変更: 帯の境と倍率を face6_bands から引く)
+    ks = [1 + (k - 1) * w for k in kset]
     src, dst = edges[0], edges[0]
     for i, k in enumerate(ks):
         nxt = edges[i + 1] if i + 1 < len(edges) else -1e9
