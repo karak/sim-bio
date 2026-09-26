@@ -1,7 +1,7 @@
 ---
 id: M23-09
 title: 小屋の遠距離版をつなぐ
-status: in_progress
+status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-02]
@@ -23,9 +23,9 @@ M23-02
 
 ## Acceptance criteria
 
-- [ ] 集落の画(引き)で小屋の三角形が 3 分の 1 以下
-- [ ] 切り替わりが目立たない(カメラを寄せ引きした比較画)
-- [ ] M23-01 の台で 6 画の三角形・draw call・fps の前後を作業ログに残す
+- [x] 集落の画(引き)で小屋の三角形が 3 分の 1 以下 → 遠距離版 5,296 → 2,460 三角形(80d3608)
+- [x] 切り替わりが目立たない(カメラを寄せ引きした比較画) → h3-hut-far 合格(hut-far3-*.png、60 m で切り替え)
+- [x] M23-01 の台で 6 画の三角形・draw call・fps の前後を作業ログに残す → 作業ログに前後の表(80d3608)
 
 ## 作業ログ
 
