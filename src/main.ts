@@ -14,6 +14,11 @@ import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
 import { createObserveEntry } from './observe/entry';
+import { openIslandStore, type IslandStore, type SlotId } from './persist/islandStore';
+import { createAutosave } from './persist/autosave';
+
+/** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
+const AUTOSAVE_TICKS = 90;
 
 async function boot(): Promise<void> {
   const [base, species, scenarios] = await Promise.all([
@@ -41,7 +46,26 @@ async function boot(): Promise<void> {
     }
   }
   const log = createConsoleSink();
-  let world = World.create(config, { log });
+  const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
+    log.write({ ts: new Date().toISOString(), tick, year: Math.floor(tick / config.ticksPerYear), level, event, ...extra });
+  const store: IslandStore | null = await openIslandStore({ indexedDB, now: Date.now }).catch((e: unknown) => {
+    persistLog('warn', 'persist.unavailable', 0, { error: String(e) });
+    return null;
+  });
+  // 閉じる前の続きから (M19-05)。シナリオは自動保存から戻さない (シナリオ中の読込は予言と矛盾する)
+  const resumeAuto = async (s: IslandStore): Promise<World | null> => {
+    try {
+      const save = await s.load('auto');
+      if (!save) return null;
+      const w = World.restore(save, { log });
+      persistLog('info', 'persist.resumed', save.tick, { slot: 'auto' });
+      return w;
+    } catch (e) {
+      persistLog('warn', 'persist.resume.failed', 0, { error: String(e) });
+      return null;
+    }
+  };
+  let world = (!scenario && store ? await resumeAuto(store) : null) ?? World.create(config, { log });
   const selectScenario = (id: string | null) => {
     const q = new URLSearchParams(location.search);
     if (id) q.set('scenario', id);
@@ -52,7 +76,7 @@ async function boot(): Promise<void> {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const app = document.getElementById('app');
   if (!app) throw new Error('#app missing');
-  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(species), size: config.size });
+  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(species), size: world.snapshot().size });
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
   /** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
@@ -75,19 +99,42 @@ async function boot(): Promise<void> {
     return result.ok;
   };
 
+  const load = (save: SaveData) => {
+    if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
+    const shownSize = world.snapshot().size;
+    world = World.restore(save, { log });
+    if (save.config.size !== shownSize) {
+      view.dispose();
+      view = createSceneView(canvas, { assets: buildAssetTable(save.config.species), size: save.config.size });
+    }
+    selected = null;
+  };
+  const saveTo = (slot: SlotId): Promise<void> => {
+    if (!store) return Promise.resolve();
+    const data = world.serialize();
+    return store.save(slot, data).then((summary) => {
+      hud.setSlot(summary);
+      persistLog('info', 'persist.saved', data.tick, { slot });
+    });
+  };
+  const saveFailed = (slot: SlotId) => (e: unknown) => persistLog('warn', 'persist.save.failed', world.snapshot().tick, { slot, error: String(e) });
+
   const hud = createHud(app, {
     onCommand: intervene,
     onSpeed: (s) => loop.setSpeed(s),
     onLayer: (l) => view.setLayer(l),
     onSave: () => world.serialize(),
-    onLoad: (save: SaveData) => {
-      if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
-      world = World.restore(save, { log });
-      if (save.config.size !== config.size) {
-        view.dispose();
-        view = createSceneView(canvas, { assets: buildAssetTable(save.config.species), size: save.config.size });
-      }
-      selected = null;
+    onLoad: load,
+    onSlotSave: (slot) => {
+      saveTo(slot).catch(saveFailed(slot));
+    },
+    onSlotLoad: (slot) => {
+      store
+        ?.load(slot)
+        .then((save) => {
+          if (save) load(save);
+        })
+        .catch((e: unknown) => persistLog('warn', 'persist.load.failed', world.snapshot().tick, { slot, error: String(e) }));
     },
     onDisasterArm: (k) => {
       armed = k;
@@ -109,6 +156,16 @@ async function boot(): Promise<void> {
     Object.fromEntries(species.map((d) => [d.id, d.name])),
     (id) => hud.showSpeciesLayer(id),
   );
+  hud.setLoadable(!scenario);
+  store
+    ?.list()
+    .then((list) => list.forEach(hud.setSlot))
+    .catch((e: unknown) => persistLog('warn', 'persist.list.failed', 0, { error: String(e) }));
+  // シナリオの島は自動の枠に書かない。書くと次に自由モードで開いたとき、シナリオの途中の島が続きとして出てしまう
+  const autosave =
+    store && !scenario
+      ? createAutosave({ every: AUTOSAVE_TICKS, startTick: world.snapshot().tick, write: () => saveTo('auto'), onError: saveFailed('auto') })
+      : null;
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
   const observe = createObserveEntry(app, {
     names: Object.fromEntries(species.map((d) => [d.id, d.name])),
@@ -119,6 +176,7 @@ async function boot(): Promise<void> {
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
+        autosave?.onTick(s.tick);
         observe.push(s, runner?.timeline());
         if (!observe.active()) view.update(s);
         hud.update(s);

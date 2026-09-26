@@ -19,6 +19,7 @@
 .chip.armed { background: #b5502f; color: #fff; }
 /* 星の力が足りないチップ・スライダー。押せるが runner が弾くので、見た目だけ薄くする */
 .unaffordable { opacity: 0.4; }
+.chip:disabled, label.chip:has(input:disabled) { opacity: 0.4; cursor: default; }
 .hud-r canvas { width: 320px; height: 100px; display: block; margin: 4px 0; }
 #legend span { margin-right: 10px; font-size: 11px; color: #9fb3c2; }
 #legend i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }

@@ -12,6 +12,7 @@ import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
 import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
+import { parseSlotId, SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/islandStore';
 import './hud.css';
 
 /**
@@ -74,6 +75,9 @@ export type HudHandlers = {
   onLayer(l: LayerKind): void;
   onSave(): SaveData;
   onLoad(save: SaveData): void;
+  /** 手元の保存の枠 (M19-05)。自動の枠へは自動保存だけが書く */
+  onSlotSave(slot: ManualSlot): void;
+  onSlotLoad(slot: SlotId): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
@@ -98,6 +102,10 @@ export type Hud = {
   setNextMeteor(year: number | null): void;
   /** 警告の種レイヤーチップ (M21-02 D5) を押したのと同じ動作。layer-species-${id} のクリックハンドラと処理を共有する */
   showSpeciesLayer(id: string): void;
+  /** 枠の一覧の 1 行を出す (書いたら上書き) */
+  setSlot(s: SlotSummary): void;
+  /** 読込 (ファイルと枠) を受け付けるか。シナリオ中は予言と矛盾するので false */
+  setLoadable(on: boolean): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -114,6 +122,7 @@ const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] =
   { id: 'vitality', label: '生気' },
   { id: 'crystal', label: '輝石' },
 ];
+const SLOT_NAMES: Record<SlotId, string> = { auto: '自動', 'manual-1': '枠 1', 'manual-2': '枠 2', 'manual-3': '枠 3' };
 const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'meteor', label: '隕石' },
   { kind: 'volcano', label: '火山' },
@@ -154,6 +163,9 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
+    <select id="slot-select" class="chip">${SLOTS.map((s) => `<option value="${s}"${s === 'manual-1' ? ' selected' : ''}></option>`).join('')}</select>
+    <button id="slot-save" class="chip">枠へ保存</button>
+    <button id="slot-load" class="chip">枠から読込</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>
@@ -295,6 +307,34 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
         input.value = '';
       });
   });
+
+  const slots = new Map<SlotId, SlotSummary>();
+  let loadable = true;
+  const slotSelect = $<HTMLSelectElement>('slot-select');
+  const selectedSlot = (): SlotId => parseSlotId(slotSelect.value) ?? 'manual-1';
+  const renderSlots = () => {
+    for (const opt of Array.from(slotSelect.options)) {
+      const slot = parseSlotId(opt.value);
+      if (!slot) continue;
+      const s = slots.get(slot);
+      opt.textContent = `${SLOT_NAMES[slot]} · ${s ? `Year ${s.year}` : '空き'}`;
+    }
+    const slot = selectedSlot();
+    $<HTMLButtonElement>('slot-save').disabled = slot === 'auto';
+    $<HTMLButtonElement>('slot-load').disabled = !loadable || !slots.has(slot);
+    const loadInput = $<HTMLInputElement>('load-input');
+    loadInput.disabled = !loadable;
+    const why = loadable ? '' : 'シナリオ中は読み込めない (予言と矛盾する)';
+    $('slot-load').title = why;
+    if (loadInput.parentElement) loadInput.parentElement.title = why;
+  };
+  slotSelect.addEventListener('change', renderSlots);
+  $('slot-save').addEventListener('click', () => {
+    const slot = selectedSlot();
+    if (slot !== 'auto') h.onSlotSave(slot);
+  });
+  $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
+  renderSlots();
 
   const canvas = $<HTMLCanvasElement>('graph');
   const ctx = canvas.getContext('2d');
@@ -503,5 +543,13 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       nextMeteor = year;
     },
     showSpeciesLayer: showSpeciesLayerInner,
+    setSlot: (s) => {
+      slots.set(s.slot, s);
+      renderSlots();
+    },
+    setLoadable: (on) => {
+      loadable = on;
+      renderSlots();
+    },
   };
 }
