@@ -412,14 +412,15 @@ describe('createAppLogSink: 設定で出口を選ぶ', () => {
 
 describe('createHttpSink: 捨てた数の会計', () => {
   const outcomes = [
-    ['2xx', () => ok(200)],
-    ['4xx', () => ok(400)],
-    ['通信失敗', () => Promise.reject(new TypeError('offline'))],
+    ['2xx', 0, () => ok(200)],
+    ['4xx', 0, () => ok(400)],
+    ['通信失敗 (送り直さない)', 0, () => Promise.reject(new TypeError('offline'))],
+    ['通信失敗のあと送り直しで 2xx', 1, () => Promise.reject(new TypeError('offline'))],
   ] as const;
 
   it.each(outcomes)(
-    '返事待ちの fetch が %s で終わっても、書いた件数 = 届いた件数 + 届いた dropped の和',
-    async (_name, finish) => {
+    '返事待ちの fetch が %s で終わっても、書いた件数 = 届いた件数 + 届いた dropped の和、同じ記録は二度届かない',
+    async (_name, maxRetries, finish) => {
       let release: () => void = () => {};
       const delivered: LogBatch[] = [];
       let n = 0;
@@ -441,7 +442,14 @@ describe('createHttpSink: 捨てた数の会計', () => {
         void data.text().then((b) => delivered.push(JSON.parse(b) as LogBatch));
         return true;
       });
-      const sink = createHttpSink(URL_, { fetch: fetchFn, sendBeacon, maxBatchSize: 2, maxBuffered: 2, maxRetries: 0 });
+      const sink = createHttpSink(URL_, {
+        fetch: fetchFn,
+        sendBeacon,
+        maxBatchSize: 2,
+        maxBuffered: 2,
+        maxRetries,
+        retryBaseDelayMs: 1_000,
+      });
       let written = 0;
       const write = (i: number) => {
         written += 1;
@@ -457,7 +465,7 @@ describe('createHttpSink: 捨てた数の会計', () => {
       sink.flushViaBeacon();
       for (let i = 6; i <= 8; i++) write(i);
       release();
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(5_000);
       write(9);
       write(10);
       await vi.advanceTimersByTimeAsync(0);
@@ -466,6 +474,8 @@ describe('createHttpSink: 捨てた数の会計', () => {
       const arrived = delivered.reduce((n, b) => n + b.records.length, 0);
       const reportedDropped = delivered.reduce((n, b) => n + b.dropped, 0);
       expect(arrived + reportedDropped).toBe(written);
+      const ids = delivered.flatMap((b) => b.records.map((r) => r.i));
+      expect(new Set(ids).size).toBe(ids.length);
     },
   );
 });
