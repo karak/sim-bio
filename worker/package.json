@@ -1,0 +1,13 @@
+{
+  "name": "biotope-island-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.2.8",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.141.0"
+  }
+}

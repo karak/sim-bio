@@ -38,6 +38,7 @@ npm run preview     # ビルド結果をローカルで確認
 npm run test        # 単体テスト(vitest)
 npm run test:slow   # 通し(放置/校正)テスト。約 15〜20 分、CI では走らせない(下記)
 npm run check       # typecheck + lint + test
+npm run test:worker # ログの受け口 (Worker) の単体テスト。workerd の中で回す。check にも入っている
 ```
 
 E2E(Playwright)は初回だけブラウザのセットアップが要る。
@@ -50,6 +51,42 @@ npx playwright test
 3D モデル・Blender ファイル・PNG は Git LFS で管理している。クローン前に `git lfs install` を済ませておくこと(LFS が無いとポインタファイルだけが落ちてくる)。
 
 CI(GitHub Actions、`.github/workflows/ci.yml`)は push と PR ごとに `npm run check` と Playwright の E2E を走らせる。`npm run test:slow` は 1 件あたり数分かかる通し実行なので CI には含めず、シナリオを触ったときに手元で回す(放置中の Mac ではバックグラウンド実行が極端に遅くなるので、`caffeinate` を付けて前面で回すか `-t` で分割する)。
+
+CI は続けて `npm run test:e2e:cloudflare`(ビルドを wrangler dev で配って、ログの受け口に当てる E2E)も走らせる。配備は CI ではなく、下の「Cloudflare へ配る」のワークフローで人が起こす。
+
+## Cloudflare へ配る
+
+設計は `docs/design/2026-09-26-cloudflare-architecture.md`(§3・§4.2)。Worker 1 本(`wrangler.jsonc`)で、静的アセット(`dist/`)とログの受け口(`/api/v1/logs`、`worker/src/index.ts`)を出す。
+
+- 静的アセットは Worker を起こさずに配る(無料・無制限)。`run_worker_first: ["/api/*"]` なので、Worker が動くのは `/api/*` だけ。知らない道には `index.html` を返す。
+- 配らないもの(`.blend`・コンセプト画・デザインボード・Blender に焼く前の絵)は `assets/.assetsignore` に書く。vite がこれを `dist/.assetsignore` へ写し、wrangler がそれを読む。
+- 受け口は `LogBatch`(`src/core/log/batch.ts`、クライアントと同じファイル)を検証し、1 件ずつ JSON 1 行で Workers Logs に書く(7 日保持)。D1 は使わない。自分の Origin 以外からの POST は 403、形が違えば 400、64 KiB を超えれば 413。
+
+### 手元で確かめる(アカウントは要らない)
+
+```bash
+npm run dev:cloudflare        # VITE_LOG_URL=/api/v1/logs でビルドし、wrangler dev で配る。http://localhost:8787
+npm run test:e2e:cloudflare   # 同じビルドを wrangler dev で立て、画面のログが受け口に 1 バッチ届くことを Playwright で確かめる
+```
+
+`npm run dev:cloudflare` で画面を開き、速度を 100 倍にすると、10 秒ほどで端末に `{"event":"harbor.logs.record","record":{...}}` の行が出る。
+
+`wrangler.jsonc` を変えたら `npm run types:worker` で `worker/worker-configuration.d.ts` を作り直す(`npm run typecheck` が古さを検査する)。
+
+### 配備(人が行う)
+
+配備は GitHub Actions の `Deploy (Cloudflare)`(`.github/workflows/deploy.yml`)で行う。起動は Actions の画面の「Run workflow」だけで、main への push では走らない。中身は、`lfs: true` の checkout → `npm run check` → `npm run build:cloudflare` → `wrangler deploy`。
+
+初回だけ、次を人が行う。
+
+1. **このゲーム専用の Cloudflare アカウントを作る。** Workers と D1 の無料枠はアカウント単位なので、ほかの Worker と枠を食い合わないようにする(設計書 C8)。
+2. **支払い方法を登録しない。** Workers Paid に上げる操作は、この設計の外で人が決める(設計書 §3.3)。無料枠を使い切った日は、課金されずに港(`/api/*`)が止まる。
+3. ダッシュボードの **Workers & Pages** で、`workers.dev` のサブドメインを決める。配った画面は `https://biotope-island.<サブドメイン>.workers.dev` になる。
+4. **Account API tokens** で、テンプレート **Edit Cloudflare Workers** のトークンを作り、このアカウントだけに絞る。
+5. GitHub の Settings → Secrets and variables → Actions に、`CLOUDFLARE_API_TOKEN`(4 のトークン)と `CLOUDFLARE_ACCOUNT_ID`(アカウント ID)を置く。値はリポジトリに書かない。
+6. Actions の `Deploy (Cloudflare)` を「Run workflow」で起こす。
+
+配ったあとのログは、ダッシュボードの Workers & Pages → `biotope-island` → Observability で読む。手元の端末からは `npx wrangler tail`(要 `wrangler login`)でも流れを見られる。
 
 ## 遊び方
 
@@ -106,6 +143,8 @@ URL に `?scenario=<id>` を付けると、その石板の予言を背負って�
 | [eslint](https://github.com/eslint/eslint) / [typescript-eslint](https://github.com/typescript-eslint/typescript-eslint) | Lint | MIT |
 | [@playwright/test](https://github.com/microsoft/playwright) | E2E テスト | Apache-2.0 |
 | [typescript](https://github.com/microsoft/TypeScript) | 型検査 | Apache-2.0 |
+| [wrangler](https://github.com/cloudflare/workers-sdk) | Cloudflare Workers の配信・ローカル実行 | MIT OR Apache-2.0 |
+| [@cloudflare/vitest-plugin](https://github.com/cloudflare/workers-sdk) | Worker の単体テスト(workerd の中で vitest を回す) | MIT |
 
 `assets/textures/concept/` のコンセプト画像・`assets/models/` の 3D モデルは AI 生成(または AI 生成物を参照した作成物)であり、上記「3D モデルとコンセプト画」の節を参照。
 
@@ -138,7 +177,9 @@ URL に `?scenario=<id>` を付けると、その石板の予言を背負って�
 | `tests/unit/` | 単体テスト（主に `src/simulation/`） |
 | `tests/integration/` | シミュレーション + 描画の結合テスト |
 | `tests/e2e/` | ブラウザ E2E テスト |
+| `tests/e2e-cloudflare/` | ビルドを wrangler dev で配って当てる E2E。`npm run test:e2e:cloudflare` |
 | `tests/slow/` | 通し（放置/校正）テスト。`npm run test:slow` で実行、CI では走らせない |
+| `worker/` | Cloudflare の Worker(港。今はログの受け口)。別の npm workspace で、テストは `@cloudflare/vitest-plugin`(vitest 4) |
 | `tools/` | チケット一覧・状態更新・コンセプト画生成などのスクリプト |
 | `tools/blender/` | 3D モデル生成・検証用の Blender Python スクリプト |
 | `issues/` | チケット(Markdown + frontmatter で状態管理、レベルデザインの進め方も記載) |

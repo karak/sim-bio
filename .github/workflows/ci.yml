@@ -22,6 +22,8 @@ jobs:
       - run: npm run check
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
+      # ビルドを wrangler dev (ローカルの workerd) で配り、本物のログの受け口に当てる (M19-02)
+      - run: npm run test:e2e:cloudflare
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

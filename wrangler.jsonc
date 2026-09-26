@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // 港 (設計書 docs/design/2026-09-26-cloudflare-architecture.md §3・§4.2)。静的配信と API を同じ 1 本で出す
+  "name": "biotope-island",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-09-25",
+  "assets": {
+    // npm run build:cloudflare の出力。配らないものは assets/.assetsignore (vite が dist/ へ写す)
+    "directory": "./dist",
+    // 知らない道は index.html を返す。Worker を起こさないので、静的配信の無料・無制限の枠で済む
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
