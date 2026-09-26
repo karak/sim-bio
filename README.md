@@ -30,7 +30,7 @@
 
 ## 動かし方
 
-パッケージは pnpm(10.28.1、`package.json` の `packageManager`)で入れる。`pnpm-workspace.yaml` が本体と `worker/` の 2 つを束ね、lockfile は `pnpm-lock.yaml` の 1 つだけ。
+パッケージは pnpm(10.28.1、`package.json` の `packageManager`)で入れる。`scripts/` の Python(構成検査と運用スクリプト)は [uv](https://docs.astral.sh/uv/) で回すので、uv も入れておく(`pnpm run check` が使う)。`pnpm-workspace.yaml` が本体と `worker/` の 2 つを束ね、lockfile は `pnpm-lock.yaml` の 1 つだけ。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -41,6 +41,7 @@ pnpm run test        # 単体テスト(vitest)
 pnpm run test:slow   # 通し(放置/校正)テスト。約 15〜20 分、CI では走らせない(下記)
 pnpm run check       # typecheck + lint + test
 pnpm run test:worker # ログの受け口 (Worker) の単体テスト。workerd の中で回す。check にも入っている
+pnpm run test:scripts # scripts/ の Python の単体テスト(unittest)。ローカルの D1 も使う。check にも入っている
 ```
 
 `pnpm run <script>` に引数を渡すときは `--` を挟まない(`pnpm run dev --port 5180`)。pnpm は `--` もそのまま script へ渡すので、vite は後ろの `--port` を読まない。
@@ -94,6 +95,37 @@ pnpm run test:e2e:cloudflare   # 同じビルドを wrangler dev で立て、画
 6. Actions の `Deploy (Cloudflare)` を、branch に `main` を選んで「Run workflow」で起こす。ほかの branch を選ぶと、job は飛ばされる。
 
 配ったあとのログは、ダッシュボードの Workers & Pages → `biotope-island` → Observability で読む。手元の端末からは `pnpm exec wrangler tail`(要 `pnpm exec wrangler login`)でも流れを見られる。
+
+### 課金にしない
+
+「止まるほうが良い、課金にしない」(設計書 Q1・§3.3)。次の 3 つの決まりで守る。
+
+1. **このゲーム専用の Cloudflare アカウントを使う。** Workers と D1 の日次の枠はアカウント単位なので、ほかの Worker と枠を分ける(設計書 C8)。
+2. **支払い方法を登録しない。** Workers Paid に上げる操作は、この設計の外で人が決める。支払い方法が無ければ、無料枠を使い切った日は課金されずに港(`/api/*`)が止まる。静的アセットは止まらない。
+3. **構成検査を CI と配備で回す。** `scripts/check_free_tier.py` が `wrangler.jsonc` とビルドした `dist/` を見て、次のどれかがあれば落とす。CI(`ci.yml`)では E2E のあと、配備(`deploy.yml`)では `wrangler deploy` の直前に回すので、落ちれば配られない。
+   - 許す key の表(`ALLOWED_KEYS`)に無い key。R2・Queues・Analytics Engine・Browser・Workers AI・Vectorize・KV・Durable Objects などの binding はここで落ちる。許すのは D1・Rate Limiting・Cron・vars と、配信・観測の設定だけ。`env` の下の環境も同じ表で見る
+   - `usage_model`(Paid の旧い課金方式)と `limits`(CPU・subrequest の上限の書き換えは Paid だけ)
+   - `dist/.assetsignore` が `*.blend` と `textures/concept/**` を配らずにおかないこと(否定の `!` で戻したものも落とす)
+   - 配るファイル(`.assetsignore` で外したものを除く)が 20,000 を超える、または 1 ファイルが 25 MiB を超える(Workers Free の静的アセットの上限)
+
+```bash
+pnpm run build:cloudflare && pnpm run check:free-tier
+```
+
+新しい binding を足すときは、無料枠の内で止まる(超えても課金にならない)ことを Cloudflare の docs で確かめてから、`ALLOWED_KEYS` に理由と一緒に足す。
+
+### 運用(`scripts/mod.py`)
+
+荒らしの片づけと予算の確かめは `scripts/mod.py` 1 本で行う(設計書 Q4)。中身は `wrangler d1 execute`。配った港に当てるときは `--remote`(要 `pnpm exec wrangler login`)、`wrangler dev` のローカルの D1 には `--local` を付ける。どちらかを必ず選ぶ。
+
+```bash
+uv run scripts/mod.py --remote hide <年代記の id>          # 一覧と訪問から隠す。もう隠れていれば、隠した時刻はそのまま
+uv run scripts/mod.py --remote restore <年代記の id>       # 戻し、通報の数を 0 にする
+uv run scripts/mod.py --remote delete <年代記の id> --yes  # 消す。戻せないので --yes が要る
+uv run scripts/mod.py --remote budget --days 7             # 日次予算(出港・積荷・通報)の消費を、新しい日から上限との比で見る
+```
+
+年代記の id は SHA-256 の 16 進 64 文字だけを受ける(SQL に埋めるため)。無い id は「見つからない」で終了コード 1 になる。表と列(`chronicles`・`daily_budget`)は、港の D1 のマイグレーション(M19-08)の前に設計書 §5・§6 から置いた仮の形で、M19-08 で本物に合わせる。
 
 ## 遊び方
 
@@ -187,6 +219,7 @@ URL に `?scenario=<id>` を付けると、その石板の予言を背負って�
 | `tests/e2e-cloudflare/` | ビルドを wrangler dev で配って当てる E2E。`pnpm run test:e2e:cloudflare` |
 | `tests/slow/` | 通し（放置/校正）テスト。`pnpm run test:slow` で実行、CI では走らせない |
 | `worker/` | Cloudflare の Worker(港。今はログの受け口)。別の pnpm workspace の package で、テストは `@cloudflare/vitest-plugin`(vitest 4) |
+| `scripts/` | 運用の Python(uv で回す)。課金にしない構成検査 `check_free_tier.py`、港の運用 `mod.py`、その単体テスト `test_*.py` |
 | `tools/` | チケット一覧・状態更新・コンセプト画生成などのスクリプト |
 | `tools/blender/` | 3D モデル生成・検証用の Blender Python スクリプト |
 | `issues/` | チケット(Markdown + frontmatter で状態管理、レベルデザインの進め方も記載) |
