@@ -5,12 +5,12 @@ import type { LogSink } from './types';
 export type AppLogSink = { log: LogSink; flushViaBeacon(): void };
 
 export function createAppLogSink(
-  deps: { url: string | undefined; out?: (line: string) => void } & Pick<HttpSinkOptions, 'fetch' | 'sendBeacon'>,
+  { url: rawUrl, out, ...httpOpts }: { url: string | undefined; out?: (line: string) => void } & HttpSinkOptions,
 ): AppLogSink {
-  const console_ = createConsoleSink(deps.out);
-  const url = deps.url?.trim();
+  const console_ = createConsoleSink(out);
+  const url = rawUrl?.trim();
   if (!url) return { log: console_, flushViaBeacon: () => {} };
-  const http = createHttpSink(url, { fetch: deps.fetch, sendBeacon: deps.sendBeacon });
+  const http = createHttpSink(url, httpOpts);
   return {
     log: {
       write(record) {

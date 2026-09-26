@@ -191,6 +191,38 @@ describe('createHttpSink: 失敗しても本体は止まらない', () => {
     expect(f.bodies()[1].dropped).toBe(2);
   });
 
+  it('返事が来ない送信は requestTimeoutMs で打ち切って送り直し、送信は止まらない', async () => {
+    const f = fakeFetch((n) => {
+      if (n > 1) return ok();
+      const signal = f.calls[0].init.signal;
+      return new Promise<Response>((_, reject) => {
+        signal?.addEventListener('abort', () => reject(new DOMException('timeout', 'AbortError')));
+      });
+    });
+    const sink = createHttpSink(URL_, {
+      fetch: f.fetch,
+      maxBatchSize: 1,
+      requestTimeoutMs: 3_000,
+      retryBaseDelayMs: 1_000,
+    });
+    sink.write(rec(1));
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(f.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1 + 1_000);
+    expect(f.calls).toHaveLength(2);
+    sink.write(rec(2));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.bodies().map((b) => b.records.map((r) => r.i))).toEqual([[1], [1], [2]]);
+  });
+
+  it('fetch は keepalive で送る (タブを閉じても返事待ちの送信を取り消させない)', async () => {
+    const f = fakeFetch(() => ok());
+    const sink = createHttpSink(URL_, { fetch: f.fetch, maxBatchSize: 1 });
+    sink.write(rec(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.calls[0].init.keepalive).toBe(true);
+  });
+
   it('fetch が同期で投げても write は投げない', async () => {
     const fetchThrows = vi.fn(() => {
       throw new Error('boom');
@@ -202,8 +234,8 @@ describe('createHttpSink: 失敗しても本体は止まらない', () => {
   });
 });
 
-describe('createHttpSink: ページを閉じるとき', () => {
-  it('flushViaBeacon は送り残しを sendBeacon で送り、以後 fetch では送らない', async () => {
+describe('createHttpSink: 隠れたとき (flushViaBeacon)', () => {
+  it('flushViaBeacon は送り残しを sendBeacon で送り、同じ記録を fetch では送らない', async () => {
     const f = fakeFetch(() => ok());
     const beacons: { url: string; body: string; type: string }[] = [];
     const sendBeacon = vi.fn((url: string, data: Blob) => {
@@ -214,6 +246,7 @@ describe('createHttpSink: ページを閉じるとき', () => {
     sink.write(rec(1));
     sink.write(rec(2));
     sink.flushViaBeacon();
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(sendBeacon).toHaveBeenCalledTimes(1);
     expect(beacons[0].url).toBe(URL_);
@@ -303,6 +336,30 @@ describe('createHttpSink: ページを閉じるとき', () => {
     ]);
   });
 
+  it('beacon のあとも、タブが戻れば通常の送信が続く', async () => {
+    const f = fakeFetch(() => ok());
+    const sendBeacon = vi.fn(() => true);
+    const sink = createHttpSink(URL_, { fetch: f.fetch, sendBeacon, maxBatchSize: 20, maxWaitMs: 5_000 });
+    sink.write(rec(1));
+    sink.flushViaBeacon();
+    sink.write(rec(2));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(f.bodies()).toEqual([{ records: [rec(2)], dropped: 0 }]);
+  });
+
+  it('sendBeacon が投げても flushViaBeacon は投げず、送れなかった分を捨てた数に足す', async () => {
+    const f = fakeFetch(() => ok());
+    const sendBeacon = vi.fn((): boolean => {
+      throw new TypeError('bad url');
+    });
+    const sink = createHttpSink(URL_, { fetch: f.fetch, sendBeacon, maxBatchSize: 20, maxWaitMs: 5_000 });
+    for (let i = 1; i <= 3; i++) sink.write(rec(i));
+    expect(() => sink.flushViaBeacon()).not.toThrow();
+    sink.write(rec(4));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(f.bodies()).toEqual([{ records: [rec(4)], dropped: 3 }]);
+  });
+
   it('送り残しが無ければ beacon を打たない', () => {
     const sendBeacon = vi.fn(() => true);
     const sink = createHttpSink(URL_, { fetch: fakeFetch(() => ok()).fetch, sendBeacon });
@@ -325,6 +382,21 @@ describe('createAppLogSink: 設定で出口を選ぶ', () => {
     expect(f.calls).toHaveLength(0);
   });
 
+  it('絞り込みなどの HTTP の設定はそのまま createHttpSink に渡る', async () => {
+    const f = fakeFetch(() => ok());
+    const app = createAppLogSink({
+      url: '/api/v1/logs',
+      out: () => {},
+      fetch: f.fetch,
+      filter: (r) => r.event === 'cmd.received',
+      maxBatchSize: 1,
+    });
+    app.log.write(rec(1, { level: 'info', event: 'cmd.received' }));
+    app.log.write(rec(2));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.bodies().map((b) => b.records.map((r) => r.i))).toEqual([[1]]);
+  });
+
   it('URL があれば console にも出し、HTTP にも送る', async () => {
     const lines: string[] = [];
     const f = fakeFetch(() => ok());
@@ -336,4 +408,64 @@ describe('createAppLogSink: 設定で出口を選ぶ', () => {
     expect(f.calls.map((c) => c.url)).toEqual(['/api/v1/logs']);
     expect(f.bodies()[0].records).toEqual([rec(2)]);
   });
+});
+
+describe('createHttpSink: 捨てた数の会計', () => {
+  const outcomes = [
+    ['2xx', () => ok(200)],
+    ['4xx', () => ok(400)],
+    ['通信失敗', () => Promise.reject(new TypeError('offline'))],
+  ] as const;
+
+  it.each(outcomes)(
+    '返事待ちの fetch が %s で終わっても、書いた件数 = 届いた件数 + 届いた dropped の和',
+    async (_name, finish) => {
+      let release: () => void = () => {};
+      const delivered: LogBatch[] = [];
+      let n = 0;
+      const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+        const batch = JSON.parse(String(init?.body)) as LogBatch;
+        n += 1;
+        const call = n;
+        const respond = (): Promise<Response> => {
+          if (call === 1) return ok(400);
+          if (call === 2) return new Promise<void>((res) => (release = res)).then(finish);
+          return ok();
+        };
+        return respond().then((r) => {
+          if (r.ok) delivered.push(batch);
+          return r;
+        });
+      }) as unknown as typeof fetch;
+      const sendBeacon = vi.fn((_url: string, data: Blob) => {
+        void data.text().then((b) => delivered.push(JSON.parse(b) as LogBatch));
+        return true;
+      });
+      const sink = createHttpSink(URL_, { fetch: fetchFn, sendBeacon, maxBatchSize: 2, maxBuffered: 2, maxRetries: 0 });
+      let written = 0;
+      const write = (i: number) => {
+        written += 1;
+        sink.write(rec(i));
+      };
+      write(1);
+      write(2);
+      await vi.advanceTimersByTimeAsync(0);
+      write(3);
+      write(4);
+      await vi.advanceTimersByTimeAsync(0);
+      write(5);
+      sink.flushViaBeacon();
+      for (let i = 6; i <= 8; i++) write(i);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      write(9);
+      write(10);
+      await vi.advanceTimersByTimeAsync(0);
+      sink.flushViaBeacon();
+      await vi.advanceTimersByTimeAsync(0);
+      const arrived = delivered.reduce((n, b) => n + b.records.length, 0);
+      const reportedDropped = delivered.reduce((n, b) => n + b.dropped, 0);
+      expect(arrived + reportedDropped).toBe(written);
+    },
+  );
 });

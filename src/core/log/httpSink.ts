@@ -1,6 +1,6 @@
 import type { LogRecord, LogSink } from './types';
 
-/** 受け口 (M19-02) へ POST する本文。dropped は、前に運んだ数のあとで捨てた件数 */
+/** 受け口 (M19-02) へ POST する本文。dropped は、このバッチを切るまでに捨てて、まだ誰も運んでいない件数 */
 export type LogBatch = { records: LogRecord[]; dropped: number };
 
 export type HttpSinkOptions = {
@@ -8,10 +8,12 @@ export type HttpSinkOptions = {
   sendBeacon?: (url: string, data: Blob) => boolean;
   filter?: (r: LogRecord) => boolean;
   maxBatchSize?: number;
+  /** 手が空いてから最初の 1 件を待たせる上限。返事待ち・送り直し待ちの間に来た記録は、そのあとから数える */
   maxWaitMs?: number;
   maxBuffered?: number;
   maxRetries?: number;
   retryBaseDelayMs?: number;
+  requestTimeoutMs?: number;
 };
 
 export type HttpSink = LogSink & { flushViaBeacon(): void };
@@ -25,13 +27,15 @@ function classify(status: number): Outcome {
   return status === 429 || status >= 500 ? 'retry' : 'reject';
 }
 
-type Batch = {
-  state: 'awaitingResponse' | 'backingOff';
-  records: LogRecord[];
-  attempt: number;
-  /** この送信の本文が運んだ捨てた数の累計の位置 */
-  carriesDroppedUpTo: number;
-};
+type Batch = { readonly records: LogRecord[]; readonly dropped: number; readonly attempt: number };
+
+type Timer = ReturnType<typeof setTimeout>;
+
+type Phase =
+  | { kind: 'idle' }
+  | { kind: 'waiting'; timer: Timer }
+  | { kind: 'sending'; batch: Batch }
+  | { kind: 'backingOff'; batch: Batch; timer: Timer };
 
 export function createHttpSink(url: string, opts: HttpSinkOptions = {}): HttpSink {
   const {
@@ -43,71 +47,76 @@ export function createHttpSink(url: string, opts: HttpSinkOptions = {}): HttpSin
     maxBuffered = 200,
     maxRetries = 3,
     retryBaseDelayMs = 2_000,
+    requestTimeoutMs = 10_000,
   } = opts;
 
   let queue: LogRecord[] = [];
-  let inFlight: Batch | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let droppedTotal = 0;
-  let droppedReported = 0;
+  let pendingDropped = 0;
+  let phase: Phase = { kind: 'idle' };
 
-  const body = (records: LogRecord[], from: number): string =>
-    JSON.stringify({ records, dropped: droppedTotal - from } satisfies LogBatch);
+  const encode = (b: Batch): string => JSON.stringify({ records: b.records, dropped: b.dropped } satisfies LogBatch);
 
-  function clearTimer(): void {
-    if (timer !== null) clearTimeout(timer);
-    timer = null;
+  function cut(): Batch {
+    const batch = { records: queue.slice(0, maxBatchSize), dropped: pendingDropped, attempt: 0 };
+    queue = queue.slice(maxBatchSize);
+    pendingDropped = 0;
+    return batch;
   }
 
-  function after(ms: number): void {
-    timer = setTimeout(() => {
-      timer = null;
-      void pump();
-    }, ms);
+  function lose(b: Batch): void {
+    pendingDropped += b.records.length + b.dropped;
   }
 
   function schedule(): void {
-    if (inFlight || queue.length === 0) return;
-    if (queue.length >= maxBatchSize) void pump();
-    else if (timer === null) after(maxWaitMs);
+    if (phase.kind === 'sending' || phase.kind === 'backingOff' || queue.length === 0) return;
+    if (queue.length >= maxBatchSize) {
+      if (phase.kind === 'waiting') clearTimeout(phase.timer);
+      void deliver(cut());
+    } else if (phase.kind === 'idle') {
+      phase = { kind: 'waiting', timer: setTimeout(() => void deliver(cut()), maxWaitMs) };
+    }
   }
 
-  async function post(records: LogRecord[]): Promise<Outcome> {
+  async function post(b: Batch): Promise<Outcome> {
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), requestTimeoutMs);
     try {
       const res = await send(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: body(records, droppedReported),
+        body: encode(b),
+        keepalive: true,
+        signal: abort.signal,
       });
       return classify(res.status);
     } catch {
       return 'retry';
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
-  async function pump(): Promise<void> {
-    clearTimer();
-    if (!inFlight) {
-      if (queue.length === 0) return;
-      inFlight = { state: 'awaitingResponse', records: queue.slice(0, maxBatchSize), attempt: 0, carriesDroppedUpTo: 0 };
-      queue = queue.slice(maxBatchSize);
-    }
-    const batch = inFlight;
-    batch.state = 'awaitingResponse';
-    batch.carriesDroppedUpTo = droppedTotal;
-    const outcome = await post(batch.records);
-    if (outcome === 'delivered') {
-      droppedReported = Math.max(droppedReported, batch.carriesDroppedUpTo);
-    } else if (outcome === 'retry' && batch.attempt < maxRetries) {
-      batch.attempt += 1;
-      batch.state = 'backingOff';
-      after(retryBaseDelayMs * 2 ** (batch.attempt - 1));
+  async function deliver(batch: Batch): Promise<void> {
+    phase = { kind: 'sending', batch };
+    const outcome = await post(batch);
+    if (outcome === 'retry' && batch.attempt < maxRetries) {
+      const next = { ...batch, attempt: batch.attempt + 1 };
+      const delay = retryBaseDelayMs * 2 ** batch.attempt;
+      phase = { kind: 'backingOff', batch: next, timer: setTimeout(() => void deliver(next), delay) };
       return;
-    } else {
-      droppedTotal += batch.records.length;
     }
-    inFlight = null;
+    if (outcome !== 'delivered') lose(batch);
+    phase = { kind: 'idle' };
     schedule();
+  }
+
+  function beacon(b: Batch): boolean {
+    if (!sendBeacon) return false;
+    try {
+      return sendBeacon(url, new Blob([encode(b)], { type: 'application/json' }));
+    } catch {
+      return false;
+    }
   }
 
   return {
@@ -115,30 +124,22 @@ export function createHttpSink(url: string, opts: HttpSinkOptions = {}): HttpSin
       if (!filter(record)) return;
       queue.push(record);
       if (queue.length > maxBuffered) {
-        droppedTotal += queue.length - maxBuffered;
+        pendingDropped += queue.length - maxBuffered;
         queue = queue.slice(-maxBuffered);
       }
       schedule();
     },
     flushViaBeacon() {
       if (!sendBeacon) return;
-      const backingOff = inFlight?.state === 'backingOff' ? inFlight.records : [];
-      const rest = [...backingOff, ...queue];
-      if (rest.length === 0) return;
-      if (backingOff.length > 0) inFlight = null;
-      queue = [];
-      clearTimer();
-      // 返事待ちの fetch が運んでいる分は、beacon では運ばない (届けば受け口が数える)
-      let from = inFlight ? Math.max(droppedReported, inFlight.carriesDroppedUpTo) : droppedReported;
-      for (let i = 0; i < rest.length; i += maxBatchSize) {
-        const blob = new Blob([body(rest.slice(i, i + maxBatchSize), from)], { type: 'application/json' });
-        if (!sendBeacon(url, blob)) {
-          droppedTotal += rest.length - i;
-          return;
-        }
-        from = droppedTotal;
-        droppedReported = droppedTotal;
+      // 返事待ちのバッチは自分の dropped を持ったまま fetch に任せる (keepalive なのでタブを閉じても届く)
+      const held = phase.kind === 'backingOff' ? [phase.batch] : [];
+      if (phase.kind === 'waiting' || phase.kind === 'backingOff') {
+        clearTimeout(phase.timer);
+        phase = { kind: 'idle' };
       }
+      const batches = [...held];
+      while (queue.length > 0) batches.push(cut());
+      for (const b of batches) if (!beacon(b)) lose(b);
     },
   };
 }

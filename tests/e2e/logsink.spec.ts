@@ -13,7 +13,10 @@ test('HTTP LogSink: warn/error と年ごとの要約がバッチで受け口に�
   await page.goto('/');
   await page.click('#speed-100');
   await expect
-    .poll(() => batches.flatMap((b) => b.body.records).some((r) => r.event === 'sim.tick.summary'), { timeout: 40_000 })
+    .poll(() => batches.flatMap((b) => b.body.records).some((r) => r.event === 'sim.tick.summary'), {
+      timeout: 40_000,
+      message: 'VITE_LOG_URL の無い dev サーバーを reuseExistingServer で拾っていないか (E2E_PORT をずらす)',
+    })
     .toBe(true);
 
   expect(batches[0].contentType).toBe('application/json');
