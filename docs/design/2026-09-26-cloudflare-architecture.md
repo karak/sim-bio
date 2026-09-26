@@ -449,3 +449,18 @@ in のスコープは issues/M19-04〜12 に起こした(既存の M19-01・02 �
 | 8 舟の積荷 | M19-10 |
 | B6 回避率 | M19-11 |
 | 10 課金にしない仕組み / 11 運用スクリプト | M19-12 |
+
+## 11. 実装で変えたこと(Implementation reconciliation)
+
+実装の途中で受け入れた設計からのずれ。受け入れた元はチケットの作業ログ。
+
+| 変えたこと | 理由 | 受け入れた元 |
+|---|---|---|
+| 取り下げ鍵は手元で作り、出港に `Authorization: Bearer` で添える(§6.3 に反映済み) | 港が作って返すと、応答が失われて outbox から再送したとき鍵が手元に届かない | M19-08、2026-09-26 に親が受け入れ |
+| 島の名前は年代記の id から作る(seed からではない) | 今の石板はどれも seed 42 で、seed からだと同じ石板の島がみな同じ名前になる | M19-09 |
+| 碑文のカタログは `/data/inscriptions.json` を実行時に読む | Vite は publicDir の JSON を import させない | M19-09 |
+| `PublishResult` の `queued` に id を持たせる。`report` は `not_human`・`slow_down` も返す | outbox の再送で同じ id を示す。通報にも人間確認と回数制限がかかる | M19-09 |
+| 年代記の型は `src/harbor/chronicle.ts`、港の約束は `src/harbor/contract.ts` に分ける | 1 つにすると rename として追えず、既存コメントが削除に見える。記録・保存・再生は港に出さなくても年代記を使う | M19-07 |
+| シナリオの続きからは、SaveData に本体の数え(memory)を足し、runner の状態(RunnerState)を持ち出す | `World.restore` だけでは閉じた年のうちに食い違った。年代記の回し直しは遅すぎる(§8-3) | M19-14 |
+| 照合は「年表を読む」の明示の操作 | 再生は Chromium の Worker で size 64 の 300 年が 73.6 秒 | M19-06 |
+| Workers Logs の無料の保持は 3 日・1 日 200,000 件 | docs で確かめた(7 日は Paid) | M19-02 |
