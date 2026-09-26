@@ -139,7 +139,7 @@ class PolicySyncTest(unittest.TestCase):
         found = {
             bucket: (int(cap.replace("_", "")), int(shed.replace("_", "")))
             for bucket, cap, shed in re.findall(
-                r"(\w+): \{ cap: ([\d_]+), shedAt: ([\d_]+) \}", text
+                r"(\w+): \{ cap: ([\d_]+), shedAt: ([\d_]+),", text
             )
         }
         self.assertEqual(

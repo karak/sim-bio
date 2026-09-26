@@ -1,13 +1,13 @@
 import scenarios from '../../assets/data/scenarios.json';
 import species from '../../assets/data/species.json';
 import inscriptions from '../../assets/data/inscriptions.json';
-import { canonicalJson, hashOfDigest, sha256Hex } from '../../src/chronicle/digest';
+import { hashOfDigest, sha256Hex } from '../../src/chronicle/digest';
 import type { ParseError } from '../../src/core/parse';
 import { chronicleId, type HarborCatalog, type HarborRequest } from '../../src/harbor/contract';
 import { bodyLimitOf, MAX_BODY_BYTES, readRequest, writeResponse, type ClosedReason, type Refusal, type WireRequest } from '../../src/harbor/wire';
 import { rateOf, senderOf, verifyHuman } from './guard';
 import * as ledger from './ledger';
-import { POLICIES, type HarborConfig } from './policy';
+import { RATE_LIMITERS, type HarborConfig } from './policy';
 
 /**
  * 港の道 (M19-08、設計書 §3・§6)。HTTP の形は wire.ts の readRequest に任せ、ここは要求 (HarborRequest) を答え (Outcome) にする。
@@ -26,21 +26,25 @@ export const CATALOG: HarborCatalog = {
 export type Outcome =
   | { kind: 'ok'; status: 200 | 201; body: string }
   | { kind: 'empty' }
-  | { kind: 'refused'; refusal: Refusal; retryAfter?: number; detail?: Record<string, unknown> };
+  | { kind: 'refused'; refusal: Refusal; detail: Record<string, unknown> };
 
 export type ServeContext = { env: Env; now: number; ip: string; config: HarborConfig };
 
 const RETRY_SOON_S = 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const empty: Outcome = { kind: 'empty' };
-const refused = (refusal: Refusal, extra: { retryAfter?: number; detail?: Record<string, unknown> } = {}): Outcome => ({ kind: 'refused', refusal, ...extra });
+const refused = (refusal: Refusal, detail: Record<string, unknown> = {}): Outcome => ({ kind: 'refused', refusal, detail });
+const closed = (reason: ClosedReason, detail: Record<string, unknown> = {}) => refused({ error: 'closed', reason }, detail);
 const ok = (status: 200 | 201, body: string): Outcome => ({ kind: 'ok', status, body });
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-/** UTC の 0 時 (D1・Workers の日次の枠が戻る時刻) までの秒 */
-export const secondsToMidnight = (now: number) => Math.ceil((DAY_MS - (now % DAY_MS)) / 1000);
-
-export function closed(reason: ClosedReason, now: number, detail?: Record<string, unknown>): Outcome {
-  return refused({ error: 'closed', reason }, { retryAfter: reason === 'unavailable' ? RETRY_SOON_S : secondsToMidnight(now), detail });
+/**
+ * 断りに添える Retry-After (秒)。回数制限と一時の失敗は 1 分、日次の枠 (港の予算・D1 の上限・満杯) は UTC の 0 時まで。
+ * ほかの断りは、同じ要求を送り直しても通らないので付けない
+ */
+export function retryAfterOf(refusal: Refusal, now: number): number | null {
+  if (refusal.error === 'slow_down') return RETRY_SOON_S;
+  if (refusal.error !== 'closed') return null;
+  return refusal.reason === 'unavailable' ? RETRY_SOON_S : Math.ceil((DAY_MS - (now % DAY_MS)) / 1000);
 }
 
 function refusedByParse(error: ParseError, wire: WireRequest): Outcome {
@@ -58,21 +62,22 @@ export async function serve(wire: WireRequest, ctx: ServeContext): Promise<Outco
   const { env, now } = ctx;
   const day = ledger.utcDay(now);
   const sender = await senderOf(env.SENDER_SECRET, day, ctx.ip);
-  const policy = POLICIES[req.kind];
-  const rate = await rateOf(env[policy.rate], `${req.kind}:${sender}`);
-  if (rate.kind === 'limited') return refused({ error: 'slow_down' }, { retryAfter: RETRY_SOON_S });
-  if (rate.kind === 'unavailable') console.warn(JSON.stringify({ event: 'harbor.rate.unavailable', binding: policy.rate, message: rate.message }));
+  const limiter = RATE_LIMITERS[req.kind];
+  const rate = await rateOf(env[limiter], `${req.kind}:${sender}`);
+  if (rate.kind === 'limited') return refused({ error: 'slow_down' });
+  if (rate.kind === 'unavailable') console.warn(JSON.stringify({ event: 'harbor.rate.unavailable', binding: limiter, message: rate.message }));
 
   if ('turnstile' in req) {
     const human = await verifyHuman(env.TURNSTILE_SECRET_KEY, req.turnstile);
-    if (human.kind === 'bot') return refused({ error: 'not_human' }, { detail: { codes: human.codes } });
-    if (human.kind === 'unavailable') return closed('unavailable', now, { cause: 'siteverify' });
+    if (human.kind === 'bot') return refused({ error: 'not_human' }, { codes: human.codes });
+    if (human.kind === 'unavailable') return closed('unavailable', { cause: 'siteverify' });
   }
 
   try {
-    const admission = await ledger.admit(env.HARBOR, day, req.kind, ctx.config.budgets[req.kind]);
+    const budget = ctx.config.budgets[req.kind];
+    const admission = await ledger.admit(env.HARBOR, day, req.kind, budget);
     if (!admission.admitted) {
-      if (policy.overBudget === 'close') return closed('budget', now, { bucket: req.kind });
+      if (budget.over === 'close') return closed('budget', { bucket: req.kind });
       console.info(JSON.stringify({ event: 'harbor.budget.dropped', bucket: req.kind }));
       return empty;
     }
@@ -80,7 +85,7 @@ export async function serve(wire: WireRequest, ctx: ServeContext): Promise<Outco
   } catch (e) {
     const reason = ledger.closedReasonOf(e);
     console.error(JSON.stringify({ event: 'harbor.d1.failed', reason, kind: req.kind, message: e instanceof Error ? e.message : String(e) }));
-    return closed(reason, now);
+    return closed(reason);
   }
 }
 
@@ -91,12 +96,11 @@ type Operations = { readonly [K in Kind]: (req: Req<K>, op: OpContext) => Promis
 
 const OPERATIONS: Operations = {
   publish: async (req, op) => {
-    if (op.sizeAfter >= op.config.storageCapBytes) return closed('full', op.now, { sizeAfter: op.sizeAfter });
+    if (op.sizeAfter >= op.config.storageCapBytes) return closed('full', { sizeAfter: op.sizeAfter });
     const id = await chronicleId(req.chronicle);
     const created = await ledger.insertChronicle(op.db, {
       id,
       chronicle: req.chronicle,
-      body: canonicalJson(req.chronicle),
       digest: req.digest,
       inscription: req.inscription,
       publishedAt: op.now,

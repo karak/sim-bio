@@ -13,40 +13,38 @@ import type { HarborRequest } from '../../src/harbor/contract';
  */
 export type Bucket = HarborRequest['kind'] | 'logs';
 
-export type Budget = { cap: number; shedAt: number };
+/** over: 予算を越えたとき。drop は 204 で黙って捨てる (善意の付加物。呼び手の手応えを変えない)、close は 503 の閉港 */
+export type Budget = { cap: number; shedAt: number; over: 'drop' | 'close' };
 
 export const BUDGETS: { readonly [B in Bucket]: Budget } = {
-  logs: { cap: 10_000, shedAt: 20_000 },
-  confirm: { cap: 5_000, shedAt: 25_000 },
-  report_outcome: { cap: 5_000, shedAt: 25_000 },
-  browse: { cap: 20_000, shedAt: 30_000 },
-  avoidance: { cap: 10_000, shedAt: 30_000 },
-  cast_cargo: { cap: 5_000, shedAt: 35_000 },
-  draw_cargo: { cap: 10_000, shedAt: 35_000 },
-  publish: { cap: 2_000, shedAt: 40_000 },
-  report: { cap: 1_000, shedAt: 40_000 },
-  withdraw: { cap: 1_000, shedAt: 45_000 },
-  visit: { cap: 40_000, shedAt: 45_000 },
+  logs: { cap: 10_000, shedAt: 20_000, over: 'drop' },
+  confirm: { cap: 5_000, shedAt: 25_000, over: 'drop' },
+  report_outcome: { cap: 5_000, shedAt: 25_000, over: 'drop' },
+  browse: { cap: 20_000, shedAt: 30_000, over: 'close' },
+  avoidance: { cap: 10_000, shedAt: 30_000, over: 'close' },
+  cast_cargo: { cap: 5_000, shedAt: 35_000, over: 'close' },
+  draw_cargo: { cap: 10_000, shedAt: 35_000, over: 'close' },
+  publish: { cap: 2_000, shedAt: 40_000, over: 'close' },
+  report: { cap: 1_000, shedAt: 40_000, over: 'close' },
+  withdraw: { cap: 1_000, shedAt: 45_000, over: 'close' },
+  visit: { cap: 40_000, shedAt: 45_000, over: 'close' },
 };
 
 /**
- * rate: 送り手ごとの回数制限の binding (RATE_WRITE は 1 分 10 回、RATE_READ は 1 分 120 回。wrangler.jsonc)。
- * overBudget: 予算を越えたとき。drop は 204 で黙って捨てる (善意の付加物。呼び手の手応えを変えない)、close は 503 の閉港。
+ * 送り手ごとの回数制限の binding (RATE_WRITE は 1 分 10 回、RATE_READ は 1 分 120 回。wrangler.jsonc)。数えは道ごと。
  * 人間確認 (Turnstile) は、要求に札のある道 (出港・通報) だけにかける。札の有無は契約 (src/harbor/contract.ts) が決める
  */
-export type Policy = { rate: 'RATE_WRITE' | 'RATE_READ'; overBudget: 'drop' | 'close' };
-
-export const POLICIES: { readonly [K in HarborRequest['kind']]: Policy } = {
-  publish: { rate: 'RATE_WRITE', overBudget: 'close' },
-  browse: { rate: 'RATE_READ', overBudget: 'close' },
-  visit: { rate: 'RATE_READ', overBudget: 'close' },
-  confirm: { rate: 'RATE_WRITE', overBudget: 'drop' },
-  report: { rate: 'RATE_WRITE', overBudget: 'close' },
-  withdraw: { rate: 'RATE_WRITE', overBudget: 'close' },
-  cast_cargo: { rate: 'RATE_WRITE', overBudget: 'close' },
-  draw_cargo: { rate: 'RATE_READ', overBudget: 'close' },
-  report_outcome: { rate: 'RATE_WRITE', overBudget: 'drop' },
-  avoidance: { rate: 'RATE_READ', overBudget: 'close' },
+export const RATE_LIMITERS: { readonly [K in HarborRequest['kind']]: 'RATE_WRITE' | 'RATE_READ' } = {
+  publish: 'RATE_WRITE',
+  browse: 'RATE_READ',
+  visit: 'RATE_READ',
+  confirm: 'RATE_WRITE',
+  report: 'RATE_WRITE',
+  withdraw: 'RATE_WRITE',
+  cast_cargo: 'RATE_WRITE',
+  draw_cargo: 'RATE_READ',
+  report_outcome: 'RATE_WRITE',
+  avoidance: 'RATE_READ',
 };
 
 export type HarborConfig = {

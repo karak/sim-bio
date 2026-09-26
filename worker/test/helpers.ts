@@ -66,4 +66,4 @@ export function captureLogs(): { event: string; [k: string]: unknown }[] {
   return out;
 }
 
-export const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+export { utcDay } from '../src/ledger';

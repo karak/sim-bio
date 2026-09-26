@@ -1,3 +1,5 @@
+import { canonicalJson } from '../../src/chronicle/digest';
+import { isObject, type ParseError } from '../../src/core/parse';
 import { parseChronicle, type Chronicle, type Digest } from '../../src/harbor/chronicle';
 import { parseCard, parseCargo, parseCargoId, parseCursor, type BrowseCursor, type Cargo, type CargoId, type ChronicleCard, type ChronicleId, type HarborCatalog, type InscriptionId } from '../../src/harbor/contract';
 import type { ClosedReason } from '../../src/harbor/wire';
@@ -38,17 +40,18 @@ export async function admit(db: D1Database, day: string, bucket: Bucket, budget:
   return { admitted: res.results.length > 0, sizeAfter: res.meta.size_after };
 }
 
-export type ChronicleRow = { id: ChronicleId; chronicle: Chronicle; body: string; digest: Digest; inscription: InscriptionId; publishedAt: number; withdrawHash: string };
+export type ChronicleRow = { id: ChronicleId; chronicle: Chronicle; digest: Digest; inscription: InscriptionId; publishedAt: number; withdrawHash: string };
 
 /** 同じ id は INSERT OR IGNORE で 1 件のまま。新しく置いたら true */
 export async function insertChronicle(db: D1Database, row: ChronicleRow): Promise<boolean> {
   const { chronicle: c, digest: d } = row;
+  const body = canonicalJson(c);
   const res = await db
     .prepare(
       `INSERT OR IGNORE INTO chronicles (id, sim_version, scenario_id, seed, inscription, verdict, year, digest_hash, body, bytes, published_at, withdraw_hash)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(row.id, c.simVersion, c.scenarioId, c.seed, row.inscription, d.verdict, d.year, d.hash, row.body, new TextEncoder().encode(row.body).length, row.publishedAt, row.withdrawHash)
+    .bind(row.id, c.simVersion, c.scenarioId, c.seed, row.inscription, d.verdict, d.year, d.hash, body, new TextEncoder().encode(body).length, row.publishedAt, row.withdrawHash)
     .run();
   return res.meta.changes === 1;
 }
@@ -59,6 +62,12 @@ const cardOf = (r: Record<string, unknown>, catalog: HarborCatalog) =>
     { id: r.id, simVersion: r.sim_version, scenarioId: r.scenario_id, seed: r.seed, inscription: r.inscription, verdict: r.verdict, year: r.year, publishedAt: r.published_at, confirms: r.confirms, mismatches: r.mismatches },
     catalog,
   );
+
+/** 帳簿の行が今のカタログ・形で読めない (カタログから石板や種を外した・手で書き換えた)。その行は出さずに残す */
+function unreadable(table: string, id: unknown, error: ParseError): null {
+  console.error(JSON.stringify({ event: 'harbor.ledger.unreadable', table, id, ...error }));
+  return null;
+}
 
 /** 頁の札は「published_at の 36 進」_「id の頭 16 文字」。同じ時刻の年代記は id の逆順に並ぶ */
 type Keyset = { publishedAt: number; idPrefix: string };
@@ -91,7 +100,7 @@ export async function browse(
   const rows = (await stmt.all()).results;
   const cards = rows.slice(0, q.pageSize).flatMap((r) => {
     const card = cardOf(r, catalog);
-    return card.ok ? [card.value] : [];
+    return card.ok ? [card.value] : (unreadable('chronicles', r.id, card.error) ?? []);
   });
   const last = cards.at(-1);
   return { cards, next: rows.length > q.pageSize && last ? encodeCursor(last) : null };
@@ -101,8 +110,9 @@ export async function visit(db: D1Database, id: ChronicleId, catalog: HarborCata
   const row = await db.prepare(`SELECT ${CARD_COLUMNS}, body FROM chronicles WHERE id = ? AND hidden_at IS NULL`).bind(id).first();
   if (row === null || typeof row.body !== 'string') return null;
   const chronicle = parseChronicle(JSON.parse(row.body));
+  if (!chronicle.ok) return unreadable('chronicles', id, chronicle.error);
   const card = cardOf(row, catalog);
-  return chronicle.ok && card.ok ? { chronicle: chronicle.value, card: card.value } : null;
+  return card.ok ? { chronicle: chronicle.value, card: card.value } : unreadable('chronicles', id, card.error);
 }
 
 /** 結末の hash が出港のものと同じなら確認、違えば不一致を 1 つ足す。隠れた年代記と無い年代記には何もしない */
@@ -115,25 +125,24 @@ export async function confirm(db: D1Database, id: ChronicleId, hash: string): Pr
 
 /**
  * 通報を 1 つ数える。同じ送り手の同じ日の 2 度目は数えない。数が hideAt に届いたら、その時刻で隠す。
+ * 通報の行と数を 1 つの batch (1 つのトランザクション) で書く。2 文目の changes() は 1 文目 (通報の行の INSERT) で増えた行の数で、
+ * 新しい通報のときだけ数を足す。数えだけが残る・行だけが残る、の半端な状態を作らない
  * @returns counted (数えた)・repeat (同じ送り手の 2 度目)・missing (無い年代記)。hidden は、この通報で隠れたか
  */
 export async function report(
   db: D1Database,
   r: { id: ChronicleId; day: string; sender: string; now: number; hideAt: number },
 ): Promise<{ kind: 'counted'; hidden: boolean } | { kind: 'repeat' | 'missing' }> {
-  const inserted = await db
-    .prepare('INSERT INTO reports (chronicle_id, day, sender) SELECT id, ?2, ?3 FROM chronicles WHERE id = ?1 ON CONFLICT DO NOTHING RETURNING chronicle_id')
-    .bind(r.id, r.day, r.sender)
-    .first();
-  if (inserted === null) {
-    const exists = await db.prepare('SELECT 1 FROM chronicles WHERE id = ?').bind(r.id).first();
-    return { kind: exists === null ? 'missing' : 'repeat' };
-  }
-  const row = await db
-    .prepare('UPDATE chronicles SET reports = reports + 1, hidden_at = CASE WHEN hidden_at IS NULL AND reports + 1 >= ?2 THEN ?3 ELSE hidden_at END WHERE id = ?1 RETURNING hidden_at')
-    .bind(r.id, r.hideAt, r.now)
-    .first();
-  return { kind: 'counted', hidden: row?.hidden_at === r.now };
+  const [, counted] = await db.batch([
+    db.prepare('INSERT INTO reports (chronicle_id, day, sender) SELECT id, ?2, ?3 FROM chronicles WHERE id = ?1 ON CONFLICT DO NOTHING').bind(r.id, r.day, r.sender),
+    db
+      .prepare('UPDATE chronicles SET reports = reports + 1, hidden_at = CASE WHEN hidden_at IS NULL AND reports + 1 >= ?2 THEN ?3 ELSE hidden_at END WHERE id = ?1 AND changes() = 1 RETURNING hidden_at')
+      .bind(r.id, r.hideAt, r.now),
+  ]);
+  const row = counted.results[0];
+  if (isObject(row)) return { kind: 'counted', hidden: row.hidden_at === r.now };
+  const exists = await db.prepare('SELECT 1 FROM chronicles WHERE id = ?').bind(r.id).first();
+  return { kind: exists === null ? 'missing' : 'repeat' };
 }
 
 /** 鍵の SHA-256 が合えば消す。通報の行は外部鍵の ON DELETE CASCADE で消える (meta.changes は消えた通報も数えるので、RETURNING で見る) */
@@ -156,8 +165,9 @@ export async function drawCargo(db: D1Database, catalog: HarborCatalog): Promise
     .first();
   if (row === null || typeof row.items !== 'string') return null;
   const id = parseCargoId(row.id);
+  if (!id.ok) return unreadable('cargo', row.id, id.error);
   const cargo = parseCargo({ items: JSON.parse(row.items) }, catalog);
-  return id.ok && cargo.ok ? { id: id.value, cargo: cargo.value } : null;
+  return cargo.ok ? { id: id.value, cargo: cargo.value } : unreadable('cargo', row.id, cargo.error);
 }
 
 export async function recordOutcome(db: D1Database, scenarioId: string, verdict: Digest['verdict']): Promise<void> {

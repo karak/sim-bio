@@ -1,7 +1,7 @@
 import { decodeLogBatch, LOG_BATCH_LIMITS } from '../../src/core/log/batch';
 import type { LogLevel } from '../../src/core/log/types';
-import { bodyLimitOf, MAX_BODY_BYTES, writeRefusal, type WireRequest } from '../../src/harbor/wire';
-import { serve, type Outcome } from './harbor';
+import { bodyLimitOf, MAX_BODY_BYTES, writeRefusal, type Refusal, type WireRequest } from '../../src/harbor/wire';
+import { retryAfterOf, serve, type Outcome } from './harbor';
 import * as ledger from './ledger';
 import { HARBOR_CONFIG } from './policy';
 
@@ -128,24 +128,24 @@ const HARBOR_METHODS = ['GET', 'POST', 'DELETE'] as const satisfies readonly Wir
 
 /** 港の道 (M19-08)。Origin の門と本文の上限はログの受け口と同じ。答え (Outcome) を Response に書き、断りは Workers Logs に残す */
 async function harbor(request: Request, url: URL, env: Env): Promise<Response> {
+  const now = Date.now();
+  const refuse = (refusal: Refusal, detail: Record<string, unknown> = {}) => render(url, now, { kind: 'refused', refusal, detail });
   const method = HARBOR_METHODS.find((m) => m === request.method);
-  if (!method) return reject({ url, status: 404, body: { error: 'not_found' } });
-  if (!SAFE_METHODS.has(method) && !isSameOrigin(request, url)) {
-    return reject({ url, status: 403, body: { error: 'forbidden_origin' }, detail: { origin: request.headers.get('origin') } });
-  }
+  if (!method) return refuse({ error: 'not_found' }, { method: request.method });
+  if (!SAFE_METHODS.has(method) && !isSameOrigin(request, url)) return refuse({ error: 'forbidden_origin' }, { origin: request.headers.get('origin') });
   const path = url.pathname + url.search;
   const maxBytes = bodyLimitOf({ method, path }) ?? MAX_BODY_BYTES;
   const body = await readBounded(request, maxBytes);
-  if (body === null) return reject({ url, status: 413, body: { error: 'payload_too_large', maxBytes } });
+  if (body === null) return refuse({ error: 'payload_too_large', maxBytes });
   const wire: WireRequest = { method, path, headers: Object.fromEntries(request.headers), body };
   const ip = request.headers.get('cf-connecting-ip') ?? '';
-  return render(url, await serve(wire, { env, now: Date.now(), ip, config: HARBOR_CONFIG }));
+  return render(url, now, await serve(wire, { env, now, ip, config: HARBOR_CONFIG }));
 }
 
-function render(url: URL, outcome: Outcome): Response {
+function render(url: URL, now: number, outcome: Outcome): Response {
   if (outcome.kind === 'empty') return new Response(null, { status: 204 });
   if (outcome.kind === 'ok') return new Response(outcome.body, { status: outcome.status, headers: { 'content-type': 'application/json' } });
   const { status } = writeRefusal(outcome.refusal);
-  const headers = outcome.retryAfter === undefined ? undefined : { 'retry-after': String(outcome.retryAfter) };
-  return reject({ url, status, body: outcome.refusal, detail: outcome.detail, headers });
+  const retryAfter = retryAfterOf(outcome.refusal, now);
+  return reject({ url, status, body: outcome.refusal, detail: outcome.detail, headers: retryAfter === null ? undefined : { 'retry-after': String(retryAfter) } });
 }

@@ -104,6 +104,7 @@ describe('出港 POST /api/v1/chronicles', () => {
     const res = await send(await publishReq(7));
 
     expect(res.status).toBe(503);
+    expect(res.headers.get('retry-after')).toBe('60');
     expect(await refusalOf(res)).toEqual({ error: 'closed', reason: 'unavailable' });
   });
 
@@ -164,6 +165,19 @@ describe('一覧 GET /api/v1/chronicles と訪問 GET /api/v1/chronicles/:id', (
     expect(body.ok && body.value.card).toMatchObject({ id, seed: 11, verdict: 'alive' });
 
     expect(await refusalOf(await send({ kind: 'visit', id: 'a'.repeat(64) as ChronicleId }))).toEqual({ error: 'not_found' });
+  });
+
+  it('今のカタログで読めない行 (石板を外した) は、一覧にも訪問にも出さず、黙らずに 1 行残す', async () => {
+    const { id } = await publish(12);
+    await env.HARBOR.prepare("UPDATE chronicles SET scenario_id = 'retired' WHERE id = ?").bind(id).run();
+    const logs = captureLogs();
+
+    expect((await browse()).cards).toEqual([]);
+    expect(await refusalOf(await send({ kind: 'visit', id }))).toEqual({ error: 'not_found' });
+    expect(logs.filter((l) => l.event === 'harbor.ledger.unreadable')).toEqual([
+      expect.objectContaining({ table: 'chronicles', id, path: 'scenarioId', reason: 'unknown_scenario' }),
+      expect.objectContaining({ table: 'chronicles', id, path: 'scenarioId', reason: 'unknown_scenario' }),
+    ]);
   });
 });
 
