@@ -1,11 +1,11 @@
 ---
 id: M19-06
 title: 年代記の記録と再生(Web Worker)
-status: todo
+status: review
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-04]
-evidence: []
+evidence: ["ec1d08f・e098fe3 tests/unit/chronicle.test.ts tests/unit/chronicle.store.test.ts tests/unit/chronicle.worker.test.ts tests/e2e/chronicle.spec.ts"]
 ---
 
 # 年代記の記録と再生(Web Worker)
