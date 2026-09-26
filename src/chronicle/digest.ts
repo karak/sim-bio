@@ -30,5 +30,10 @@ export async function digestOf(snapshot: Pick<WorldSnapshot, 'year' | 'totals'>,
   const totals = Object.fromEntries(ids.map((id) => [id, Number(snapshot.totals[id].toPrecision(6))]));
   const extinct = ids.filter((id) => totals[id] === 0);
   const body = { year: snapshot.year, verdict, totals, extinct };
-  return { ...body, hash: await sha256Hex(canonicalJson(body)) };
+  return { ...body, hash: await hashOfDigest(body) };
+}
+
+/** 要約の hash の元 (hash を除いた 4 つの正規化 JSON の SHA-256)。港 (M19-08) は出港の要約の hash をこれで検算する */
+export function hashOfDigest({ year, verdict, totals, extinct }: Omit<Digest, 'hash'>): Promise<string> {
+  return sha256Hex(canonicalJson({ year, verdict, totals, extinct }));
 }

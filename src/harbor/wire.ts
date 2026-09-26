@@ -18,6 +18,7 @@ import {
   type HarborCatalog,
   type HarborRequest,
   type HarborResponses,
+  type WithdrawKey,
 } from './contract';
 import type { Chronicle, Digest } from './chronicle';
 
@@ -66,10 +67,12 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
     method: 'POST',
     path: ['chronicles'],
     maxBytes: MAX_BODY_BYTES,
-    write: ({ chronicle, digest, inscription, turnstile }) => ({ headers: { [TURNSTILE_HEADER]: turnstile }, body: { chronicle, digest, inscription } }),
+    write: ({ chronicle, digest, inscription, turnstile, key }) => ({ headers: { [TURNSTILE_HEADER]: turnstile, ...bearer(key) }, body: { chronicle, digest, inscription } }),
     read: (m, catalog) => {
       const turnstile = under(`headers.${TURNSTILE_HEADER}`, parseTurnstile(m.headers[TURNSTILE_HEADER]));
       if (!turnstile.ok) return turnstile;
+      const key = readBearer(m.headers);
+      if (!key.ok) return key;
       if (!isObject(m.body)) return fail('', 'not_object');
       const chronicle = under('chronicle', parsePublicChronicle(m.body.chronicle, catalog));
       if (!chronicle.ok) return chronicle;
@@ -77,7 +80,7 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
       if (!digest.ok) return digest;
       const inscription = under('inscription', parseInscription(m.body.inscription, catalog));
       if (!inscription.ok) return inscription;
-      return { ok: true, value: { kind: 'publish', chronicle: chronicle.value, digest: digest.value, inscription: inscription.value, turnstile: turnstile.value } };
+      return { ok: true, value: { kind: 'publish', chronicle: chronicle.value, digest: digest.value, inscription: inscription.value, turnstile: turnstile.value, key: key.value } };
     },
   },
   browse: {
@@ -109,11 +112,11 @@ const ROUTES: { readonly [K in Kind]: Route<K> } = {
     method: 'DELETE',
     path: ['chronicles', PARAM],
     maxBytes: NO_BODY,
-    write: ({ id, key }) => ({ param: id, headers: { authorization: `Bearer ${key}` } }),
+    write: ({ id, key }) => ({ param: id, headers: bearer(key) }),
     read: (m) => {
       const id = under('id', parseChronicleId(m.param));
       if (!id.ok) return id;
-      const key = under('headers.authorization', parseWithdrawKey(BEARER.exec(m.headers.authorization ?? '')?.[1]));
+      const key = readBearer(m.headers);
       return key.ok ? { ok: true, value: { kind: 'withdraw', id: id.value, key: key.value } } : key;
     },
   },
@@ -196,18 +199,30 @@ export function writeRequest(req: HarborRequest): WireRequest {
 
 /** 道が無い・method が違うは no_route、本文が道の上限を越えれば too_large、JSON でなければ not_json。ほかは形の拒否 */
 export function readRequest(wire: WireRequest, catalog: HarborCatalog): Parsed<HarborRequest> {
+  const found = findRoute(wire);
+  if (found === null) return fail('', 'no_route');
+  const { route, url, segments } = found;
+  const body = readJson(wire.body, route.maxBytes);
+  if (!body.ok) return body;
+  const at = route.path.indexOf(PARAM);
+  return route.read({ param: at < 0 ? null : segments[at], query: url.searchParams, headers: wire.headers, body: body.value }, catalog);
+}
+
+/** 道の本文の上限 (M19-08)。Worker はこれを超える本文を読まずに 413 にする。道が無ければ null */
+export function bodyLimitOf(wire: Pick<WireRequest, 'method' | 'path'>): number | null {
+  return findRoute(wire)?.route.maxBytes ?? null;
+}
+
+function findRoute(wire: Pick<WireRequest, 'method' | 'path'>): { route: (typeof ROUTES)[Kind]; url: URL; segments: string[] } | null {
   const url = new URL(wire.path, 'http://harbor.invalid');
-  if (!url.pathname.startsWith(PREFIX)) return fail('', 'no_route');
+  if (!url.pathname.startsWith(PREFIX)) return null;
   const segments = url.pathname.slice(PREFIX.length).split('/');
   for (const route of Object.values(ROUTES)) {
     if (route.method !== wire.method || route.path.length !== segments.length) continue;
     if (!route.path.every((s, i) => s === PARAM || s === segments[i])) continue;
-    const body = readJson(wire.body, route.maxBytes);
-    if (!body.ok) return body;
-    const at = route.path.indexOf(PARAM);
-    return route.read({ param: at < 0 ? null : segments[at], query: url.searchParams, headers: wire.headers, body: body.value }, catalog);
+    return { route, url, segments };
   }
-  return fail('', 'no_route');
+  return null;
 }
 
 export function writeResponse<K extends keyof HarborResponses>(_kind: K, value: HarborResponses[K]): string {
@@ -227,9 +242,7 @@ const RESPONSES: ResponseReaders = {
   publish: (v) => {
     if (!isObject(v)) return fail('', 'not_object');
     const id = under('id', parseChronicleId(v.id));
-    if (!id.ok) return id;
-    const withdrawKey = under('withdrawKey', parseWithdrawKey(v.withdrawKey));
-    return withdrawKey.ok ? { ok: true, value: { id: id.value, withdrawKey: withdrawKey.value } } : withdrawKey;
+    return id.ok ? { ok: true, value: { id: id.value } } : id;
   },
   browse: (v, catalog) => {
     if (!isObject(v)) return fail('', 'not_object');
@@ -271,6 +284,9 @@ const RESPONSES: ResponseReaders = {
   },
 };
 
+const bearer = (key: WithdrawKey) => ({ authorization: `Bearer ${key}` });
+const readBearer = (headers: Readonly<Record<string, string>>) => under('headers.authorization', parseWithdrawKey(BEARER.exec(headers.authorization ?? '')?.[1]));
+
 function writeOf<K extends Kind>(kind: K, req: Req<K>): Outgoing {
   const route: Route<K> = ROUTES[kind];
   return route.write(req);
@@ -288,3 +304,66 @@ function readJson(text: string | null, maxBytes: number): Parsed<unknown> {
 }
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+
+/** 閉港の理由。budget は港の日次予算、full は保存の内部の栓 (400 MB)、d1_* は D1 そのものの上限、unavailable は D1 か人間確認の一時の失敗 */
+export const CLOSED_REASONS = ['budget', 'full', 'd1_read_limit', 'd1_write_limit', 'd1_storage', 'unavailable'] as const;
+export type ClosedReason = (typeof CLOSED_REASONS)[number];
+
+/**
+ * 断りの返事 (M19-08、設計書 §6.2)。Worker は writeRefusal で書き、クライアント (M19-09) は readRefusal で読む。
+ * 形の誤りは 400、人間確認の失敗と要約の食い違いは 422、回数制限は 429、閉港 (予算切れ・D1 の上限・満杯) はどれも 503
+ */
+export type Refusal =
+  | { error: 'bad_request'; path: string; reason: string }
+  | { error: 'payload_too_large'; maxBytes: number }
+  | { error: 'forbidden_origin' }
+  | { error: 'forbidden' }
+  | { error: 'not_found' }
+  | { error: 'method_not_allowed' }
+  | { error: 'not_human' }
+  | { error: 'mismatch'; path: string }
+  | { error: 'slow_down' }
+  | { error: 'closed'; reason: ClosedReason };
+
+/** 港が書いたと読めない返事 (1027 の画面・Worker の外の 5xx・壊れた本文) は、どれも閉港として扱う */
+export type ReadRefusal = Refusal | { error: 'closed'; reason: 'unknown' };
+
+type RefusalOf<E extends Refusal['error']> = Extract<Refusal, { error: E }>;
+const isText = (v: unknown): v is string => typeof v === 'string' && v.length <= 200;
+
+const REFUSALS: { readonly [E in Refusal['error']]: { status: number; read(v: Record<string, unknown>): RefusalOf<E> | null } } = {
+  bad_request: { status: 400, read: ({ path, reason }) => (isText(path) && isText(reason) ? { error: 'bad_request', path, reason } : null) },
+  payload_too_large: { status: 413, read: ({ maxBytes }) => (isCount(maxBytes) ? { error: 'payload_too_large', maxBytes } : null) },
+  forbidden_origin: { status: 403, read: () => ({ error: 'forbidden_origin' }) },
+  forbidden: { status: 403, read: () => ({ error: 'forbidden' }) },
+  not_found: { status: 404, read: () => ({ error: 'not_found' }) },
+  method_not_allowed: { status: 405, read: () => ({ error: 'method_not_allowed' }) },
+  not_human: { status: 422, read: () => ({ error: 'not_human' }) },
+  mismatch: { status: 422, read: ({ path }) => (isText(path) ? { error: 'mismatch', path } : null) },
+  slow_down: { status: 429, read: () => ({ error: 'slow_down' }) },
+  closed: {
+    status: 503,
+    read: ({ reason }) => {
+      const known = CLOSED_REASONS.find((r) => r === reason);
+      return known ? { error: 'closed', reason: known } : null;
+    },
+  },
+};
+
+const isRefusalError = (v: unknown): v is Refusal['error'] => typeof v === 'string' && Object.hasOwn(REFUSALS, v);
+const UNKNOWN_CLOSED: ReadRefusal = { error: 'closed', reason: 'unknown' };
+const MAX_REFUSAL_BYTES = 1024;
+
+export function writeRefusal(refusal: Refusal): { status: number; body: string } {
+  return { status: REFUSALS[refusal.error].status, body: JSON.stringify(refusal) };
+}
+
+export function readRefusal(status: number, text: string): ReadRefusal {
+  const body = readJson(text, MAX_REFUSAL_BYTES);
+  if (!body.ok || !isObject(body.value)) return UNKNOWN_CLOSED;
+  const { error } = body.value;
+  if (!isRefusalError(error)) return UNKNOWN_CLOSED;
+  const entry = REFUSALS[error];
+  if (entry.status !== status) return UNKNOWN_CLOSED;
+  return entry.read(body.value) ?? UNKNOWN_CLOSED;
+}

@@ -15,7 +15,7 @@ import {
   type WithdrawKey,
 } from '../../src/harbor/contract';
 import type { Chronicle, TimedCommand } from '../../src/harbor/chronicle';
-import { MAX_BODY_BYTES, readRequest, readResponse, writeRequest, writeResponse, type WireRequest } from '../../src/harbor/wire';
+import { bodyLimitOf, MAX_BODY_BYTES, readRefusal, readRequest, readResponse, writeRefusal, writeRequest, writeResponse, type Refusal, type WireRequest } from '../../src/harbor/wire';
 import { FIXTURE_CHRONICLE, FIXTURE_CHRONICLE_ID } from '../fixtures/chronicle';
 
 const ids = (file: string) => new Set((JSON.parse(readFileSync(file, 'utf8')) as { id: string }[]).map((d) => d.id));
@@ -29,7 +29,7 @@ const card: ChronicleCard = { simVersion: '1', scenarioId: 'sinking', seed: 42, 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
 const REQUESTS: { [K in HarborRequest['kind']]: Extract<HarborRequest, { kind: K }> } = {
-  publish: { kind: 'publish', chronicle: FIXTURE_CHRONICLE, digest, inscription: 'still-here' as InscriptionId, turnstile },
+  publish: { kind: 'publish', chronicle: FIXTURE_CHRONICLE, digest, inscription: 'still-here' as InscriptionId, turnstile, key },
   browse: { kind: 'browse', scenarioId: 'sinking', before: 'c-1790000000000' as BrowseCursor },
   visit: { kind: 'visit', id },
   confirm: { kind: 'confirm', id, digest },
@@ -42,7 +42,7 @@ const REQUESTS: { [K in HarborRequest['kind']]: Extract<HarborRequest, { kind: K
 };
 
 const RESPONSES: { [K in keyof HarborResponses]: HarborResponses[K] } = {
-  publish: { id, withdrawKey: key },
+  publish: { id },
   browse: { cards: [card], next: 'c-1' as BrowseCursor },
   visit: { chronicle: FIXTURE_CHRONICLE, card },
   draw_cargo: { drawn: { id: 'cargo-7' as CargoId, cargo: { items: [{ speciesId: 'wolf', amount: 0.5 }] } } },
@@ -70,7 +70,7 @@ describe('港の要求の往復 (M19-07): クライアントが書き、Worker �
 
   it('HTTP の形: 人間確認の札と取り下げ鍵は header に載せ、本文には入れない', () => {
     const publish = writeRequest(REQUESTS.publish);
-    expect(publish).toMatchObject({ method: 'POST', path: '/api/v1/chronicles', headers: { 'content-type': 'application/json', 'cf-turnstile-response': turnstile } });
+    expect(publish).toEqual({ method: 'POST', path: '/api/v1/chronicles', headers: { 'content-type': 'application/json', 'cf-turnstile-response': turnstile, authorization: `Bearer ${key}` }, body: publish.body });
     expect(JSON.parse(publish.body ?? 'null')).toEqual({ chronicle: FIXTURE_CHRONICLE, digest, inscription: 'still-here' });
     expect(writeRequest(REQUESTS.withdraw)).toEqual({ method: 'DELETE', path: `/api/v1/chronicles/${id}`, headers: { authorization: `Bearer ${key}` }, body: null });
     expect(writeRequest(REQUESTS.report)).toEqual({ method: 'POST', path: `/api/v1/chronicles/${id}/report`, headers: { 'cf-turnstile-response': turnstile }, body: null });
@@ -118,6 +118,7 @@ describe('readRequest (M19-07): 拒否の場所と理由', () => {
     const withBody = (b: unknown) => ({ ...publish, body: JSON.stringify(b) });
     expect(refused(readRequest(withBody({ ...body, inscription: 'visit example.com' }), catalog))).toEqual({ path: 'inscription', reason: 'unknown_inscription' });
     expect(refused(readRequest({ ...publish, headers: { 'content-type': 'application/json' } }, catalog))).toEqual({ path: 'headers.cf-turnstile-response', reason: 'invalid' });
+    expect(refused(readRequest({ ...publish, headers: { 'cf-turnstile-response': turnstile } }, catalog))).toEqual({ path: 'headers.authorization', reason: 'invalid' });
     expect(refused(readRequest(withBody({ ...body, chronicle: { ...FIXTURE_CHRONICLE, scenarioId: 'nowhere' } }), catalog))).toEqual({ path: 'chronicle.scenarioId', reason: 'unknown_scenario' });
     expect(refused(readRequest(withBody({ ...body, digest: { ...digest, verdict: 'running' } }), catalog))).toEqual({ path: 'digest.verdict', reason: 'invalid' });
   });
@@ -157,5 +158,46 @@ describe('港の応答の往復 (M19-07): Worker が書き、クライアント�
     expect(refused(readResponse('browse', JSON.stringify(many), catalog))).toEqual({ path: 'cards', reason: 'too_many' });
     expect(refused(readResponse('avoidance', JSON.stringify({ finished: 3, avoided: 4 }), catalog))).toEqual({ path: 'avoided', reason: 'invalid' });
     expect(refused(readResponse('visit', JSON.stringify({ chronicle: FIXTURE_CHRONICLE, card: { ...card, inscription: 'lol' } }), catalog))).toEqual({ path: 'card.inscription', reason: 'unknown_inscription' });
+  });
+});
+
+describe('bodyLimitOf (M19-08): Worker が本文を読む前の道ごとの上限', () => {
+  it('出港は MAX_BODY_BYTES、照合は 2 KB、本文の無い道は 0、道が無ければ null', () => {
+    expect(bodyLimitOf(writeRequest(REQUESTS.publish))).toBe(MAX_BODY_BYTES);
+    expect(bodyLimitOf(writeRequest(REQUESTS.confirm))).toBe(2 * 1024);
+    expect(bodyLimitOf(writeRequest(REQUESTS.withdraw))).toBe(0);
+    expect(bodyLimitOf({ method: 'GET', path: '/api/v1/nowhere' })).toBeNull();
+  });
+});
+
+describe('断りの返事 (M19-08): Worker が書き、クライアントが読む', () => {
+  const REFUSALS: readonly [Refusal, number][] = [
+    [{ error: 'bad_request', path: 'chronicle.scenarioId', reason: 'unknown_scenario' }, 400],
+    [{ error: 'payload_too_large', maxBytes: MAX_BODY_BYTES }, 413],
+    [{ error: 'forbidden_origin' }, 403],
+    [{ error: 'forbidden' }, 403],
+    [{ error: 'not_found' }, 404],
+    [{ error: 'not_human' }, 422],
+    [{ error: 'mismatch', path: 'digest.hash' }, 422],
+    [{ error: 'slow_down' }, 429],
+    [{ error: 'closed', reason: 'budget' }, 503],
+    [{ error: 'closed', reason: 'd1_write_limit' }, 503],
+  ];
+
+  it.each(REFUSALS)('%o は %i で書き、同じ断りに読み戻す', (refusal, status) => {
+    const out = writeRefusal(refusal);
+    expect(out.status).toBe(status);
+    expect(readRefusal(out.status, out.body)).toEqual(refusal);
+  });
+
+  it.each([
+    ['1027 の画面 (Cloudflare の HTML)', 429, '<!DOCTYPE html><title>Error 1027</title>'],
+    ['Worker の外の 5xx', 502, 'Bad Gateway'],
+    ['JSON だが港の断りの形でない', 500, '{"message":"oops"}'],
+    ['断りの名前と status が食い違う', 200, JSON.stringify({ error: 'slow_down' })],
+    ['閉港の理由が知らない言葉', 503, JSON.stringify({ error: 'closed', reason: 'visit example.com' })],
+    ['断りの鍵が足りない', 400, JSON.stringify({ error: 'bad_request', path: 'x' })],
+  ])('読めない返事 (%s) は、閉港 (理由 unknown) に読み替える', (_, status, body) => {
+    expect(readRefusal(status, body)).toEqual({ error: 'closed', reason: 'unknown' });
   });
 });
