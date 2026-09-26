@@ -146,6 +146,7 @@ export function createTablet(
       <div class="verdict-title" id="verdict-title"></div>
       <div class="verdict-reason" id="verdict-reason"></div>
       <div class="verdict-stats mono" id="verdict-stats"></div>
+      <div id="verdict-harbor"></div>
       <div class="row"><button id="verdict-retry" class="chip">もう一度</button><button id="verdict-free" class="chip">自由モードへ</button><a id="verdict-download" class="chip" href="#" download="cargo.json" hidden>持ち出しを保存</a></div>
     </div>
   </div>`,

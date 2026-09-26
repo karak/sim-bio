@@ -12,6 +12,7 @@ export default defineConfig({
     url: `http://localhost:${port}`,
     reuseExistingServer: true,
     timeout: 30_000,
-    env: { VITE_LOG_URL: '/api/v1/logs' },
+    // 港 (M19-09) は同じ origin の /api/v1/*。dev サーバーには港が無いので、spec が page.route() で決定論的に答える (答えなければ閉港)
+    env: { VITE_LOG_URL: '/api/v1/logs', VITE_HARBOR_URL: '/' },
   },
 });
