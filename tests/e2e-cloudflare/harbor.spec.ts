@@ -1,5 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { cloudflarePort } from '../../playwright.cloudflare.config';
 import { decodeLogBatch } from '../../src/core/log/batch';
@@ -9,8 +11,16 @@ let wrangler: ChildProcess;
 let output = '';
 
 test.beforeAll(async () => {
+  // M19-08: 港の帳簿は使い捨てのローカルの D1 に置き、本番と同じマイグレーションを当ててから立てる。secret はテストの値
+  const persist = mkdtempSync(join(tmpdir(), 'harbor-e2e-'));
+  const migrated = spawnSync('node_modules/.bin/wrangler', ['d1', 'migrations', 'apply', 'biotope-harbor', '--local', '--persist-to', persist], {
+    env: { ...process.env, CI: 'true', WRANGLER_SEND_METRICS: 'false' },
+    encoding: 'utf8',
+  });
+  expect(migrated.status, migrated.stderr || migrated.stdout).toBe(0);
+  const secrets = ['--var', 'TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA', '--var', 'SENDER_SECRET:e2e-only'];
   // detached で process group を分け、後で workerd ごと止める
-  wrangler = spawn('node_modules/.bin/wrangler', ['dev', '--port', String(cloudflarePort), '--ip', '127.0.0.1'], {
+  wrangler = spawn('node_modules/.bin/wrangler', ['dev', '--port', String(cloudflarePort), '--ip', '127.0.0.1', '--persist-to', persist, ...secrets], {
     env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
@@ -90,10 +100,29 @@ test('配るもの・配らないもの・知らない道 (.assetsignore と SPA
     expect({ path, status: res.status(), servesIndex: (await res.text()) === index }).toEqual({ path, status: 200, servesIndex: true });
   }
 
-  const unknownApi = await request.get('/api/v1/chronicles');
+  const unknownApi = await request.get('/api/v1/nowhere');
   expect(unknownApi.status()).toBe(404);
   expect(await unknownApi.json()).toEqual({ error: 'not_found' });
 
   const foreign = await request.post('/api/v1/logs', { headers: { origin: 'https://evil.example' }, data: { records: [], dropped: 0 } });
   expect(foreign.status()).toBe(403);
+});
+
+test('港の道がローカルの D1 に届く: 結末を報告すると回避率に数えられ、一覧は空で返る (M19-08)', async ({ request }) => {
+  const same = { origin: base, 'content-type': 'application/json' };
+  for (const verdict of ['alive', 'dead', 'escaped']) {
+    const res = await request.post('/api/v1/outcomes', { headers: same, data: { scenarioId: 'volcano', verdict } });
+    expect(res.status(), await res.text()).toBe(204);
+  }
+  const rate = await request.get('/api/v1/outcomes/volcano');
+  expect(rate.status()).toBe(200);
+  expect(await rate.json()).toEqual({ finished: 3, avoided: 2 });
+
+  const browse = await request.get('/api/v1/chronicles');
+  expect(browse.status()).toBe(200);
+  expect(await browse.json()).toEqual({ cards: [], next: null });
+
+  const human = await request.post('/api/v1/chronicles', { headers: same, data: {} });
+  expect(human.status()).toBe(400);
+  expect(await human.json()).toEqual({ error: 'bad_request', path: 'headers.cf-turnstile-response', reason: 'invalid' });
 });

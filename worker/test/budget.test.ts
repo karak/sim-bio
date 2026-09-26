@@ -40,7 +40,7 @@ describe('日次予算 (設計書 §6.1)', () => {
     expect(await env.HARBOR.prepare('SELECT COUNT(*) AS n FROM chronicles').first('n')).toBe(0);
   });
 
-  it('使った分だけ数える。形の誤り・人間確認の失敗・回数制限では数えない', async () => {
+  it('使った分だけ数える。形の誤り・人間確認の失敗では数えない', async () => {
     await send(await publishReq(2), { ip: freshIp() });
     await send({ ...(await publishReq(3)), turnstile: 'bot' as never }, { ip: freshIp() });
     await send({ kind: 'cast_cargo', cargo: { items: [{ speciesId: 'dragon', amount: 1 }] } });
