@@ -3,7 +3,8 @@ import type { LogLevel } from '../../src/core/log/types';
 
 /**
  * 港の Worker (設計書 §3・§4.2)。wrangler.jsonc の run_worker_first で /api/* だけがここへ来る。静的アセットと SPA の fallback は Worker を起こさない。
- * 今あるのはログの受け口 (M19-02) だけ。ROUTES は道の完全一致なので、/api/v1/chronicles/:id のような道を持つ M19-08 で URLPattern などに替える。
+ * 今あるのはログの受け口 (M19-02) だけ。年代記・積荷などのルートは M19-08 で ROUTES に足す。
+ * ROUTES は道の完全一致なので、/api/v1/chronicles/:id のような道を足すときは URLPattern などに替える。
  */
 
 type Handler = (request: Request, url: URL) => Promise<Response>;
@@ -11,6 +12,7 @@ type Handler = (request: Request, url: URL) => Promise<Response>;
 /** 道 → (method → handler)。Map にするのは、`constructor` のような Object の鍵を道と取り違えないため */
 const ROUTES: ReadonlyMap<string, ReadonlyMap<string, Handler>> = new Map([['/api/v1/logs', new Map([['POST', receiveLogs]])]]);
 
+/** 書き込みの要求は、この Worker 自身の Origin から来たものだけを受ける (よそのページからの送りつけを断る) */
 const SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
 const CONSOLE: Readonly<Record<LogLevel, (line: string) => void>> = {
@@ -75,12 +77,15 @@ async function readBounded(request: Request, maxBytes: number): Promise<string |
   }
 }
 
-/** 断った理由は Workers Logs に残す (返す本文と同じ中身に、呼び手へは返さない detail を添える。固定の鍵は後ろに置いて上書きさせない) */
+type LogKey = 'event' | 'status' | 'route';
+
+// 固定の鍵 (LogKey) は body・detail に入れられない型にし、spread の後ろにも置く
+/** 断った理由は Workers Logs に残す (返す本文と同じ中身に、呼び手へは返さない detail を添える) */
 function reject({ url, status, body, detail = {}, headers }: {
   url: URL;
   status: number;
-  body: { error: string } & Record<string, unknown>;
-  detail?: Record<string, unknown>;
+  body: { error: string } & Record<string, unknown> & Partial<Record<LogKey, never>>;
+  detail?: Record<string, unknown> & Partial<Record<LogKey, never>>;
   headers?: HeadersInit;
 }): Response {
   console.warn(JSON.stringify({ ...body, ...detail, event: 'harbor.api.rejected', status, route: url.pathname }));

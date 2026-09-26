@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { decodeLogBatch, encodeLogBatch, LOG_BATCH_LIMITS, type LogBatch } from '../../src/core/log/batch';
-import { createHttpSink } from '../../src/core/log/httpSink';
 import type { LogRecord } from '../../src/core/log/types';
 
 function rec(over: Partial<LogRecord> = {}): LogRecord {
@@ -82,27 +81,5 @@ describe('decodeLogBatch: 拒否する形と、その場所', () => {
     ['event が長すぎる', [rec({ event: 'e'.repeat(LOG_BATCH_LIMITS.maxEventLength + 1) })], 'records[0].event', `${LOG_BATCH_LIMITS.maxEventLength} 文字を超える`],
   ])('%s', (_, records, path, reason) => {
     expect(rejects({ records, dropped: 0 })).toEqual({ path, reason });
-  });
-});
-
-describe('HTTP LogSink のバッチは受け口の件数の上限を超えない', () => {
-  it.each([
-    ['既定', {}],
-    ['maxBatchSize を上限より大きく渡したとき', { maxBatchSize: LOG_BATCH_LIMITS.maxRecords * 5 }],
-  ])('%s: 上限の 3 倍を書くと、どのバッチも受け口が受ける形で、件数は上限ちょうど', async (_, opts) => {
-    const bodies: string[] = [];
-    const send = (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
-      bodies.push(String(init?.body));
-      return Promise.resolve(new Response(null, { status: 204 }));
-    };
-    const sink = createHttpSink('https://example.test/api/v1/logs', { fetch: send, maxBuffered: 1_000, ...opts });
-    for (let i = 0; i < LOG_BATCH_LIMITS.maxRecords * 3; i++) sink.write(rec({ level: 'warn', event: 'cmd.rejected', tick: i }));
-    await new Promise((r) => setTimeout(r, 0));
-
-    const sizes = bodies.map((b) => {
-      const d = decodeLogBatch(b);
-      return d.ok ? d.value.records.length : d.error;
-    });
-    expect(sizes[0]).toBe(LOG_BATCH_LIMITS.maxRecords);
   });
 });

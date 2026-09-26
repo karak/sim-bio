@@ -45,27 +45,25 @@ test('ビルドした画面のログが wrangler dev の受け口に 1 バッチ
 });
 
 test('タブが隠れたときの sendBeacon も Origin 付きで受け口に届く (403 で捨てられない)', async ({ page }) => {
-  const summaries: string[] = [];
-  page.on('console', (m) => {
-    if (m.text().includes('"event":"sim.tick.summary"')) summaries.push(m.text());
-  });
-  const kinds: string[] = [];
-  page.on('request', (r) => {
-    if (r.url() === `${base}/api/v1/logs`) kinds.push(r.resourceType());
+  const beacons: { status: number }[] = [];
+  page.on('response', (r) => {
+    if (r.url() === `${base}/api/v1/logs` && r.request().resourceType() === 'ping') beacons.push({ status: r.status() });
   });
   await page.goto('/');
+  await page.evaluate(() => Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }));
   await page.click('#speed-100');
-  await expect.poll(() => summaries.length, { timeout: 40_000 }).toBeGreaterThan(0);
-  const beacon = page.waitForResponse((r) => r.url() === `${base}/api/v1/logs` && r.request().resourceType() === 'ping', { timeout: 10_000 });
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
 
-  const res = await beacon.catch((e: unknown) => {
-    throw new Error(`beacon の返事が見えない (送った種類: ${kinds.join(', ')}): ${String(e)}`);
-  });
-  expect(res.status()).toBe(204);
+  // 送り残しがあるときだけ beacon が出る。10 秒待ちの fetch が先に運ぶこともあるので、出るまで隠れた合図を送り続ける
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+        return beacons.length;
+      },
+      { timeout: 60_000, intervals: [500], message: 'beacon の返事が見えない' },
+    )
+    .toBeGreaterThan(0);
+  expect(beacons.every((b) => b.status === 204)).toBe(true);
 });
 
 test('配るもの・配らないもの・知らない道 (.assetsignore と SPA の fallback と run_worker_first)', async ({ request }) => {
