@@ -17,6 +17,9 @@ import { disasterClick, spawnClick } from './ui/clicks';
 import { createObserveEntry } from './observe/entry';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
+import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
+import type { InterveneResult } from './scenario/ScenarioRunner';
+import { SIM_VERSION } from './simulation/version';
 
 /** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
 const AUTOSAVE_TICKS = 90;
@@ -83,14 +86,23 @@ async function boot(): Promise<void> {
   let selected: number | null = null;
 
   let runner: ScenarioRunner | null = null;
+  /** シナリオ中の介入の年代記 (M19-06)。runner と一緒に作り、runner.intervene を包む */
+  let recorder: ChronicleRecorder<InterveneResult> | null = null;
+  /** 年代記は石板ごとに最後の 1 本を置く。続きからの復帰 (島と runner を戻す) はまだ無いので、読むのは港への出港 (M19-09) */
+  const saveChronicle = () => {
+    if (!store || !recorder || !scenario) return;
+    const tick = world.snapshot().tick;
+    store.saveChronicle(scenario.id, recorder.current()).catch((e: unknown) => persistLog('warn', 'persist.chronicle.failed', tick, { error: String(e) }));
+  };
   /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
   const intervene = (c: Command): boolean => {
-    if (!runner) {
+    if (!recorder) {
       world.dispatch(c);
       return true;
     }
-    const result = runner.intervene(c);
-    if (!result.ok) {
+    const result = recorder.dispatch(c);
+    if (result.ok) saveChronicle();
+    else {
       const snap = world.snapshot();
       log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'cmd.rejected', reason: result.reason, cmd: c });
       if (result.reason === 'budget') tablet.flash();
@@ -157,6 +169,7 @@ async function boot(): Promise<void> {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'hidden') return;
     localSave.flush(() => world.serialize());
+    saveChronicle();
     flushViaBeacon();
   });
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
@@ -203,6 +216,7 @@ async function boot(): Promise<void> {
       ticksPerYear: config.ticksPerYear,
       onVerdict: (v) => {
         loop.setSpeed(0);
+        saveChronicle();
         // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
         tablet.showVerdict(v, v.status === 'escaped' ? exportCargo(world.snapshot()) : undefined);
         log.write({ ts: new Date().toISOString(), tick: world.snapshot().tick, year: world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
@@ -221,6 +235,14 @@ async function boot(): Promise<void> {
         log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.power.exhausted', scenario: scenario.id });
       },
     });
+    const scenarioRunner = runner;
+    recorder = recordChronicle(
+      { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => world.snapshot() },
+      { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
+      () => scenarioRunner.totalsByYear(),
+    );
+    // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る
+    scenarioRunner.update(world.snapshot());
   }
 
   // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す

@@ -10,6 +10,7 @@ import { SIM_VERSION } from '../../src/simulation/version';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, SpeciesDef, WorldConfig } from '../../src/simulation/types';
 import { disasterClick, spawnClick } from '../../src/ui/clicks';
+import { runChronicle } from '../../src/chronicle/replay';
 
 /**
  * 決定論の刻み (M19-04、設計書 2026-09-26-cloudflare-architecture.md §1.3 C6)。
@@ -98,13 +99,8 @@ function playByScript(def: ScenarioDef, opening: Command) {
  * 境目ちょうどの介入は、その境目の update の後に打つ (ライブでもクリックは境目を越えたフレームの update の後に来る)
  */
 function replay(def: ScenarioDef, commands: readonly Timed[]) {
-  const { world, runner } = setup(def);
-  runner.update(world.snapshot());
-  for (const { tick, command } of commands) {
-    stepByYear(world, runner, tick - world.snapshot().tick);
-    runner.intervene(command);
-  }
-  stepByYear(world, runner, Number.MAX_SAFE_INTEGER);
+  const { world, runner, ticksPerYear } = setup(def);
+  expect(runChronicle(world, runner, commands, { maxTicks: def.years * ticksPerYear })).toEqual({ kind: 'done' });
   return { world, runner };
 }
 
