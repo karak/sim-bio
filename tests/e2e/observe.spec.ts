@@ -17,7 +17,7 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
   await expect(page.locator('#speed-10')).toHaveClass(/on/);
   await expect(page.locator('#speed-100')).not.toHaveClass(/on/);
   const stats = page.locator('#observe-layer .o-stats');
-  await expect(stats).toHaveText(/^\d+ 年$/, { timeout: 90_000 });
+  await expect(stats).toHaveText(/^\d+ 年 · [春夏秋冬]$/, { timeout: 90_000 });
   // 観察画面の中でも本体の時間が進む (観察画面は操作画面の runner の snapshot を描く)
   const tick = () => page.evaluate(() => (window as unknown as { __observeStats: { tick: number } }).__observeStats.tick);
   const t0 = await tick();
