@@ -126,3 +126,41 @@ test('港の道がローカルの D1 に届く: 結末を報告すると回避�
   expect(human.status()).toBe(400);
   expect(await human.json()).toEqual({ error: 'bad_request', path: 'headers.cf-turnstile-response', reason: 'invalid' });
 });
+
+test('本物の港と通しで: 判定のあとに出港 → 一覧に並ぶ → リンクで訪れると、港から引いた年代記の島になる (M19-09)', async ({ page }) => {
+  test.setTimeout(120_000);
+  // Turnstile の widget の script だけは手元で答える (テストの sitekey と同じダミーの札)。札の確かめは Worker が siteverify にテストの secret で問う
+  await page.route('https://challenges.cloudflare.com/turnstile/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/javascript',
+      body: `window.turnstile = { render(el, o) { setTimeout(() => o.callback('XXXX.DUMMY.TOKEN.XXXX'), 100); return 'w'; }, remove() {} };`,
+    }),
+  );
+  await page.goto('/?scenario=test-quick');
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict')).toBeVisible({ timeout: 90_000 });
+  const panel = page.getByRole('region', { name: '港へ出す' });
+  await panel.getByRole('radio', { name: 'また始めよう' }).click();
+  const published = page.waitForResponse((r) => r.url() === `${base}/api/v1/chronicles` && r.request().method() === 'POST');
+  await panel.getByRole('button', { name: '出港する' }).click();
+  const res = await published;
+  expect(res.status(), await res.text()).toBe(201);
+  await expect(panel.getByRole('status').first()).toHaveText('港へ出した。リンクを渡せば、誰でもこの島をたどれる');
+  const url = await panel.getByRole('textbox', { name: '訪問のリンク' }).inputValue();
+  const id = new URL(url).searchParams.get('visit');
+  expect(id).toMatch(/^[0-9a-f]{64}$/);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  const card = page.getByRole('list', { name: '流れ着いた年代記' }).locator(`[data-id="${id}"]`);
+  await expect(card).toContainText('「また始めよう」');
+  await expect(card).toContainText('試し読みの 2 年目に滅びた');
+  await expect(card).toContainText('あなたが出港した島');
+
+  await card.getByRole('link', { name: '訪れる' }).click();
+  const plaque = page.getByRole('region', { name: '訪れている島' });
+  await expect(plaque.locator('#harbor-visit-ending')).toHaveText('試し読みの 2 年目に滅びた');
+  await expect(plaque).toContainText('「また始めよう」');
+  await expect(plaque.getByRole('button', { name: '年表を読む' })).toBeVisible();
+});
