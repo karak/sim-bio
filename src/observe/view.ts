@@ -8,6 +8,8 @@ import {
   HemisphereLight,
   IcosahedronGeometry,
   BoxGeometry,
+  Box3,
+  Sphere,
   Matrix4,
   Mesh,
   Object3D,
@@ -23,23 +25,31 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
-import { describeEvent } from '../ui/Tablet';
+import { createNoticeBand } from './notice';
 import { mulberry32 } from '../simulation/rng';
-import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh } from './render/terrain';
+import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh, groundLayers, wearTerrain, type Worn } from './render/terrain';
 import { createWater } from './render/water';
 import { createGrass } from './render/grass';
 import { createGrade } from './render/grade';
 import { createToonMaterial, rimLight } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { glow } from './render/bake';
-import { instanceProps, lodProps, type LodProps } from './render/instancer';
+import { culledProps, instanceProps, lodProps, type CulledProps, type LodProps } from './render/instancer';
+import { HUT_NEAR_M, HUT_NEAR_SPREAD, PROP_NEAR_M, hutPlacements } from './settlementLayout';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
-import { createShotCamera, frameBlocked, inFoliage } from './render/shotCamera';
+import { createPuddles, puddleSpots } from './render/puddles';
+import { createSurface } from './render/roofs';
+import { MIST_S, mistEnvelope, surgeStep, wetness, type SurgeState } from './fx';
+import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
+import { triangleBreakdown } from './render/breakdown';
+import { installShadowOnly } from './render/shadowOnly';
+import { bakeImpostor } from './render/impostor';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { AtmospherePass, createSky } from './render/atmosphere';
+import { createDynamicResolution } from './render/dynamicResolution';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks } from './area';
 import { K_DEFAULT, BUDGET_PER_SECOND, folkRuleFor, reconcile, targetCounts } from './population';
@@ -53,6 +63,11 @@ import { applyPlan, stepAgents, type AgentWorld } from './agents';
  * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
  * (M22-08: depart=1 で開いてすぐ舟が飛び去る。sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
  * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
+ * (M23-06: far は鐘樹の成木と森の木をインポスター (板) に替える距離 (m)。0 で切る)
+ * (M23-08: cfar は動物を遠い段 (群れ LOD を削った形) に替える距離 (m、個体ごとに ±10%)。0 で切る)
+ * (M23-09: hut は小屋を遠距離版 hut_lod1 に替える距離 (m、カメラの高さも入れた距離、小屋ごとに ±10% 揺らす)。0 で切る (いつも近い形))
+ * (M23-07: msaa は場面の MSAA の段 (0 / 2 / 4)、pr はピクセル比の上限、airres は空気の層を場面の何分の 1 で描くか (1 か 2、既定 2)、
+ *  dynres=0 で動的な解像度 (コマが 60 fps の予算を続けて超えたときだけ合成の倍率を下げる。ピクセル比 2 で 0.5、1 で 0.7 まで) を切る)
  */
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => Number(params.get(k) ?? d);
@@ -61,7 +76,9 @@ const OPT = {
   deer: num('deer', 0),
   trees: num('trees', 140),
   near: num('near', 40),
-  grass: num('grass', 25000),
+  cfar: num('cfar', 50),
+  // (草の磨き上げ: 房を 36 三角形に減らした分、25,000 から 30,000 房に増やして草の絨毯を密にする)
+  grass: num('grass', 30000),
   grade: flag('grade'),
   bloom: flag('bloom'),
   shadow: flag('shadow'),
@@ -76,7 +93,23 @@ const OPT = {
   time: num('time', 0.16),
   day: num('day', DAY_CYCLE_S),
   freeze: params.get('freeze') === '1',
+  far: num('far', 60),
+  hut: num('hut', HUT_NEAR_M),
+  // (M23-09 の 3 回目で追加) 小屋でない集落の部品 (灯り柱・石垣・立石・船台・衝立) を遠距離版 <名前>_lod1 に替える距離 (m)。0 で切る
+  prop: num('prop', PROP_NEAR_M),
+  msaa: num('msaa', 4),
+  pr: num('pr', 2),
+  airScale: (num('airres', 2) === 1 ? 1 : 2) as 1 | 2,
+  dynres: flag('dynres'),
 };
+/**
+ * (遠距離版の追加で追加) 作り直した芽・株・下草を遠距離版に替える距離 (m)。どれも近い形の 1〜2 割の三角形で、切り替わりの距離では数画素の違い。
+ * 羊歯は FERN_BEYOND_M より先をさらに遠い版 (12 三角形) にする (林の画で遠距離版 120 三角形が 555 株見え、6.7 万三角形あった)
+ */
+const SEEDLING_NEAR_M = 25;
+const STUMP_NEAR_M = 35;
+const UNDER_NEAR_M: Record<string, number> = { fern: 22, flower_patch: 25, moongrass_tuft_seed: 25 };
+const FERN_BEYOND_M = 45;
 /** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
 const AREA_R = 8;
 const WINDOW = 12;
@@ -189,6 +222,8 @@ export type ObservationView = {
   setSnapshot(s: WorldSnapshot, timeline?: readonly TimelineEvent[]): void;
   start(): void;
   stop(): void;
+  /** 今のカメラ: 自動 (自然記録調)・自由 (触ったあと、20 秒で自動に戻る)・個体を追う */
+  cameraMode(): 'auto' | 'free' | 'follow';
 };
 
 export async function createObservationView(host: ObserveHost): Promise<ObservationView> {
@@ -198,10 +233,14 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const field = createTerrainField(s, home, WINDOW);
 
   const canvas = host.canvas;
-  const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+  // (M23-07 で変更: 画面 (canvas) の MSAA を切る。描画はすべて合成 (grade.ts) を通り、MSAA は場面の描画先が持つ。画面の MSAA は最後の全画面の 1 枚にしか掛からず、解決の分だけ重かった)
+  const renderer = new WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  // (M23-07 で変更: ピクセル比の上限は OPT.pr)
+  renderer.setPixelRatio(Math.min(OPT.pr, window.devicePixelRatio));
   renderer.shadowMap.enabled = OPT.shadow;
   renderer.shadowMap.type = PCFShadowMap;
+  // (M23-04) 影の描画だけに出す粗い代わりの形 (鐘樹の成木・小屋・近くの動物)。本の描画の形は castShadow = false にする
+  const shadowOnly = installShadowOnly(renderer.shadowMap);
   const scene = new Scene();
   scene.background = skyTexture();
   // 霧の色は空の地平の帯に合わせ、水面の端 (区域の外の遠景) を地平に溶かす
@@ -254,8 +293,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     loadGlb('/models/observe/rabbit.glb'),
     loadGlb('/models/observe/ship.glb'),
   ]);
-  const tuft = findNode(floraGlb, 'grass_tuft') as Mesh | null;
-  const grass = createGrass(field, { grass: s.layers.populations['grass'], moss: s.layers.populations['moss'] }, OPT.grass, 7, tuft?.geometry, (AREA_R + 1) * CELL_M);
+  // (草の磨き上げ: 房の形は grass.ts の carpetTuft を使う (flora.glb の grass_tuft は星形に開いて判を押したように見えた)。地面と同じ層で色を決める)
+  const grass = createGrass(field, groundLayers(s), OPT.grass, 7, undefined, (AREA_R + 1) * CELL_M);
   scene.add(grass.mesh);
 
   // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
@@ -264,6 +303,15 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-06 試作 2: 船台が 27 m になったので、船台の点 (外海に接する陸のセルの中心) から陸の側へ 6.5 m ずらし、
   //  舳先の端が水際を 2 m ほど越えるところに置く。舟・丸太の山・切り開きはこの中心に合わせる)
   const slip = { x: marks.slipway.x - marks.slipwayBow.x * 6.5, z: marks.slipway.z - marks.slipwayBow.z * 6.5 };
+  // (草の磨き上げ) 集落の広場・小屋の戸口への道・船台への道を踏み固めた土にし、そこの草を減らす (小屋の位置は下の集落の一角と同じ)
+  const plaza = { x: marks.center.x, z: marks.center.z - 6 };
+  const worn: Worn[] = [
+    { ax: plaza.x, az: plaza.z, bx: plaza.x, bz: plaza.z, r: 9 },
+    { ax: plaza.x, az: plaza.z, bx: slip.x, bz: slip.z, r: 2.6 },
+    ...hutPlacements(marks.center, plaza, field.heightAt).map((h) => ({ ax: plaza.x, az: plaza.z, bx: h.x, bz: h.z, r: 2.2 })),
+  ];
+  wearTerrain(terrain, worn);
+  grass.trample(worn);
 
   // 鐘樹: 密度に比例して最大 OPT.trees 本。密度で段 (成木・若木・芽) を選ぶ。舟の材を伐った跡として船台の近くに株を置く
   const rng = mulberry32(11);
@@ -310,22 +358,41 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     byKind.stump.push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.05, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(1, 1, 1)));
   }
   const lods: LodProps[] = [];
+  // (遠距離版の追加で追加) 株の近い・遠いの組 (自動カメラの遮りには今までどおり入れない)
+  let stumpSet: LodProps | null = null;
   const belltreeSets: Partial<Record<string, LodProps>> = {};
   for (const [kind, mats] of Object.entries(byKind)) {
     const node = findNode(treeGlb, `belltree_${kind}`) ?? placeholderTree(kind as 'mature' | 'sapling' | 'seedling' | 'stump');
     const lod1 = kind === 'mature' ? findNode(treeGlb, 'belltree_mature_lod1') : null;
     if (lod1) {
-      const l = lodProps(node, lod1, mats, 38, OPT.trees);
+      // (M23-06) OPT.far より先は lod1 を焼いた板 (インポスター、2 三角形) で描く
+      const far = OPT.far > 0 ? { node: bakeImpostor(renderer, lod1).mesh, farM: OPT.far } : null;
+      // (M23-04 で変更: 成木の影は近い・遠いの形ではなく、影の代わりの形 belltree_mature_shadow (420 三角形) で落とす)
+      const l = lodProps(node, lod1, mats, 38, OPT.trees, findNode(treeGlb, 'belltree_mature_shadow'), far);
+      if (l.shadow) shadowOnly.add(l.shadow);
       lods.push(l);
       belltreeSets[kind] = l;
       scene.add(l.group);
     } else if (kind !== 'stump') {
       // (M22-03: 若木と芽も植え直せるよう、遠くも同じ形の組にして置き場所を入れ替えられるようにする)
-      const l = lodProps(node, node, mats, 45, OPT.trees);
+      // (鐘樹の段の作り直しで変更: 若木は作り直して 1,421 三角形になったので、45 m より先は遠距離版 belltree_sapling_lod1 (356 三角形) で描く)
+      const far = (kind === 'sapling' ? findNode(treeGlb, 'belltree_sapling_lod1') : null) ?? node;
+      // (遠距離版の追加で変更: 芽 (746 三角形) も 25 m より先は遠距離版 belltree_seedling_lod1 (57 三角形) で描く)
+      const farNode = kind === 'seedling' ? (findNode(treeGlb, 'belltree_seedling_lod1') ?? far) : far;
+      const l = lodProps(node, farNode, mats, kind === 'seedling' ? SEEDLING_NEAR_M : 45, OPT.trees);
+      // (M23-04) 芽 (0.4 m) は影を落とさない (影が小さく見えない。下草と同じ)
+      if (kind === 'seedling') l.group.traverse((o) => (o.castShadow = false));
       lods.push(l);
       belltreeSets[kind] = l;
       scene.add(l.group);
-    } else scene.add(instanceProps(node, mats));
+    } else {
+      // (遠距離版の追加で変更: 株 (1,662 三角形) は 35 m より先を遠距離版 belltree_stump_lod1 (220 三角形) で描く。無ければ今までどおり 1 つの組)
+      const stumpFar = findNode(treeGlb, 'belltree_stump_lod1');
+      if (stumpFar) {
+        stumpSet = lodProps(node, stumpFar, mats, STUMP_NEAR_M);
+        scene.add(stumpSet.group);
+      } else scene.add(instanceProps(node, mats));
+    }
   }
 
   // 森の木 (M22-03): 本体の forest の密度に比例して最大 OPT.forest 本。鐘樹と同じく集落の広場と船台は切り開く
@@ -352,7 +419,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   };
   let forestSet: LodProps | null = null;
   if (forestNode && forestLod) {
-    forestSet = lodProps(forestNode, forestLod, selectForest(forest), 45, OPT.forest);
+    // (M23-06 で変更: OPT.far より先はインポスター。森の木は影の代わりの形を持たないので、影は今までどおり lod1 の組が全部の木で落とす)
+    const far = OPT.far > 0 ? { node: bakeImpostor(renderer, forestLod).mesh, farM: OPT.far } : null;
+    forestSet = lodProps(forestNode, forestLod, selectForest(forest), 45, OPT.forest, null, far);
     lods.push(forestSet);
     scene.add(forestSet.group);
   }
@@ -381,10 +450,22 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const k = 0.8 + rng() * 0.6;
     under[kind].push(new Matrix4().compose(tp.set(x, field.heightAt(x, z) - 0.03, z), tq.setFromAxisAngle(ty, rng() * Math.PI * 2), ts.set(k, k, k)));
   }
+  // (M23-02 で変更: 下草は視錐台で見える株だけを描く。update は毎コマ、カメラを動かした後に呼ぶ)
+  const understory: CulledProps[] = [];
   for (const [name, mats] of Object.entries(under)) {
     const node = findNode(floraGlb, name);
-    if (node && mats.length) scene.add(instanceProps(node, mats, false));
+    // (鐘樹の段の作り直しで変更: 羊歯は作り直して 417 三角形になり、林の画で数百株が見えるので、22 m より先は遠距離版 fern_lod1 (120 三角形) で描く。
+    //  下草なので影は落とさない (近い・遠いの組の castShadow を切る)。自動カメラの遮り (lods) には入れない)
+    const far = findNode(floraGlb, `${name}_lod1`);
+    // (遠距離版の追加で変更: 近い・遠いの切り替えの距離は下草ごと (UNDER_NEAR_M)。羊歯は 45 m より先をさらに遠い版 fern_lod2 (12 三角形) で描く)
+    const beyond = findNode(floraGlb, `${name}_lod2`);
+    if (node && far && mats.length) {
+      const l = lodProps(node, far, mats, UNDER_NEAR_M[name] ?? 22, mats.length, null, beyond ? { node: beyond, farM: FERN_BEYOND_M } : null);
+      l.group.traverse((o) => (o.castShadow = false));
+      understory.push(l);
+    } else if (node && mats.length) understory.push(culledProps(node, mats, false));
   }
+  for (const u of understory) scene.add(u.group);
 
   // 集落の一角: 船台は南の海岸へ向け、小屋・灯り・巨石・石垣で囲む
   // (M22-04 の後: 南の固定位置をやめ、個体層の目印に合わせる)
@@ -392,18 +473,22 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-06: 区域と目印は鐘樹の前で決めた)
   // 同じ部品はまとめてインスタンス化する (小屋・灯り柱を 1 つずつ複製すると部品 × 材質 × 影の draw call になる)
   const settlementPlacements = new Map<string, Matrix4[]>();
-  const place = (name: string, x: number, z: number, ry = 0) => {
+  // (集落の建物の作り直しで変更: y を渡すとその高さに置く (小屋は戸口の外の地面に合わせる、敷石は斜面に沿わせる))
+  const place = (name: string, x: number, z: number, ry = 0, y = field.heightAt(x, z) - 0.15) => {
     const list = settlementPlacements.get(name) ?? [];
-    list.push(new Matrix4().compose(new Vector3(x, field.heightAt(x, z) - 0.15, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), ry), new Vector3(1, 1, 1)));
+    list.push(new Matrix4().compose(new Vector3(x, y, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), ry), new Vector3(1, 1, 1)));
     settlementPlacements.set(name, list);
   };
   // (M22-06: 集落から船台への向きをやめ、船台から外海が最も開けた方位へ向ける)
   const toSea = Math.atan2(marks.slipwayBow.x, marks.slipwayBow.z);
   place('slipway', slip.x, slip.z, toSea);
   const c0 = marks.center;
-  place('hut', c0.x - 14, c0.z - 8, 0.4);
-  place('hut', c0.x + 12, c0.z - 12, -0.6);
-  place('hut', c0.x - 4, c0.z - 20, 0.1);
+  // (集落の建物の作り直しで変更: 小屋は戸口を広場へ向ける (元は 0.4 / −0.6 / 0.1 の向き)。位置は settlementLayout.ts の HUT_OFFSETS)
+  const huts = hutPlacements(c0, plaza, field.heightAt);
+  for (const h of huts) {
+    place('hut', h.x, h.z, h.ry, h.y);
+    for (const st of h.steps) place('stepping_stone', st.x, st.z, st.ry, field.heightAt(st.x, st.z) - 0.03);
+  }
   for (const l of marks.lanterns.slice(0, 5)) place('lantern_post', l.x + 3, l.z + 3, 0);
   place('megalith', c0.x - 12, c0.z + 6, 0.3);
   place('megalith', c0.x + 16, c0.z + 2, -0.2);
@@ -414,7 +499,44 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   place('woven_screen', c0.x + 9, c0.z - 7, -0.6);
   place('stone_wall_corner', c0.x - 22, c0.z - 18, 0.8);
   const side = { x: marks.slipwayBow.z, z: -marks.slipwayBow.x };
-  for (const [name, mats] of settlementPlacements) scene.add(instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats));
+  // 小屋・巨石・石垣もカメラの遮りに数える (舟の見上げのカメラが集落の中に立って巨石が画を覆ったため)。自動カメラは舟も数える (集落の俯瞰が舟の甲板の上に立ったため)
+  const settlement = new Group();
+  scene.add(settlement);
+  // (M23-09) 小屋の近い・遠い (hut と hut_lod1) の組。settlement の中に置くので、自動カメラの遮りの光線は今までどおり小屋に当たる
+  let hutSet: LodProps | null = null;
+  // (M23-09 の 3 回目で追加) 小屋でない部品の近い・遠いの組 (<名前>_lod1 があるもの)
+  const propSets: LodProps[] = [];
+  for (const [name, mats] of settlementPlacements) {
+    // (M23-09) 小屋は OPT.hut より先を遠距離版 hut_lod1 で描く (影は近い・遠いに依らず全部の小屋を hut_lod1 で落とす。M23-04 と同じ)
+    const far = name === 'hut' && OPT.hut > 0 ? findNode(settleGlb, 'hut_lod1') : null;
+    // (M23-09 のやり直しで追加) 影は hut_shadow (前の遠距離版、1,249 三角形) で落とす。遠距離版は 5 千三角形を超えたので影には重い (無ければ遠距離版)
+    const hutShadow = name === 'hut' ? (findNode(settleGlb, 'hut_shadow') ?? findNode(settleGlb, 'hut_lod1')) : null;
+    if (far) {
+      hutSet = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), far, mats, OPT.hut, mats.length, hutShadow, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
+      if (hutSet.shadow) shadowOnly.add(hutSet.shadow);
+      settlement.add(hutSet.group);
+      continue;
+    }
+    // (M23-09 の 3 回目で追加) 小屋でない部品は OPT.prop より先を遠距離版で描く (小屋と同じく置き場所ごとに揺らし、高さも入れた距離。影はそれぞれの形で落とす)
+    const propFar = name !== 'hut' && OPT.prop > 0 ? findNode(settleGlb, `${name}_lod1`) : null;
+    if (propFar) {
+      const set = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), propFar, mats, OPT.prop, mats.length, null, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
+      propSets.push(set);
+      settlement.add(set.group);
+      continue;
+    }
+    const g = instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats);
+    settlement.add(g);
+    // (M23-04) 小屋 (1 棟 10 千三角形) の影は遠い段 hut_lod1 (766 三角形) で落とす
+    const lod1 = name === 'hut' ? findNode(settleGlb, 'hut_lod1') : null;
+    if (!lod1) continue;
+    // (M23-09 のやり直しで追加) 影の形は hut_shadow (上と同じ)
+    const lod1Shadow = hutShadow ?? lod1;
+    g.traverse((o) => (o.castShadow = false));
+    const proxy = instanceProps(lod1Shadow, mats);
+    settlement.add(proxy);
+    shadowOnly.add(proxy);
+  }
   const pile = findNode(shipGlb, 'timber_pile');
   if (pile) {
     const px = slip.x + side.x * 9 - marks.slipwayBow.x * 3;
@@ -428,8 +550,29 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const z = (rng() * 2 - 1) * AREA_R * CELL_M;
     if (Math.hypot(x, z) <= AREA_R * CELL_M && field.heightAt(x, z) > 1.2) fireflyAt.push({ x, z });
   }
-  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), fireflyAt });
+  // (M22-07 の手直し、雨「屋根や地面での跳ね返りがない」) 跳ね返りを置く面の高さ: 小屋の近くは、近い形の小屋 (描かない複製) に真上から光線を落として焼いた屋根の高さ (render/roofs.ts)
+  const roofNode = findNode(settleGlb, 'hut');
+  const roofs = roofNode && settlementPlacements.get('hut')?.length ? instanceProps(roofNode, settlementPlacements.get('hut')!, false) : null;
+  // (M22-07 の 3 回目、雨「跳ね返りの対象を石垣と柱に広げて」) 石垣・灯り柱・立石・衝立の天端も、描かない複製に光線を落として焼く (置き場所ごとの四角の半幅 m)
+  const propReach: Record<string, number> = { stone_wall: 2.6, stone_wall_corner: 3.6, lantern_post: 1.4, megalith: 1.3, woven_screen: 2 };
+  const surfaceProps = Object.entries(propReach).flatMap(([name, reach]) => {
+    const node = findNode(settleGlb, name);
+    const mats = settlementPlacements.get(name);
+    return node && mats?.length ? [{ node: instanceProps(node, mats, false), reach, sites: mats.map((m) => new Vector3().setFromMatrixPosition(m)) }] : [];
+  });
+  const surface = createSurface(field.heightAt, huts, roofs, undefined, undefined, surfaceProps);
+  // (集落の建物の作り直しで変更: 小屋の炉にも灯りの溜まりを置く (夜に戸口から火の明かりがこぼれる。帆を失うと灯りと一緒に消える))
+  // (M22-07 の手直しで変更: 跳ね返りを置く面 (surfaceAt・roofPoints) を渡す)
+  const motes = createMotes({ rng, heightAt: field.heightAt, lanterns: [...marks.lanterns.slice(0, 5).map((l) => ({ x: l.x + 3, z: l.z + 3 })), ...huts.map((h) => h.hearth)], fireflyAt, surfaceAt: surface.at, roofPoints: surface.roofPoints, propPoints: surface.propPoints });
   scene.add(motes.group);
+  // (M22-07 の手直し、雨「水たまりと波紋がない」) 水たまり: 踏み固めた広場・道・小屋の戸口の窪み。置き場所は専用の乱数で決める (他の置き場所の乱数を動かさない)
+  const wornSpots = worn.flatMap((w) => {
+    const len = Math.hypot(w.bx - w.ax, w.bz - w.az);
+    const n = Math.max(1, Math.round(len / 5));
+    return Array.from({ length: n }, (_, i) => ({ x: w.ax + ((w.bx - w.ax) * (i + 0.5)) / n, z: w.az + ((w.bz - w.az) * (i + 0.5)) / n, r: w.r }));
+  });
+  const puddles = createPuddles(puddleSpots(wornSpots, field.heightAt, mulberry32(41), 16), field.heightAt);
+  scene.add(puddles.mesh);
   // 空の舟 (M22-06): 進みで段を切り替えて船台に載せる
   const shipView = createShipView(shipGlb, slip, toSea, field.heightAt(slip.x, slip.z) - 0.15);
   const shipState = s.ship ? { ...s.ship, ...(OPT.ship !== null ? { progress: OPT.ship } : {}), ...(OPT.launched || OPT.depart ? { launchedYear: s.year } : {}) } : null;
@@ -448,7 +591,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     if (sum > 0) K = { ...K, deer: OPT.deer / sum };
   }
   let targets = targetCounts(area, K, folk);
-  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50));
+  // (M23-04 で変更: 近くの骨入りの個体の影は群れ LOD で落とす)
+  // (M23-08 で変更: 遠い段に替える距離 OPT.cfar を渡す)
+  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50), (o) => shadowOnly.add(o), OPT.cfar);
   scene.add(creatures.group);
   let agents: AgentWorld = { agents: [], nextId: 1 };
   let credit = 0;
@@ -468,12 +613,16 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const elev0 = s.layers.elevation[home];
   water.setLevel(OPT.sink);
   grass.setLevel(OPT.sink);
+  // (M22-07 の手直し) 沈む海: 本体の沈降から決まる海面 seaTarget (と調整用の上げ seaExtra) へ、見せる海面 sea.level を上げていく
+  let seaTarget = OPT.sink;
+  let seaExtra = 0;
+  let sea: SurgeState = { level: OPT.sink, surge: 0, hold: 0 };
   const onSnapshot = (next: WorldSnapshot) => {
     snap = next;
     replant(next);
     const level = OPT.sink + Math.max(0, elev0 - next.layers.elevation[home]) * ELEV_M;
-    water.setLevel(level);
-    grass.setLevel(level);
+    // (M22-07 の手直しで変更: 海面はすぐには上げず、fx で SURGE_RATE m/s で追わせ、上がる間は波立ちと流れを見せる (沈む海岸「波立ちがない。流れが見えない。」))
+    seaTarget = level;
     area = extractArea(snap, home, AREA_R);
     targets = targetCounts(area, K, folkRuleFor(snap.civ, 3));
     building = !!snap.ship && snap.ship.launchedYear === undefined && (snap.civ?.stage ?? 0) >= 5;
@@ -490,8 +639,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     onSnapshot(clock.snapshot());
   };
 
-  const air = OPT.air ? new AtmospherePass(camera, sun) : null;
-  const grade = createGrade(renderer, scene, camera, air ? [air] : []);
+  // (M23-07 で変更: 空気の層は既定で場面の半分の大きさで描く (OPT.airScale))
+  const air = OPT.air ? new AtmospherePass(camera, sun, OPT.airScale) : null;
+  // (M23-07 で変更: 場面の MSAA の段を渡す)
+  const grade = createGrade(renderer, scene, camera, air ? [air] : [], { msaa: OPT.msaa });
   // 調整用 (M22-07): 開発者ツールから空気の層の uniform と時刻を触る
   (window as unknown as { __observeAir: unknown }).__observeAir = { air, sun, camera, controls, scene, renderer, heightAt: field.heightAt };
   grade.setEnabled({ grade: OPT.grade, bloom: OPT.bloom });
@@ -514,7 +665,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     controls.target.set(tx, ty + 1.2, tz);
     // (M22-03: 林の置き方が変わると寄せ先のカメラが樹冠に入るので、狙いとの間に木があれば向きを少しずつ振って見通しの良い所を探す。
     // どの向きも塞がっていれば、最初の向きで木の手前に寄せる)
-    const blockers = lods.map((l) => l.group);
+    const blockers = [...lods.map((l) => l.group), settlement];
     const place = (yw: number) => {
       const cx = tx + Math.sin(yw) * dist;
       const cz = tz + Math.cos(yw) * dist;
@@ -576,7 +727,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     shots.appendChild(b);
   }
   // 自動カメラ (M22-08): 場面の引き金・狩り・民・群れ・風景からショットを選び、触れば自由カメラ、20 秒触らなければ戻る
-  const shotCam = createShotCamera(camera, field.heightAt, () => lods.map((l) => l.group), AREA_R * CELL_M, mulberry32(31));
+  // 舟の見上げ以外は、舟を狙いより手前に映さない (集落の俯瞰が帆柱の真上に立ったため)
+  const shipBox = new Box3();
+  const shipBall = new Sphere();
+  const shipAvoid = (shot: Shot): AvoidZone[] => {
+    if (!shipView.node() || shot.kind === 'shipLookUp') return [];
+    shipBox.setFromObject(shipView.group);
+    if (shipBox.isEmpty()) return [];
+    shipBox.getBoundingSphere(shipBall);
+    return [{ x: shipBall.center.x, y: shipBall.center.y, z: shipBall.center.z, r: shipBall.radius }];
+  };
+  const shotCam = createShotCamera(camera, field.heightAt, () => [...lods.map((l) => l.group), settlement, shipView.group], AREA_R * CELL_M, mulberry32(31), shipAvoid);
   let director = initialDirector();
   let prevFrame: SceneFrame | null = null;
   let touched = !OPT.auto;
@@ -591,16 +752,22 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // 入った (start した) あとの最初の年表は、見る前の出来事として既読にするだけ (入るたびに昔の介入を再生しない)
   let baseline = true;
   let mist = 0;
+  // (M22-07 の手直し) 霧が立ってからの秒数。濃さと余韻は fx.ts の mistEnvelope が決める (MIST_S を過ぎたら消えている)
+  let mistAge = MIST_S;
   let mistAt = { x: 0, y: 0, z: 0 };
   let mistR = 20;
   let rain = 0;
   let rainLeft = 0;
-  const MIST_S = 90;
+  // (M22-07 の手直しで変更: 霧の長さ MIST_S (90 秒) は fx.ts に移した)
   const RAIN_S = 45;
+  // (M22-07 の手直し) 雨の濡れ (水たまりの広がり) と、波紋を動かす時刻
+  let wet = 0;
+  let fxTime = 0;
   const playScene = (e: SceneEvent) => {
     if (e.kind === 'sprout') motes.sprout(e.at, Math.max(1, e.radius) * CELL_M);
     else if (e.kind === 'mist') {
       mist = 1;
+      mistAge = 0;
       mistR = Math.max(12, e.radius * CELL_M);
       mistAt = { x: e.at.x, y: field.heightAt(e.at.x, e.at.z), z: e.at.z };
     } else if (e.kind === 'rain') rainLeft = RAIN_S;
@@ -611,16 +778,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let lamps = 1;
   let lampsTarget = 1;
   // 知らせの帯 (M22-08): 石板の警告・祈り・結末を、画面の上に控えめに出して 8 秒で消す
-  const band = document.createElement('div');
-  band.style.cssText = 'position:absolute;left:50%;top:14px;transform:translateX(-50%);max-width:min(560px,80%);padding:5px 14px;border-radius:14px;font:13px/1.5 system-ui,sans-serif;color:#F4F6F1;background:rgba(31,38,33,0.55);opacity:0;transition:opacity 1.2s;pointer-events:none;text-align:center';
-  canvas.parentElement?.appendChild(band);
-  let bandLeft = 0;
-  const notice = (e: TimelineEvent) => {
-    if (e.kind !== 'warning' && e.kind !== 'prayer' && e.kind !== 'verdict') return;
-    band.textContent = describeEvent(e, host.names ?? {});
-    band.style.opacity = '1';
-    bandLeft = 8;
-  };
+  // (M22-08 の手直しで変更: 帯の DOM・見た目・寿命は notice.ts へ移した。石板の銘板の見た目にし、続けて来た知らせは待たせて順に出す)
+  const band = createNoticeBand(canvas.parentElement ?? document.body, () => host.names ?? {});
+  const notice = (e: TimelineEvent) => band.push(e);
+  // 調整用: 開発者ツールから知らせを出す (__observeNotice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
+  (window as unknown as { __observeNotice: unknown }).__observeNotice = notice;
   // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
   const DEPART_S = 70;
   let departLeft = OPT.depart && OPT.auto ? DEPART_S : 0;
@@ -640,23 +802,49 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     return true;
   };
   const fx = (dt: number) => {
-    if (bandLeft > 0 && (bandLeft -= dt) <= 0) band.style.opacity = '0';
+    band.step(performance.now());
     if (lampsTarget === 0 && snap.ship && snap.civ && snap.civ.stage >= 5) lampsTarget = 1;
     lamps += (lampsTarget - lamps) * Math.min(1, dt / 3);
     motes.setLamps(lamps);
-    mist = Math.max(0, mist - dt / MIST_S);
-    air?.setMist(mistAt, mistR, mist);
+    // (M22-07 の手直しで変更: 霧の濃さは一様に薄めず、fx.ts の mistEnvelope (立ち上がり → 満ちる → 最後の 32 秒の余韻) で決める)
+    mistAge += dt;
+    const env = mistEnvelope(mistAge);
+    mist = env.amount;
+    // (M22-07 の 3 回目で変更: 地面の高さを渡し、霧を地形に沿わせる (atmosphere.ts が霧の下の高さの表を焼く))
+    air?.setMist(mistAt, mistR, mist, env.fade, field.heightAt);
     rainLeft = Math.max(0, rainLeft - dt);
     rain += ((rainLeft > 0 ? 1 : 0) - rain) * Math.min(1, dt / 4);
     motes.setRain(rain);
+    // (M22-07 の手直し) 雨の水たまり・海面の波紋
+    fxTime += dt;
+    // (審査台 23:54 の指摘で変更: 濡れはいま見えている雨の強さ rain で満ちる。降り始めに水たまりが雨より先に広がらない)
+    wet = wetness(wet, rainLeft > 0, dt, rain);
+    puddles.update(wet, rain, hemi.color, fxTime);
+    water.setRain(rain);
+    // (M22-07 の手直し) 沈む海: 海面を追わせ、上がる間の波立ちと流れ
+    sea = surgeStep(sea, seaTarget + seaExtra, dt);
+    water.setLevel(sea.level);
+    grass.setLevel(sea.level);
+    water.setSurge(sea.surge);
   };
   // 調整用: 開発者ツールから場面を起こす (__observeFx('sprout' | 'mist' | 'rain'))
-  (window as unknown as { __observeFx: unknown }).__observeFx = (kind: 'sprout' | 'mist' | 'rain') => {
+  // (M22-07 の手直しで変更: 'sinking' は海面を 1.5 m 上げる (本体の沈降の代わり)。上がる間は波立ちと流れが見える)
+  (window as unknown as { __observeFx: unknown }).__observeFx = (kind: 'sprout' | 'mist' | 'rain' | 'sinking') => {
     const at = marks.grove ?? marks.center;
     if (kind === 'sprout') playScene({ kind, year: snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
     else if (kind === 'mist') playScene({ kind, year: snap.year, cell: home, at, radius: 4 });
+    else if (kind === 'sinking') seaExtra += 1.5;
     else playScene({ kind, year: snap.year });
   };
+  // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__observeLook('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
+  (window as unknown as { __observeLook: unknown }).__observeLook = (at: string | { x: number; z: number }, dist = 6, height = 1.2, yaw = 0) => {
+    const c = typeof at === 'string' ? centroid(at) : at;
+    if (c) lookFrom(c.x, c.z, dist, height, yaw);
+  };
+  // (M23-09) 調整用: 小屋の置き場所 (遠距離版への切り替えを寄せ引きで確かめる)
+  (window as unknown as { __observeHuts: unknown }).__observeHuts = () => huts.map((h) => ({ x: h.x, y: h.y, z: h.z, ry: h.ry }));
+  // (M23-09 の 3 回目で追加) 調整用: 集落の部品の名前と置き場所
+  (window as unknown as { __observeProps: unknown }).__observeProps = () => [...settlementPlacements].map(([name, ms]) => ({ name, at: ms.map((m) => [m.elements[12], m.elements[13], m.elements[14]]) }));
   const direct = (dt: number) => {
     const frame = sceneFrame(snap, area);
     const scenes = detectScenes(prevFrame, frame, newEvents, area);
@@ -705,6 +893,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const down = { x: 0, y: 0 };
   const proj = new Vector3();
   // 試験用 (E2E): 個体の画面上の位置 (canvas の左上から px)。画面の外・カメラの後ろなら null
+  // 軽量化の試算用: 区分ごとの三角形の内訳 (render/breakdown.ts)。__observeBreakdown() を開発者ツールから呼ぶ
+  (window as unknown as { __observeBreakdown: unknown }).__observeBreakdown = () =>
+    triangleBreakdown(camera, { terrain: [terrain], water: [water.mesh], grass: [grass.mesh], belltree: lods.filter((l) => l !== forestSet).map((l) => l.group), forest: forestSet ? [forestSet.group] : [], settlement: [settlement], ship: [shipView.group], creatures: [creatures.group] }, scene);
   (window as unknown as { __observeScreen: unknown }).__observeScreen = (id: number) => {
     const a = agents.agents.find((g) => g.id === id);
     if (!a) return null;
@@ -742,8 +933,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let frames = 0;
   let acc = 0;
   let fps = 0;
+  // (M23-07) 動的な解像度。倍率は renderer のピクセル比に掛ける (ピクセル比 2 の画面は 0.5 = CSS の画素まで、1 の画面は 0.7 まで下げる)
+  const dynres = OPT.dynres ? createDynamicResolution({ min: renderer.getPixelRatio() >= 1.5 ? 0.5 : 0.7 }) : null;
   const loop = () => {
     const now = performance.now();
+    if (dynres) grade.setPixelRatio(renderer.getPixelRatio() * dynres.update(now - last));
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     t += dt;
@@ -776,13 +970,18 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     }
     fx(dt);
     agents = stepAgents(agents, { area, marks, night: day.night > 0.6, building, launched: false, targets }, dt, arng);
-    creatures.update(agents.agents, camera, field.heightAt, t, dt);
     motes.update(t, dt, day.night, camera, controls.target, agents.agents);
-    for (const l of lods) l.update(camera);
     water.update(t);
     shipView.update(t);
-    grass.update(t, camera.position);
     direct(dt);
+    // (M23-02 で変更: 視錐台で落とすもの (群れ・木・下草・草) は、このコマのカメラが決まった後 (direct の後) に更新する。前だと寄せ先へ切り替えた最初のコマが前の画の視錐台で描かれる)
+    creatures.update(agents.agents, camera, field.heightAt, t, dt);
+    for (const l of lods) l.update(camera);
+    hutSet?.update(camera);
+    stumpSet?.update(camera);
+    for (const p of propSets) p.update(camera);
+    for (const u of understory) u.update(camera);
+    grass.update(t, camera.position, camera);
     renderer.info.autoReset = false;
     renderer.info.reset();
     grade.render(dt);
@@ -794,11 +993,11 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       (window as unknown as { __observeStats: unknown }).__observeStats = st;
       (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       if (host.debug === false) stats.textContent = `${st.year} 年`;
-      else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
+      else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps${st.res < 1 ? ` (解像度 ×${st.res})` : ''} · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
     }
     if (running) handle = requestAnimationFrame(loop);
   };
@@ -825,6 +1024,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     stop() {
       running = false;
       cancelAnimationFrame(handle);
+    },
+    cameraMode() {
+      if (director.mode === 'auto') return 'auto';
+      return followId !== null ? 'follow' : 'free';
     },
   };
 }

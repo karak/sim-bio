@@ -4,6 +4,7 @@
   ~/.claude/skills/blender/scripts/run_blender.sh tools/blender/observe_deer.py -- assets/models/observe
 出力: <out_dir>/deer.glb と deer.blend
   - メッシュ `deer` (近 LOD、~3,000 三角形)、`deer_lod1` (群れ LOD、~900)、`deer_doe` (角の無い雌、近 LOD と同じ密度)。3 つとも同じアーマチュア `deer_rig` にスキン
+  - (M23-08) メッシュ `deer_far` (遠い段、~210 三角形): 群れ LOD を島ごとに削った形 (creature_far.py)。光る角・脚・装甲板は多く残す。描画は切ってある (hide_render)
   - アクション idle (4 s)・walk (1.2 s)・run (0.6 s)・graze (5 s)・fall (2 s、ループしない)。30 fps、その場 (root は動かさない)
   - 材質 deer_body (頂点色で腹・喉・耳の内側を淡く) / deer_plate / deer_hoof / deer_antler_base / deer_glow (発光 #8FF5E6)
 基準画: assets/textures/board/creatures/deer.png (承認済み)。造形の元は assets/textures/concept/deer-angular.png と tools/blender/deer.py (ローポリ版)。
@@ -31,6 +32,9 @@ import bmesh
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from creature_far import build_far  # noqa: E402  (M23-08)
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT_DIR = argv[0] if argv else "assets/models/observe"
@@ -69,11 +73,24 @@ PAL = {k: lin(v) for k, v in {
     "hoof": "#1F4B47",
     "antler_base": "#24514C",
     "glow": "#8FF5E6",
+    # (月鹿の手直しで追加) 装甲板の面取りと角の稜のハイライト (基準画の板の縁は明るい青緑、角の稜は白に近い光)
+    "plate_hi": "#62A396",
+    "glow_hi": "#E2FFFA",
+    # (月鹿の手直し 3 で追加) 角の内側の面 (明るい) と外側の面 (暗い青緑)。基準画 creatures/deer.png の角の寄りから
+    "glow_in": "#A8F5EC",
+    "glow_lo": "#58BAB6",
+    # (月鹿の手直し 4 で追加) 眼窩・頬の窪みの底の陰 (基準画 creatures/deer.png の正面、目のまわりから鼻づらの脇へ下がる濃い面)
+    "socket": "#A5773F",
 }.items()}
 WHITE = (1.0, 1.0, 1.0)
 
 BODY, PLATE, HOOF, ABASE, GLOW = range(5)
 MAT_NAMES = ["deer_body", "deer_plate", "deer_hoof", "deer_antler_base", "deer_glow"]
+PLATE_HI, GLOW_HI = 5, 6  # (月鹿の手直しで追加) 装甲板の面取りのハイライト・角の稜の光
+MAT_NAMES += ["deer_plate_hi", "deer_glow_hi"]
+# (月鹿の手直し 3 で追加) 角の内側 (曲がりの内) の明るい面と、外側の暗い面 (基準画の角の面の明暗)
+GLOW_IN, GLOW_LO = 7, 8
+MAT_NAMES += ["deer_glow_in", "deer_glow_lo"]
 
 
 def make_materials():
@@ -85,7 +102,8 @@ def make_materials():
         bsdf = nt.nodes["Principled BSDF"]
         bsdf.inputs["Roughness"].default_value = 0.8
         bsdf.inputs["Specular IOR Level"].default_value = 0.0
-        key = {"deer_body": "fur", "deer_plate": "plate", "deer_hoof": "hoof", "deer_antler_base": "antler_base", "deer_glow": "glow"}[name]
+        key = {"deer_body": "fur", "deer_plate": "plate", "deer_hoof": "hoof", "deer_antler_base": "antler_base", "deer_glow": "glow",
+               "deer_plate_hi": "plate_hi", "deer_glow_hi": "glow_hi", "deer_glow_in": "glow_in", "deer_glow_lo": "glow_lo"}[name]
         rgb = PAL[key]
         bsdf.inputs["Base Color"].default_value = (*rgb, 1)
         m.diffuse_color = (*rgb, 1)
@@ -95,6 +113,12 @@ def make_materials():
             vc.layer_name = "Col"
             nt.links.new(vc.outputs["Color"], bsdf.inputs["Base Color"])
         if name == "deer_glow":
+            bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
+            bsdf.inputs["Emission Strength"].default_value = 1.0
+        if name == "deer_glow_hi":  # (月鹿の手直しで追加) 角の稜: deer_glow と同じ強さで白に近い色
+            bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
+            bsdf.inputs["Emission Strength"].default_value = 1.0
+        if name in ("deer_glow_in", "deer_glow_lo"):  # (月鹿の手直し 3 で追加) 角の内側・外側の面: deer_glow と同じ強さ
             bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
             bsdf.inputs["Emission Strength"].default_value = 1.0
         mats.append(m)
@@ -205,8 +229,10 @@ def cap(bm, rng, mat=BODY):
     return f
 
 
-def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
-    """折れ線に沿ったチューブ (角・枝・尾)。tip=True で最後を 1 点に収束。flat で断面を横 (X) 方向に潰す"""
+def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0, ridge=0.0):
+    """折れ線に沿ったチューブ (角・枝・尾)。tip=True で最後を 1 点に収束。flat で断面を横 (X) 方向に潰す
+    (月鹿の手直しで追加: ridge (ラジアン) > 0 は断面の上側の角 (断面の上向き v の側、sin > 0.5 の 2 つ) を ±ridge の 2 点に割り、
+    角に細い稜の面を立てて deer_glow_hi (白に近い光) にする。基準画の角の縁のハイライト。断面の頂点は n + 2 になる)"""
     rings = []
     for i, (p, r) in enumerate(zip(pts, radii)):
         if tip and i == len(pts) - 1:
@@ -215,8 +241,90 @@ def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
         d = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
         u = (Z.cross(d) if abs(d.z) < 0.9 else X.cross(d)).normalized()
         v = d.cross(u).normalized()
+        if ridge > 0:
+            vs = []
+            for k in range(n):
+                a0 = 2 * math.pi * k / n + phase
+                for a in ((a0 - ridge, a0 + ridge) if math.sin(a0) > 0.5 else (a0,)):
+                    vs.append(bm.verts.new(p + u * (r * flat * math.cos(a)) + v * (r * math.sin(a))))
+            rings.append(vs)
+            continue
         rings.append(ring(bm, p, u, v, r * flat, r, r, n, phase=phase))
     faces = loft(bm, rings, mat=mat, mats=mats)
+    if ridge > 0:  # (月鹿の手直しで追加) 稜の面 (割った 2 点のあいだの帯) の光る面を deer_glow_hi に
+        slots, j = [], 0
+        for k in range(n):
+            if math.sin(2 * math.pi * k / n + phase) > 0.5:
+                slots.append(j)
+                j += 2
+            else:
+                j += 1
+        per = j
+        for idx, f in enumerate(faces):
+            if idx % per in slots and f.material_index == GLOW:
+                f.material_index = GLOW_HI
+    faces.append(cap(bm, list(reversed(rings[0])), mats[0] if mats else mat))
+    if not tip:
+        faces.append(cap(bm, rings[-1], mats[-1] if mats else mat))
+    return faces
+
+
+# (月鹿の手直し 3 で追加) 角のハイライトの再現 (審査台 d2-deer「つののハイライトの再現率を上げて」)。基準画の角は面の立った刃で、
+# 曲がりの内側 (三日月の内) を向く面が明るく、その両の縁が白く光り、外側の面は暗い青緑。近 LOD の角は断面を曲がりの内へ向けて組み、
+# 内の面を deer_glow_in、その両の縁の細い帯を deer_glow_hi、内寄りの横の 2 面を deer_glow、外の 3 面を deer_glow_lo にする
+ANTLER_LIT = True
+ANTLER_EDGE = math.radians(8)  # 内の面の縁の帯の半幅 (断面の角度)
+
+
+def bend_dirs(pts):
+    """(月鹿の手直し 3 で追加) 折れ線の各点で曲がりの内 (曲率の中心) の向き。端と曲がらない所は隣の値を引き継ぎ、隣と平均してなめらかにする"""
+    m = len(pts)
+    tans = [(pts[min(i + 1, m - 1)] - pts[max(i - 1, 0)]).normalized() for i in range(m)]
+    raw = [None] * m
+    for i in range(1, m - 1):
+        c = pts[i - 1] + pts[i + 1] - pts[i] * 2
+        c -= tans[i] * c.dot(tans[i])
+        if c.length > 1e-6:
+            raw[i] = c.normalized()
+    known = [i for i in range(m) if raw[i] is not None]
+    if not known:
+        ref = Z - tans[0] * Z.dot(tans[0])
+        return tans, [ref.normalized()] * m
+    for i in range(m):
+        if raw[i] is None:
+            raw[i] = raw[min(known, key=lambda j: abs(j - i))]
+    out = []
+    for i in range(m):
+        k = raw[max(i - 1, 0)] + raw[i] * 2 + raw[min(i + 1, m - 1)]
+        k -= tans[i] * k.dot(tans[i])
+        k = k.normalized() if k.length > 1e-6 else raw[i]
+        if out and k.dot(out[-1]) < 0:
+            k = out[-1] - tans[i] * out[-1].dot(tans[i])  # 曲がりが反る所は前の向きを保つ (断面をねじらない)
+            k.normalize()
+        out.append(k)
+    return tans, out
+
+
+def tube_lit(bm, pts, radii, mats=None, mat=GLOW, tip=True):
+    """(月鹿の手直し 3 で追加) 曲がりの内へ 1 つの面を向けた 6 角の断面のチューブ (内の面の両の角を割って 8 頂点)。
+    面の並び: 0 内の面 / 1 縁 / 2 内寄りの横 / 3〜5 外 / 6 内寄りの横 / 7 縁。mats[i] が GLOW の帯だけ面ごとに光の材質を分ける"""
+    tans, bends = bend_dirs(pts)
+    e = ANTLER_EDGE
+    angs = [-math.pi / 6 + e, math.pi / 6 - e, math.pi / 6 + e, math.pi / 2, 5 * math.pi / 6, 7 * math.pi / 6, 3 * math.pi / 2,
+            11 * math.pi / 6 - e]
+    rings = []
+    for i, (p, r) in enumerate(zip(pts, radii)):
+        if tip and i == len(pts) - 1:
+            rings.append(bm.verts.new(p))
+            continue
+        e1 = bends[i]
+        e2 = tans[i].cross(e1).normalized()
+        rings.append([bm.verts.new(p + e1 * (r * math.cos(a)) + e2 * (r * math.sin(a))) for a in angs])
+    faces = loft(bm, rings, mat=mat, mats=mats)
+    by_slot = {0: GLOW_IN, 1: GLOW_HI, 2: GLOW, 3: GLOW_LO, 4: GLOW_LO, 5: GLOW_LO, 6: GLOW, 7: GLOW_HI}
+    for idx, f in enumerate(faces):
+        if f.material_index == GLOW:
+            f.material_index = by_slot[idx % len(angs)]
     faces.append(cap(bm, list(reversed(rings[0])), mats[0] if mats else mat))
     if not tip:
         faces.append(cap(bm, rings[-1], mats[-1] if mats else mat))
@@ -226,6 +334,18 @@ def tube(bm, pts, radii, n, mats=None, mat=GLOW, tip=True, phase=0.0, flat=1.0):
 # ---------------------------------------------------------------- LOD の密度
 HERO = dict(name="hero", body=(15, 16), neck=(7, 12), head=(10, 12), leg=(12, 8), hoof=8, antler=(12, 6), tine=(3, 6),
             ear=(4, 8), tail=(3, 6), plate_chaikin=True, ribbon_seg=12, eye=12, sq=2.4)  # (M22-05 残りの手直しで変更: eye 10 → 12、目尻の尖りを出す)
+def far_ratio(c, mats, n):
+    """(M23-08) 遠い段で群れ LOD の島を削る割合 (creature_far.build_far)。光る角 (1.9 m より上) は半分残し、胴の光る帯と目は除く。
+    脚 (蹄の材質を持つ島。鼻の暗い色を持つ頭も入る) は関節の曲がりが読めるよう 3 割、装甲板は色の斑が残るよう 35%、胴・首・耳・尾は 2 割"""
+    if "deer_glow" in mats:
+        return 0.5 if c.z > 1.9 else 0.0
+    if "deer_hoof" in mats:
+        return 0.3
+    if "deer_plate" in mats:
+        return 0.35
+    return 0.2
+
+
 LOD1 = dict(name="lod1", body=(7, 10), neck=(4, 8), head=(6, 8), leg=(6, 5), hoof=0, antler=(6, 4), tine=(2, 4),
             ear=(2, 4), tail=(2, 4), plate_chaikin=False, ribbon_seg=4, eye=4, sq=2.2)
 
@@ -296,16 +416,449 @@ HEAD_KEYS = [
 ]
 NOSE_Y = -1.152
 
+# (月鹿の手直し 3 で追加) 顔の面 (審査台 d2-deer「正面がで👀がみえるように鼻筋を通して頬や眼窩の部分も設ける」)。
+# 基準画の正面は、額から鼻先へ明るい鼻筋が細く通り、その両脇の眼窩の面に目が前を向いて収まる。頬は目の下・外で張り、鼻づらは目の前で細くなる。
+# 近 LOD (雄・雌) の頭は、超楕円の代わりに角を持つ断面 (head_corners_face) で組む: 鼻筋の縁・眼窩の上の縁 (眉)・頬の張り・顎の縁。
+# 眼窩の上の縁は目の前 (鼻先の側) で内へ寄せ (HEAD_ORBIT_IN)、目の載る面を前へ向ける。目はその面へ前寄りの向きから載せる (EYE_FACE_DIR)
+HEAD_FACE = True
+HEAD_FACE_PAIRS = [False, True, False, True, False, False]
+HEAD_ORBIT_IN = 0.30  # 眼窩の上の縁を目の前で内へ寄せる割合
+EYE_FACE_DIR = (0.80, -0.58, 0.10)  # 目を載せる向き (x は side を掛ける)。前は真横 (1, 0, 0)
+EYE_FACE_AT = (-0.855, 1.853)  # 目を載せる狙いの (y, z)
+EYE_FACE_TILT = 0.42  # 目の長軸の前下がり (前は 0.25)
+EYE_FACE_SCALE = 1.12  # 目の大きさ (近 LOD の EYE_HI の形に掛ける)
+# 硬いエッジにする断面の頂点 (facet_ring の並び: 0 頭頂、1-2 / 13-12 鼻筋の縁、3 / 11 眼窩の上の縁、4-5 / 10-9 頬の張り、6 / 8 顎の縁、7 顎の下)
+HEAD_FACE_SHARP = (1, 2, 12, 13, 3, 11, 4, 5, 9, 10)
+HEAD_FACE_SHARP_Y = -0.66  # これより前 (鼻先の側) の断面のあいだだけ (後頭部はなめらか)
+
+
+def facet_ring(bm, center, ux, uy, corners, pairs, bevel=0.2):
+    """(月鹿の手直し 3 で追加) 面の立った断面のリング (observe_rabbit.py の facet_ring と同じ)。corners は右半分の角を上から下へ。
+    pairs[i] が真の角は 2 点 (両隣の辺へ bevel の割合だけ寄せる)。並びは上 → -ux の側 → 下 → +ux の側"""
+    pts = [corners[0]]
+    for i in range(1, len(corners) - 1):
+        c = Vector(corners[i])
+        if pairs[i]:
+            a, b = Vector(corners[i - 1]), Vector(corners[i + 1])
+            pts += [tuple(c + (a - c) * bevel), tuple(c + (b - c) * bevel)]
+        else:
+            pts.append(tuple(c))
+    pts.append(corners[-1])
+    loop = [(-x, y) for x, y in pts] + [(x, y) for x, y in reversed(pts[1:-1])]
+    return [bm.verts.new(center + ux * x + uy * y) for x, y in loop]
+
+
+def head_corners_face(rx, rt, rb, pinch, y):
+    """(月鹿の手直し 3 で追加) 頭の断面の角 (右半分、上から下): 頭頂・鼻筋の縁・眼窩の上の縁・頬の張り・顎の縁・顎の下"""
+    bridge = 0.40 - 0.12 * smoothstep(-0.80, -1.05, y)
+    orbit = 1.0 - HEAD_ORBIT_IN * smoothstep(-0.78, -0.95, y) * (1 - smoothstep(-1.02, -1.12, y))
+    rx *= 1.04
+    return [(0.0, rt), (bridge * rx, 0.97 * rt), (0.80 * rx * orbit, 0.58 * rt), (rx, -0.22 * rb),
+            (0.62 * rx * (1 - 0.5 * pinch), -0.80 * rb), (0.0, -rb)]
+
+
+# (月鹿の手直し 4 で追加) 顔の尖りを和らげる (審査台 d3-deer「顔が全体的に尖りすぎている。シルエット自体は間違っていない。が、頬や眼窩はもっと
+# 正面に対して平坦になる。デザイン画のように窪み領域を入れたほうがよい。また、穏やかさを称えた口元を鼻とセットで。」)。
+# 基準画 creatures/deer.png の正面は、額・眼窩・頬が正面を向く広い面で、輪郭は V でなく U (鼻づらの先の幅は目の高さの幅の 6 割)。
+# concept/deer-angular.png は目が一段下がった面 (上の縁は眉の稜、下の縁は目の下から後ろ下へ下がる頬の線) に収まる。
+# 鼻は逆三角の暗い面、その下に短い人中と、口角の少し上がった口の線。
+# 側面の輪郭 (各断面の上下の高さ y, zc, rt, rb) は HEAD_KEYS のまま変えず、横の幅と断面の角だけを組み直す。
+HEAD_FACE4 = True
+HEAD4_NSEC = 12  # 近 LOD の頭の断面の数 (前は 10。窪みの前後の縁を出す)
+# 横の半幅 (y, rx)。目の高さは広く、目の前で急に絞って (眼窩の面が前を向く)、鼻づらは平行に近い幅で先まで (V でなく U)。前は HEAD_KEYS の rx
+HEAD4_RX = [(-0.50, 0.06), (-0.545, 0.15), (-0.64, 0.178), (-0.76, 0.174), (-0.84, 0.166), (-0.90, 0.146), (-0.97, 0.114), (-1.05, 0.101),
+            (-1.13, 0.092), (-1.165, 0.078)]
+HEAD4_SOCKET = (0.006, 0.014)  # 窪みの深さ (一様、目の前ほど深く = 窪みの底が前を向く)
+HEAD4_SOCKET_Y = (-0.73, -0.785, -0.93, -0.99)  # 窪みの後ろの縁 (立ち上がり)・前の縁 (立ち上がり)
+HEAD4_TIP = 0.62  # 鼻先の断面の縮め (前は 1 点に収束して尖っていた。平らな面で閉じる)
+HEAD4_PAIRS = [False, True, False, False, False, False, False, False]
+# facet_ring の並び: 0 頭頂、1-2 / 15-14 鼻筋の縁、3 / 13 眉の稜 (窪みの上の縁)、4-5 / 12-11 窪みの底、6 / 10 頬の線 (窪みの下の縁)、7 / 9 顎の縁、8 顎の下
+HEAD4_SHARP = (1, 2, 15, 14, 3, 13, 4, 12, 5, 11, 6, 10)
+EYE4_AT = (-0.862, 1.846)  # 目を載せる狙いの (y, z)
+EYE4_DIR = (1.0, -0.30, 0.08)  # 狙いへ向かう視線 (x は side を掛ける)
+EYE4_DRAPE = 0.15  # 目の頂点を落とす始点の高さ (目の向きに沿って)
+HEAD4_TONE = {"shade": 0.75, "lit": 0.8}  # 窪みの底の陰・縁の明るさの強さ
+HEAD_TONE = {}  # 頂点の位置 → (塗りの名前, 強さ)。build_head4 が付け、color_for が読む
+
+
+def head4_rx(y):
+    ks = HEAD4_RX
+    if y >= ks[0][0]:
+        return ks[0][1]
+    for (ya, ra), (yb, rb) in zip(ks, ks[1:]):
+        if ya >= y >= yb:
+            t = (ya - y) / (ya - yb)
+            return ra + (rb - ra) * (t * t * (3 - 2 * t))
+    return ks[-1][1]
+
+
+def head4_window(y):
+    a, b, c, d = HEAD4_SOCKET_Y
+    return smoothstep(a, b, y) * (1 - smoothstep(c, d, y))
+
+
+def head_corners_face4(rx, rt, rb, pinch, y):
+    """(月鹿の手直し 4 で追加) 頭の断面の角 (右半分、上から下): 頭頂・鼻筋の縁・眉の稜・窪みの底 (上・下)・頬の線・顎の縁・顎の下。
+    戻り値は (角の列, 各角の塗り)"""
+    rx = head4_rx(y)
+    win = head4_window(y)
+    dep = (HEAD4_SOCKET[0] + HEAD4_SOCKET[1] * smoothstep(-0.76, -0.96, y)) * win
+    bridge = 0.44 - 0.08 * smoothstep(-0.80, -1.05, y)
+    orbit = 1.0 - 0.16 * smoothstep(-0.78, -0.95, y) * (1 - smoothstep(-1.02, -1.12, y))
+    brow = Vector((0.94 * rx * orbit, 0.72 * rt))
+    cheek = Vector((rx * (1 - 0.05 * smoothstep(-0.93, -1.05, y)), -(0.50 - 0.40 * smoothstep(-0.72, -0.95, y)) * rb))  # 頬の線は前ほど高い (目の下から後ろ下へ)
+    up, lo = brow.lerp(cheek, 0.07), brow.lerp(cheek, 0.84)
+    up.x -= dep
+    lo.x -= dep
+    corners = [(0.0, rt), (bridge * rx, 0.97 * rt), tuple(brow), tuple(up), tuple(lo), tuple(cheek),
+               (0.66 * rx * (1 - 0.4 * pinch), -0.80 * rb), (0.0, -rb)]
+    tones = [None, None, ("lit", 0.55 * win), ("shade", win), ("shade", win), ("lit", 0.35 * win), None, None]
+    return corners, tones
+
+
+# (月鹿の手直し 5 で追加) 細い鼻筋と正面寄りの眼窩 (審査台 d4-deer「鼻筋はもっと細く、眼窩の角度はもっと正面向きよりで良い。
+# 正面からみたときに鼻筋と両眼が３分割くらい。」)。基準画 creatures/deer.png の正面は、目の高さの顔の幅を左の目・鼻筋・右の目がおよそ分け合い、
+# 目は前・外を向く面に載る。頭の断面の上の半分 (鼻筋・眉の稜・窪み・頬の線) の横の幅を別の表 (HEAD5_UP) にし、目のところで急に絞る
+# (眼窩の面が前へ約 45° 向く)。目の前の鼻筋は細く、鼻の載る鼻先で少し戻す。下の半分 (新しい頬の張り・顎の縁) は手直し 4 の幅 (HEAD4_RX) の
+# ままにして、正面の U の輪郭を保つ。側面の輪郭 (HEAD_KEYS の上下の高さ) は変えない。
+HEAD_FACE5 = True
+HEAD5_NSEC = 16  # 近 LOD の頭の断面の数 (前は 12。目のところの急な絞りを面で受ける)
+HEAD5_UP = [(-0.64, 0.178), (-0.76, 0.174), (-0.80, 0.168), (-0.895, 0.058), (-1.00, 0.054), (-1.06, 0.058), (-1.12, 0.070), (-1.165, 0.064)]
+HEAD5_BRIDGE = (0.52, 0.44)  # 鼻筋の縁の半幅: 上の幅に対する割合、下の幅に対する上限の割合
+# facet_ring の並び: 0 頭頂、1-2 / 17-16 鼻筋の縁、3 / 15 眉の稜、4-5 / 14-13 窪みの底、6 / 12 頬の線、7 / 11 頬の張り、8 / 10 顎の縁、9 顎の下
+HEAD5_SHARP = (1, 2, 17, 16, 3, 15, 4, 14, 5, 13, 6, 12)
+HEAD5_CHEEK = (6, 12)  # 頬の線 (窪みの前で硬いエッジを消す)
+EYE5_AT = (-0.723, 1.833)  # 目を載せる狙いの (y, z)。視線 EYE5_DIR が眼窩の面の中ほどに当たる
+EYE5_DIR = (0.72, -0.69, 0.08)  # 狙いへ向かう視線 (x は side を掛ける)。前は (1.0, -0.30, 0.08)
+EYE5_TILT = 0.15  # 目の長軸の前下がり。面が前を向いた分だけ正面での傾きが増えるので、前 (0.42) より小さく
+HEAD5_UP_SHADE = 0.0  # 窪みの底の上の角の陰の強さ (前は 1。面が前を向くと目の上の陰が眉をしかめた線に読めるので、陰は目の下と脇に寄せる)
+HEAD5_LO_SHADE = 0.7  # 窪みの底の下の角の陰の強さ (前は 1。前を向いた面は光を受けて窪みの形で読めるので、塗りの陰は控えめに)
+
+
+def head5_up(y):
+    ks = HEAD5_UP
+    if y >= ks[0][0]:
+        return ks[0][1]
+    for (ya, ra), (yb, rb) in zip(ks, ks[1:]):
+        if ya >= y >= yb:
+            return ra + (rb - ra) * (ya - y) / (ya - yb)
+    return ks[-1][1]
+
+
+def head_corners_face5(rx, rt, rb, pinch, y):
+    """(月鹿の手直し 5 で追加) 頭の断面の角 (右半分、上から下): 頭頂・鼻筋の縁・眉の稜・窪みの底 (上・下)・頬の線・頬の張り・顎の縁・顎の下。
+    上の半分は HEAD5_UP の幅、頬の張りから下は HEAD4_RX の幅。戻り値は (角の列, 各角の塗り)"""
+    lo_w = head4_rx(y)
+    up_w = min(head5_up(y), lo_w)
+    win = head4_window(y)
+    dep = (HEAD4_SOCKET[0] + HEAD4_SOCKET[1] * smoothstep(-0.76, -0.96, y)) * win
+    s = smoothstep(-0.72, -0.95, y)
+    bridge = min(HEAD5_BRIDGE[0] * up_w, HEAD5_BRIDGE[1] * lo_w)
+    brow = Vector((0.94 * up_w, 0.72 * rt))
+    cheek = Vector((min(lo_w, 1.02 * up_w), -(0.50 - 0.40 * s) * rb))
+    up, lo = brow.lerp(cheek, 0.07), brow.lerp(cheek, 0.84)
+    up.x -= dep
+    lo.x -= dep
+    jowl = (lo_w, -(0.62 - 0.17 * s) * rb)
+    corners = [(0.0, rt), (bridge, 0.97 * rt), tuple(brow), tuple(up), tuple(lo), tuple(cheek), jowl,
+               (0.66 * lo_w * (1 - 0.4 * pinch), -0.80 * rb), (0.0, -rb)]
+    tones = [None, None, ("lit", 0.55 * win), ("shade", HEAD5_UP_SHADE * win), ("shade", HEAD5_LO_SHADE * win), ("lit", 0.35 * win), None, None, None]
+    return corners, tones
+
+
+def build_head4(bm, lod):
+    """(月鹿の手直し 4 で追加) 近 LOD の頭: head_corners_face4 の断面のロフト。鼻先は縮めた断面を平らな面で閉じる (尖らせない)"""
+    secs = resample(HEAD_KEYS, HEAD5_NSEC if HEAD_FACE5 else HEAD4_NSEC)  # (月鹿の手直し 5 で変更: 断面 12 → 16)
+    rings = []
+    for y, zc, rx, rt, rb, pinch in secs:
+        corners, tones = (head_corners_face5 if HEAD_FACE5 else head_corners_face4)(rx, rt, rb, pinch, y)  # (月鹿の手直し 5 で変更)
+        rg = facet_ring(bm, Vector((0, y, zc)), X, Z, corners, HEAD4_PAIRS, bevel=0.18)
+        tl = [tones[0]] + [tones[1]] * 2 + tones[2:-1] + [tones[-1]]
+        tl = tl + list(reversed(tl[1:-1]))
+        for v, t in zip(rg, tl):
+            if t and t[1] > 0.02:
+                HEAD_TONE[tuple(round(c, 4) for c in v.co)] = t
+        rings.append(rg)
+    y, zc = secs[-1][0], secs[-1][1]
+    tip = [bm.verts.new(Vector((0, y - 0.012, zc)) + (v.co - Vector((0, y, zc))) * HEAD4_TIP) for v in rings[-1]]
+    for v in tip:
+        v.co.y = y - 0.012
+    back = bm.verts.new((0, secs[0][0] + 0.012, secs[0][1]))
+    loft(bm, [back] + rings + [tip])
+    cap(bm, tip)
+    for (ya, ra), (yb, rb_) in zip(zip([q[0] for q in secs], rings), zip([q[0] for q in secs[1:]] + [y - 0.012], rings[1:] + [tip])):
+        if max(ya, yb) > HEAD_FACE_SHARP_Y:
+            continue
+        for j in (HEAD5_SHARP if HEAD_FACE5 else HEAD4_SHARP):  # (月鹿の手直し 5 で変更: 断面に頬の張りの角が増えた分、並びがずれる)
+            if j in (HEAD5_CHEEK if HEAD_FACE5 else (6, 10)) and min(ya, yb) < HEAD4_SOCKET_Y[3]:
+                continue  # 頬の線の角は窪みの前で消す (正面から見て鼻づらの脇に棚が立たない)
+            e = bm.edges.get((ra[j], rb_[j]))
+            if e is not None:
+                e.smooth = False
+
+
+# (月鹿の手直し 4 で追加) 鼻と口。鼻は正面から見た逆三角 (上の辺は緩い山、角は丸く、下は人中へ尖る)。前上から頭の面へ投影する。
+# 口は人中から左右へ、鼻づらの脇を後ろへ回って口角で少し上がる線 (穏やかな口元)。どちらも deer_hoof (鼻と同じ暗い青緑)
+NOSE4 = dict(w=0.060, top=1.805, bot=1.750, arch=0.006, round=0.35, dir=(0, 1, -0.38), off=0.005)
+# 口の線: (軸からの向き φ 度 (0 = 正面、90 = 真横)、狙いの y, z)。人中は鼻の下の角から口の真ん中へ。左右の口の線は真ん中を少し越えて重ねる (継ぎ目に隙間を残さない)
+MOUTH4_PHILTRUM = [(0, -1.10, 1.752), (0, -1.10, 1.716)]
+MOUTH4_LIP = [(-5, -1.10, 1.714), (0, -1.10, 1.714), (22, -1.10, 1.715), (45, -1.10, 1.718), (68, -1.09, 1.720), (86, -1.07, 1.722), (90, -1.045, 1.727),
+              (90, -1.025, 1.737)]
+MOUTH4_W = (0.0065, 0.0055, 0.003)  # 線の幅 (人中、口、口角の先)
+
+
+def nose4_outline(k=20):
+    """正面から見た鼻の輪郭 (x, z)。上の辺 (左 → 右) と、右の辺 → 下の角 → 左の辺"""
+    p = NOSE4
+    w, top, bot, arch = p["w"], p["top"], p["bot"], p["arch"]
+    pts = []
+    n_top = k // 2
+    for i in range(n_top):
+        x = -w + 2 * w * i / (n_top - 1)
+        pts.append((x * (1 - p["round"] * 0.15 * (abs(x) / w) ** 6), top + arch * (1 - (x / w) ** 2) - p["round"] * 0.012 * (abs(x) / w) ** 8))
+    n_side = (k - n_top) // 2
+    for s in (1, -1):
+        seq = []
+        for i in range(1, n_side + 1):
+            t = i / (n_side + 0.5)
+            x = w * (1 - t) ** 1.25 * (1 - p["round"] * 0.3 * (1 - t) ** 12)
+            z = top - 0.012 * p["round"] * (1 - t) ** 8 - (top - bot) * t ** 1.1
+            seq.append((s * x, z))
+        pts += seq if s == 1 else list(reversed(seq))
+    # 下の角 (人中の上) を右の辺と左の辺のあいだに入れる
+    j = n_top + n_side
+    pts.insert(j, (0.0, bot))
+    return pts
+
+
+def cast_front(bvh, x, z, d):
+    d = Vector(d).normalized()
+    o = Vector((x, -1.24, z)) - d * 0.6
+    loc, n, _, _ = bvh.ray_cast(o, d)
+    if loc is None:
+        raise RuntimeError(f"nose miss x={x} z={z}")
+    if n.dot(d) > 0:
+        n = -n
+    return loc, n
+
+
+def cast_around(bvh, phi, y, z, side):
+    a = math.radians(phi)
+    d = Vector((side * math.sin(a), -math.cos(a), 0))
+    loc, n, _, _ = bvh.ray_cast(Vector((0, y, z)) + d * 0.6, -d)
+    if loc is None:
+        raise RuntimeError(f"mouth miss phi={phi} y={y} z={z}")
+    if n.dot(d) < 0:
+        n = -n
+    return loc, n
+
+
+def build_nose4(bm, bvh):
+    p = NOSE4
+    outline = nose4_outline()
+    cx = sum(q[0] for q in outline) / len(outline)
+    cz = sum(q[1] for q in outline) / len(outline)
+    rings = []
+    for f in (1.0, 0.7, 0.4):
+        rg = []
+        for x, z in outline:
+            loc, n = cast_front(bvh, cx + (x - cx) * f, cz + (z - cz) * f, p["dir"])
+            rg.append((loc + n * p["off"], n))
+        rings.append(rg)
+    loc, n = cast_front(bvh, cx, cz, p["dir"])
+    c = bm.verts.new(loc + n * p["off"])
+    vr = [[bm.verts.new(q) for q, _ in rg] for rg in rings]
+    k = len(vr[0])
+    faces = []
+    for outer, inner in zip(vr, vr[1:]):
+        for i in range(k):
+            j = (i + 1) % k
+            faces.append(bm.faces.new((outer[i], outer[j], inner[j], inner[i])))
+    for i in range(k):
+        faces.append(bm.faces.new((vr[-1][i], vr[-1][(i + 1) % k], c)))
+    for f in faces:
+        f.material_index = HOOF
+        f.normal_update()
+        if f.normal.dot(n) < 0:
+            f.normal_flip()
+
+
+def ribbon_on(bm, pts, widths, off=0.002):
+    """面の上の点 (位置, 法線) の列に沿う細い帯 (幅は widths を線形に補間)"""
+    vs = []
+    m = len(pts)
+    for i, (p, n) in enumerate(pts):
+        t = (pts[min(i + 1, m - 1)][0] - pts[max(i - 1, 0)][0]).normalized()
+        b = n.cross(t).normalized()
+        u = i / (m - 1)
+        w = widths[0] + (widths[1] - widths[0]) * u if len(widths) == 2 else \
+            (widths[0] + (widths[1] - widths[0]) * u * 2 if u < 0.5 else widths[1] + (widths[2] - widths[1]) * (u - 0.5) * 2)
+        vs.append((bm.verts.new(p + n * off + b * w / 2), bm.verts.new(p + n * off - b * w / 2), n))
+    for (a0, a1, n), (b0, b1, _) in zip(vs, vs[1:]):
+        f = bm.faces.new((a0, a1, b1, b0))
+        f.material_index = HOOF
+        f.normal_update()
+        if f.normal.dot(n) < 0:
+            f.normal_flip()
+
+
+def dense(keys, per=3):
+    """(φ, y, z) の折れ線を per 倍に細かくする (帯が面の曲がりの下に潜らないように、1 点ずつ面へ投影し直す)"""
+    out = []
+    for a, b in zip(keys, keys[1:]):
+        out += [tuple(p + (q - p) * i / per for p, q in zip(a, b)) for i in range(per)]
+    return out + [keys[-1]]
+
+
+def build_mouth4(bm, bvh):
+    ribbon_on(bm, [cast_around(bvh, phi, y, z, 1) for phi, y, z in dense(MOUTH4_PHILTRUM)], (MOUTH4_W[0], MOUTH4_W[0]), off=0.003)
+    for side in (-1, 1):
+        ribbon_on(bm, [cast_around(bvh, phi, y, z, side) for phi, y, z in dense(MOUTH4_LIP)], MOUTH4_W, off=0.003)
+
+
+# (月鹿の手直し 6 で追加) 顔の縦横の比 (審査台 d5-deer「目と鼻の水平の比率についてはOK。だが、そもそもの顔の縦横比率がだいぶ扁平より。
+# 顔の横幅は0.5-1割削り、鼻から顎までの領域については、垂直方向に1.8-2.0倍くらいまで伸ばして 口元の線は正面から見てもっと左右短く、
+# 鼻の領域の1-2割増し程度。」)。手直し 5 の頭 (断面・窪み・目・鼻) を組んだあと、頭の頂点を動かす (face6):
+# 横は頭の幅を FACE6_X 倍に (目と鼻も同じ倍率なので正面の目・鼻筋の比は変わらない)。縦は鼻の上の辺 (FACE6_Z[0]) より下を下へ伸ばす。
+# 伸ばし方は帯ごと: 鼻 (上の辺 → 下の角) は FACE6_K[0] 倍、鼻の下 → 口の線は FACE6_K[1] 倍、口の線 → 顎の下は FACE6_K[2] 倍。
+# 鼻と口は大きく伸ばさず (基準画の正面は鼻のすぐ下に口)、口の下の顎を長くする。縦の伸ばしは目の前 (FACE6_Y) から鼻先へ効かせ、
+# 後頭部・喉は動かさない。口の線は伸ばしたあとの頭へ貼り直し、正面の幅を鼻の幅の 1.1〜1.2 倍に短くする (MOUTH6_LIP)
+HEAD_FACE6 = True
+FACE6_X = 0.93  # 顔の横幅の倍率 (0.5〜1 割削る)
+FACE6_X_Y = (-0.50, -0.58)  # 横の倍率を効かせ始める y (後頭部の首の付け根は元の幅)
+FACE6_Z = (1.785, 1.726, 1.7095)  # 鼻の上の辺・鼻の下の角・口の線の下の縁の高さ (手直し 5 の頭で測った値)
+FACE6_K = (1.45, 1.4, 2.9)  # 帯ごとの縦の倍率 (鼻・鼻の下・口の下の顎)。鼻の上の辺 → 顎の下が手直し 5 の 1.85 倍
+FACE6_Y = (-0.72, -1.10)  # 縦の伸ばしを効かせ始める y・効かせ切る y (この間は一直線に強める。顎の下の線が喉へまっすぐ上がる)
+FACE6_SHEAR = 0.9  # 鼻の下の角より下の、下へ動いた量の何倍だけ後ろへ引くか (顎を鼻先より後ろへ引く。前へ丸く膨らませない)
+# 口の線: (φ 度, y, z)。z は伸ばす前の高さ (face6_z で写す)。口角を正面の面の上で少し上げる (前は φ 90° の真横まで回って後ろへ)
+MOUTH6_PHILTRUM = [(0, -1.10, 1.752), (0, -1.10, 1.716)]
+MOUTH6_LIP = [(-5, -1.10, 1.714), (0, -1.10, 1.714), (14, -1.10, 1.7145), (26, -1.10, 1.716), (35, -1.10, 1.719), (41, -1.10, 1.723)]
+MOUTH6_W = (0.0065, 0.0055, 0.0035)
+
+# (月鹿の手直し 7 で追加) 審査台 d6-deer「顎が縦にながすぎている。倍で済んでいない（情報の基準点の認識がずれているように思える）」。
+# 手直し 6 の帯ごとの倍率 (FACE6_K) をやめ、正面から見た鼻 (逆三角の鼻の面) の下端 FACE7_Z0 から顎の下端までを 1 つの倍率 FACE7_K で一様に伸ばす。
+# 基準点は鼻の下端に固定し、鼻そのものとそれより上は伸ばさない。倍率は喉 (FACE7_Y[0]) から顎の下の一番低い所 (FACE7_Y[1]) へ強め、
+# そこより前は FACE7_K のまま。横の倍率 (FACE6_X)・顎を後ろへ引く量 (FACE6_SHEAR)・短い口の線 (MOUTH6_LIP) は手直し 6 のまま。
+# 案は FACE7_K = 1.3 / 1.6 / 1.9 (FACE7_OPTIONS)。書き出しの既定は 1.3 (頭頂〜顎 / 横幅が基準画の 1.07 に一番近い)。
+# 撮り比べのときは `-- <out_dir> <倍率>` で 2 つ目の引数に倍率を渡す
+HEAD_FACE7 = True
+FACE7_OPTIONS = (1.3, 1.6, 1.9)
+FACE7_K = float(argv[1]) if len(argv) > 1 else 1.3  # 鼻の下端 → 顎の下端の縦の倍率
+FACE7_Y = (-0.72, -0.92)  # 縦の伸ばしを効かせ始める y・効かせ切る y。手直し 6 の FACE6_Y (-1.10 で効かせ切る) では、正面で一番低い顎の下 (y -0.91) に倍率の半分しか効かなかった
+FACE7_Z0 = 1.726  # 鼻の下端 (逆三角の鼻の面の下の角、手直し 5 の頭で測った値。FACE6_Z[1] と同じ)
+
+
+def face6_bands():
+    """(月鹿の手直し 7 で追加) 縦の伸ばしの帯の境と倍率。手直し 7 は鼻の帯を 1 倍、鼻の下端から下を FACE7_K 倍"""
+    if HEAD_FACE7:
+        return (FACE6_Z[0], FACE7_Z0), (1.0, FACE7_K)
+    return FACE6_Z, FACE6_K
+
+
+def face6_w(y):
+    y0, y1 = FACE7_Y if HEAD_FACE7 else FACE6_Y  # (月鹿の手直し 7 で変更: 顎の下の一番低い所 (y -0.91) で倍率を効かせ切る)
+    return max(0.0, min(1.0, (y - y0) / (y1 - y0)))
+
+
+def face6_back(y, z):
+    """鼻の下の角より下の頂点を後ろへ引く量 (下へ動いた量のうち、鼻の帯の分を除いたもの × FACE6_SHEAR)"""
+    return FACE6_SHEAR * max(0.0, (min(z, FACE6_Z[1]) - face6_z(y, z)) - (FACE6_Z[1] - face6_z(y, FACE6_Z[1])))
+
+
+def face6_z(y, z):
+    """伸ばす前の高さ z → 後の高さ (y で縦の伸ばしを弱める)"""
+    w = face6_w(y)
+    if w <= 0 or z >= FACE6_Z[0]:
+        return z
+    edges, kset = face6_bands()  # (月鹿の手直し 7 で変更: 帯の境と倍率を face6_bands から引く)
+    ks = [1 + (k - 1) * w for k in kset]
+    out = edges[0]
+    lo = edges[0]
+    for i, k in enumerate(ks):
+        nxt = edges[i + 1] if i + 1 < len(edges) else -1e9
+        seg = lo - max(z, nxt)
+        out -= seg * k
+        if z >= nxt:
+            return out
+        lo = nxt
+    return out
+
+
+def face6_z_inv(y, z):
+    """後の高さ → 伸ばす前の高さ (重みを伸ばす前の口の線で配るため)"""
+    w = face6_w(y)
+    if w <= 0 or z >= FACE6_Z[0]:
+        return z
+    edges, kset = face6_bands()  # (月鹿の手直し 7 で変更: 帯の境と倍率を face6_bands から引く)
+    ks = [1 + (k - 1) * w for k in kset]
+    src, dst = edges[0], edges[0]
+    for i, k in enumerate(ks):
+        nxt = edges[i + 1] if i + 1 < len(edges) else -1e9
+        dnxt = dst - (src - nxt) * k if nxt > -1e8 else -1e9
+        if z >= dnxt:
+            return src - (dst - z) / k
+        src, dst = nxt, dnxt
+    return z
+
+
+def face6_x(y):
+    return 1 - (1 - FACE6_X) * smoothstep(FACE6_X_Y[0], FACE6_X_Y[1], y)
+
+
+def face6(verts, tones=False):
+    """(月鹿の手直し 6 で追加) 頂点を動かす。tones は窪みの塗り (HEAD_TONE、位置で引く) を動かした先へ付け替える"""
+    moved = []
+    for v in verts:
+        k0 = tuple(round(q, 4) for q in v.co)
+        x, y, z = v.co
+        v.co = Vector((x * face6_x(y), y + face6_back(y, z), face6_z(y, z)))
+        if tones and k0 in HEAD_TONE:
+            moved.append((v, HEAD_TONE.pop(k0)))
+    for v, t in moved:
+        HEAD_TONE[tuple(round(q, 4) for q in v.co)] = t
+
+
+def build_mouth6(bm, bvh):
+    """(月鹿の手直し 6 で追加) 伸ばしたあとの頭へ口の線を貼る (線の幅は伸ばさない)"""
+    def keys(ks):
+        return [(phi, y, face6_z(y, z)) for phi, y, z in dense(ks)]
+    ribbon_on(bm, [cast_around(bvh, phi, y, z, 1) for phi, y, z in keys(MOUTH6_PHILTRUM)], (MOUTH6_W[0], MOUTH6_W[0]), off=0.003)
+    for side in (-1, 1):
+        ribbon_on(bm, [cast_around(bvh, phi, y, z, side) for phi, y, z in keys(MOUTH6_LIP)], MOUTH6_W, off=0.003)
+
+
+def head_weights6(co):
+    """(月鹿の手直し 6 で追加) 伸ばす前の位置で head_weights を引く (顎の骨の重みの境は伸ばす前の口の線)"""
+    y = co.y
+    for _ in range(6):  # 後ろへ引いた分を戻す (y は引く量にしか効かないので数回で収まる)
+        z = face6_z_inv(y, co.z)
+        y = co.y - face6_back(y, z)
+    return head_weights(Vector((co.x, y, face6_z_inv(y, co.z))))
+
+
 def build_head(bm, lod):
+    if lod["name"] == "hero" and HEAD_FACE4:  # (月鹿の手直し 4 で追加) 近 LOD は平らな顔・窪み・丸い鼻づらの断面 (build_head4)
+        return build_head4(bm, lod)
     nsec, n = lod["head"]
     secs = resample(HEAD_KEYS, nsec)
-    rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rt, rb, n, pinch, sq=2.2, phase=math.pi / 2) for y, zc, rx, rt, rb, pinch in secs]
+    rings = [ring(bm, Vector((0, y, zc)), X, Z, rx, rt, rb, n, pinch, sq=2.2, phase=math.pi / 2) for y, zc, rx, rt, rb, pinch in secs] \
+        if not (lod["name"] == "hero" and HEAD_FACE) else \
+        [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners_face(rx, rt, rb, pinch, y), HEAD_FACE_PAIRS, bevel=0.18)
+         for y, zc, rx, rt, rb, pinch in secs]  # (月鹿の手直し 3 で変更: 近 LOD は角を持つ断面 head_corners_face)
     back = bm.verts.new((0, secs[0][0] + 0.012, secs[0][1]))
     tip = bm.verts.new((0, secs[-1][0] - 0.012, secs[-1][1]))
     faces = loft(bm, [back] + rings + [tip])
     for f in faces:
         if f.calc_center_median().y < NOSE_Y:
             f.material_index = HOOF  # 鼻 (基準画では暗い)
+    if lod["name"] == "hero" and HEAD_FACE:  # (月鹿の手直し 3 で追加) 顔の鼻筋・眼窩の上の縁・頬の張りの角は硬いエッジ
+        for (ya, ra), (yb, rb_) in zip(zip([q[0] for q in secs], rings), zip([q[0] for q in secs[1:]], rings[1:])):
+            if max(ya, yb) > HEAD_FACE_SHARP_Y:
+                continue
+            for j in HEAD_FACE_SHARP:
+                e = bm.edges.get((ra[j], rb_[j]))
+                if e is not None:
+                    e.smooth = False
 
 
 def build_ears(bm, lod, side):
@@ -340,6 +893,8 @@ ANTLER_BEAM = [(0.07, -0.71, 1.98), (0.20, -0.62, 2.03), (0.33, -0.50, 2.075),
                (0.47, -0.35, 2.14), (0.60, -0.15, 2.22), (0.665, 0.02, 2.36), (0.665, 0.08, 2.52), (0.62, 0.05, 2.68), (0.54, -0.05, 2.81), (0.45, -0.19, 2.90)]
 ANTLER_R = [0.058, 0.056, 0.055, 0.058, 0.06, 0.06, 0.056, 0.05, 0.036, 0.008]
 ANTLER_BASE_T = 0.28  # 主幹のうち根元 (深緑) の割合
+# (月鹿の手直しで追加) 角の稜: 断面の上側の角を割る角度 (ラジアン、近 LOD だけ)
+ANTLER_RIDGE = math.radians(7)
 ANTLER_TINES = [[(0.37, -0.46, 2.095), (0.27, -0.66, 2.14), (0.18, -0.84, 2.24), (0.13, -0.91, 2.44)],
                 [(0.54, -0.33, 2.19), (0.48, -0.37, 2.35), (0.41, -0.41, 2.52)]]
 ANTLER_TINE_R = [[0.052, 0.046, 0.036, 0.0], [0.052, 0.04, 0.0]]
@@ -355,14 +910,16 @@ def build_antler(bm, lod, side):
     radii = [r for (r,) in resample([(r,) for r in ANTLER_R], nb)]
     radii[-1] = 0.0
     mats = [ABASE if (i + 0.5) / (nb - 1) < ANTLER_BASE_T else GLOW for i in range(nb - 1)]
-    faces = tube(bm, dense, radii, n, mats=mats)
+    rg = ANTLER_RIDGE if lod["name"] == "hero" else 0.0  # (月鹿の手直しで追加) 近 LOD の角に光る稜
+    lit = lod["name"] == "hero" and ANTLER_LIT  # (月鹿の手直し 3 で追加) 近 LOD の角は内の面を明るく、縁を光らせる (tube_lit)
+    faces = tube_lit(bm, dense, radii, mats=mats) if lit else tube(bm, dense, radii, n, mats=mats, ridge=rg)
     nt, tn = lod["tine"]
     for tpts, trr in zip(ANTLER_TINES, ANTLER_TINE_R):
         cnt = nt + len(tpts) - 3
         tp = resample_path([antler_fit((side * x, y, z)) for x, y, z in tpts], cnt)
         rr = [r for (r,) in resample([(r,) for r in trr], cnt)]
         rr[-1] = 0.0
-        faces += tube(bm, tp, rr, tn, mat=GLOW)
+        faces += tube_lit(bm, tp, rr, mat=GLOW) if lit else tube(bm, tp, rr, tn, mat=GLOW, ridge=rg)
     bmesh.ops.recalc_face_normals(bm, faces=faces)
 
 
@@ -488,6 +1045,20 @@ def outside(poly, i, d):
     return p[i % len(poly)]
 
 
+# (月鹿の手直しで追加) 装甲板の縁のハイライト: 基準画の板は面取りが明るい青緑に光り、縁取りのように読める (下を向く辺は陰で暗いまま)。
+# 側面図で辺の外向きの法線の上下成分がこれより大きい辺の面取りを deer_plate_hi にする
+PLATE_HI_MIN_NZ = -0.55
+
+
+def edge_lit(poly, i):
+    """(月鹿の手直しで追加) 多角形 (y, z) の辺 i (i → i+1) の面取りを明るくするか"""
+    k = len(poly)
+    area = sum(poly[j][0] * poly[(j + 1) % k][1] - poly[(j + 1) % k][0] * poly[j][1] for j in range(k))
+    a, b = Vector(poly[i]), Vector(poly[(i + 1) % k])
+    out = Vector((b.y - a.y, a.x - b.x)).normalized() * (1 if area > 0 else -1)  # 外向き
+    return out.y > PLATE_HI_MIN_NZ
+
+
 def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024, seam_band=False):
     """装甲板: 縁 (表面 +4 mm) → 縁の上 → 面取り (中心へ 74%) → 頂。光る辺には外側に帯を貼り、縁の壁も光らせる。
     outline は左側面から見た (y, z)。縁と面取りの境は硬いエッジ、頂はなめらか (丸めた角ばり)
@@ -518,6 +1089,8 @@ def build_plate(bm, bvh, lod, outline, glow_edges, side, thick=0.075, band=0.024
         for i in range(k):
             f = bm.faces.new((a[i], a[(i + 1) % k], b[(i + 1) % k], b[i]))
             f.material_index = GLOW if (ri == 0 and glow[i] and seam_band) else PLATE
+            if ri == 1 and lod["plate_chaikin"] and edge_lit(poly, i):  # (月鹿の手直しで追加) 面取りの縁のハイライト
+                f.material_index = PLATE_HI
             faces.append(f)
     for f in faces:
         f.smooth = False
@@ -673,11 +1246,29 @@ def lens(k, lf, lb, ht, hb, pf=0.2, pb=1.2, lift=0.0, dx=0.0):
     return out
 
 
+# (月鹿の手直しで追加) 近 LOD の目の形。lens() の (目頭までの長さ, 目尻までの長さ, 上まぶたの高さ, 下まぶたの高さ) と尖り。空にすると前の形
+EYE_HI = dict(rim=28, rim_shape=(0.070, 0.058, 0.027, 0.030), rim_pf=1.6, rim_pb=1.3, rim_lift=0.25,
+              iris=24, iris_shape=(0.036, 0.033, 0.019, 0.021), iris_pf=0.3, iris_pb=0.3, iris_lift=0.1, iris_dx=-0.002)
+
+
 def build_eye(bm, bvh_head, lod, side):
     loc, n, _, _ = bvh_head.ray_cast(Vector((side * 1.0, -0.84, 1.865)), Vector((-side, 0, 0)))
+    if lod["name"] == "hero" and HEAD_FACE:  # (月鹿の手直し 3 で追加) 眼窩の面へ前寄りの向きから載せる (正面から目が見える)
+        dd = Vector((side * EYE_FACE_DIR[0], *EYE_FACE_DIR[1:])).normalized()
+        loc, n, _, _ = bvh_head.ray_cast(Vector((0, *EYE_FACE_AT)) + dd, -dd)
+    if lod["name"] == "hero" and HEAD_FACE4:  # (月鹿の手直し 4 で追加) 窪みの底の中ほど (EYE4_AT) に載せる。向きは底の面の法線
+        dd = Vector((side * EYE4_DIR[0], *EYE4_DIR[1:])).normalized()
+        loc, n, _, _ = bvh_head.ray_cast(Vector((0, *EYE4_AT)) + dd, -dd)
+    if lod["name"] == "hero" and HEAD_FACE4 and HEAD_FACE5:  # (月鹿の手直し 5 で追加) 前へ向いた眼窩の面の中ほど (EYE5_AT) に載せる
+        dd = Vector((side * EYE5_DIR[0], *EYE5_DIR[1:])).normalized()
+        loc, n, _, _ = bvh_head.ray_cast(Vector((0, *EYE5_AT)) + dd, -dd)
     if n.dot(Vector((side, 0, 0))) < 0:
         n = -n
     u = Vector((0, -1, -0.25))  # (M22-05 残りの手直しで変更: -0.12 → -0.25。頭の面の傾きと合わせて、真横から目頭が 20° ほど下がって見える)
+    if lod["name"] == "hero" and HEAD_FACE:
+        u = Vector((0, -1, -EYE_FACE_TILT))  # (月鹿の手直し 3 で追加) 正面から目頭が鼻へ向かって下がって見えるように
+    if lod["name"] == "hero" and HEAD_FACE4 and HEAD_FACE5:
+        u = Vector((0, -1, -EYE5_TILT))  # (月鹿の手直し 5 で追加) 面が前を向いた分、正面での目頭の下がりが強くなりすぎないように
     u = (u - n * u.dot(n)).normalized()  # 目の長軸 (鼻先へ少し下がる)
     v = n.cross(u).normalized()
     if v.z < 0:
@@ -696,6 +1287,8 @@ def build_eye(bm, bvh_head, lod, side):
             if shape:  # (M22-05 残りの手直しで追加: lens() の形。目頭・目尻とも尖らせ、上下のまぶたの丸みを変える)
                 p = loc + u * shape[i][0] + v * shape[i][1] + n * off
             best = bvh_head.find_nearest(p)
+            if lod["name"] == "hero" and HEAD_FACE4:  # (月鹿の手直し 4 で追加) 平らな円盤のまま (窪みの底の折れ目や段の壁へ折れ曲がらない)
+                best = (p - n * off,)
             p = best[0] + n * off if best[0] is not None else p
             vs.append(bm.verts.new(p))
         for i in range(k):
@@ -706,6 +1299,28 @@ def build_eye(bm, bvh_head, lod, side):
                 f.normal_flip()
 
     # (M22-05 残りの手直しで変更: 楕円から lens() の形へ。暗い縁は目尻を後ろ上へ尖らせて伸ばし、目頭は丸く。光る瞳は丸みを残して前へ寄せる)
+    if lod["name"] == "hero" and EYE_HI:
+        # (月鹿の手直しで追加) 基準画の目 (creatures/deer.png の側面・斜め前・正面、concept/deer-angular.png) に寄せる。
+        # 両端の尖った細長いレンズ: 目頭は前下へ細く尾を引いて尖り、目尻も後ろへ尖る (目尻の持ち上げは弱く、穏やかな目)。
+        # 暗い縁は上下とも細く、両端の尖りで太る。光る瞳は縁の中をほぼ満たす卵形で、両端を少し尖らせる (まぶたの内の輪郭)。
+        # 頂点は縁 28・瞳 24 (前は 12・12)。三角形は増えるが、両端の尖りと上下のまぶたの曲がりが滑らかに出る
+        kk = EYE_HI
+        k = kk["rim"]
+        sc = EYE_FACE_SCALE if HEAD_FACE else 1.0  # (月鹿の手直し 3 で追加) 眼窩の面の目は一回り大きく (基準画の正面)
+        if HEAD_FACE4:  # (月鹿の手直し 4 で追加) 平らな目の縁のどの頂点も面の下へ潜らない高さへ、目ごと面の法線へ持ち上げる
+            lift = 0.0
+            for x, y in lens(k, *kk["rim_shape"], pf=kk["rim_pf"], pb=kk["rim_pb"], lift=kk["rim_lift"]):
+                p = loc + u * (x * sc) + v * (y * sc)
+                hit = bvh_head.ray_cast(p + n * EYE4_DRAPE, -n)[0]
+                if hit is not None:
+                    lift = max(lift, (hit - loc).dot(n))
+            loc = loc + n * lift
+        disc(0, 0, 0.003, 0.002, ABASE, shape=[(x * sc, y * sc) for x, y in
+                                               lens(k, *kk["rim_shape"], pf=kk["rim_pf"], pb=kk["rim_pb"], lift=kk["rim_lift"])])
+        k = kk["iris"]
+        disc(0, 0, 0.006, 0.004, GLOW, shape=[(x * sc, y * sc) for x, y in
+                                              lens(k, *kk["iris_shape"], pf=kk["iris_pf"], pb=kk["iris_pb"], lift=kk["iris_lift"], dx=kk["iris_dx"])])
+        return
     if lod["name"] == "hero":
         disc(0.064, 0.04, 0.003, 0.002, ABASE, shape=lens(k, 0.054, 0.066, 0.026, 0.032, pf=0.9, pb=1.2, lift=0.7))
     disc(0.052, 0.03, 0.006, 0.005, GLOW, shape=lens(k, 0.036, 0.034, 0.017, 0.022, pf=0.2, pb=0.4, dx=0.006))
@@ -723,6 +1338,12 @@ def color_for(part, co, n):
     if part == "head":
         c = mix(PAL["fur"], PAL["muzzle"], smoothstep(-0.95, -1.1, co.y))
         c = mix(c, PAL["belly"], smoothstep(-0.2, -0.7, n.z))
+        if HEAD_FACE:  # (月鹿の手直し 3 で追加) 明るい鼻筋 (上を向く細い面、額から鼻先へ) と、頬の張りの下の陰
+            c = mix(c, PAL["belly"], smoothstep(0.55, 0.85, n.z) * smoothstep(-0.62, -0.78, co.y) * 0.85)
+            c = mix(c, PAL["fur_back"], smoothstep(0.0, -0.4, n.z) * smoothstep(0.55, 0.85, abs(n.x)) * smoothstep(-0.70, -0.80, co.y) * 0.6)
+        tone = HEAD_TONE.get(tuple(round(q, 4) for q in co))  # (月鹿の手直し 4 で追加) 窪みの底は陰、上の縁 (眉の稜) と下の縁 (頬の線) は明るく
+        if tone:
+            c = mix(c, PAL["socket"] if tone[0] == "shade" else PAL["belly"], tone[1] * HEAD4_TONE[tone[0]])
         return c
     if part.startswith("ear"):
         return PAL["ear_in"] if n.dot(EAR_FRONT[part]) > 0.25 else PAL["fur"]
@@ -867,13 +1488,30 @@ def build_lod(lod, obj_name, mats, antlers=True):
     build_head(bm, lod)
     bm.normal_update()
     bvh_head = BVHTree.FromBMesh(bm)
-    parts.append(make_part(obj_name + "_head", bm, "head", head_weights, mats))
+    face6_on = lod["name"] == "hero" and HEAD_FACE4 and HEAD_FACE6  # (月鹿の手直し 6 で追加) 組んだ頭の幅を削り、鼻から下を伸ばす
+    bvh_head0 = bvh_head  # 伸ばす前の頭 (鼻と目はここへ載せてから頭と一緒に動かす)
+    if face6_on:
+        face6(bm.verts, tones=True)
+        bm.normal_update()
+        bvh_head = BVHTree.FromBMesh(bm)
+    parts.append(make_part(obj_name + "_head", bm, "head", head_weights6 if face6_on else head_weights, mats))
+    if lod["name"] == "hero" and HEAD_FACE4:  # (月鹿の手直し 4 で追加) 鼻と口の線 (頭の面の上に貼る。重みは下の面と同じ head_weights)
+        bm = bmesh.new()
+        build_nose4(bm, bvh_head0)
+        if face6_on:  # (月鹿の手直し 6 で追加) 鼻は頭と一緒に動かし、口の線は伸ばしたあとの頭へ短く貼る
+            face6(bm.verts)
+            build_mouth6(bm, bvh_head)
+        else:
+            build_mouth4(bm, bvh_head)
+        parts.append(make_part(obj_name + "_nose", bm, "rigid", head_weights6 if face6_on else head_weights, mats, recalc=False))
     for side, s in ((-1, "L"), (1, "R")):
         bm = bmesh.new()
         EAR_FRONT[f"ear_{s}"] = build_ears(bm, lod, side)
         parts.append(make_part(f"{obj_name}_ear_{s}", bm, f"ear_{s}", [(f"ear_{s}", 1.0), ("head", 0.25)], mats))
         bm = bmesh.new()
-        build_eye(bm, bvh_head, lod, side)
+        build_eye(bm, bvh_head0 if face6_on else bvh_head, lod, side)
+        if face6_on:  # (月鹿の手直し 6 で追加) 目は伸ばす前の頭へ載せ、頭と同じ横の倍率で動かす (正面の目・鼻筋の比を保つ)
+            face6(list(bm.verts))
         if antlers:
             build_antler(bm, lod, side)
         parts.append(make_part(f"{obj_name}_headgear_{s}", bm, "rigid", lambda co: [("head", 1.0)], mats, recalc=False))
@@ -1437,6 +2075,8 @@ def main():
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
     bake_actions(rig, meshes)  # (M22-05 残りの手直しで変更: 地面へのめり込みを測るためにメッシュを渡す)
+    # (M23-08) 遠い段はアクションを焼いた後に作る (接地の持ち上げは渡したメッシュの一番低い頂点で決まるので、先に作ると lod0・lod1 のアニメが変わる)
+    build_far(meshes[1], "deer_far", rig, far_ratio)
     scene.frame_set(0)
     for o in scene.objects:
         o.select_set(True)

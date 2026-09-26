@@ -9,6 +9,7 @@
   blender -b --factory-startup --python tools/blender/observe_render.py -- ship-stages|ship|shipyard <out.png>
   (lineup は --yaw <度> で各ノードを回して並べる、--el <度> でカメラの仰角)
   blender -b --factory-startup --python tools/blender/observe_render.py -- canopy-gaps <out.png>
+  (集落の建物の作り直しで追加) pieces|settlement-ship|hut <out.png>: 作り直した部品を基準画の並びで / 舟の前に / 小屋の寄り
   (M22-07: 成木・森の木の樹冠の隙間を、日の仰角 90/60/45/30° の影で確かめ、日が抜ける割合を出す)
 """
 import math
@@ -97,6 +98,8 @@ def toonify(m, vcol_name):
     if max(ecol) > 0:
         k = 1.0 / max(ecol)
         ecol = tuple(c * k for c in ecol)
+    # (木の磨き上げで追加) 絵 (葉のカード) を持つ材質は、絵の色を地の色に掛け、絵のアルファで切り抜く
+    img = next((n.image for n in nt.nodes if n.type == "TEX_IMAGE" and n.image), None)
     nt.nodes.clear()
     N = nt.nodes.new
     L = nt.links.new
@@ -114,8 +117,31 @@ def toonify(m, vcol_name):
         L(rgb.outputs[0], mul.inputs[6])
         L(vc.outputs["Color"], mul.inputs[7])
         albedo = mul.outputs[2]
+    if img is not None:
+        tex = N("ShaderNodeTexImage")
+        tex.image = img
+        tm = N("ShaderNodeMix")
+        tm.data_type = "RGBA"
+        tm.blend_type = "MULTIPLY"
+        tm.inputs["Factor"].default_value = 1.0
+        L(albedo, tm.inputs[6])
+        L(tex.outputs["Color"], tm.inputs[7])
+        albedo = tm.outputs[2]
     dif = N("ShaderNodeBsdfDiffuse")
     dif.inputs["Color"].default_value = (1, 1, 1, 1)
+    if img is not None:
+        # 両面のカードの裏も表と同じ法線で陰らせる (Three.js 側の foliage.ts と同じ。裏返った法線で暗くならない)
+        geo = N("ShaderNodeNewGeometry")
+        flip = N("ShaderNodeMath")
+        flip.operation = "MULTIPLY_ADD"
+        flip.inputs[1].default_value = -2.0
+        flip.inputs[2].default_value = 1.0
+        L(geo.outputs["Backfacing"], flip.inputs[0])
+        vs = N("ShaderNodeVectorMath")
+        vs.operation = "SCALE"
+        L(geo.outputs["Normal"], vs.inputs[0])
+        L(flip.outputs[0], vs.inputs["Scale"])
+        L(vs.outputs[0], dif.inputs["Normal"])
     s2r = N("ShaderNodeShaderToRGB")
     L(dif.outputs[0], s2r.inputs[0])
     bw = N("ShaderNodeRGBToBW")
@@ -144,6 +170,9 @@ def toonify(m, vcol_name):
     rr.inputs["From Min"].default_value = 0.55
     rr.inputs["From Max"].default_value = 0.95
     rr.inputs["To Max"].default_value = 0.22
+    if img is not None:
+        # (木の磨き上げで追加) 葉のカードの縁の光は弱く (foliage.ts の rim 0.06 と同じ考え。寝たカードが白く光らない)
+        rr.inputs["To Max"].default_value = 0.04
     L(lw.outputs["Facing"], rr.inputs["Value"])
     rim = N("ShaderNodeMix")
     rim.data_type = "RGBA"
@@ -162,7 +191,26 @@ def toonify(m, vcol_name):
         col = add.outputs[2]
     em = N("ShaderNodeEmission")
     L(col, em.inputs["Color"])
-    if base[3] < 0.999:  # 半透明 (alphaMode BLEND): 透過と混ぜる
+    if img is not None:  # (木の磨き上げで追加) 切り抜き (alphaMode MASK): 絵のアルファ 0.5 で透過と切り替える
+        cut = N("ShaderNodeMath")
+        cut.operation = "GREATER_THAN"
+        cut.inputs[1].default_value = 0.5
+        L(tex.outputs["Alpha"], cut.inputs[0])
+        tr = N("ShaderNodeBsdfTransparent")
+        mx = N("ShaderNodeMixShader")
+        L(cut.outputs[0], mx.inputs["Fac"])
+        L(tr.outputs[0], mx.inputs[1])
+        L(em.outputs[0], mx.inputs[2])
+        L(mx.outputs[0], out.inputs["Surface"])
+        try:
+            m.surface_render_method = "DITHERED"
+        except AttributeError:
+            m.blend_method = "CLIP"
+        try:
+            m.use_transparent_shadow = True
+        except AttributeError:
+            pass
+    elif base[3] < 0.999:  # 半透明 (alphaMode BLEND): 透過と混ぜる
         tr = N("ShaderNodeBsdfTransparent")
         mx = N("ShaderNodeMixShader")
         mx.inputs["Fac"].default_value = base[3]
@@ -261,7 +309,7 @@ def render(path):
 
 
 ORDER = ["belltree_seedling", "belltree_sapling", "belltree_mature", "belltree_mature_lod1", "belltree_stump", "belltree_logs",
-         "hut", "lantern_post", "slipway", "stone_wall", "megalith",
+         "hut", "hut_lod1", "lantern_post", "slipway", "stone_wall", "megalith",
          "grass_tuft", "moongrass_tuft", "moss_clump", "rock",
          "woven_screen", "stone_wall_corner",
          "forest_tree", "forest_tree_lod1", "moongrass_tuft_seed", "fern", "flower_patch",
@@ -536,6 +584,73 @@ def shipyard(out):
     render(out)
 
 
+# ---------------------------------------------------------------- 集落の建物 (集落の建物の作り直しで追加)
+
+def pieces(out):
+    """作り直した集落の部品を、基準画 sheets/settlement.png と同じ並び (小屋・灯り柱・L 字の石垣・衝立) と近い角度で。
+    右に月鹿を物差しに置く"""
+    K.reset()
+    setup_scene((1600, 900))
+    place = placer(library(["settlement"]))
+    place("hut", (-6.0, 1.2), yaw=-28)
+    place("lantern_post", (-1.6, 1.6), yaw=-10)
+    place("stone_wall_corner", (0.5, -0.8), yaw=-12)
+    place("woven_screen", (5.6, 1.8), yaw=-8)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (8.3, 0.2, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-150))
+    floor(200)
+    toonify_all()
+    camera((-0.3, -20.0, 8.6), (-0.3, 1.0, 1.4), lens=38)
+    render(out)
+
+
+def settlement_ship(out):
+    """作り直した集落の部品を、完成の舟 (船台に載せた ship_sails) の前に並べる (大きさと作り込みの比べ)"""
+    K.reset()
+    sc = setup_scene((1600, 900))
+    place = placer(library(["ship", "settlement"]))
+    place("slipway", (6.0, 14.0), yaw=62)
+    place("ship_sails", (6.0, 14.0, SLIP_TOP + CRADLE_H_SHIP), yaw=62, pitch=SLIP_ANG)
+    place("hut", (-13.0, -4.0), yaw=-30)
+    place("hut_lod1", (-19.5, 2.0), yaw=-30)
+    place("lantern_post", (-7.8, -6.0), yaw=-20)
+    place("stone_wall_corner", (-6.0, -2.4), yaw=-15)
+    place("woven_screen", (-1.6, -5.2), yaw=-12)
+    place("stone_wall", (2.8, -6.8), yaw=-8)
+    place("timber_pile", (6.5, -3.5), yaw=20)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (-4.2, -8.2, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-150))
+    floor(400)
+    toonify_all()
+    sc.world.node_tree.nodes["Background.001"].inputs["Color"].default_value = (0.78, 0.82, 0.86, 1)
+    camera((-17.0, -31.0, 8.0), (-3.0, 5.0, 6.5), lens=28)
+    render(out)
+
+
+def hut_close(out):
+    """作り直した小屋の寄り (斜め前から、ゲームの寄りの 15 m ほど) と、遠景用の hut_lod1"""
+    K.reset()
+    setup_scene((1600, 900))
+    place = placer(library(["settlement"]))
+    place("hut", (0.0, 0.0), yaw=-35)
+    place("hut_lod1", (8.5, 6.0), yaw=-35)
+    for o in import_glb(os.path.join(K.REPO, "assets", "models", "deer.glb")):
+        if o.type == "MESH":
+            o.location = (2.6, -3.6, 0)
+            o.rotation_mode = "XYZ"
+            o.rotation_euler = (0, 0, math.radians(-140))
+    floor(200, "#8FA35A")
+    toonify_all()
+    camera((-6.5, -13.0, 5.0), (2.2, 1.0, 1.9), lens=35)
+    render(out)
+
+
 # ---------------------------------------------------------------- 樹冠の隙間 (M22-07 光の筋)
 
 GAP_TREES = [("belltree", "belltree_mature"), ("belltree", "belltree_mature_lod1"),
@@ -562,7 +677,32 @@ def gap_fraction(o, el_deg, az_deg, step=0.12):
     leaf = {i for i, m in enumerate(o.data.materials) if m and "leaf" in m.name}
     for v in {v for f in bm.faces if f.material_index in leaf for v in f.verts}:
         hull.verts.new(v.co)
+    # (木の磨き上げで追加) 葉のカード (材質名に foliage) は、面の中心を包みに入れ (カードの角は葉の外なので入れない)、
+    # 光線がカードに当たったら絵のアルファを引いて、0.5 未満 (葉の隙間) なら先へ通す
+    cards = _alpha_lookup(o)
+    for f in bm.faces:
+        if f.material_index in cards:
+            hull.verts.new(f.calc_center_median())
     bmesh.ops.convex_hull(hull, input=list(hull.verts))
+    uv_layer = bm.loops.layers.uv.active
+    bm.faces.ensure_lookup_table()
+
+    def blocked(g):
+        origin = g.copy()
+        for _ in range(24):
+            loc, _n, idx, _d = tree.ray_cast(origin, L)
+            if loc is None:
+                return False
+            f = bm.faces[idx]
+            if f.material_index not in cards or uv_layer is None:
+                return True
+            from mathutils.interpolate import poly_3d_calc
+            w = poly_3d_calc([v.co for v in f.verts], loc)
+            uv = sum((lp[uv_layer].uv * wi for lp, wi in zip(f.loops, w)), Vector((0, 0)))
+            if cards[f.material_index](uv) >= 0.5:
+                return True
+            origin = loc + L * 1e-3
+        return True
     htree = BVHTree.FromBMesh(hull)
     L = sun_vector(el_deg, az_deg)
     pts = [v.co - L * (v.co.z / L.z) for v in hull.verts]  # 凸包の頂点の影
@@ -576,13 +716,29 @@ def gap_fraction(o, el_deg, az_deg, step=0.12):
             g = Vector((x, y, 0.02))
             if htree.ray_cast(g, L)[0] is not None:
                 inside += 1
-                if tree.ray_cast(g, L)[0] is None:
+                if not blocked(g):
                     lit += 1
             x += step
         y += step
     bm.free()
     hull.free()
     return lit / max(1, inside)
+
+
+def _alpha_lookup(o):
+    """(木の磨き上げで追加) 材質の番号 -> uv を受けて絵のアルファを返す関数 (絵を持つ葉のカードの材質だけ)"""
+    import numpy as np
+    out = {}
+    for i, m in enumerate(o.data.materials):
+        if not m or "foliage" not in m.name or not m.node_tree:
+            continue
+        img = next((n.image for n in m.node_tree.nodes if n.type == "TEX_IMAGE" and n.image), None)
+        if img is None:
+            continue
+        w, h = img.size
+        a = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)[..., 3]
+        out[i] = lambda uv, a=a, w=w, h=h: float(a[min(h - 1, max(0, int((uv.y % 1.0) * h))), min(w - 1, max(0, int((uv.x % 1.0) * w)))])
+    return out
 
 
 def label(text, loc, size=1.2):
@@ -693,5 +849,11 @@ if __name__ == "__main__":
         ship_views(argv[1])
     elif mode == "shipyard":
         shipyard(argv[1])
+    elif mode == "pieces":  # (集落の建物の作り直しで追加)
+        pieces(argv[1])
+    elif mode == "settlement-ship":  # (集落の建物の作り直しで追加)
+        settlement_ship(argv[1])
+    elif mode == "hut":  # (集落の建物の作り直しで追加)
+        hut_close(argv[1])
     elif mode == "canopy-gaps":
         canopy_gaps(argv[1])
