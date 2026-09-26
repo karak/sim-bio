@@ -24,15 +24,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      # pnpm の版は package.json の packageManager から読む。setup-node の cache: pnpm より前に置く
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm run build:cloudflare
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run build:cloudflare
       # トークンは GitHub Secrets にだけ置く (README「Cloudflare へ配る」)
-      - run: npx wrangler deploy
+      - run: pnpm exec wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

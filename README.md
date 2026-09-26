@@ -30,29 +30,35 @@
 
 ## 動かし方
 
+パッケージは pnpm(10.28.1、`package.json` の `packageManager`)で入れる。`pnpm-workspace.yaml` が本体と `worker/` の 2 つを束ね、lockfile は `pnpm-lock.yaml` の 1 つだけ。
+
 ```bash
-npm install
-npm run dev        # 開発サーバ起動。http://localhost:5173
-npm run build       # 本番ビルド
-npm run preview     # ビルド結果をローカルで確認
-npm run test        # 単体テスト(vitest)
-npm run test:slow   # 通し(放置/校正)テスト。約 15〜20 分、CI では走らせない(下記)
-npm run check       # typecheck + lint + test
-npm run test:worker # ログの受け口 (Worker) の単体テスト。workerd の中で回す。check にも入っている
+pnpm install --frozen-lockfile
+pnpm run dev        # 開発サーバ起動。http://localhost:5173
+pnpm run build       # 本番ビルド
+pnpm run preview     # ビルド結果をローカルで確認
+pnpm run test        # 単体テスト(vitest)
+pnpm run test:slow   # 通し(放置/校正)テスト。約 15〜20 分、CI では走らせない(下記)
+pnpm run check       # typecheck + lint + test
+pnpm run test:worker # ログの受け口 (Worker) の単体テスト。workerd の中で回す。check にも入っている
 ```
+
+`pnpm run <script>` に引数を渡すときは `--` を挟まない(`pnpm run dev --port 5180`)。pnpm は `--` もそのまま script へ渡すので、vite は後ろの `--port` を読まない。
+
+git worktree で作業するときも、worktree ごとに `pnpm install --frozen-lockfile` を実行して自分の `node_modules` を持つ。ほかの checkout の `node_modules` へ symlink を張らない。pnpm は同じディスクの store からハードリンクで配るので、2 つ目からの install は速く、容量もほとんど増えない。store の場所は `pnpm store path` で見る。repo を置いたディスクに home が無いとき(外付けのディスクなど)は、pnpm はそのディスクの根に `.pnpm-store` を作るので、ハードリンクが効く。repo の設定では store の場所を決めない(CI やほかの機械で壊れるため)。
 
 E2E(Playwright)は初回だけブラウザのセットアップが要る。
 
 ```bash
-npx playwright install   # 初回のみ(Chromium 等をダウンロード)
-npx playwright test
+pnpm exec playwright install   # 初回のみ(Chromium 等をダウンロード)
+pnpm exec playwright test
 ```
 
 3D モデル・Blender ファイル・PNG は Git LFS で管理している。クローン前に `git lfs install` を済ませておくこと(LFS が無いとポインタファイルだけが落ちてくる)。
 
-CI(GitHub Actions、`.github/workflows/ci.yml`)は push と PR ごとに `npm run check` と Playwright の E2E を走らせる。`npm run test:slow` は 1 件あたり数分かかる通し実行なので CI には含めず、シナリオを触ったときに手元で回す(放置中の Mac ではバックグラウンド実行が極端に遅くなるので、`caffeinate` を付けて前面で回すか `-t` で分割する)。
+CI(GitHub Actions、`.github/workflows/ci.yml`)は push と PR ごとに `pnpm run check` と Playwright の E2E を走らせる。`pnpm run test:slow` は 1 件あたり数分かかる通し実行なので CI には含めず、シナリオを触ったときに手元で回す(放置中の Mac ではバックグラウンド実行が極端に遅くなるので、`caffeinate` を付けて前面で回すか `-t` で分割する)。
 
-CI は続けて `npm run test:e2e:cloudflare`(ビルドを wrangler dev で配って、ログの受け口に当てる E2E)も走らせる。配備は CI ではなく、下の「Cloudflare へ配る」のワークフローで人が起こす。
+CI は続けて `pnpm run test:e2e:cloudflare`(ビルドを wrangler dev で配って、ログの受け口に当てる E2E)も走らせる。配備は CI ではなく、下の「Cloudflare へ配る」のワークフローで人が起こす。
 
 ## Cloudflare へ配る
 
@@ -66,17 +72,17 @@ CI は続けて `npm run test:e2e:cloudflare`(ビルドを wrangler dev で配�
 ### 手元で確かめる(アカウントは要らない)
 
 ```bash
-npm run dev:cloudflare        # VITE_LOG_URL=/api/v1/logs でビルドし、wrangler dev で配る。http://localhost:8787
-npm run test:e2e:cloudflare   # 同じビルドを wrangler dev で立て、画面のログが受け口に 1 バッチ届くことを Playwright で確かめる
+pnpm run dev:cloudflare        # VITE_LOG_URL=/api/v1/logs でビルドし、wrangler dev で配る。http://localhost:8787
+pnpm run test:e2e:cloudflare   # 同じビルドを wrangler dev で立て、画面のログが受け口に 1 バッチ届くことを Playwright で確かめる
 ```
 
-`npm run dev:cloudflare` で画面を開き、速度を 100 倍にすると、10 秒ほどで端末に `{"event":"harbor.logs.record","record":{...}}` の行が出る。
+`pnpm run dev:cloudflare` で画面を開き、速度を 100 倍にすると、10 秒ほどで端末に `{"event":"harbor.logs.record","record":{...}}` の行が出る。
 
-`wrangler.jsonc` を変えたら `npm run types:worker` で `worker/worker-configuration.d.ts` を作り直す(`npm run typecheck` が古さを検査する)。
+`wrangler.jsonc` を変えたら `pnpm run types:worker` で `worker/worker-configuration.d.ts` を作り直す(`pnpm run typecheck` が古さを検査する)。
 
 ### 配備(人が行う)
 
-配備は GitHub Actions の `Deploy (Cloudflare)`(`.github/workflows/deploy.yml`)で行う。起動は Actions の画面の「Run workflow」だけで、main への push では走らない。出せるのは main だけ。中身は、`lfs: true` の checkout → `npm run check` → `npm run build:cloudflare` → `wrangler deploy`。
+配備は GitHub Actions の `Deploy (Cloudflare)`(`.github/workflows/deploy.yml`)で行う。起動は Actions の画面の「Run workflow」だけで、main への push では走らない。出せるのは main だけ。中身は、`lfs: true` の checkout → `pnpm install --frozen-lockfile` → `pnpm run check` → `pnpm run build:cloudflare` → `wrangler deploy`。
 
 初回だけ、次を人が行う。
 
@@ -87,7 +93,7 @@ npm run test:e2e:cloudflare   # 同じビルドを wrangler dev で立て、画�
 5. GitHub の Settings → Environments で `production` を作り、Deployment branches and tags を `main` だけにする。その Environment secrets に、`CLOUDFLARE_API_TOKEN`(4 のトークン)と `CLOUDFLARE_ACCOUNT_ID`(アカウント ID)を置く。値はリポジトリに書かない。
 6. Actions の `Deploy (Cloudflare)` を、branch に `main` を選んで「Run workflow」で起こす。ほかの branch を選ぶと、job は飛ばされる。
 
-配ったあとのログは、ダッシュボードの Workers & Pages → `biotope-island` → Observability で読む。手元の端末からは `npx wrangler tail`(要 `wrangler login`)でも流れを見られる。
+配ったあとのログは、ダッシュボードの Workers & Pages → `biotope-island` → Observability で読む。手元の端末からは `pnpm exec wrangler tail`(要 `pnpm exec wrangler login`)でも流れを見られる。
 
 ## 遊び方
 
@@ -178,9 +184,9 @@ URL に `?scenario=<id>` を付けると、その石板の予言を背負って�
 | `tests/unit/` | 単体テスト（主に `src/simulation/`） |
 | `tests/integration/` | シミュレーション + 描画の結合テスト |
 | `tests/e2e/` | ブラウザ E2E テスト |
-| `tests/e2e-cloudflare/` | ビルドを wrangler dev で配って当てる E2E。`npm run test:e2e:cloudflare` |
-| `tests/slow/` | 通し（放置/校正）テスト。`npm run test:slow` で実行、CI では走らせない |
-| `worker/` | Cloudflare の Worker(港。今はログの受け口)。別の npm workspace で、テストは `@cloudflare/vitest-plugin`(vitest 4) |
+| `tests/e2e-cloudflare/` | ビルドを wrangler dev で配って当てる E2E。`pnpm run test:e2e:cloudflare` |
+| `tests/slow/` | 通し（放置/校正）テスト。`pnpm run test:slow` で実行、CI では走らせない |
+| `worker/` | Cloudflare の Worker(港。今はログの受け口)。別の pnpm workspace の package で、テストは `@cloudflare/vitest-plugin`(vitest 4) |
 | `tools/` | チケット一覧・状態更新・コンセプト画生成などのスクリプト |
 | `tools/blender/` | 3D モデル生成・検証用の Blender Python スクリプト |
 | `issues/` | チケット(Markdown + frontmatter で状態管理、レベルデザインの進め方も記載) |

@@ -13,14 +13,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:worker": "npm run test -w worker",
+    "test:worker": "pnpm --filter ./worker test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker && wrangler types worker/worker-configuration.d.ts --check",
     "types:worker": "wrangler types worker/worker-configuration.d.ts",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run test:worker",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:worker",
     "test:e2e": "playwright test",
-    "dev:cloudflare": "npm run build:cloudflare && wrangler dev",
-    "test:e2e:cloudflare": "npm run build:cloudflare && playwright test -c playwright.cloudflare.config.ts",
+    "dev:cloudflare": "pnpm run build:cloudflare && wrangler dev",
+    "test:e2e:cloudflare": "pnpm run build:cloudflare && playwright test -c playwright.cloudflare.config.ts",
     "test:slow": "SLOW=1 vitest run",
     "bench:observe": "node tools/bench-observe.ts",
     "bench:observe:compare": "node tools/bench-observe-compare.ts"
@@ -48,7 +48,5 @@
     "wrangler": "^4.141.0"
   },
   "private": true,
-  "workspaces": [
-    "worker"
-  ]
+  "packageManager": "pnpm@10.28.1"
 }
