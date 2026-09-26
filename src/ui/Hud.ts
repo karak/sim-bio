@@ -12,6 +12,7 @@ import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
 import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
+import { SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/slots';
 import './hud.css';
 
 /**
@@ -74,6 +75,11 @@ export type HudHandlers = {
   onLayer(l: LayerKind): void;
   onSave(): SaveData;
   onLoad(save: SaveData): void;
+  /** 手元の保存の枠 (M19-05)。自動の枠へは自動保存だけが書く */
+  onSlotSave(slot: ManualSlot): void;
+  onSlotLoad(slot: SlotId): void;
+  /** 自由モードの島を作り直す (自動保存から再開するので、開き直しても新しい島にはならない) */
+  onNewIsland(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
@@ -98,6 +104,10 @@ export type Hud = {
   setNextMeteor(year: number | null): void;
   /** 警告の種レイヤーチップ (M21-02 D5) を押したのと同じ動作。layer-species-${id} のクリックハンドラと処理を共有する */
   showSpeciesLayer(id: string): void;
+  /** 枠の一覧の 1 行を出す (書いたら上書き) */
+  setSlot(s: SlotSummary): void;
+  /** 島の差し替え (ファイルと枠の読込、新しい島) を受け付けるか。シナリオ中は予言と矛盾するので false */
+  setReplaceable(on: boolean): void;
 };
 
 const SEASONS = ['春', '夏', '秋', '冬'];
@@ -114,6 +124,7 @@ const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] =
   { id: 'vitality', label: '生気' },
   { id: 'crystal', label: '輝石' },
 ];
+const SLOT_NAMES: Record<SlotId, string> = { auto: '自動', 'manual-1': '枠 1', 'manual-2': '枠 2', 'manual-3': '枠 3' };
 const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'meteor', label: '隕石' },
   { kind: 'volcano', label: '火山' },
@@ -154,6 +165,10 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
+    <select id="slot-select" class="chip">${SLOTS.map((s) => `<option value="${s}"${s === 'manual-1' ? ' selected' : ''}></option>`).join('')}</select>
+    <button id="slot-save" class="chip">枠へ保存</button>
+    <button id="slot-load" class="chip">枠から読込</button>
+    <button id="new-island" class="chip">新しい島</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>
@@ -295,6 +310,37 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
         input.value = '';
       });
   });
+
+  const slots = new Map<SlotId, SlotSummary>();
+  let replaceable = true;
+  const slotSelect = $<HTMLSelectElement>('slot-select');
+  // option は SLOTS から同じ順に作っている
+  const selectedSlot = (): SlotId => SLOTS[slotSelect.selectedIndex];
+  const renderSlots = () => {
+    SLOTS.forEach((slot, i) => {
+      const s = slots.get(slot);
+      slotSelect.options[i].textContent = `${SLOT_NAMES[slot]} · ${s ? `Year ${s.year}` : '空き'}`;
+    });
+    const slot = selectedSlot();
+    $<HTMLButtonElement>('slot-save').disabled = slot === 'auto';
+    $<HTMLButtonElement>('slot-load').disabled = !replaceable || !slots.has(slot);
+    const loadInput = $<HTMLInputElement>('load-input');
+    loadInput.disabled = !replaceable;
+    $<HTMLButtonElement>('new-island').disabled = !replaceable;
+    const why = replaceable ? '' : 'シナリオ中は島を差し替えられない (予言と矛盾する)';
+    for (const el of [$('slot-load'), $('new-island'), loadInput.parentElement]) if (el) el.title = why;
+  };
+  slotSelect.addEventListener('change', renderSlots);
+  $('slot-save').addEventListener('click', () => {
+    const slot = selectedSlot();
+    if (slot !== 'auto') h.onSlotSave(slot);
+  });
+  $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
+  $('new-island').addEventListener('click', () => {
+    // 自動の枠をその場で上書きするので、押し間違いで島を失わないよう確かめる
+    if (window.confirm('今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)')) h.onNewIsland();
+  });
+  renderSlots();
 
   const canvas = $<HTMLCanvasElement>('graph');
   const ctx = canvas.getContext('2d');
@@ -503,5 +549,13 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       nextMeteor = year;
     },
     showSpeciesLayer: showSpeciesLayerInner,
+    setSlot: (s) => {
+      slots.set(s.slot, s);
+      renderSlots();
+    },
+    setReplaceable: (on) => {
+      replaceable = on;
+      renderSlots();
+    },
   };
 }

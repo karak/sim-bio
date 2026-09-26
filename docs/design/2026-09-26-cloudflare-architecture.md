@@ -111,7 +111,7 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 |---|---|---|---|
 | クライアント | 今のまま: TypeScript・Vite 8・three.js・simplex-noise。足すのは `src/harbor`(契約と港のクライアント)、`src/chronicle`(記録と再生)、`src/persist`(IndexedDB) | 変えない | — |
 | 再生 | ブラウザの Web Worker で本体を回す | 数百年の再生で画面を止めない。壊れた年代記を渡されても、tick の上限と中断でタブを守れる | メインスレッド |
-| 手元の保存 | IndexedDB(`saves`・`chronicle`・`outbox`・`keys`) | localStorage は 5 MB 前後で、SaveData を複数持てない | localStorage |
+| 手元の保存 | IndexedDB(`saves`・`slots`・`chronicle`・`outbox`・`keys`)。`slots` は枠の一覧の行だけを持つ(M19-05。一覧のために `saves` を読むと Chromium で 4 枠 130 ms ほど) | localStorage は 5 MB 前後で、SaveData を複数持てない | localStorage |
 | 静的配信 | **Workers Static Assets**(API と同じ Worker に同梱)。SPA の fallback は `assets_navigation_prefers_asset_serving`(2025-04-01 から既定)で Worker を起こさない | 静的アセットへのリクエストは無料・無制限 | Cloudflare Pages(新規は Workers へ寄せる流れ。1 回の deploy で配信と API を出せるほうが手間が少ない)、GitHub Pages(Cloudflare 主軸の指示に反する) |
 | API(港) | **Cloudflare Worker 1 本**、TypeScript、フレームワークなし(ルート表 1 枚)。`/api/*` だけ fetch handler に入る | ルートは 10 本ほど。依存を増やさない今の流儀に合わせる。枠はアカウント単位なので、Worker を分けても枠は分かれない | Hono(8〜10 ルートに対して重い) |
 | データベース | **D1**(SQLite)。港の帳簿(年代記・通報・積荷・回避の集計・日次予算) | 新しい順の一覧・ランダムに 1 件・集計の加算が SQL 1 文で書ける。超えるとクエリが失敗するだけで、課金にならない | KV、Durable Objects SQLite(この規模では D1 1 つで足り、置き場が 2 つになる。リアルタイムの多人数を始めるときの候補) |

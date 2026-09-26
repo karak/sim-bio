@@ -14,12 +14,22 @@ import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
 import { createObserveEntry } from './observe/entry';
+import { openIslandStore } from './persist/islandStore';
+import { createLocalSave } from './persist/localSave';
+
+/** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
+const AUTOSAVE_TICKS = 90;
 
 async function boot(): Promise<void> {
-  const [base, species, scenarios] = await Promise.all([
+  const log = createConsoleSink();
+  const [base, species, scenarios, store] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
     fetch('/data/scenarios.json').then((r) => r.json() as Promise<ScenarioDef[]>),
+    openIslandStore({ indexedDB, now: Date.now }).catch((e: unknown) => {
+      log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.unavailable', error: String(e) });
+      return null;
+    }),
   ]);
   // ?scenario=<id> で石板を選ぶ。無ければ自由モード
   const params = new URLSearchParams(location.search);
@@ -40,8 +50,17 @@ async function boot(): Promise<void> {
       config.volcanoCell = scenario.start.volcanoCell === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : scenario.start.volcanoCell;
     }
   }
-  const log = createConsoleSink();
-  let world = World.create(config, { log });
+  const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
+    log.write({ ts: new Date().toISOString(), tick, year: Math.floor(tick / config.ticksPerYear), level, event, ...extra });
+  const localSave = createLocalSave({
+    store,
+    mode: scenario ? 'scenario' : 'free',
+    every: AUTOSAVE_TICKS,
+    log: persistLog,
+    onSaved: (s) => hud.setSlot(s),
+  });
+  // 閉じる前の続きから (M19-05)
+  let world = (await localSave.resume((save) => World.restore(save, { log }))) ?? World.create(config, { log });
   const selectScenario = (id: string | null) => {
     const q = new URLSearchParams(location.search);
     if (id) q.set('scenario', id);
@@ -52,7 +71,7 @@ async function boot(): Promise<void> {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const app = document.getElementById('app');
   if (!app) throw new Error('#app missing');
-  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(species), size: config.size });
+  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(world.snapshot().species), size: world.snapshot().size });
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
   /** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
@@ -75,19 +94,39 @@ async function boot(): Promise<void> {
     return result.ok;
   };
 
+  const replaceWorld = (next: World) => {
+    const shown = world.snapshot();
+    world = next;
+    const { size, species: nextSpecies } = world.snapshot();
+    // 描き分けの表は種から作るので、大きさか種の並びが変われば作り直す
+    if (size !== shown.size || nextSpecies.map((d) => d.id).join() !== shown.species.map((d) => d.id).join()) {
+      view.dispose();
+      view = createSceneView(canvas, { assets: buildAssetTable(nextSpecies), size });
+    }
+    selected = null;
+    localSave.replaced(world.serialize());
+  };
+  const load = (save: SaveData) => {
+    if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
+    replaceWorld(World.restore(save, { log }));
+  };
+
   const hud = createHud(app, {
     onCommand: intervene,
     onSpeed: (s) => loop.setSpeed(s),
     onLayer: (l) => view.setLayer(l),
     onSave: () => world.serialize(),
-    onLoad: (save: SaveData) => {
+    onLoad: load,
+    onSlotSave: (slot) => void localSave.saveSlot(slot, world.serialize()),
+    onSlotLoad: (slot) => {
       if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
-      world = World.restore(save, { log });
-      if (save.config.size !== config.size) {
-        view.dispose();
-        view = createSceneView(canvas, { assets: buildAssetTable(save.config.species), size: save.config.size });
-      }
-      selected = null;
+      void localSave.loadSlot(slot, (save) => World.restore(save, { log })).then((w) => {
+        if (w) replaceWorld(w);
+      });
+    },
+    onNewIsland: () => {
+      if (runner) return;
+      replaceWorld(World.create(config, { log }));
     },
     onDisasterArm: (k) => {
       armed = k;
@@ -109,6 +148,11 @@ async function boot(): Promise<void> {
     Object.fromEntries(species.map((d) => [d.id, d.name])),
     (id) => hud.showSpeciesLayer(id),
   );
+  hud.setReplaceable(!scenario);
+  void localSave.list().then((list) => list.forEach(hud.setSlot));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') localSave.flush(() => world.serialize());
+  });
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
   const observe = createObserveEntry(app, {
     names: Object.fromEntries(species.map((d) => [d.id, d.name])),
@@ -119,6 +163,7 @@ async function boot(): Promise<void> {
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
+        localSave.onTick(s.tick, () => world.serialize());
         observe.push(s, runner?.timeline());
         if (!observe.active()) view.update(s);
         hud.update(s);
