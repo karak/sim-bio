@@ -59,7 +59,10 @@ REJECTED_KEYS: Mapping[str, tuple[str, str]] = {
         "Analytics Engine は無料での枠を確かめていない。設計書 §3.1",
     ),
     "browser": ("binding", "Browser Run は設計の外"),
-    "ai": ("binding", "Workers AI は手元の開発でも課金になる"),
+    "ai": (
+        "binding",
+        "Workers AI は手元の開発でも遠隔で動き、使った分を数える。設計の外",
+    ),
     "vectorize": ("binding", "Vectorize は設計の外"),
     "kv_namespaces": ("binding", "KV は設計書 §3.1 で落とした (D1 1 つで足りる)"),
     "durable_objects": ("binding", "Durable Objects は設計書 §3.1 で落とした"),
@@ -90,16 +93,14 @@ class Violation:
 
 def parse_jsonc(text: str) -> object:
     """コメントと末尾のカンマを外して JSON として読む。文字列の中は触らない。"""
-    strings: list[str] = []
-    code: list[str] = []
+    out: list[str] = []
     i, n = 0, len(text)
     while i < n:
         if text[i] == '"':
             j = i + 1
             while j < n and text[j] != '"':
                 j += 2 if text[j] == "\\" else 1
-            strings.append(text[i : j + 1])
-            code.append("\0")
+            out.append(text[i : j + 1])
             i = j + 1
         elif text.startswith("//", i):
             end = text.find("\n", i)
@@ -110,11 +111,14 @@ def parse_jsonc(text: str) -> object:
                 raise ValueError("閉じていない /* コメント")
             i = end + 2
         else:
-            code.append(text[i])
+            if text[i] in "}]":
+                while out and out[-1].isspace():
+                    out.pop()
+                if out and out[-1] == ",":
+                    out.pop()
+            out.append(text[i])
             i += 1
-    bare = re.sub(r",(\s*[}\]])", r"\1", "".join(code))
-    pieces = iter(strings)
-    return json.loads(re.sub("\0", lambda _: next(pieces), bare))
+    return json.loads("".join(out))
 
 
 def check_config(config: Mapping[str, object], prefix: str = "") -> list[Violation]:
@@ -129,7 +133,7 @@ def check_config(config: Mapping[str, object], prefix: str = "") -> list[Violati
             violations.append(Violation(rule, where, why))
         elif key not in ALLOWED_KEYS:
             why = "許す key の表に無い。設計書 §3.3 に照らして、無料枠の内なら scripts/check_free_tier.py の ALLOWED_KEYS に足す"
-            violations.append(Violation("binding", where, why))
+            violations.append(Violation("unknown_key", where, why))
     return violations
 
 
@@ -243,27 +247,18 @@ def check_repo(root: Path) -> list[Violation]:
     config = parse_jsonc((root / "wrangler.jsonc").read_text(encoding="utf-8"))
     if not isinstance(config, dict):
         raise TypeError("wrangler.jsonc の一番外が object でない")
-    violations = check_config(config)
     directory = Path(config.get("assets", {}).get("directory", "./dist"))
-    dist = root / directory
-    shown = directory.as_posix()
+    return [*check_config(config), *check_dist(root / directory, directory.as_posix())]
+
+
+def check_dist(dist: Path, shown: str) -> list[Violation]:
     if not dist.is_dir():
-        return [
-            *violations,
-            Violation(
-                "dist", shown, "配る dir が無い。先に pnpm run build:cloudflare を回す"
-            ),
-        ]
+        why = "配る dir が無い。先に pnpm run build:cloudflare を回す"
+        return [Violation("dist", shown, why)]
     ignore_file = dist / ".assetsignore"
     if not ignore_file.is_file():
-        return [
-            *violations,
-            Violation(
-                "assetsignore",
-                f"{shown}/.assetsignore",
-                "wrangler が読む .assetsignore が無い",
-            ),
-        ]
+        why = "wrangler が読む .assetsignore が無い"
+        return [Violation("assetsignore", f"{shown}/.assetsignore", why)]
     rules = IgnoreRules.parse(
         WRANGLER_IGNORES + ignore_file.read_text(encoding="utf-8")
     )
@@ -272,7 +267,7 @@ def check_repo(root: Path) -> list[Violation]:
         for p in dist.rglob("*")
         if p.is_file()
     ]
-    return [*violations, *check_assetsignore(rules), *check_assets(entries, rules)]
+    return [*check_assetsignore(rules), *check_assets(entries, rules)]
 
 
 def main(argv: list[str] | None = None) -> int:

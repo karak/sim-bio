@@ -79,7 +79,7 @@ class CheckConfigTest(unittest.TestCase):
 
     def test_unknown_key_fails_until_it_is_added_to_the_table(self):
         violations = check_config({**BASE_CONFIG, "some_future_product": {}})
-        self.assertEqual(where_of(violations), [("binding", "some_future_product")])
+        self.assertEqual(where_of(violations), [("unknown_key", "some_future_product")])
         self.assertIn("表に無い", violations[0].why)
 
     def test_d1_ratelimits_and_cron_are_allowed_for_m19_08(self):

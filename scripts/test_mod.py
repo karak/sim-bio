@@ -115,6 +115,16 @@ class CommandLineTest(unittest.TestCase):
             )
         self.assertEqual(caught.exception.code, 2)
 
+    def test_nonzero_exit_fails_even_if_stdout_looks_like_rows(self):
+        def half_done(argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 1, stdout='[{"results": [{"id": "x"}]}]', stderr="boom"
+            )
+
+        code, _, err = run_main(["--remote", "hide", ID_A], run=half_done)
+        self.assertEqual(code, 1)
+        self.assertIn("boom", err)
+
     def test_wrangler_error_is_reported_and_fails(self):
         def failing(argv, **kwargs):
             return subprocess.CompletedProcess(
