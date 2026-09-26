@@ -109,6 +109,16 @@ describe('迎撃 (M10 レビュー): 同じ step 内の連打', () => {
     expect(r.intervene({ type: 'intercept' })).toEqual({ ok: true });
     expect(r.milestones().map((m) => m.atYear)).toEqual([10]);
   });
+  it('年の途中で update を挟まなくても (年代記の再生は境目でしか update しない)、World が適用した迎撃の分は備蓄から二重に引かない (M19-04)', () => {
+    const w = fakeWorld({ works: { stock: INTERCEPT_NEED * 2 - 0.5, stopped: false } });
+    const r = createScenarioRunner(def, w);
+    r.update(w.snapshot());
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: true });
+    w.step(10);
+    w.setCiv({ intercepted: 1, works: { stock: INTERCEPT_NEED, stopped: false } });
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: true });
+    expect(r.milestones().map((m) => m.atYear)).toEqual([10]);
+  });
   it('World の dispatch が拒否 (ok:false) を返せば、予定は取り消さず年表にも積まない', () => {
     const w = fakeWorld({ works: { stock: INTERCEPT_NEED, stopped: false } });
     const w2 = { ...w, dispatch: (cmd: Command) => { w.cmds.push(cmd); return { ok: false as const, reason: '段階が星に満たない' }; } };

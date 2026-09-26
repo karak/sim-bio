@@ -117,7 +117,8 @@ async function boot(): Promise<void> {
     setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
   });
   const loop = createRunner(
-    { step: (n) => (runner ? stepByYear(world, runner, n) : world.step(n)), snapshot: () => world.snapshot() },
+    // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
+    { step: (n) => (runner?.verdict().status === 'running' ? stepByYear(world, runner, n) : world.step(n)), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
         observe.push(s, runner?.timeline());

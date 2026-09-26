@@ -51,6 +51,7 @@ export type BudgetInfo = { power: number; max: number; incomeLastYear: number; u
 
 export type ScenarioRunner = {
   readonly def: ScenarioDef;
+  // M19-04: 年の境目では stepByYear が境目ちょうどの snapshot で update を呼ぶ。同じ年のうちに何度呼んでも、年次評価と予定の発火は 1 回きり
   /** 毎フレーム呼ぶ。予定コマンドの発火と年次判定を行う */
   update(s: WorldSnapshot): Verdict;
   /** プレイヤーの介入。回数を数えて world に流す。budget があれば値段を引き、足りなければ弾く */
@@ -191,6 +192,15 @@ export function createScenarioRunner(
     }
   };
 
+  /** World が適用した迎撃の数 (snapshot の intercepted の増え) だけ pendingIntercepts を減らす。何度呼んでも同じ (M19-04) */
+  const syncIntercepts = (s: WorldSnapshot) => {
+    const intercepted = s.civ?.intercepted ?? 0;
+    if (intercepted !== lastIntercepted) {
+      pendingIntercepts = Math.max(0, pendingIntercepts - (intercepted - lastIntercepted));
+      lastIntercepted = intercepted;
+    }
+  };
+
   /** 迎撃で取り消せる次の予定隕石 (M10-02): 単発 (everyYears 無し) の隕石で、まだ発火も取り消しもされていない最も早いもの */
   const nextMeteor = (): { idx: number; atYear: number } | null => {
     let best: { idx: number; atYear: number } | null = null;
@@ -297,7 +307,10 @@ export function createScenarioRunner(
         if (!target) return { ok: false, reason: 'no_target' };
         // M10 レビュー: 同じ step 内 (停止中の連打) に 2 回目を撃つと snapshot の備蓄はまだ減っていないので、
         // まだ適用されていない迎撃の分 (pendingIntercepts) を備蓄から引いて判定する
-        const civ = world.snapshot().civ;
+        const snap = world.snapshot();
+        // M19-04: 年代記の再生は境目でしか update しないので、ここでも World が適用した分を pending から引く
+        syncIntercepts(snap);
+        const civ = snap.civ;
         const stock = (civ?.works?.stock ?? 0) - pendingIntercepts * INTERCEPT_NEED;
         if (!civ || !canIntercept({ ...civ, works: { stock, stopped: civ.works?.stopped ?? false } }).ok) return { ok: false, reason: 'rejected' };
         const res = world.dispatch(cmd);
@@ -347,11 +360,7 @@ export function createScenarioRunner(
       // 祈り (M9-02): 石板が毎フレーム読めるように、年次評価を待たず最新の値に更新しておく
       currentPrayer = s.civ?.prayer ?? null;
       // 迎撃 (M10 レビュー): World が適用した分だけ pending を減らす
-      const intercepted = s.civ?.intercepted ?? 0;
-      if (intercepted !== lastIntercepted) {
-        pendingIntercepts = Math.max(0, pendingIntercepts - (intercepted - lastIntercepted));
-        lastIntercepted = intercepted;
-      }
+      syncIntercepts(s);
       fireDue(year);
       if (year !== lastYear) {
         // 最初の呼び出し (lastYear === -1) はまだ 1 年も経っていないので力は動かさない

@@ -34,11 +34,13 @@ export function createRunner(world: SteppableWorld, opts: RunnerOptions): Runner
 
   const frame = (now: number) => {
     if (last !== null && speed > 0) {
+      // step の中で速度が 0 にされうる (シナリオの判定の onVerdict、M19-04)。割る速度はこのフレームの速度に固定する
+      const s = speed;
       acc += now - last;
-      const ticks = Math.floor((acc * speed) / 1000);
+      const ticks = Math.floor((acc * s) / 1000);
       if (ticks > 0) {
         world.step(Math.min(ticks, cap));
-        acc -= (ticks * 1000) / speed;
+        acc -= (ticks * 1000) / s;
       }
     } else if (speed === 0) {
       acc = 0;
