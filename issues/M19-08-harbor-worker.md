@@ -30,3 +30,10 @@ M19-07, M19-02
 - [ ] npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す
 
 ## 作業ログ
+
+- 2026-09-26 M19-12 からの申し送り: 運用スクリプト `scripts/mod.py` は、この M19-08 のマイグレーションの前に、表と列を仮に置いた(設計書 §5・§6 から)。マイグレーションを書いたら、次を本物に合わせる。
+  - D1 の binding の名前 `HARBOR`(`mod.py` の `DATABASE`)。`wrangler.jsonc` の `d1_databases` に同じ名前で置けば、`mod.py` はそのまま当たる
+  - `chronicles(id, report_count, hidden_at)`。id は SHA-256 の 16 進 64 文字(`parse_chronicle_id`)。隠すは `hidden_at` に時刻、戻すは `hidden_at = NULL` と `report_count = 0`。通報を別の表に持つなら、戻す・消すの SQL をそれに合わせる
+  - `daily_budget(day, publish, cargo, report)` と、上限 出港 2,000・積荷 5,000・通報 1,000(`mod.py` の `BUDGET_CAPS`)
+  - `scripts/test_mod.py` の `PROVISIONAL_SCHEMA` を消し、`wrangler d1 migrations apply --local` に替える
+  - D1 と Rate Limiting の binding は、構成検査 `scripts/check_free_tier.py` の `ALLOWED_KEYS` で許してある
