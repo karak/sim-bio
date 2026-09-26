@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createHttpSink, shipsToServer, type LogBatch } from '../../src/core/log/httpSink';
+import { decodeLogBatch, LOG_BATCH_LIMITS, type LogBatch } from '../../src/core/log/batch';
+import { createHttpSink, shipsToServer } from '../../src/core/log/httpSink';
 import { createAppLogSink } from '../../src/core/log/appSink';
 import type { LogRecord } from '../../src/core/log/types';
 
@@ -478,4 +479,22 @@ describe('createHttpSink: 捨てた数の会計', () => {
       expect(new Set(ids).size).toBe(ids.length);
     },
   );
+});
+
+describe('createHttpSink: バッチは受け口の件数の上限 (LOG_BATCH_LIMITS.maxRecords) を超えない', () => {
+  it.each([
+    ['既定', {}],
+    ['maxBatchSize を上限より大きく渡したとき', { maxBatchSize: LOG_BATCH_LIMITS.maxRecords * 5 }],
+  ])('%s: 上限の 3 倍を書くと、どのバッチも受け口が受ける形で、件数は上限ちょうど', async (_, opts) => {
+    const f = fakeFetch(() => ok(204));
+    const sink = createHttpSink(URL_, { fetch: f.fetch, maxBuffered: 1_000, ...opts });
+    for (let i = 0; i < LOG_BATCH_LIMITS.maxRecords * 3; i++) sink.write(rec(i));
+    await vi.advanceTimersByTimeAsync(0);
+
+    const sizes = f.calls.map((c) => {
+      const d = decodeLogBatch(String(c.init.body));
+      return d.ok ? d.value.records.length : d.error;
+    });
+    expect(sizes).toEqual([LOG_BATCH_LIMITS.maxRecords, LOG_BATCH_LIMITS.maxRecords, LOG_BATCH_LIMITS.maxRecords]);
+  });
 });

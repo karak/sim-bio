@@ -5,12 +5,11 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "node"],
+    "lib": ["ES2022"],
+    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"],
     "skipLibCheck": true,
     "isolatedModules": true,
-    "esModuleInterop": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "tests", "tools/*.ts", "vite.config.ts", "playwright.config.ts", "playwright.cloudflare.config.ts"]
+  "include": ["src", "test"]
 }
