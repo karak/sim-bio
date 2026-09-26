@@ -399,6 +399,10 @@ LOD1 = dict(name="lod1", body=(6, 8), neck=(2, 6), head=(5, 8), ear=(3, 4), fleg
 HERO["mouth"] = True  # (土兎の手直しで追加) 鼻の下の口の線 (build_mouth) は近 LOD だけ
 LOD1.update(mouth=True, mouth_w=0.0095)  # (土兎の手直し 3 で追加) 群れ LOD にも口 (2〜10 m で読めるよう太い線)
 HERO["shoulder"], LOD1["shoulder"] = (5, 8), (3, 6)  # (土兎の手直し 4 で追加) 肩の塊 (build_shoulder) の断面数・周の頂点数
+# (土兎の手直し 8 で追加) 群れ LOD の首が正面・斜めから柱に見えた (審査台 r7-rabbit「首の左右（扁桃腺あたり）に2本、首輪より外側に柱上の部位がある」)。
+# 首の断面が 6 角 (左右が平らな面) で、首輪の帯 (8 区間) の弦が首の前の角の中へ潜って、首輪の端より外の首の平らな面が縦の柱に読めていた。
+# 首の周を 6 → 8 頂点にして丸め、首輪を 8 → 12 区間にして首を回り込ませる (三角形 +8 / +8)。近 LOD (周 10・首輪 12 区間) は変えない
+LOD1.update(neck=(2, 8), collar_seg=12)
 
 # 胴 (尻 → 胸): (y, 背の高さ, 腹の高さ, 半幅, 腹側の絞り)。基準画の側面から (座った姿勢: 尻は地面すれすれ)
 BODY_KEYS = [
@@ -1140,8 +1144,9 @@ def build_decals(shell, lod, mats, obj_name):
         build_ribbon(bm_glow, shell, pts, lod, 0.0042, 0.0040, GLOW, seg=max(2, lod["ribbon_seg"] // 2 + 1))
     # 首輪: 暗い青緑の帯 (群れ LOD も持つ。遠目にも頭と胴の境が読める)
     # (M22-05 残りの手直しで変更: 首輪が首と胴の境で途切れて見えたので、浮かせる量を 0.003 → 0.0045 に)
+    # (土兎の手直し 8 で変更: 群れ LOD の区間数を LOD1["collar_seg"] (8 → 12) に。元は seg=12 if lod["hex_ring"] else 8)
     build_ribbon(bm_teal, shell, collar_points(shell), lod, 0.013, 0.0045, BODY, closed=True,
-                 seg=12 if lod["hex_ring"] else 8)
+                 seg=12 if lod["hex_ring"] else lod.get("collar_seg", 8))
     parts = []
     for bm, part in ((bm_glow, "glow"), (bm_teal, "teal")):
         if not bm.faces:
