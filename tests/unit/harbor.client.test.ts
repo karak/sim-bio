@@ -331,3 +331,23 @@ describe('港のクライアントの回避率 (M19-11、設計書 B6)', () => {
     expect(h.sent).toEqual([]);
   });
 });
+
+describe('判定の出た島を手元に残す (M19-14 の直し)', () => {
+  it('石板ごとに最後の 1 つを残し、港の契約で読み直して返す。無い石板は null', async () => {
+    const h = harness();
+    await h.harbor.keepFinished(island);
+    expect(await h.harbor.finished('sinking')).toEqual({ chronicle: island.chronicle, digest: island.digest });
+    expect(await h.harbor.finished('test-quick')).toBeNull();
+    await h.harbor.keepFinished(dead);
+    expect(await h.harbor.finished('sinking')).toEqual(dead);
+  });
+
+  it('置き場の値が読めなければ (手で書き換えた・版を上げてカタログから種が消えた) null', async () => {
+    const store = createMemoryHarborStore();
+    const h = harness({ store });
+    await store.keepFinished('sinking', { chronicle: { ...FIXTURE_CHRONICLE, commands: 'x' as never }, digest });
+    expect(await h.harbor.finished('sinking')).toBeNull();
+    await store.keepFinished('sinking', { chronicle: FIXTURE_CHRONICLE, digest: { ...digest, totals: { dragon: 1 } } });
+    expect(await h.harbor.finished('sinking')).toBeNull();
+  });
+});

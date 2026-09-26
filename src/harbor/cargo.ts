@@ -9,6 +9,9 @@ import { HARBOR_LIMITS, type Cargo, type CargoId } from './contract';
  * 受け取った積荷は放流の命令 (ui/clicks.ts の receiveCargoClick) として本体の dispatch の門を通り、年代記に載る
  */
 
+/** 島が積荷を受け取れたか。budget は石板の星の力が足りない、refused は判定の後・訪問など介入を受けない島 */
+export type LandResult = 'ok' | 'no_shore' | 'budget' | 'refused';
+
 /** 舟は島の種の総数のこの割合を積む。量は放流の amount (セルの密度に足す量) として受け取り側に届く */
 export const CARGO_SHARE = 0.01;
 /** これより少ない種は積まない (ほぼ絶えた種の塵を、外来種として他人の島へ流さない) */

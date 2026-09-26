@@ -52,7 +52,7 @@ test('observe view: a prayer that comes while watching shows on the notice band,
   await expect(page.locator('#hud-year')).toHaveText('Year 9', { timeout: 60_000 });
   await page.click('#speed-0');
   await page.getByRole('button', { name: '3D で見る' }).click();
-  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^9 年$/, { timeout: 90_000 });
+  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^9 年 · [春夏秋冬]$/, { timeout: 90_000 });
   const band = page.getByRole('status', { name: /^祈り: / });
   await expect(band).toBeHidden();
   await page.getByRole('toolbar', { name: '観察画面' }).getByRole('button', { name: '10x' }).click();

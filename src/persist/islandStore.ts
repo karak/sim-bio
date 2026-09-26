@@ -59,6 +59,10 @@ const UPGRADES: readonly ((db: IDBDatabase) => void)[] = [
   (db) => {
     db.createObjectStore('marks');
   },
+  // 版 6 (M19-14 の直し): 判定の出た島 ({chronicle, digest})。key は scenarioId (persist/harborStore.ts)
+  (db) => {
+    db.createObjectStore('finished');
+  },
 ];
 
 export const requestDone = <T>(req: IDBRequest<T>): Promise<T> =>

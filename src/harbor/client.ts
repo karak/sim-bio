@@ -73,6 +73,10 @@ export type Harbor = {
   reportOutcome(island: { chronicle: Chronicle; digest: Digest }): Promise<'counted' | 'already' | 'closed' | 'rejected'>;
   /** 石板の結末の数え。閉港なら null */
   avoidance(scenarioId: string): Promise<{ finished: number; avoided: number } | null>;
+  /** 判定の出た島を石板ごとに手元に残す (M19-14 の直し)。判定の後に閉じても、開き直してから港へ出せる */
+  keepFinished(island: { chronicle: Chronicle; digest: Digest }): Promise<void>;
+  /** 残した島を港の契約で読み直す。無い・読めなければ null */
+  finished(scenarioId: string): Promise<{ chronicle: Chronicle; digest: Digest } | null>;
 };
 
 export type HarborLog = (level: 'info' | 'warn', event: string, extra?: Record<string, unknown>) => void;
@@ -294,6 +298,18 @@ export function createHarbor(deps: HarborDeps): Harbor {
     async avoidance(scenarioId) {
       const got = await ask('avoidance', { kind: 'avoidance', scenarioId });
       return got.ok ? got.value : null;
+    },
+    keepFinished: (island) => store.keepFinished(island.chronicle.scenarioId, island),
+    async finished(scenarioId) {
+      const raw = await store.finishedOf(scenarioId);
+      if (!isObject(raw)) return null;
+      const chronicle = parsePublicChronicle(raw.chronicle, catalog);
+      const digest = parseDigest(raw.digest, catalog);
+      if (!chronicle.ok || !digest.ok || chronicle.value.scenarioId !== scenarioId) {
+        log('warn', 'harbor.finished.unreadable', { scenarioId, ...(chronicle.ok ? {} : chronicle.error), ...(digest.ok ? {} : digest.error) });
+        return null;
+      }
+      return { chronicle: chronicle.value, digest: digest.value };
     },
   };
 }

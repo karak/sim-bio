@@ -30,6 +30,13 @@ export type HarborStore = {
   has(m: Mark): Promise<boolean>;
   /** claim した後にやり遂げられなかった (受け取れなかった・港が閉まっていた) ときに控えを外す */
   release(m: Mark): Promise<void>;
+  /**
+   * 判定の出た島 (年代記と要約) を石板ごとに 1 つ残す (M19-14 の直し)。chronicles の年代記は次の挑戦の自動保存が上書きするので、
+   * 判定の後に閉じてからでも港へ出せるよう、別の store に置く
+   */
+  keepFinished(scenarioId: string, island: { chronicle: Chronicle; digest: Digest }): Promise<void>;
+  /** 無ければ null。値は境界として港のクライアントがカタログで parse し直す */
+  finishedOf(scenarioId: string): Promise<unknown>;
 };
 
 const readKey = (v: unknown): WithdrawKey | null => {
@@ -48,7 +55,7 @@ const ownOf = (entries: Iterable<[unknown, unknown]>): ReadonlySet<ChronicleId> 
 
 export async function openHarborStore(deps: { indexedDB: IDBFactory }): Promise<HarborStore> {
   const db = await openDb(deps.indexedDB);
-  const write = async (store: 'outbox' | 'keys' | 'marks', f: (s: IDBObjectStore) => void) => {
+  const write = async (store: 'outbox' | 'keys' | 'marks' | 'finished', f: (s: IDBObjectStore) => void) => {
     const tx = db.transaction(store, 'readwrite');
     f(tx.objectStore(store));
     await transactionDone(tx);
@@ -94,6 +101,8 @@ export async function openHarborStore(deps: { indexedDB: IDBFactory }): Promise<
     },
     has: async (m) => (await requestDone(db.transaction('marks').objectStore('marks').getKey(markKey(m)))) !== undefined,
     release: (m) => write('marks', (s) => s.delete(markKey(m))),
+    keepFinished: (scenarioId, island) => write('finished', (s) => s.put(island, scenarioId)),
+    finishedOf: async (scenarioId) => (await requestDone<unknown>(db.transaction('finished').objectStore('finished').get(scenarioId))) ?? null,
   };
 }
 
@@ -102,6 +111,7 @@ export function createMemoryHarborStore(): HarborStore {
   const outbox = new Map<string, Outbound>();
   const keys = new Map<ChronicleId, WithdrawKey>();
   const marks = new Set<string>();
+  const finished = new Map<string, unknown>();
   return {
     enqueue: async (o) => void outbox.set(o.id, structuredClone(o)),
     queued: async () => [...outbox.values()].map((o) => structuredClone(o)),
@@ -121,5 +131,7 @@ export function createMemoryHarborStore(): HarborStore {
     },
     has: async (m) => marks.has(markKey(m)),
     release: async (m) => void marks.delete(markKey(m)),
+    keepFinished: async (scenarioId, island) => void finished.set(scenarioId, structuredClone(island)),
+    finishedOf: async (scenarioId) => structuredClone(finished.get(scenarioId)) ?? null,
   };
 }

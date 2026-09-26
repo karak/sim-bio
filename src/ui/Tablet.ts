@@ -134,6 +134,7 @@ export function createTablet(
     <div class="row"><span class="dim">石板</span><select id="tablet-select">${options}</select></div>
     ${def ? `<div class="tablet-title" id="tablet-title">${def.title} <span class="dim">· ${KIND_LABEL[def.kind]}</span></div>
     <div class="tablet-prophecy" id="tablet-prophecy">${def.prophecy}</div>
+    <div class="tablet-avoidance dim" id="tablet-avoidance" hidden></div>
     <div class="row"><span id="tablet-year" class="mono">0 / ${def.years} 年</span><span id="tablet-status" class="dim"></span></div>
     <div class="tablet-prayer" id="tablet-prayer" hidden></div>
     <div id="tablet-milestones" class="tablet-milestones"></div>
@@ -146,6 +147,7 @@ export function createTablet(
       <div class="verdict-title" id="verdict-title"></div>
       <div class="verdict-reason" id="verdict-reason"></div>
       <div class="verdict-stats mono" id="verdict-stats"></div>
+      <div class="verdict-avoidance dim" id="verdict-avoidance" hidden></div>
       <div id="verdict-harbor"></div>
       <div class="row"><button id="verdict-retry" class="chip">もう一度</button><button id="verdict-free" class="chip">自由モードへ</button><a id="verdict-download" class="chip" href="#" download="cargo.json" hidden>持ち出しを保存</a></div>
     </div>
