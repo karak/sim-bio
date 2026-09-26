@@ -1,3 +1,4 @@
+import { fail, isObject, type Parsed } from '../parse';
 import type { LogLevel, LogRecord } from './types';
 
 /**
@@ -11,13 +12,10 @@ export type LogBatch = { records: LogRecord[]; dropped: number };
 /** maxBytes は受け口が本文を読む上限 (UTF-8)。超えたら 413。ほかは形の検査で、超えたら 400 */
 export const LOG_BATCH_LIMITS = {
   maxBytes: 64 * 1024,
-  maxRecords: 100,
+  maxRecords: 20,
   maxTsLength: 64,
   maxEventLength: 128,
 } as const;
-
-export type ParseError = { path: string; reason: string };
-export type Parsed<T> = { ok: true; value: T } | { ok: false; error: ParseError };
 
 const LEVELS: ReadonlySet<string> = new Set<LogLevel>(['info', 'warn', 'error']);
 const BATCH_KEYS: ReadonlySet<string> = new Set<keyof LogBatch>(['records', 'dropped']);
@@ -76,11 +74,3 @@ function lengthProblem(v: string, max: number): string | null {
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 const isLevel = (v: unknown): v is LogLevel => typeof v === 'string' && LEVELS.has(v);
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-function fail(path: string, reason: string): { ok: false; error: ParseError } {
-  return { ok: false, error: { path, reason } };
-}

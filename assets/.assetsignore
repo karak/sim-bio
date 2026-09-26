@@ -1,9 +1,12 @@
 # wrangler deploy が dist/ から上げないもの (M19-02、設計書 §2.1-2・§3.3)。書式は .gitignore と同じ。
 # vite は assets/ を publicDir として dist/ へ写すので、このファイルも dist/.assetsignore になる。
-# 画面が fetch するのは data/** と models/observe/*.glb だけ。下は作業の元データと参照の絵で、画面は読まない。
+# 画面が fetch するのは data/** と models/observe/*.glb だけ。下は作業の元データ・参照の絵・古い模型で、画面は読まない。
 
 # Blender の元データ (書き出した .glb だけを配る)
 *.blend
+
+# 観察画面の前の、2D の頃の模型 (models/ の直下。観察画面は models/observe/ を読む)
+/models/*.glb
 
 # コンセプト画と、その没案
 textures/concept/**

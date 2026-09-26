@@ -13,6 +13,10 @@ concurrency:
 
 jobs:
   deploy:
+    # 「Run workflow」は branch を選べる。レビュー前の branch を出さないよう main だけにする。
+    # Secrets は Environment production に置き、その Deployment branches も main だけにする (README「Cloudflare へ配る」)
+    if: github.ref == 'refs/heads/main'
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

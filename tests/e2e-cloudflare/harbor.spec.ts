@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { cloudflarePort } from '../../playwright.cloudflare.config';
 import { decodeLogBatch } from '../../src/core/log/batch';
@@ -44,6 +44,30 @@ test('ビルドした画面のログが wrangler dev の受け口に 1 バッチ
   expect(JSON.parse(first.slice(first.indexOf('{')))).toEqual({ event: 'harbor.logs.record', record: records[0] });
 });
 
+test('タブが隠れたときの sendBeacon も Origin 付きで受け口に届く (403 で捨てられない)', async ({ page }) => {
+  const summaries: string[] = [];
+  page.on('console', (m) => {
+    if (m.text().includes('"event":"sim.tick.summary"')) summaries.push(m.text());
+  });
+  const kinds: string[] = [];
+  page.on('request', (r) => {
+    if (r.url() === `${base}/api/v1/logs`) kinds.push(r.resourceType());
+  });
+  await page.goto('/');
+  await page.click('#speed-100');
+  await expect.poll(() => summaries.length, { timeout: 40_000 }).toBeGreaterThan(0);
+  const beacon = page.waitForResponse((r) => r.url() === `${base}/api/v1/logs` && r.request().resourceType() === 'ping', { timeout: 10_000 });
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  const res = await beacon.catch((e: unknown) => {
+    throw new Error(`beacon の返事が見えない (送った種類: ${kinds.join(', ')}): ${String(e)}`);
+  });
+  expect(res.status()).toBe(204);
+});
+
 test('配るもの・配らないもの・知らない道 (.assetsignore と SPA の fallback と run_worker_first)', async ({ request }) => {
   const index = readFileSync('dist/index.html', 'utf8');
 
@@ -53,15 +77,17 @@ test('配るもの・配らないもの・知らない道 (.assetsignore と SPA
   const species = await request.get('/data/species.json');
   expect(await species.json()).toEqual(JSON.parse(readFileSync('dist/data/species.json', 'utf8')));
 
-  for (const path of [
+  const unserved = [
     '/models/observe/deer.blend',
+    '/models/deer.glb',
     '/textures/concept/deer-angular.png',
     '/textures/board/README.md',
     '/textures/observe/leaf_card.png',
     '/audio/.gitkeep',
     '/.assetsignore',
-    '/island/deep/link',
-  ]) {
+  ];
+  expect(unserved.filter((p) => !existsSync(`dist${p}`)), '配らないものは dist にはある (名前が変わって空振りしていない)').toEqual([]);
+  for (const path of [...unserved, '/island/deep/link']) {
     const res = await request.get(path);
     expect({ path, status: res.status(), servesIndex: (await res.text()) === index }).toEqual({ path, status: 200, servesIndex: true });
   }

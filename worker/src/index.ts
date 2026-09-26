@@ -3,19 +3,18 @@ import type { LogLevel } from '../../src/core/log/types';
 
 /**
  * 港の Worker (設計書 §3・§4.2)。wrangler.jsonc の run_worker_first で /api/* だけがここへ来る。静的アセットと SPA の fallback は Worker を起こさない。
- * 今あるのはログの受け口 (M19-02) だけ。年代記・積荷などのルートは M19-08 で ROUTES に足す。
+ * 今あるのはログの受け口 (M19-02) だけ。ROUTES は道の完全一致なので、/api/v1/chronicles/:id のような道を持つ M19-08 で URLPattern などに替える。
  */
 
-type Handler = (request: Request) => Promise<Response>;
+type Handler = (request: Request, url: URL) => Promise<Response>;
 
 /** 道 → (method → handler)。Map にするのは、`constructor` のような Object の鍵を道と取り違えないため */
 const ROUTES: ReadonlyMap<string, ReadonlyMap<string, Handler>> = new Map([['/api/v1/logs', new Map([['POST', receiveLogs]])]]);
 
-/** 書き込みの要求は、この Worker 自身の Origin から来たものだけを受ける (よそのページからの送りつけを断る) */
 const SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
 const CONSOLE: Readonly<Record<LogLevel, (line: string) => void>> = {
-  info: (line) => console.log(line),
+  info: (line) => console.info(line),
   warn: (line) => console.warn(line),
   error: (line) => console.error(line),
 };
@@ -25,21 +24,27 @@ export default {
     const url = new URL(request.url);
     const route = ROUTES.get(url.pathname);
     if (!route) return reject({ url, status: 404, body: { error: 'not_found' } });
-    const origin = request.headers.get('origin');
-    if (!SAFE_METHODS.has(request.method) && origin !== url.origin) {
-      return reject({ url, status: 403, body: { error: 'forbidden_origin' }, detail: { origin } });
+    if (!SAFE_METHODS.has(request.method) && !isSameOrigin(request, url)) {
+      return reject({ url, status: 403, body: { error: 'forbidden_origin' }, detail: { origin: request.headers.get('origin') } });
     }
     const handler = route.get(request.method);
     if (!handler) {
       const allow = [...route.keys()].join(', ');
       return reject({ url, status: 405, body: { error: 'method_not_allowed' }, detail: { method: request.method }, headers: { allow } });
     }
-    return handler(request);
+    return handler(request, url);
   },
 } satisfies ExportedHandler<Env>;
 
-async function receiveLogs(request: Request): Promise<Response> {
-  const url = new URL(request.url);
+/**
+ * 書き込みは、この Worker 自身の画面から来たものだけを受ける (よそのページからブラウザで送りつけられるのを断る。認証ではない)。
+ * Referrer-Policy: no-referrer の下では same-origin の POST でも Origin が "null" になるので、Sec-Fetch-Site も見る
+ */
+function isSameOrigin(request: Request, url: URL): boolean {
+  return request.headers.get('origin') === url.origin || request.headers.get('sec-fetch-site') === 'same-origin';
+}
+
+async function receiveLogs(request: Request, url: URL): Promise<Response> {
   const text = await readBounded(request, LOG_BATCH_LIMITS.maxBytes);
   if (text === null) return reject({ url, status: 413, body: { error: 'payload_too_large', maxBytes: LOG_BATCH_LIMITS.maxBytes } });
   const parsed = decodeLogBatch(text);
@@ -70,7 +75,7 @@ async function readBounded(request: Request, maxBytes: number): Promise<string |
   }
 }
 
-/** 断った理由は Workers Logs に残す (返す本文と同じ中身に、呼び手へは返さない detail を添える) */
+/** 断った理由は Workers Logs に残す (返す本文と同じ中身に、呼び手へは返さない detail を添える。固定の鍵は後ろに置いて上書きさせない) */
 function reject({ url, status, body, detail = {}, headers }: {
   url: URL;
   status: number;
@@ -78,6 +83,6 @@ function reject({ url, status, body, detail = {}, headers }: {
   detail?: Record<string, unknown>;
   headers?: HeadersInit;
 }): Response {
-  console.warn(JSON.stringify({ event: 'harbor.api.rejected', status, route: url.pathname, ...body, ...detail }));
+  console.warn(JSON.stringify({ ...body, ...detail, event: 'harbor.api.rejected', status, route: url.pathname }));
   return Response.json(body, { status, headers });
 }

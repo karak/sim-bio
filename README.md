@@ -60,7 +60,8 @@ CI は続けて `npm run test:e2e:cloudflare`(ビルドを wrangler dev で配�
 
 - 静的アセットは Worker を起こさずに配る(無料・無制限)。`run_worker_first: ["/api/*"]` なので、Worker が動くのは `/api/*` だけ。知らない道には `index.html` を返す。
 - 配らないもの(`.blend`・コンセプト画・デザインボード・Blender に焼く前の絵)は `assets/.assetsignore` に書く。vite がこれを `dist/.assetsignore` へ写し、wrangler がそれを読む。
-- 受け口は `LogBatch`(`src/core/log/batch.ts`、クライアントと同じファイル)を検証し、1 件ずつ JSON 1 行で Workers Logs に書く(7 日保持)。D1 は使わない。自分の Origin 以外からの POST は 403、形が違えば 400、64 KiB を超えれば 413。
+- 受け口は `LogBatch`(`src/core/log/batch.ts`、クライアントと同じファイル)を検証し、1 件ずつ JSON 1 行で Workers Logs に書く。Workers Free の Workers Logs は 1 日 200,000 件・3 日保持([pricing](https://developers.cloudflare.com/workers/platform/pricing/#workers-logs))。D1 は使わない。自分の Origin 以外からの POST は 403、形が違えば 400、64 KiB を超えれば 413。
+- Origin の確認は、よそのページからブラウザで送りつけられるのを断るためのもので、認証ではない(curl なら Origin は自由に付けられる)。枠を守る本当の栓は、M19-08 の日次上限。
 
 ### 手元で確かめる(アカウントは要らない)
 
@@ -75,7 +76,7 @@ npm run test:e2e:cloudflare   # 同じビルドを wrangler dev で立て、画�
 
 ### 配備(人が行う)
 
-配備は GitHub Actions の `Deploy (Cloudflare)`(`.github/workflows/deploy.yml`)で行う。起動は Actions の画面の「Run workflow」だけで、main への push では走らない。中身は、`lfs: true` の checkout → `npm run check` → `npm run build:cloudflare` → `wrangler deploy`。
+配備は GitHub Actions の `Deploy (Cloudflare)`(`.github/workflows/deploy.yml`)で行う。起動は Actions の画面の「Run workflow」だけで、main への push では走らない。出せるのは main だけ。中身は、`lfs: true` の checkout → `npm run check` → `npm run build:cloudflare` → `wrangler deploy`。
 
 初回だけ、次を人が行う。
 
@@ -83,8 +84,8 @@ npm run test:e2e:cloudflare   # 同じビルドを wrangler dev で立て、画�
 2. **支払い方法を登録しない。** Workers Paid に上げる操作は、この設計の外で人が決める(設計書 §3.3)。無料枠を使い切った日は、課金されずに港(`/api/*`)が止まる。
 3. ダッシュボードの **Workers & Pages** で、`workers.dev` のサブドメインを決める。配った画面は `https://biotope-island.<サブドメイン>.workers.dev` になる。
 4. **Account API tokens** で、テンプレート **Edit Cloudflare Workers** のトークンを作り、このアカウントだけに絞る。
-5. GitHub の Settings → Secrets and variables → Actions に、`CLOUDFLARE_API_TOKEN`(4 のトークン)と `CLOUDFLARE_ACCOUNT_ID`(アカウント ID)を置く。値はリポジトリに書かない。
-6. Actions の `Deploy (Cloudflare)` を「Run workflow」で起こす。
+5. GitHub の Settings → Environments で `production` を作り、Deployment branches and tags を `main` だけにする。その Environment secrets に、`CLOUDFLARE_API_TOKEN`(4 のトークン)と `CLOUDFLARE_ACCOUNT_ID`(アカウント ID)を置く。値はリポジトリに書かない。
+6. Actions の `Deploy (Cloudflare)` を、branch に `main` を選んで「Run workflow」で起こす。ほかの branch を選ぶと、job は飛ばされる。
 
 配ったあとのログは、ダッシュボードの Workers & Pages → `biotope-island` → Observability で読む。手元の端末からは `npx wrangler tail`(要 `wrangler login`)でも流れを見られる。
 

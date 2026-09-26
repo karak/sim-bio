@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createHttpSink, shipsToServer, type LogBatch } from '../../src/core/log/httpSink';
+import type { LogBatch } from '../../src/core/log/batch';
+import { createHttpSink, shipsToServer } from '../../src/core/log/httpSink';
 import { createAppLogSink } from '../../src/core/log/appSink';
 import type { LogRecord } from '../../src/core/log/types';
 

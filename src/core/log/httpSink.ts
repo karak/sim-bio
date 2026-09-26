@@ -1,4 +1,4 @@
-import { encodeLogBatch } from './batch';
+import { encodeLogBatch, LOG_BATCH_LIMITS } from './batch';
 import type { LogRecord, LogSink } from './types';
 
 /** 受け口 (M19-02) へ POST する本文。dropped は、このバッチを切るまでに捨てて、まだ誰も運んでいない件数 */
@@ -43,13 +43,15 @@ export function createHttpSink(url: string, opts: HttpSinkOptions = {}): HttpSin
     fetch: send = (input, init) => fetch(input, init),
     sendBeacon,
     filter = shipsToServer,
-    maxBatchSize = 20,
+    maxBatchSize: requestedBatchSize = LOG_BATCH_LIMITS.maxRecords,
     maxWaitMs = 10_000,
     maxBuffered = 200,
     maxRetries = 3,
     retryBaseDelayMs = 2_000,
     requestTimeoutMs = 10_000,
   } = opts;
+  // 受け口は上限を超えるバッチを 400 で断り、400 は送り直さずに捨てる。なので上限より大きくは切らない
+  const maxBatchSize = Math.min(requestedBatchSize, LOG_BATCH_LIMITS.maxRecords);
 
   let queue: LogRecord[] = [];
   let pendingDropped = 0;

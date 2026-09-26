@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import type { LogBatch } from '../../src/core/log/httpSink';
+import type { LogBatch } from '../../src/core/log/batch';
 
 test('HTTP LogSink: warn/error と年ごとの要約がバッチで受け口に届き、console にも出続ける (M19-01)', async ({ page }) => {
   const batches: { contentType: string | null; body: LogBatch }[] = [];

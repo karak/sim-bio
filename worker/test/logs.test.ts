@@ -14,11 +14,11 @@ const post = (body: BodyInit, headers: Record<string, string> = { origin: ORIGIN
   exports.default.fetch(LOGS, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body });
 
 type Line = Record<string, unknown>;
-let out: { level: 'log' | 'warn' | 'error'; line: Line }[] = [];
+let out: { level: 'log' | 'info' | 'warn' | 'error'; line: Line }[] = [];
 
 beforeEach(() => {
   out = [];
-  for (const level of ['log', 'warn', 'error'] as const) {
+  for (const level of ['log', 'info', 'warn', 'error'] as const) {
     vi.spyOn(console, level).mockImplementation((text: unknown) => {
       out.push({ level, line: JSON.parse(String(text)) as Line });
     });
@@ -40,7 +40,7 @@ describe('POST /api/v1/logs: 受け取る', () => {
 
     expect(res.status).toBe(204);
     expect(received()).toEqual([
-      { level: 'log', line: { event: 'harbor.logs.record', record: batch.records[0] } },
+      { level: 'info', line: { event: 'harbor.logs.record', record: batch.records[0] } },
       { level: 'warn', line: { event: 'harbor.logs.record', record: batch.records[1] } },
       { level: 'error', line: { event: 'harbor.logs.record', record: batch.records[2] } },
     ]);
@@ -131,7 +131,44 @@ describe('POST /api/v1/logs: 断る', () => {
 
     expect(res.status).toBe(405);
     expect(res.headers.get('allow')).toBe('POST');
+    expect(await res.json()).toEqual({ error: 'method_not_allowed' });
+    expect(out).toEqual([{ level: 'warn', line: { event: 'harbor.api.rejected', status: 405, route: '/api/v1/logs', error: 'method_not_allowed', method: 'GET' } }]);
   });
+
+  it('申告の Content-Length が上限を超えていたら、中身が小さく正しくても読まずに 413', async () => {
+    const small = new TextEncoder().encode(encodeLogBatch({ records: [rec()], dropped: 0 }));
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(small);
+        c.close();
+      },
+    });
+
+    const res = await post(body, { origin: ORIGIN, 'content-length': String(LOG_BATCH_LIMITS.maxBytes + 1) });
+
+    expect(res.status).toBe(413);
+    expect(received()).toEqual([]);
+  });
+});
+
+describe('Origin の門', () => {
+  it('Referrer-Policy: no-referrer で Origin が null になっても、Sec-Fetch-Site: same-origin なら受ける', async () => {
+    const res = await post(encodeLogBatch({ records: [rec()], dropped: 0 }), { origin: 'null', 'sec-fetch-site': 'same-origin' });
+
+    expect(res.status).toBe(204);
+    expect(received()).toHaveLength(1);
+  });
+
+  it.each([
+    ['cross-site', { 'sec-fetch-site': 'cross-site' }],
+    ['same-site (別のサブドメイン)', { origin: 'https://other.biotope.example', 'sec-fetch-site': 'same-site' }],
+  ])('Sec-Fetch-Site が %s なら 403', async (_, headers) => {
+    const res = await post(encodeLogBatch({ records: [rec()], dropped: 0 }), headers);
+
+    expect(res.status).toBe(403);
+    expect(received()).toEqual([]);
+  });
+
 });
 
 describe('/api/* のほか', () => {
