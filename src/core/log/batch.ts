@@ -1,4 +1,4 @@
-import { fail, isObject, type Parsed } from '../parse';
+import { fail, isFiniteNumber, isObject, type Parsed } from '../parse';
 import type { LogLevel, LogRecord } from './types';
 
 /**
@@ -70,7 +70,5 @@ function lengthProblem(v: string, max: number): string | null {
   if (v.length === 0) return '空の文字列';
   return v.length > max ? `${max} 文字を超える` : null;
 }
-
-const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 const isLevel = (v: unknown): v is LogLevel => typeof v === 'string' && LEVELS.has(v);

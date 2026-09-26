@@ -1,5 +1,5 @@
 import type { Command } from '../simulation/types';
-import { YEARLY_POINTS, type Chronicle, type ChronicleHead, type TimedCommand, type YearlyTotals } from '../harbor/contract';
+import { YEARLY_POINTS, type Chronicle, type ChronicleHead, type TimedCommand, type YearlyTotals } from '../harbor/chronicle';
 
 /** UI が命令を流す先 (シナリオ中は ScenarioRunner.intervene)。ok が false なら拒否 (力が足りない・門で弾かれた・判定の後) */
 export type DispatchLike<R extends { ok: boolean }> = { dispatch(cmd: Command): R; snapshot(): { tick: number } };

@@ -1,5 +1,5 @@
 import type { WorldSnapshot } from '../simulation/types';
-import type { Digest } from '../harbor/contract';
+import type { Digest } from '../harbor/chronicle';
 
 type Json = null | boolean | number | string | readonly Json[] | { readonly [k: string]: Json };
 
@@ -7,7 +7,9 @@ type Json = null | boolean | number | string | readonly Json[] | { readonly [k: 
 export function canonicalJson(v: Json): string {
   if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
   if (v !== null && typeof v === 'object') {
-    const entries = Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    const entries = Object.entries(v)
+      .filter(([, x]) => x !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     return `{${entries.map(([k, x]) => `${JSON.stringify(k)}:${canonicalJson(x)}`).join(',')}}`;
   }
   return JSON.stringify(v);

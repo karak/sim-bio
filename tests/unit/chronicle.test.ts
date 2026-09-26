@@ -9,7 +9,7 @@ import { SIM_VERSION } from '../../src/simulation/version';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, SpeciesDef, WorldConfig } from '../../src/simulation/types';
 import { disasterClick, spawnClick } from '../../src/ui/clicks';
-import { CHRONICLE_LIMITS, YEARLY_POINTS, parseChronicle, type ReplayOutcome } from '../../src/harbor/contract';
+import { CHRONICLE_LIMITS, YEARLY_POINTS, parseChronicle, type ReplayOutcome } from '../../src/harbor/chronicle';
 import { recordChronicle, yearlySeries } from '../../src/chronicle/recorder';
 import { digestOf } from '../../src/chronicle/digest';
 import { replay, type ReplayIsland } from '../../src/chronicle/replay';
