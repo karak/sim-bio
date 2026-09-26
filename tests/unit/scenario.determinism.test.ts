@@ -124,14 +124,16 @@ describe('決定論の刻み (M19-04): 速度とフレームの刻みに依ら�
     expect(byFrames).toEqual(Object.fromEntries(SPEEDS.map(({ name }) => [name, script])));
   });
 
-  it('年の途中のクリックも、打った tick を記録して再生すれば、3 通りとも実際の結末と一致する', () => {
+  it('年の途中と境目ちょうど (1x なら tick 720) のクリックも、打った tick を記録して再生すれば、3 通りとも実際の結末と一致する', () => {
     const clicks = [
       { atTick: 500, command: spawnClick('deer', 16 * SIZE + 16) },
+      { atTick: 720, command: spawnClick('deer', 14 * SIZE + 17) },
       { atTick: 800, command: disasterClick('plague', 16 * SIZE + 16) },
     ];
     for (const { name, speed, intervals } of SPEEDS) {
       const live = playByFrames(def, speed, intervals, { opening, clicks });
       expect(live.record.map((r) => r.command), name).toEqual(clicks.map((c) => c.command));
+      if (speed === 1) expect(live.record.map((r) => r.tick)).toEqual([500, 720, 800]);
       const again = replay(def, [{ tick: 0, command: opening }, ...live.record]);
       expect(fullDigest(again.world, again.runner), name).toBe(live.digest);
     }
