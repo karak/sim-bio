@@ -7,6 +7,7 @@ import { buildAssetTable } from './render/assetTable';
 import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
 import { createScenarioRunner, type ScenarioRunner } from './scenario/ScenarioRunner';
+import { stepByYear } from './scenario/stepByYear';
 import type { ScenarioDef } from './scenario/types';
 import type { Command } from './simulation/types';
 import { resolveCivilizationStart } from './simulation/civilization';
@@ -116,7 +117,7 @@ async function boot(): Promise<void> {
     setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
   });
   const loop = createRunner(
-    { step: (n) => world.step(n), snapshot: () => world.snapshot() },
+    { step: (n) => (runner ? stepByYear(world, runner, n) : world.step(n)), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
         observe.push(s, runner?.timeline());
