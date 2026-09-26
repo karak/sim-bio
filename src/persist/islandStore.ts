@@ -33,22 +33,27 @@ const UPGRADES: readonly ((db: IDBDatabase) => void)[] = [
   (db) => {
     db.createObjectStore('chronicles');
   },
+  // 版 3 (M19-09): 港へ出す年代記の outbox と、取り下げ鍵。key はどちらも年代記の id (persist/harborStore.ts)
+  (db) => {
+    db.createObjectStore('outbox');
+    db.createObjectStore('keys');
+  },
 ];
 
-const requestDone = <T>(req: IDBRequest<T>): Promise<T> =>
+export const requestDone = <T>(req: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 
 // error の event の時点では tx.error がまだ null なので、abort で原因を受け取る
-const transactionDone = (tx: IDBTransaction): Promise<void> =>
+export const transactionDone = (tx: IDBTransaction): Promise<void> =>
   new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'));
   });
 
-function openDb(indexedDB: IDBFactory): Promise<IDBDatabase> {
+export function openDb(indexedDB: IDBFactory): Promise<IDBDatabase> {
   const req = indexedDB.open(DB_NAME, UPGRADES.length);
   req.onupgradeneeded = (e) => {
     for (const upgrade of UPGRADES.slice(e.oldVersion)) upgrade(req.result);
