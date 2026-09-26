@@ -26,7 +26,7 @@
 | ![兎](docs/design/screenshots/08-rabbit.png)<br>草地の兎と、岩肌の斜面 | ![鐘樹の林](docs/design/screenshots/09-grove.png)<br>鐘樹の林と舟の肋材 |
 | ![海岸](docs/design/screenshots/10-coast.png)<br>入り江の砂浜と浅瀬 | |
 
-撮り直しは `node tools/readme-shots.ts --url <動いている Vite の URL>`。
+撮り直しの手順は [docs/operations/readme-screenshots.md](docs/operations/readme-screenshots.md)。
 
 ## 動かし方
 
@@ -117,6 +117,7 @@ URL に `?scenario=<id>` を付けると、その石板の予言を背負って�
 | `docs/specs/` | 機能仕様・技術設計（承認済みの設計を置く） |
 | `docs/design/` | ゲームデザイン文書（GDD、コンセプト、バランス表、QA 資料） |
 | `docs/decisions/` | ADR（技術選定などの意思決定記録） |
+| `docs/operations/` | 運用の手順（スクリーンショットの撮り直しなど） |
 | `assets/` | 素材 |
 | `assets/models/` | 3D モデル（glTF/GLB、Git LFS 管理） |
 | `assets/textures/` | テクスチャ、ハイトマップ、AI 生成コンセプト画 |
