@@ -21,7 +21,20 @@ const rawSave = (indexedDB: IDBFactory, key: string): Promise<SaveData | undefin
     };
     open.onerror = () => reject(open.error);
   });
-const settle = () => new Promise((r) => setTimeout(r, 0));
+/** 出した書き込みがすべて確定し、localSave がそれを受け取るまで待つ (fake-indexeddb の transaction は数 macrotask かかる) */
+const pending: Promise<unknown>[] = [];
+const settle = async () => {
+  await Promise.allSettled(pending);
+  await new Promise((r) => setTimeout(r, 0));
+};
+const tracked = (store: IslandStore): IslandStore => ({
+  ...store,
+  save: (slot, data) => {
+    const p = store.save(slot, data);
+    pending.push(p);
+    return p;
+  },
+});
 const world = () => World.create(testConfig(), { log: createMemorySink() });
 const restore = (s: SaveData) => World.restore(s, { log: createMemorySink() });
 
@@ -29,7 +42,8 @@ type Logged = { level: string; event: string; tick: number } & Record<string, un
 
 async function setup(opts: { mode?: 'free' | 'scenario'; store?: IslandStore | null; indexedDB?: IDBFactory } = {}) {
   const indexedDB = opts.indexedDB ?? new IDBFactory();
-  const store = opts.store === undefined ? await openIslandStore({ indexedDB, now: () => 1000 }) : opts.store;
+  const opened = opts.store === undefined ? await openIslandStore({ indexedDB, now: () => 1000 }) : opts.store;
+  const store = opened && tracked(opened);
   const logs: Logged[] = [];
   const saved: SlotSummary[] = [];
   const log: SaveLog = (level, event, tick, extra = {}) => logs.push({ level, event, tick, ...extra });

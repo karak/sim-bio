@@ -107,9 +107,11 @@ test('M19-05: 「新しい島」は確かめてから Year 0 に作り直し (�
   await runUntilAutosaved(page, logs, TICKS_PER_YEAR);
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0');
 
+  const before = await storedAutoTick(page);
   page.once('dialog', (d) => void d.dismiss());
   await page.click('#new-island');
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0');
+  expect(await storedAutoTick(page)).toBe(before);
 
   page.once('dialog', (d) => void d.accept());
   await page.click('#new-island');
