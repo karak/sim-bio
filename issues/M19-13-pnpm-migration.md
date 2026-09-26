@@ -25,7 +25,7 @@ pnpm に移し、worktree ごとに `pnpm install --frozen-lockfile` で自分�
 - vite・vitest・playwright・eslint・tsc が pnpm の厳格な node_modules(巻き上げ無し)で動くかを確かめる。足りない依存は明示する。`shamefully-hoist` は最後の手段にする。
 - CI(`.github/workflows/ci.yml`)を `pnpm/action-setup` と `pnpm install --frozen-lockfile` にする。
 - 手順書を直す: agent に張らせていた node_modules の symlink をやめ、worktree で `pnpm install --frozen-lockfile` を実行する。対象は README、メモリの運用、引き継ぎ。
-- 親の `node_modules/node_modules`(移設前の `/Users/yasushi/projects/game-demo/node_modules` を指す壊れたリンク)を片づける。
+- 親の `node_modules/node_modules`(移設前の `/Users/yasushi/projects/game-demo/node_modules` を指す壊れたリンク)を片づける。→ 2026-09-26 12:42 にユーザーの許可で消した(済み)
 
 ## Blocked by
 
