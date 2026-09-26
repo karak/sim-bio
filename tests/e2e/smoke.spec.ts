@@ -321,8 +321,18 @@ test('intercept: 備蓄が足りない年は押せない理由を行に出す (M
 });
 
 test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チップが出て、押すと狼レイヤーが開く (M21-02 D5)', async ({ page }) => {
+  // 狼の波の警告は 1 年目の年次評価の警告で、2 年目の評価で差し替わる (1 年 = 360 tick、100 倍速で 3.6 秒)。
+  // 負荷がかかると操作の往復だけでその 1 年を使い切り、押す前にチップが消える (M19-04 の作業ログ)。
+  // ページの時計を止めて年はテストが送り、1 年目のうちに見て押す。止めるのは開く前 (開いた後の時刻を読んで止めると、負荷で読んだ時刻を過ぎる)
+  const t0 = new Date('2026-01-01T00:00:00Z').getTime();
+  await page.clock.install({ time: t0 });
+  await page.clock.pauseAt(t0 + 60_000);
   await page.goto('/?scenario=test-event');
   await page.click('#speed-100');
+  // fastForward は溜まったフレームを 1 回だけ回す。1 回目は runner が時刻を覚えるだけ、2 回目からは 1 回 1 秒 = 100 倍速で 100 tick
+  // (1 フレームの上限 200 tick の内)。1 年 = 360 tick より小さい刻みで送るので、1 年目に着いたところで必ず止まる
+  for (let i = 0; i < 10 && (await page.locator('#tablet-year').textContent()) !== '1 / 3 年'; i++) await page.clock.fastForward(1000);
+  await expect(page.locator('#tablet-year')).toHaveText('1 / 3 年');
   await expect(page.locator('#tablet-warnings')).toContainText('狼の群れが北の谷に下りた', { timeout: 20_000 });
   await expect(page.locator('#layer-species-wolf')).not.toHaveClass(/on/);
   const chip = page.getByRole('button', { name: '狼を見る' });
