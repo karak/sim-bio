@@ -14,5 +14,27 @@
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
+  },
+  // 港の帳簿 (M19-08)。database_id は本番の DB を作るまでの仮の値。作り方は README「配備(人が行う)」
+  "d1_databases": [
+    {
+      "binding": "HARBOR",
+      "database_name": "biotope-harbor",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+  // 送り手 (日替わりの HMAC) ごとの回数制限。数えは場所ごとで緩い。最後の砦は D1 の日次予算 (worker/src/policy.ts)
+  "ratelimits": [
+    { "name": "RATE_WRITE", "namespace_id": "19081", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RATE_READ", "namespace_id": "19082", "simple": { "limit": 120, "period": 60 } }
+  ],
+  // 毎日 00:10 UTC (日次の枠が戻った直後) に掃除と保存量の集計
+  "triggers": {
+    "crons": ["10 0 * * *"]
+  },
+  // 値は wrangler secret put で置く。リポジトリには名前だけ
+  "secrets": {
+    "required": ["TURNSTILE_SECRET_KEY", "SENDER_SECRET"]
   }
 }
