@@ -17,6 +17,7 @@ import { disasterClick, spawnClick } from './ui/clicks';
 import { createObserveEntry } from './observe/entry';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
+import { createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
 import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
 import type { InterveneResult } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';
@@ -71,8 +72,17 @@ async function boot(): Promise<void> {
     log: persistLog,
     onSaved: (s) => hud.setSlot(s),
   });
+  // 石板の途中で閉じた島の続き (M19-14): 島・runner の状態・年代記を戻す。無い・判定の出た石板・読めない続きなら石板の初めから。
+  // 訪問 (M19-09) では戻さない (他人の島を訪れているので、自分の続きを差し込まない)
+  const resumed = scenario && !visitId
+    ? await resumeScenario({ store, head: { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed }, log: persistLog }, (s) => ({
+        world: World.restore(s.save, { log }),
+        runner: s.runner,
+        chronicle: s.chronicle,
+      }))
+    : null;
   // 閉じる前の続きから (M19-05)
-  let world = (await localSave.resume((save) => World.restore(save, { log }))) ?? World.create(config, { log });
+  let world = resumed?.world ?? (await localSave.resume((save) => World.restore(save, { log }))) ?? World.create(config, { log });
   const selectScenario = (id: string | null) => {
     const q = new URLSearchParams(location.search);
     if (id) q.set('scenario', id);
@@ -93,12 +103,11 @@ async function boot(): Promise<void> {
   let runner: ScenarioRunner | null = null;
   /** シナリオ中の介入の年代記 (M19-06)。runner と一緒に作り、runner.intervene を包む */
   let recorder: ChronicleRecorder<InterveneResult> | null = null;
+  /** 石板の途中の島の自動保存 (M19-14)。runner と一緒に作る */
+  let scenarioAutosave: ScenarioAutosave | null = null;
   /** 年代記は石板ごとに最後の 1 本を置く。続きからの復帰 (島と runner を戻す) はまだ無いので、読むのは港への出港 (M19-09) */
-  const saveChronicle = () => {
-    if (!store || !recorder || !scenario) return;
-    const tick = world.snapshot().tick;
-    store.saveChronicle(scenario.id, recorder.current()).catch((e: unknown) => persistLog('warn', 'persist.chronicle.failed', tick, { error: String(e) }));
-  };
+  // (M19-14 で変更: 続きからの復帰ができた。年代記は島・runner の状態と同じ transaction で書く。persist/scenarioSave.ts)
+  const saveChronicle = () => scenarioAutosave?.flush();
   /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
   const intervene = (c: Command): boolean => {
     if (visitId) return false;
@@ -205,6 +214,7 @@ async function boot(): Promise<void> {
     {
       onFrame: (s) => {
         localSave.onTick(s.tick, () => world.serialize());
+        scenarioAutosave?.onTick(s.tick);
         observe.push(s, runner?.timeline());
         if (!observe.active()) view.update(s);
         hud.update(s);
@@ -257,13 +267,26 @@ async function boot(): Promise<void> {
         const snap = world.snapshot();
         log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.power.exhausted', scenario: scenario.id });
       },
-    });
+    }, resumed?.runner);
     const scenarioRunner = runner;
     recorder = visitId ? null : recordChronicle(
       { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => world.snapshot() },
       { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
       () => scenarioRunner.totalsByYear(),
     );
+    // 石板の途中の島の自動保存 (M19-14) は、記録する島 (自分の島) だけ。訪問している他人の島を自分の続きとして書かない
+    const scenarioRecorder = recorder;
+    if (scenarioRecorder) {
+      if (resumed) scenarioRecorder.resume(resumed.chronicle);
+      scenarioAutosave = createScenarioAutosave({
+        store,
+        scenarioId: scenario.id,
+        every: AUTOSAVE_TICKS,
+        log: persistLog,
+        from: world.snapshot().tick,
+        capture: () => ({ save: world.serialize(), runner: scenarioRunner.save(), chronicle: scenarioRecorder.current() }),
+      });
+    }
     // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る
     scenarioRunner.update(world.snapshot());
     if (visitId) {

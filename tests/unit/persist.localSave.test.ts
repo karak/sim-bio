@@ -207,6 +207,9 @@ describe('手動の枠 (M19-05)', () => {
       setAside: () => Promise.resolve('unreadable:auto'),
       saveChronicle: () => Promise.resolve(),
       loadChronicle: () => Promise.resolve(null),
+      saveScenario: () => Promise.resolve(),
+      loadScenario: () => Promise.resolve(null),
+      setAsideScenario: () => Promise.resolve('unreadable:test-quick'),
     };
     const { local, logs, saved } = await setup({ store: failing });
     await local.saveSlot('manual-2', world().serialize());
