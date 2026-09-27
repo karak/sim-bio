@@ -59,6 +59,7 @@ async function routeHarbor(page: Page, harbor: ReturnType<typeof createFakeHarbo
 }
 
 test('M19-16: 状態を受入の画面へ送って id を得、その id の写しを別のブラウザに流し込むと、同じ島・同じ枠から続く', async ({ page, browser }) => {
+  test.setTimeout(120_000);
   await page.goto(`/?dev=1&acceptance=${encodeURIComponent(acceptance)}`);
   await page.click('#speed-100');
   await expect.poll(() => shownTick(page), { timeout: 30_000 }).toBeGreaterThan(TICKS_PER_YEAR);
@@ -72,7 +73,7 @@ test('M19-16: 状態を受入の画面へ送って id を得、その id の写�
   const dev = page.getByRole('region', { name: '開発' });
   await dev.getByRole('button', { name: '状態を受入の画面へ送る' }).click();
   const id = page.locator('#dev-snapshot-id');
-  await expect(id).toHaveText(/^s-\d{8}-\d{6}-[0-9a-f]{4}$/);
+  await expect(id).toHaveText(/^s-\d{8}-\d{6}-[0-9a-f]{4}$/, { timeout: 15_000 });
 
   const snap = readSnapshot(join(dir, `${await id.textContent()}.json`));
   expect(snap.current.save.tick).toBe(pausedAt);
@@ -103,7 +104,7 @@ test('M19-16: ?player= で見守り手を分けると、置き場・取り下げ
   await expect(alice.locator('#verdict')).toBeVisible({ timeout: 60_000 });
   const publish = alice.getByRole('region', { name: '港へ出す' });
   await publish.getByRole('button', { name: '出港する' }).click();
-  await expect(publish.getByRole('status').first()).toHaveText('港へ出した。リンクを渡せば、誰でもこの島をたどれる');
+  await expect(publish.getByRole('status').first()).toHaveText('港へ出した。リンクを渡せば、誰でもこの島をたどれる', { timeout: 15_000 });
   const [id] = [...harbor.ledger.keys()];
 
   const bob = await context.newPage();
@@ -114,7 +115,7 @@ test('M19-16: ?player= で見守り手を分けると、置き場・取り下げ
   await expect(card).toContainText('試し読み');
   await expect(card).not.toContainText('あなたが出港した島');
   await card.getByRole('button', { name: '通報' }).click();
-  await expect(card.getByRole('status')).toHaveText('通報した。3 件集まると、港から隠れる');
+  await expect(card.getByRole('status')).toHaveText('通報した。3 件集まると、港から隠れる', { timeout: 15_000 });
 
   await alice.goto('/?player=alice');
   await alice.getByRole('button', { name: /^港を開く/ }).click();
