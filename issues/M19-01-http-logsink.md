@@ -86,3 +86,4 @@ None (can start immediately)
     - 再レビューの medium(コメントの規則): dd3ceab で書き換えたコメント 3 つは、どれも同じブランチの 94fe98d で自分が足したもの。feat/m19 にあったコメントではなく、feat/m19 との差分で消えたコメント行は 0 行。
   - 残した差: 受け口(M19-02)はまだ無い。本文の形 `LogBatch` は、受け口を作るときに `src/harbor/contract.ts` へ移すか、そこから import する。
 - 2026-09-26 訂正: Workers Logs の保持は無料プランで 3 日(1 日 200,000 件)。上の「7 日」は Paid の値だった(M19-02 で docs を確認)
+- 2026-09-27 受入試験(.claude/acceptance、http://localhost:5392): a-logs 保留(メモなし) → 直しは M19-15・M19-16・M19-17、登録は M21-04・M22-10

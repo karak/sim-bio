@@ -65,3 +65,4 @@ M21-01, M21-02, M21-03, M19-03
     - 3 回目(b3c1485): 承認
   - **見送り**: actions を SHA で固定する(別チケット)、SPA の fallback を `404-page` にするか(M19-09 の共有リンクの道が決まってから)、`httpSink.ts` の `export type { LogBatch }` とその上のコメント(呼び手は 0 件。消すにはユーザーが当該コメントを名指しする必要がある)
   - **配備の前にユーザーがすること**: README「Cloudflare へ配る」の手順 1〜6(専用アカウント、支払い方法を登録しない、workers.dev のサブドメイン、トークン、Environment `production` と Secrets、main で Run workflow)。そのあと、配った URL で画面が開き、Observability に `harbor.logs.record` が出ることを確かめる
+- 2026-09-27 受入試験(.claude/acceptance、http://localhost:5392): a-logs 保留(メモなし) → 直しは M19-15・M19-16・M19-17、登録は M21-04・M22-10

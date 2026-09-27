@@ -1,0 +1,31 @@
+---
+id: M21-04
+title: やり直しの効かない操作は確認のダイアログを経る
+status: todo
+milestone: M21
+plan: docs/design/2026-09-26-cloudflare-architecture.md
+depends_on: []
+evidence: []
+---
+
+# やり直しの効かない操作は確認のダイアログを経る
+
+優先度: Should
+
+## What to build
+
+受入試験(2026-09-27、a-free-resume)のユーザーのメモ原文(登録の依頼):「「新しい島」「枠から読み込み」その他、やり直しの効かない破壊的変更は確認ダイアログを経由すること」
+
+「新しい島」は M19-05 で確認を付けた。ほかの、今の島を失う操作(枠から読込・ファイルの読込・災害? など)を洗い出し、やり直しが効かないものはすべて同じ確認のダイアログを経るようにする。
+
+## Blocked by
+
+None (can start immediately)
+
+## Acceptance criteria
+
+- [ ] 今の島や記録を失う操作の一覧を作業ログに書き、どれに確認を付けるかを決める
+- [ ] 確認を付けた操作は、取り消せば何も変わらないことを E2E で確かめる
+- [ ] pnpm run check・E2E が通り、evidence に commit SHA とテストファイルを記す
+
+## 作業ログ
