@@ -38,11 +38,11 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
 | H4 | 人(済 2026-09-27、widget `biotope-island`、site key `0x4AAAAAAFFM5qcR0ciWH4Br`。Hostname・Managed は API で確かめた) | Turnstile の widget を 1 つ作る。Hostname に `biotope-island.dev-sim-bio.workers.dev`、Widget Mode は Managed。**site key**(公開してよい)と **secret key**(秘密)が出る | ダッシュボード → Turnstile → Add widget |
-| H5 | 人 | Turnstile の secret key を Worker に置く。値は対話の入力で渡し、チャットにもファイルにも書かない | `! pnpm exec wrangler secret put TURNSTILE_SECRET_KEY` |
-| A5 | AI | 送り手の HMAC の鍵(乱数)を作って Worker に置く。値は画面にも出さずパイプで渡す | `openssl rand -base64 32 \| pnpm exec wrangler secret put SENDER_SECRET` |
+| H5 | 人(済 2026-09-27、初回の配備の secrets file で) | Turnstile の secret key を Worker に置く。値は対話の入力で渡し、チャットにもファイルにも書かない | `! pnpm exec wrangler secret put TURNSTILE_SECRET_KEY` |
+| A5 | AI(済 2026-09-27、初回の配備の secrets file で。人の端末で作った) | 送り手の HMAC の鍵(乱数)を作って Worker に置く。値は画面にも出さずパイプで渡す | `openssl rand -base64 32 \| pnpm exec wrangler secret put SENDER_SECRET` |
 | A6 | AI | 2 つの secret の名前が置かれたことを確かめる(値は出ない) | `pnpm exec wrangler secret list` |
 
-secret は Worker が一度も配られていないと置けないことがある。そのときは A5・A6 と H5 を、7 の最初の配備のあとに回す(配ってから置いても、置いた時点で効く)。
+**初回は `secret put` では置けない**(2026-09-27 に確かめた)。`wrangler.jsonc` が 2 つの secret を要るものとして宣言しているので、Worker がまだ無いと配備が「required secrets have not been set」で止まり、`secret put` も Worker が無いので使えない。初回は A12a の形で、secret を一時ファイルに書いて `wrangler deploy --secrets-file` で配り、すぐ消す。2 回目からの鍵の差し替えは H5・A5 の `secret put` でよい。
 
 ## 4. 配備に使う API トークン(人)
 
@@ -78,7 +78,7 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 | # | 誰 | 作業 | コマンド |
 |---|---|---|---|
 | A12 | AI | 配備のワークフローを main で起こし、終わりまで見る | `gh workflow run deploy.yml --ref main --repo karak/sim-bio` → `gh run watch --repo karak/sim-bio` |
-| A12a | AI | **初回だけは手元から配る**(新しい Worker を作るには product scope の Admin が要り、CI のトークンでは作れない)。その後に H6 のトークンを作る | `VITE_TURNSTILE_SITEKEY=0x4AAAAAAFFM5qcR0ciWH4Br pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote && pnpm exec wrangler deploy` |
+| A12a | 人(済 2026-09-27。AI の端末からの `wrangler deploy` はツールの許可の判定に止められたので、人の端末で打った) | **初回だけは手元から配る**(新しい Worker を作るには product scope の Admin が要り、CI のトークンでは作れない)。secret は一時ファイルで渡す。その後に H6 のトークンを作る | `VITE_TURNSTILE_SITEKEY=0x4AAAAAAFFM5qcR0ciWH4Br pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote` → `f=$(mktemp) && chmod 600 "$f"; printf 'Turnstile secret key: '; read -rs t; echo; printf 'TURNSTILE_SECRET_KEY="%s"\nSENDER_SECRET="%s"\n' "$t" "$(openssl rand -base64 32)" > "$f"; unset t; pnpm exec wrangler deploy --secrets-file "$f"; rm -f "$f"` |
 
 ## 8. 配ったあとの確かめ
 
