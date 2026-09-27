@@ -311,6 +311,8 @@ async function boot(): Promise<void> {
         localSave.onTick(s.tick, () => world.serialize());
         scenarioAutosave?.onTick(s.tick);
         observe.push(s, runner?.timeline());
+        // 選んだセルを 3D の島の上でも示す (M22-10)。選びを解けば (selected = null) 消える
+        view.setSelected(selected);
         if (!observe.active()) view.update(s);
         hud.update(s);
         // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)
