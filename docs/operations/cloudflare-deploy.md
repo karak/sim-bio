@@ -37,7 +37,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
-| H4 | 人 | Turnstile の widget を 1 つ作る。Hostname に `biotope-island.dev-sim-bio.workers.dev`、Widget Mode は Managed。**site key**(公開してよい)と **secret key**(秘密)が出る | ダッシュボード → Turnstile → Add widget |
+| H4 | 人(済 2026-09-27、widget `biotope-island`、site key `0x4AAAAAAFFM5qcR0ciWH4Br`。Hostname・Managed は API で確かめた) | Turnstile の widget を 1 つ作る。Hostname に `biotope-island.dev-sim-bio.workers.dev`、Widget Mode は Managed。**site key**(公開してよい)と **secret key**(秘密)が出る | ダッシュボード → Turnstile → Add widget |
 | H5 | 人 | Turnstile の secret key を Worker に置く。値は対話の入力で渡し、チャットにもファイルにも書かない | `! pnpm exec wrangler secret put TURNSTILE_SECRET_KEY` |
 | A5 | AI | 送り手の HMAC の鍵(乱数)を作って Worker に置く。値は画面にも出さずパイプで渡す | `openssl rand -base64 32 \| pnpm exec wrangler secret put SENDER_SECRET` |
 | A6 | AI | 2 つの secret の名前が置かれたことを確かめる(値は出ない) | `pnpm exec wrangler secret list` |
@@ -59,7 +59,7 @@ secret は Worker が一度も配られていないと置けないことがあ�
 | A7 | AI | Environment `production` を作り、配れる branch を `main` だけにする | `gh api -X PUT repos/karak/sim-bio/environments/production -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'` → `gh api -X POST repos/karak/sim-bio/environments/production/deployment-branch-policies -f name=main -f type=branch` |
 | H7 | 人 | API トークンを Environment secret に置く(対話の入力) | `! gh secret set CLOUDFLARE_API_TOKEN --env production --repo karak/sim-bio` |
 | A8 | AI | account_id(A1)を Environment secret に置く | `gh secret set CLOUDFLARE_ACCOUNT_ID --env production --repo karak/sim-bio --body <account_id>` |
-| A9 | AI | Turnstile の site key(H4、公開してよい値)を Environment variable に置く。配備のワークフローがこれを焼き、無ければ配備を止める | `gh variable set TURNSTILE_SITEKEY --env production --repo karak/sim-bio --body <site key>` |
+| A9 | AI | Turnstile の site key(H4、公開してよい値)を Environment variable に置く。配備のワークフローがこれを焼き、無ければ配備を止める | `gh variable set TURNSTILE_SITEKEY --env production --repo karak/sim-bio --body 0x4AAAAAAFFM5qcR0ciWH4Br` |
 | A10 | AI | 置いたものを確かめる | `gh secret list --env production --repo karak/sim-bio` と `gh variable list --env production --repo karak/sim-bio` |
 
 ## 6. main へ入れる(AI、許可を得て)
@@ -78,7 +78,7 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 | # | 誰 | 作業 | コマンド |
 |---|---|---|---|
 | A12 | AI | 配備のワークフローを main で起こし、終わりまで見る | `gh workflow run deploy.yml --ref main --repo karak/sim-bio` → `gh run watch --repo karak/sim-bio` |
-| A12a | AI | **初回だけは手元から配る**(新しい Worker を作るには product scope の Admin が要り、CI のトークンでは作れない)。その後に H6 のトークンを作る | `VITE_TURNSTILE_SITEKEY=<site key> pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote && pnpm exec wrangler deploy` |
+| A12a | AI | **初回だけは手元から配る**(新しい Worker を作るには product scope の Admin が要り、CI のトークンでは作れない)。その後に H6 のトークンを作る | `VITE_TURNSTILE_SITEKEY=0x4AAAAAAFFM5qcR0ciWH4Br pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote && pnpm exec wrangler deploy` |
 
 ## 8. 配ったあとの確かめ
 
