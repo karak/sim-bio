@@ -187,7 +187,6 @@ async function boot(): Promise<void> {
    * 移った先へは読む枠の名前を sessionStorage で渡す。ファイルは枠の一覧に出さない置き場 (import) に置いてから移る
    */
   const load = async (data: SlotSave, slot: SlotId | null) => {
-    // シナリオ中の読込は予言と矛盾するので無効
     // (M19-17 で変更: 石板の中でも、同じ石板の枠は runner の状態・年代記と一緒に戻すので読める。別の島の差し込みは openSlot の舞台の確かめで弾く。無効は訪問だけ)
     if (visitId) return;
     const plan = planSlotLoad(data, here, (id) => scenarios.find((d) => d.id === id)?.title ?? id);
@@ -217,7 +216,6 @@ async function boot(): Promise<void> {
     onLoad: (raw) => void load(slotSaveOf(raw), null),
     onSlotSave: (slot) => void localSave.saveSlot(slot, slotSave()),
     onSlotLoad: (slot) => {
-      // シナリオ中の読込は予言と矛盾するので無効
       // (M19-17 で変更: 読めるかどうかは load が舞台で決める)
       void localSave.loadSlot(slot, (data) => data).then((data) => {
         if (data) void load(data, slot);

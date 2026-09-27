@@ -81,7 +81,6 @@ export type HudHandlers = {
   /** 手元の保存の枠 (M19-05)。自動の枠へは自動保存だけが書く */
   onSlotSave(slot: ManualSlot): void;
   onSlotLoad(slot: SlotId): void;
-  /** 自由モードの島を作り直す (自動保存から再開するので、開き直しても新しい島にはならない) */
   // (M19-17 で変更: 石板の中では「石板を初めから」。今の続きを捨てて Year 0 から)
   onNewIsland(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
@@ -110,7 +109,6 @@ export type Hud = {
   showSpeciesLayer(id: string): void;
   /** 枠の一覧の 1 行を出す (書いたら上書き) */
   setSlot(s: SlotSummary): void;
-  /** 島の差し替え (ファイルと枠の読込、新しい島) を受け付けるか。シナリオ中は予言と矛盾するので false */
   // (M19-17 で変更: 石板の中も受け付ける。false は訪問 (他人の島) だけで、枠への保存も止める)
   setReplaceable(on: boolean): void;
 };

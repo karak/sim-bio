@@ -22,7 +22,6 @@ export type LocalSave = {
   /** タブが隠れたとき (閉じる直前を含む)。周期を待たずに書く */
   flush(serialize: () => SaveData): Promise<void>;
   saveSlot(slot: ManualSlot, data: SlotSave): Promise<void>;
-  /** 読めない枠 (restore が投げる) は null にして記録に残す */
   // (M19-17 で変更: 枠は舞台を名乗る包み。open が舞台の確かめと restore をし、読めなければ投げる)
   loadSlot<W>(slot: PendingSlot, open: (data: SlotSave) => W): Promise<W | null>;
   list(): Promise<readonly SlotSummary[]>;
