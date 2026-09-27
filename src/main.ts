@@ -14,6 +14,7 @@ import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
 import { createObserveEntry } from './observe/entry';
+import { createViewedSpecies } from './ui/viewedSpecies';
 
 async function boot(): Promise<void> {
   const [base, species, scenarios] = await Promise.all([
@@ -75,12 +76,19 @@ async function boot(): Promise<void> {
     return result.ok;
   };
 
+  // いま地図で見ている種 (M21-02 D5)。変わったら石板の告知に反映し、ログに残す (e2e が HUD からの通知を確かめる)
+  const viewedSpecies = createViewedSpecies((id) => {
+    if (!runner) return;
+    runner.setViewedSpecies(id);
+    const snap = world.snapshot();
+    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: runner.def.id, id });
+  });
   const hud = createHud(app, {
     onCommand: intervene,
     onSpeed: (s) => loop.setSpeed(s),
     onLayer: (l) => view.setLayer(l),
     // 種のレイヤーを見ている間はその種の告知を出さない (M21-02 D5: 警告のチップからでも HUD からでも開けば消える)
-    onSpeciesLayer: (id) => runner?.setViewedSpecies(id),
+    onSpeciesLayer: (id) => viewedSpecies.select(id),
     onSave: () => world.serialize(),
     onLoad: (save: SaveData) => {
       if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
@@ -121,6 +129,8 @@ async function boot(): Promise<void> {
     { step: (n) => world.step(n), snapshot: () => world.snapshot() },
     {
       onFrame: (s) => {
+        // 観察画面の間は地図を描かないので、種を選んでいても見ていないとみなす
+        viewedSpecies.setObserving(observe.active());
         observe.push(s, runner?.timeline());
         if (!observe.active()) view.update(s);
         hud.update(s);

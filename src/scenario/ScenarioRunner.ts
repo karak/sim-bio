@@ -68,7 +68,10 @@ export type ScenarioRunner = {
   budget(): BudgetInfo | null;
   /** 現在有効な祈りと残り年数 (石板表示用、M9-02)。祈りが無ければ null */
   prayer(): { kind: PrayerKind; yearsLeft: number } | null;
-  /** 直近の年次評価で出た警告 (年に 1 回更新)。予定の告知は予定の順に先頭に並び、noticeYears のあいだ残る */
+  /**
+   * 直近の年次評価で出た警告 (年に 1 回更新) に、予定の告知を予定の順で先頭に足したもの。
+   * 告知は noticeYears のあいだ残り、setViewedSpecies で年の途中にも消えるので、結果を 1 年キャッシュしない
+   */
   warnings(): Warning[];
   /**
    * いま見ている種のレイヤー (M21-02 D5)。見始めたら (警告のチップからでも HUD からでも) その種の告知を警告から外し、
@@ -384,7 +387,7 @@ export function createScenarioRunner(
         const civ: CivContext = prevCivStage === null ? null : { prevStage: prevCivStage };
         // 舟の警告 (M10-04): 前年の進みと比べる。前年に舟が無ければ null
         warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ, { year, prevProgress: prevShipProgress });
-        // text 付きの予定 (M10R-07) はその年の警告の先頭に出す (年表には fireDue で積んである)
+        // 予定の告知 (M10R-07) の期限切れを消す (判定はここだけ)。告知は fireDue が notices に入れ、warnings() が先頭に並べる
         for (const [idx, n] of notices) if (year >= n.untilYear) notices.delete(idx);
         prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;
         for (const w of warnings) {

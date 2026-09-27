@@ -321,21 +321,29 @@ test('intercept: 備蓄が足りない年は押せない理由を行に出す (M
 });
 
 test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チップが出て、押すと狼レイヤーが開く (M21-02 D5)', async ({ page }) => {
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  const viewed = () => logs.filter((l) => l.includes('"event":"scenario.viewed_species"')).map((l) => (JSON.parse(l) as { id: string | null }).id);
   await page.goto('/?scenario=test-event');
   await page.click('#speed-100');
   await expect(page.locator('#tablet-warnings')).toContainText('狼の群れが北の谷に下りた', { timeout: 20_000 });
   await expect(page.locator('#layer-species-wolf')).not.toHaveClass(/on/);
   // 遅い CI ではこの click が効くまでに数年進むことがある。test-event の告知は noticeYears (30 年) のあいだ残るので年をまたいでも押せるが、
-  // 終わる年の判定の幕はチップを覆う。止まったことを確かめてから押す。年の表示は 100x でも約 3.6 s に 1 回しか変わらず
-  // 止まっていなくても変わらないことが多いので、毎フレーム進む日 (#hud-season の Day N) で見る
+  // 終わる年の判定の幕はチップを覆う。止まったことを確かめてから押す。毎フレーム進む日 (#hud-season の Day N) を、待ち直しの無い
+  // 比較で見る (toHaveText は一致するまで待ち直すので、3.6 s で一周する表示では止まっていなくても通る)。1.5 s は 100x の 1 年より短く、
+  // 1 フレーム ~1 s の遅い CI でも少なくとも 1 フレームは入る
   await page.click('#speed-0');
   const day = await page.locator('#hud-season').textContent();
-  await page.waitForTimeout(500);
-  await expect(page.locator('#hud-season')).toHaveText(day ?? '');
+  await page.waitForTimeout(1_500);
+  expect(await page.locator('#hud-season').textContent()).toBe(day);
   const chip = page.getByRole('button', { name: '狼を見る' });
   await expect(chip).toBeVisible();
   await chip.click();
   await expect(page.locator('#layer-species-wolf')).toHaveClass(/on/);
   // 種のレイヤーを開いたら告知は読まれたものとして消える (チップ → 狼レイヤー → onSpeciesLayer → setViewedSpecies の経路)
   await expect(page.locator('#tablet-warnings')).not.toContainText('狼の群れが北の谷に下りた');
+  await expect.poll(viewed).toEqual(['wolf']);
+  // 種以外のレイヤーに切り替えたら「見ていない」に戻る (これが抜けると、その種の告知が以後ずっと出なくなる)
+  await page.click('#layer-terrain');
+  await expect.poll(viewed).toEqual(['wolf', null]);
 });

@@ -100,12 +100,12 @@ describe('assets/data/scenarios.json', () => {
       alive: { type: 'year_reached', year: 30 },
     });
   });
-  it('予定の noticeYears は省略するか 1 以上の整数 (0・負・小数だと告知が石板に届く前に消える)', () => {
-    const bad = defs.flatMap((d) => d.schedule.filter((sc) => sc.noticeYears !== undefined && !(Number.isInteger(sc.noticeYears) && sc.noticeYears >= 1)).map((sc) => `${d.id}: ${sc.noticeYears}`));
+  it('予定の noticeYears は省略するか 1 以上の整数 (0 以下だと告知が石板に届く前に消える。小数は年数として意図が曖昧なので整数に限る)', () => {
+    const isBadNoticeYears = (v: number) => !(Number.isInteger(v) && v >= 1);
+    const bad = defs.flatMap((d) => d.schedule.filter((sc) => sc.noticeYears !== undefined && isBadNoticeYears(sc.noticeYears)).map((sc) => `${d.id}: ${sc.noticeYears}`));
     expect(bad).toEqual([]);
-    // 陽性対照: 検査式そのものが不正な値を拾うこと
-    const isBad = (v: number) => !(Number.isInteger(v) && v >= 1);
-    expect([0, -1, 1.5].map(isBad)).toEqual([true, true, true]);
+    // 陽性対照: データの検査に使っているのと同じ判定が、不正な値を拾い正しい値を通すこと
+    expect([0, -1, 1.5, 1, 2].map(isBadNoticeYears)).toEqual([true, true, true, false, false]);
   });
 });
 
