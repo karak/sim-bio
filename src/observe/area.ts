@@ -4,7 +4,7 @@
  *
  * 契約:
  * - 区域のセルは forEachInRadius と同じ円判定で選び、index の昇順に並べる。
- * - 位置は m 単位。1 セル = CELL_M (10 m)、集落のセルの中心が原点。x は列 (東) の向き、z は行 (南) の向き。
+ * - 位置は m 単位。1 セル = CELL_M (10 m)、中心のセル (observeCenter) の中心が原点。x は列 (東) の向き、z は行 (南) の向き。
  * - isLand は elevation ≥ SEA_LEVEL。landCount は区域の陸セルの数。
  * - openSea は地図の縁から 4 近傍でつながる海 (外海)。陸に囲まれた池・湖は false。
  * - density は snapshot の populations をセルごとに写したもの (全種)。snapshot の配列は参照しない (コピー)。
