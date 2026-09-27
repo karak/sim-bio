@@ -7,6 +7,7 @@ import { createTurnstile, TEST_SITEKEY } from '../harbor/turnstile';
 import { createMemoryHarborStore, openHarborStore, type HarborStore } from '../persist/harborStore';
 import type { ScenarioDef } from '../scenario/types';
 import { publishClick, visitHref } from './clicks';
+import type { Risky } from './confirmAsk';
 import { el } from './el';
 import { mountVisit, type HarborContext, type Visit } from './HarborVisit';
 import {
@@ -59,7 +60,11 @@ export type HarborUiDeps = {
   log: HarborLog;
   /** 開発用の見守り手 (M19-16)。手元の置き場の DB の名前と、港への要求に添える名乗りの header。本番では無い */
   player?: { dbName: string; headers: Readonly<Record<string, string>> };
+  /** やり直しの効かない操作の確かめ (M21-04)。取り下げは ask を経て、訪れる札は leave (判定の出た島なら確かめてから移る) を経る */
+  guard: HarborGuard;
 };
+
+export type HarborGuard = { ask(r: Risky): Promise<boolean>; leave(href: string): void };
 
 /** 1 時間ごとに outbox を送り直す (設計書 §5.2) */
 const RESEND_MS = 60 * 60 * 1000;
@@ -72,7 +77,8 @@ export function visitIdOf(params: URLSearchParams, scenario: ScenarioDef | null)
   return id.ok ? id.value : null;
 }
 
-type Ready = HarborContext & { store: HarborStore };
+type Ctx = HarborContext & { guard: HarborGuard };
+type Ready = Ctx & { store: HarborStore };
 
 export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   const titleOf = (scenarioId: string) => deps.scenarios.find((d) => d.id === scenarioId)?.title ?? scenarioId;
@@ -110,6 +116,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     inscriptions,
     simVersion: deps.simVersion,
     titleOf,
+    guard: deps.guard,
     harbor: createHarbor({
       baseUrl: deps.baseUrl,
       linkBase: location.origin,
@@ -228,10 +235,10 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
 }
 
 /** 一覧の 1 件は石碑: 島の呼び名・ひとこと・結末・確かめた人。版違いは要約だけで、訪れる札を出さない */
-function cardItem(ctx: HarborContext, card: ChronicleCard, own: boolean): HTMLLIElement {
+function cardItem(ctx: Ctx, card: ChronicleCard, own: boolean): HTMLLIElement {
   const sameVersion = card.simVersion === ctx.simVersion;
   const status = el('p', { class: 'harbor-line harbor-card-status', role: 'status' });
-  const actions = el('div', { class: 'harbor-actions' }, sameVersion && el('a', { class: 'harbor-chip harbor-primary', href: visitHref(card) }, '訪れる'));
+  const actions = el('div', { class: 'harbor-actions' }, sameVersion && leaveLink(ctx, el('a', { class: 'harbor-chip harbor-primary', href: visitHref(card) }, '訪れる')));
   const item = el(
     'li',
     { class: `harbor-card ${card.verdict}`, 'data-id': card.id },
@@ -243,9 +250,10 @@ function cardItem(ctx: HarborContext, card: ChronicleCard, own: boolean): HTMLLI
     actions,
     status,
   );
-  const act = (label: string, run: () => Promise<{ text: string; done: boolean }>) => {
+  const act = (label: string, run: () => Promise<{ text: string; done: boolean }>, risky?: Risky) => {
     const b = el('button', { class: 'harbor-chip' }, label);
     b.addEventListener('click', async () => {
+      if (risky && !(await ctx.guard.ask(risky))) return;
       b.disabled = true;
       const r = await run();
       status.textContent = r.text;
@@ -262,13 +270,13 @@ function cardItem(ctx: HarborContext, card: ChronicleCard, own: boolean): HTMLLI
       const r = await ctx.harbor.withdraw(card.id);
       item.classList.toggle('harbor-card-gone', r === 'ok');
       return { text: withdrawText(r), done: r === 'ok' };
-    });
+    }, { kind: 'withdraw', name: islandName(card.id) });
   }
   return item;
 }
 
 /** 判定の板の「港へ出す」。ひとことは碑文のカタログから選ぶ (自由文は受けない) */
-function publishPanel(ctx: HarborContext, island: { chronicle: Chronicle; digest: Digest }, published: () => Promise<void>): HTMLElement {
+function publishPanel(ctx: Ctx, island: { chronicle: Chronicle; digest: Digest }, published: () => Promise<void>): HTMLElement {
   let chosen: InscriptionId | undefined = ctx.inscriptions[0]?.id;
   const choices = el('div', { class: 'harbor-inscriptions', role: 'radiogroup', 'aria-label': '島に添えるひとこと' });
   for (const d of ctx.inscriptions) {
@@ -291,13 +299,13 @@ function publishPanel(ctx: HarborContext, island: { chronicle: Chronicle; digest
     const r = await ctx.harbor.publish(publishClick(island, chosen));
     status.textContent = publishText(r);
     send.disabled = r.kind === 'published' || r.kind === 'queued';
-    showLink(link, r);
+    showLink(ctx, link, r);
     await published();
   });
   return el('section', { class: 'harbor-publish', 'aria-label': '港へ出す' }, el('h3', { class: 'harbor-publish-title' }, '港へ出す'), lead, choices, send, status, link);
 }
 
-function showLink(link: HTMLElement, r: PublishResult) {
+function showLink(ctx: Ctx, link: HTMLElement, r: PublishResult) {
   link.hidden = r.kind !== 'published';
   if (r.kind !== 'published') return;
   const field = el('input', { class: 'harbor-url', readonly: '', value: r.url, 'aria-label': '訪問のリンク' });
@@ -308,7 +316,7 @@ function showLink(link: HTMLElement, r: PublishResult) {
       () => field.select(),
     );
   });
-  link.replaceChildren(field, copy, el('a', { class: 'harbor-chip', href: r.url }, 'この島を訪れる'));
+  link.replaceChildren(field, copy, leaveLink(ctx, el('a', { class: 'harbor-chip', href: r.url }, 'この島を訪れる')));
 }
 
 /** 浜の漂着 (M19-10)。港から 1 件引き、受け取るか追い払うかを選ばせる。受け取れば land が外来種として島の浜に放つ */
@@ -351,4 +359,14 @@ function driftSection(ready: Promise<Ready>, names: Readonly<Record<string, stri
     offer(null);
   });
   return el('section', { class: 'harbor-drift', 'aria-label': '浜の漂着' }, el('h3', { class: 'harbor-publish-title' }, '浜の漂着'), status, items, el('div', { class: 'harbor-actions' }, look, take, shoo));
+}
+
+/** 島を離れる札 (M21-04)。ふつうの押下は guard.leave を経て移る。新しいタブ・窓で開く押し方 (修飾キー・中の釦) は今の島を離れないので、そのまま */
+function leaveLink(ctx: Ctx, a: HTMLAnchorElement): HTMLAnchorElement {
+  a.addEventListener('click', (e) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    ctx.guard.leave(a.href);
+  });
+  return a;
 }

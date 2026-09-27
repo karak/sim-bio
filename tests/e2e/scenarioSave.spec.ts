@@ -96,13 +96,14 @@ async function spawnGrass(page: Page) {
 }
 
 /** 次のダイアログの文を確かめて受ける */
-const acceptDialog = (page: Page, message: string) =>
-  new Promise<void>((resolve, reject) => {
-    page.once('dialog', (d) => {
-      const got = d.message();
-      void d.accept().then(() => (got === message ? resolve() : reject(new Error(`dialog: ${got}`))));
-    });
-  });
+// (M21-04) window.confirm から、ページの中の確かめのダイアログ (alertdialog) に替えた。押す前に呼んで、押した後に待つ
+const acceptDialog = async (page: Page, message: string) => {
+  const d = page.getByRole('alertdialog');
+  await expect(d.locator('#confirm-message')).toHaveText(message);
+  await d.locator('.confirm-ok').click();
+  await expect(d).toBeHidden();
+};
+const answerDialog = (page: Page, accept: boolean) => page.getByRole('alertdialog').locator(accept ? '.confirm-ok' : '.confirm-cancel').click();
 
 test('M19-17: 石板で枠に保存し、介入して進めてから読むと、石板の年・力・年表・年代記が保存の時点に戻る。戻した島を判定まで回して港へ出すと、訪れた側の回し直しで同じ結末になる', async ({ page }) => {
   test.setTimeout(240_000);
@@ -203,8 +204,8 @@ test('M19-17: 「石板を初めから」は確かめてから Year 0・力の�
   await page.click('#speed-0');
 
   const restart = page.getByRole('button', { name: '石板を初めから' });
-  page.once('dialog', (d) => void d.dismiss());
   await restart.click();
+  await answerDialog(page, false);
   await expect(page.locator('#tablet-power')).toHaveText('7 / 30');
 
   const asked = acceptDialog(page, '今の続きを捨てて、石板を初めからやり直しますか (判定の出た島は港へ出せるまま残ります)');
@@ -257,8 +258,8 @@ test('M19-17: 包みの無い古い枠とファイル (M19-17 より前の SaveD
   expect(file.stage).toBe('free');
   const bare = JSON.stringify(file.save);
 
-  page.once('dialog', (d) => void d.accept());
   await page.click('#new-island');
+  await answerDialog(page, true);
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
   await page.evaluate(
     (save) =>
@@ -288,8 +289,8 @@ test('M19-17: 包みの無い古い枠とファイル (M19-17 より前の SaveD
   await expect(page.locator('#hud-year')).toHaveText(oldYear ?? '');
   expect(await shownTick(page)).toBe(file.save.tick);
 
-  page.once('dialog', (d) => void d.accept());
   await page.click('#new-island');
+  await answerDialog(page, true);
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
   const fromFile = acceptDialog(page, '今の島を捨てて、枠の島を読み込みますか (自動の枠は上書きされます)');
   await page.locator('#load-input').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(bare) });

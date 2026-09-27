@@ -162,8 +162,12 @@ export function createTablet(
     if (!el) throw new Error(`tablet element missing: #${id}`);
     return el;
   };
-  $<HTMLSelectElement>('tablet-select').addEventListener('change', (e) => {
+  const select = $<HTMLSelectElement>('tablet-select');
+  // (M21-04) 選んだだけでは舞台は変わらない。移るとき (確かめを受けたとき) は開き直すので、選んだ直後に今の舞台の表示へ戻す
+  const shown = select.value;
+  select.addEventListener('change', (e) => {
     const v = (e.target as HTMLSelectElement).value;
+    select.value = shown;
     onSelect(v || null);
   });
   $('verdict-retry').addEventListener('click', () => onSelect(def?.id ?? null));

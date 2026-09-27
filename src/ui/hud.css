@@ -75,3 +75,13 @@
 .verdict-grip i { display: block; width: 56px; height: 6px; margin: 0 auto; border-radius: 3px; background: radial-gradient(circle, rgba(143, 234, 223, 0.75) 1.2px, transparent 1.6px) 0 0 / 7px 6px; opacity: 0.7; }
 .verdict-grip:hover i, .verdict-grip:focus-visible i { opacity: 1; box-shadow: 0 0 6px rgba(143, 234, 223, 0.45); }
 .verdict-grip:focus-visible { outline: 2px solid #8feadf; outline-offset: 2px; }
+
+/* 確かめのダイアログ (M21-04)。港の板・観察画面・判定の板・人の確かめ (z 60) より上。背景は押せない (押せば取り消し) */
+.confirm { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(15, 26, 36, 0.55); }
+.confirm-box { background: rgba(15, 26, 36, 0.97); color: #e9eff3; border: 2px solid #b5502f; border-radius: 12px; padding: 18px 24px 16px; max-width: min(420px, calc(100% - 48px)); text-align: center; }
+.confirm-title { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: #e07a55; }
+.confirm-message { font-size: 13px; line-height: 1.6; margin: 0 0 14px; color: #c9d6cd; }
+.confirm-actions { justify-content: center; gap: 12px; }
+.confirm-actions .chip { font-size: 13px; padding: 4px 14px; }
+.confirm-ok { background: #b5502f; color: #fff; }
+.confirm-actions .chip:focus-visible { outline: 2px solid #8feadf; outline-offset: 2px; }

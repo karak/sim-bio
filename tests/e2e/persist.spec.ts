@@ -14,6 +14,9 @@ function collectLogs(page: Page): Logged[] {
   return logs;
 }
 
+/** 確かめのダイアログ (M21-04) を受ける・取り消す */
+const answerDialog = (page: Page, accept: boolean) => page.getByRole('alertdialog').locator(accept ? '.confirm-ok' : '.confirm-cancel').click();
+
 const saved = (logs: Logged[], slot: string) => logs.filter((l) => l.event === 'persist.saved' && l.slot === slot);
 
 /** IndexedDB に確定した自動の枠の tick。ページの記録ではなく置き場そのものを読む */
@@ -91,8 +94,8 @@ test('M19-05: 手動の枠に保存し、先へ進めてから読み込むと保
   await page.click('#speed-100');
   await expect(page.locator('#hud-year')).not.toHaveText(savedYear, { timeout: 30_000 });
   await page.click('#speed-0');
-  page.once('dialog', (d) => void d.accept());
   await page.click('#slot-load');
+  await answerDialog(page, true);
   await expect(page.locator('#hud-year')).toHaveText(savedYear);
   // 読み込んだ島をその場で自動の枠に書く (止めたまま閉じても、読み込む前の島に戻らない)
   await expect.poll(() => storedAutoTick(page)).toBe(savedAt);
@@ -109,13 +112,13 @@ test('M19-05: 「新しい島」は確かめてから Year 0 に作り直し (�
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0');
 
   const before = await storedAutoTick(page);
-  page.once('dialog', (d) => void d.dismiss());
   await page.click('#new-island');
+  await answerDialog(page, false);
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0');
   expect(await storedAutoTick(page)).toBe(before);
 
-  page.once('dialog', (d) => void d.accept());
   await page.click('#new-island');
+  await answerDialog(page, true);
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
   await expect.poll(() => storedAutoTick(page)).toBe(0);
   await expect(page.locator('#slot-select option[value="auto"]')).toHaveText('自動 · Year 0');
