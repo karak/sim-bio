@@ -79,7 +79,8 @@ export type HudHandlers = {
   onSave(): SlotSave;
   onLoad(data: unknown): void;
   /** 手元の保存の枠 (M19-05)。自動の枠へは自動保存だけが書く */
-  onSlotSave(slot: ManualSlot): void;
+  // (M21-04) overwrites は書いてある枠の一覧の 1 行 (空きなら null)。上書きの確かめに使う
+  onSlotSave(slot: ManualSlot, overwrites: string | null): void;
   onSlotLoad(slot: SlotId): void;
   // (M19-17 で変更: 石板の中では「石板を初めから」。今の続きを捨てて Year 0 から)
   onNewIsland(): void;
@@ -346,13 +347,14 @@ export function createHud(
   slotSelect.addEventListener('change', renderSlots);
   $('slot-save').addEventListener('click', () => {
     const slot = selectedSlot();
-    if (slot !== 'auto') h.onSlotSave(slot);
+    const saved = slots.get(slot);
+    if (slot !== 'auto') h.onSlotSave(slot, saved ? slotLabel(slot, saved, scenarioTitles) : null);
   });
   $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
   $('new-island').addEventListener('click', () => {
     // 自動の枠をその場で上書きするので、押し間違いで島を失わないよう確かめる
-    const ask = inScenario ? '今の続きを捨てて、石板を初めからやり直しますか (判定の出た島は港へ出せるまま残ります)' : '今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)';
-    if (window.confirm(ask)) h.onNewIsland();
+    // (M21-04 で変更: 確かめは main.ts の onNewIsland が確かめのダイアログ (confirm.ts) で。文は confirmAsk.ts)
+    h.onNewIsland();
   });
   renderSlots();
 

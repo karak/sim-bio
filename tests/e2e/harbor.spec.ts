@@ -187,6 +187,8 @@ test('M19-09: 港を全部閉じても 1 シナリオ遊べ、出港は outbox �
 
   // 閉じた港の一覧は、閉港を普段の状態として言う
   await page.locator('#verdict-free').click();
+  // 判定の出た島を離れるので確かめる (M21-04)
+  await page.getByRole('alertdialog').getByRole('button', { name: '離れる' }).click();
   await page.getByRole('button', { name: /^港を開く/ }).click();
   await expect(page.locator('#harbor-state')).toHaveText('港は今日は閉まっている。遊ぶ・保存するはそのまま続けられる');
   await shot(page, '07-closed-browse');
@@ -341,6 +343,8 @@ test('M19-11: 石板を終えると 1 回数え、石板と判定の板に回避
 
   // 同じ石板を介入なしでもう一度 (同じ年代記) 終えても、数えは増えない
   await page.locator('#verdict-retry').click();
+  // 判定の出た島を離れるので確かめる (M21-04)
+  await page.getByRole('alertdialog').getByRole('button', { name: '離れる' }).click();
   await page.click('#speed-100');
   await expect(page.locator('#verdict-avoidance')).toHaveText('この予言を越えた見守り手は 50%', { timeout: 90_000 });
   expect(harbor.fake.outcomes.get('test-civ')).toEqual({ finished: 2, avoided: 1 });

@@ -29,6 +29,8 @@ import { SIM_VERSION } from './simulation/version';
 import { digestOf } from './chronicle/digest';
 import { createPlayback } from './chronicle/playback';
 import { mountHarbor, visitIdOf } from './ui/Harbor';
+import { createConfirm } from './ui/confirm';
+import { askOf, type Risky } from './ui/confirmAsk';
 
 /** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
 const AUTOSAVE_TICKS = 90;
@@ -132,6 +134,12 @@ async function boot(): Promise<void> {
   const app = document.getElementById('app');
   if (!app) throw new Error('#app missing');
   let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(world.snapshot().species), size: world.snapshot().size });
+  /** やり直しの効かない操作の確かめ (M21-04)。何を確かめるかは askOf が決め、確かめの要らない操作はそのまま通す */
+  const confirm = createConfirm(app);
+  const confirmed = (r: Risky): Promise<boolean> => {
+    const ask = askOf(r);
+    return ask ? confirm(ask) : Promise.resolve(true);
+  };
   let armed: DisasterKind | null = null;
   let spawnArmed: string | null = null;
   /** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
@@ -190,7 +198,7 @@ async function boot(): Promise<void> {
     // (M19-17 で変更: 石板の中でも、同じ石板の枠は runner の状態・年代記と一緒に戻すので読める。別の島の差し込みは openSlot の舞台の確かめで弾く。無効は訪問だけ)
     if (visitId) return;
     const plan = planSlotLoad(data, here, (id) => scenarios.find((d) => d.id === id)?.title ?? id);
-    if (!window.confirm(plan.confirm)) return;
+    if (!(await confirmed({ kind: 'load', plan }))) return;
     if (plan.kind === 'navigate') {
       if (!slot) await store?.stashImport(data).catch((e: unknown) => persistLog('warn', 'persist.save.failed', data.save.tick, { slot: 'import', error: String(e) }));
       putPendingSlot(sessionStorage, slot ?? 'import');
@@ -214,15 +222,19 @@ async function boot(): Promise<void> {
     onLayer: (l) => view.setLayer(l),
     onSave: slotSave,
     onLoad: (raw) => void load(slotSaveOf(raw), null),
-    onSlotSave: (slot) => void localSave.saveSlot(slot, slotSave()),
+    onSlotSave: (slot, overwrites) =>
+      void confirmed({ kind: 'slot_save', overwrites }).then((ok) => {
+        if (ok) void localSave.saveSlot(slot, slotSave());
+      }),
     onSlotLoad: (slot) => {
       // (M19-17 で変更: 読めるかどうかは load が舞台で決める)
       void localSave.loadSlot(slot, (data) => data).then((data) => {
         if (data) void load(data, slot);
       });
     },
-    onNewIsland: () => {
+    onNewIsland: async () => {
       if (visitId) return;
+      if (!(await confirmed({ kind: 'new_island', inScenario: !!scenario }))) return;
       replaceWorld(World.create(config, { log }));
       // 石板の中では「石板を初めから」(M19-17)。今の続きを Year 0 で上書きする。判定の出た島 (港へ出せる島) は別の置き場に残る
       if (scenario) restartScenario(null);
@@ -239,11 +251,19 @@ async function boot(): Promise<void> {
     },
   }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visitId });
 
+  /**
+   * 舞台を移る操作 (石板を選ぶ・自由モードへ・もう一度・訪れる) の確かめ (M21-04)。走っている島は書き切ってから移るので確かめない。
+   * 判定の出た自分の石板の島は、開き直すと初めからになる (M19-14) ので確かめる
+   */
+  const leaving = () => confirmed({ kind: 'leave', finished: !visitId && !!runner && runner.verdict().status !== 'running' });
   const tablet = createTablet(
     app,
     scenarios,
     scenario,
-    selectScenario,
+    (id) =>
+      void leaving().then((ok) => {
+        if (ok) selectScenario(id);
+      }),
     Object.fromEntries(species.map((d) => [d.id, d.name])),
     (id) => hud.showSpeciesLayer(id),
   );
@@ -281,6 +301,13 @@ async function boot(): Promise<void> {
     land: visitId ? null : landCargo,
     log: (level, event, extra) => persistLog(level, event, world.snapshot().tick, extra),
     player: dev?.player,
+    guard: {
+      ask: confirmed,
+      leave: (href) =>
+        void leaving().then((ok) => {
+          if (ok) location.assign(href);
+        }),
+    },
   });
   /** 判定の前の石板の島の進め方。訪問では港から年代記が届くまで止め、届いたら記録の tick で打ち直す (M19-09) */
   let scenarioStep: (n?: number) => void = visitId

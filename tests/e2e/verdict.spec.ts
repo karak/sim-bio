@@ -58,6 +58,8 @@ test('M19-15 (3): 判定の板は上の取っ手のドラッグとキーボー�
 
   // 「もう一度」(同じタブで開き直す) の判定の板は、動かした位置に出る
   await page.locator('#verdict-retry').click();
+  // 判定の出た島を離れるので確かめる (M21-04)
+  await page.getByRole('alertdialog').getByRole('button', { name: '離れる' }).click();
   await page.click('#speed-100');
   await expect(page.locator('#verdict-title')).toHaveText('島は生き延びた', { timeout: 90_000 });
   expect(await at(page)).toEqual(moved);
