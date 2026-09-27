@@ -31,7 +31,8 @@ export type IslandStore = {
 /** 石板の途中で閉じた島の続き (M19-14) */
 export type ScenarioSave = { save: SaveData; runner: RunnerState; chronicle: Chronicle };
 
-const DB_NAME = 'biotope-island';
+/** 既定の置き場の名前。見守り手ごと (M19-16、開発用の ?player=) に分けるときは dbName で別の名前を渡す */
+export const DB_NAME = 'biotope-island';
 /**
  * 版 n への移行は UPGRADES[n - 1]。年代記 (M19-06) や outbox・取り下げ鍵 (M19-09) の store は、使う版で末尾に足す。
  * 並びを変えたり消したりすると、既に開いた利用者の DB と食い違う。
@@ -78,8 +79,8 @@ export const transactionDone = (tx: IDBTransaction): Promise<void> =>
     tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'));
   });
 
-export function openDb(indexedDB: IDBFactory): Promise<IDBDatabase> {
-  const req = indexedDB.open(DB_NAME, UPGRADES.length);
+export function openDb(indexedDB: IDBFactory, name = DB_NAME): Promise<IDBDatabase> {
+  const req = indexedDB.open(name, UPGRADES.length);
   req.onupgradeneeded = (e) => {
     for (const upgrade of UPGRADES.slice(e.oldVersion)) upgrade(req.result);
   };
@@ -90,8 +91,8 @@ export function openDb(indexedDB: IDBFactory): Promise<IDBDatabase> {
   });
 }
 
-export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => number }): Promise<IslandStore> {
-  const db = await openDb(deps.indexedDB);
+export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => number; dbName?: string }): Promise<IslandStore> {
+  const db = await openDb(deps.indexedDB, deps.dbName);
   return {
     async save(slot, data) {
       const summary: SlotSummary = { slot, savedAt: deps.now(), year: Math.floor(data.tick / data.config.ticksPerYear) };

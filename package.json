@@ -23,6 +23,8 @@
     "test:scripts": "uv run --no-project python -m unittest discover -s scripts",
     "test:e2e": "playwright test",
     "dev:cloudflare": "pnpm run build:cloudflare && wrangler dev",
+    "build:acceptance": "VITE_DEVTOOLS=1 VITE_LOG_URL=/api/v1/logs VITE_HARBOR_URL=/ vite build",
+    "dev:acceptance": "pnpm run build:acceptance && wrangler dev",
     "test:e2e:cloudflare": "pnpm run build:cloudflare && playwright test -c playwright.cloudflare.config.ts",
     "test:slow": "SLOW=1 vitest run",
     "bench:observe": "node tools/bench-observe.ts",

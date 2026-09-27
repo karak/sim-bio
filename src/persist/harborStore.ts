@@ -53,8 +53,8 @@ const ownOf = (entries: Iterable<[unknown, unknown]>): ReadonlySet<ChronicleId> 
   return ids;
 };
 
-export async function openHarborStore(deps: { indexedDB: IDBFactory }): Promise<HarborStore> {
-  const db = await openDb(deps.indexedDB);
+export async function openHarborStore(deps: { indexedDB: IDBFactory; dbName?: string }): Promise<HarborStore> {
+  const db = await openDb(deps.indexedDB, deps.dbName);
   const write = async (store: 'outbox' | 'keys' | 'marks' | 'finished', f: (s: IDBObjectStore) => void) => {
     const tx = db.transaction(store, 'readwrite');
     f(tx.objectStore(store));

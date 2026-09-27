@@ -93,6 +93,8 @@ export type HarborDeps = {
   /** 取り下げ鍵 (乱数 32 B の base64url)。テストは決まった鍵を渡す */
   newKey?: () => WithdrawKey;
   log?: HarborLog;
+  /** どの要求にも添える header。開発用の見守り手の名乗り (M19-16) だけが使い、本番では無い */
+  headers?: Readonly<Record<string, string>>;
 };
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -125,7 +127,7 @@ export function createHarbor(deps: HarborDeps): Harbor {
     try {
       const res = await fetchImpl(new URL(wire.path, new URL(base, deps.linkBase)).href, {
         method: wire.method,
-        headers: wire.headers,
+        headers: { ...deps.headers, ...wire.headers },
         body: wire.body,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });

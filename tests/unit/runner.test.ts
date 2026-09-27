@@ -53,6 +53,18 @@ describe('createRunner', () => {
     r.frame(10000);
     expect(w.ticks()).toBe(50);
   });
+  it('1000x (開発用、M19-16) は 1 秒に 1000 tick 進め、遅れたフレームでも既定の上限 200 tick で止め、遅れを持ち越さない', () => {
+    const w = fakeWorld();
+    const r = createRunner(w, { onFrame: () => {}, raf: () => 0, caf: () => {} });
+    r.setSpeed(1000);
+    r.frame(0);
+    r.frame(100);
+    expect(w.ticks()).toBe(100);
+    r.frame(1100);
+    expect(w.ticks()).toBe(300);
+    r.frame(1116);
+    expect(w.ticks()).toBe(316);
+  });
   it('start schedules frames via raf and stop cancels', () => {
     const w = fakeWorld();
     const cbs: ((t: number) => void)[] = [];

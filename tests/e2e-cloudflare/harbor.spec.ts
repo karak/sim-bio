@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { cloudflarePort } from '../../playwright.cloudflare.config';
 import { decodeLogBatch } from '../../src/core/log/batch';
 
@@ -163,4 +163,35 @@ test('本物の港と通しで: 判定のあとに出港 → 一覧に並ぶ →
   await expect(plaque.locator('#harbor-visit-ending')).toHaveText('試し読みの 2 年目に滅びた');
   await expect(plaque).toContainText('「また始めよう」');
   await expect(plaque.getByRole('button', { name: '年表を読む' })).toBeVisible();
+});
+
+test('手元の 3 人の見守り手 (M19-16): wrangler dev では x-dev-sender で別の送り手に数え、2 人の通報では並び、3 人目で港から隠れる', async ({ page, browser }) => {
+  test.setTimeout(180_000);
+  const answerTurnstile = (p: Page) =>
+    p.route('https://challenges.cloudflare.com/turnstile/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.turnstile = { render(el, o) { setTimeout(() => o.callback('XXXX.DUMMY.TOKEN.XXXX'), 100); return 'w'; }, remove() {} };` }),
+    );
+  await answerTurnstile(page);
+  await page.goto('/?scenario=test-quick');
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict')).toBeVisible({ timeout: 90_000 });
+  const panel = page.getByRole('region', { name: '港へ出す' });
+  await panel.getByRole('button', { name: '出港する' }).click();
+  const url = await panel.getByRole('textbox', { name: '訪問のリンク' }).inputValue();
+  const id = new URL(url).searchParams.get('visit');
+
+  const listed = async () => ((await (await fetch(`${base}/api/v1/chronicles`)).json()) as { cards: { id: string }[] }).cards.some((c) => c.id === id);
+  // 手元の網では 3 人とも 127.0.0.1 から来る。名乗りの header が無ければ、同じ 1 人に数えられる
+  for (const [i, name] of ['alice', 'bob', 'carol'].entries()) {
+    const context = await browser.newContext({ extraHTTPHeaders: { 'x-dev-sender': name } });
+    const watcher = await context.newPage();
+    await answerTurnstile(watcher);
+    await watcher.goto('/');
+    await watcher.getByRole('button', { name: /^港を開く/ }).click();
+    const card = watcher.getByRole('list', { name: '流れ着いた年代記' }).locator(`[data-id="${id}"]`);
+    await card.getByRole('button', { name: '通報' }).click();
+    await expect(card.getByRole('status')).toHaveText('通報した。3 件集まると、港から隠れる');
+    await context.close();
+    expect(await listed(), `${name} (${i + 1} 人目) の通報のあと`).toBe(i < 2);
+  }
 });
