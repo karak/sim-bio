@@ -5,7 +5,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 - **人(H)**: 本人のアカウント・支払い・秘密の値・ブラウザでのログインが要る作業。AI は代われない。
 - **AI(A)**: 端末で打てる作業。どれもユーザーの許可を得てから行う。リモートに触れる(Cloudflare・GitHub に書く)ものは特に、その都度許可を得る。
 
-コマンドはすべて repo の根(feat/m19 か、それを取り込んだ main の checkout)で打つ。`pnpm install --frozen-lockfile` 済みとする。
+どのコマンドも、このリポジトリでまだ実際に打ってはいない(配備の許可が出ていないため)。形は wrangler・gh の docs と `--help` に合わせた。コマンドはすべて repo の根(feat/m19 か、それを取り込んだ main の checkout)で打つ。`pnpm install --frozen-lockfile` 済みとする。
 
 ## 0. 前提の値
 
@@ -86,7 +86,7 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 |---|---|---|---|
 | A13 | AI | 画面と港が答えるか | `curl -sI https://biotope-island.<sub>.workers.dev/` と `curl -s https://biotope-island.<sub>.workers.dev/api/v1/chronicles` |
 | A14 | AI | ログが流れるか(画面を開いた人の操作に合わせて見る) | `pnpm exec wrangler tail biotope-island --format pretty` |
-| A15 | AI | D1 に行が入るか(出港のあと) | `uv run scripts/mod.py budget --remote` と `pnpm exec wrangler d1 execute biotope-harbor --remote --command "SELECT COUNT(*) FROM chronicles"` |
+| A15 | AI | D1 に行が入るか(出港のあと) | `uv run scripts/mod.py --remote budget` と `pnpm exec wrangler d1 execute biotope-harbor --remote --command "SELECT COUNT(*) FROM chronicles"` |
 | H9 | 人 | 本物の Turnstile で出港 → リンク → 訪問 → 年表を読む を通す。積荷と回避率も見る | ブラウザで `https://biotope-island.<sub>.workers.dev/?scenario=test-quick` |
 | H10 | 人 | Observability で CPU Time(10 ms の内か)・429 が返るか(Rate Limiting が無料で効くか)・`harbor.cron.stats` の行(毎日 00:10 UTC)を見る | ダッシュボード → Workers & Pages → biotope-island → Observability |
 
@@ -94,6 +94,6 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 
 | 場面 | 誰 | コマンド |
 |---|---|---|
-| 荒らしを隠す・戻す・消す | AI(許可を得て) | `uv run scripts/mod.py hide <id> --remote` / `restore <id> --remote` / `delete <id> --remote --yes` |
+| 荒らしを隠す・戻す・消す | AI(許可を得て) | `uv run scripts/mod.py --remote hide <id>` / `--remote restore <id>` / `--remote delete <id> --yes` |
 | 配った版を 1 つ戻す | AI(許可を得て) | `pnpm exec wrangler deployments list` → `pnpm exec wrangler rollback <version-id>` |
 | 港を止めたい(静的アセットは残す) | 人 | ダッシュボードで Worker のルートを外すか、`wrangler.jsonc` の `run_worker_first` を空にして配り直す |
