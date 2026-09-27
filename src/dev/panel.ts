@@ -49,7 +49,8 @@ export function mountDevPanel(app: HTMLElement, deps: DevPanelDeps): void {
     shortcut.addEventListener('click', async () => {
       shortcut.disabled = true;
       deps.capture();
-      // 自動保存が確定してから開き直す (開き直した画面が同じ島の続きから近道にする)
+      // 自動保存が確定してから開き直す (開き直した画面が同じ島の続きから近道にする)。
+      // 同じ store を読む transaction は、先に作った書きの transaction が終わってから動くので、読み終えれば書きも確定している
       await dumpDb(indexedDB, session.dbName);
       const q = new URLSearchParams(location.search);
       q.set('shortcut', 'alive');
