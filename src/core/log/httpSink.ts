@@ -1,9 +1,6 @@
 import { encodeLogBatch, LOG_BATCH_LIMITS } from './batch';
 import type { LogRecord, LogSink } from './types';
 
-/** 受け口 (M19-02) へ POST する本文。dropped は、このバッチを切るまでに捨てて、まだ誰も運んでいない件数 */
-export type { LogBatch } from './batch';
-
 export type HttpSinkOptions = {
   fetch?: typeof fetch;
   sendBeacon?: (url: string, data: Blob) => boolean;
