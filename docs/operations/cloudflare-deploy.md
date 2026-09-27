@@ -29,9 +29,9 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 
 | # | 誰 | 作業 | コマンド |
 |---|---|---|---|
-| A2 | AI | 本番の D1 を作る。出てきた `database_id` を控える | `pnpm exec wrangler d1 create biotope-harbor` |
-| A3 | AI | `wrangler.jsonc` の `d1_databases[0].database_id` の仮の値(`00000000-0000-0000-0000-000000000000`)を A2 の id に置き換え、型を作り直して commit する | `pnpm run types:worker && pnpm run check` |
-| A4 | AI | 本番の D1 にマイグレーションを当てる(当て済みは飛ばす)。当たったことを確かめる | `pnpm exec wrangler d1 migrations apply biotope-harbor --remote` → `pnpm exec wrangler d1 migrations list biotope-harbor --remote` |
+| A2 | AI(済 2026-09-27、id `4b9db893-5306-4a01-9eb9-4926c2b34d17`) | 本番の D1 を作る。出てきた `database_id` を控える | `pnpm exec wrangler d1 create biotope-harbor` |
+| A3 | AI(済 3fc3e48) | `wrangler.jsonc` の `d1_databases[0].database_id` の仮の値(`00000000-0000-0000-0000-000000000000`)を A2 の id に置き換え、型を作り直して commit する | `pnpm run types:worker && pnpm run check` |
+| A4 | AI(済、0001_harbor.sql) | 本番の D1 にマイグレーションを当てる(当て済みは飛ばす)。当たったことを確かめる | `pnpm exec wrangler d1 migrations apply biotope-harbor --remote` → `pnpm exec wrangler d1 migrations list biotope-harbor --remote` |
 
 ## 3. Turnstile と secret
 
