@@ -110,3 +110,21 @@ describe('港の手元の置き場 (IndexedDB の版)', () => {
     expect(await again.claim({ kind: 'received', id: 'c0ffee' as CargoId })).toBe(false);
   });
 });
+
+describe('見守り手ごとの置き場 (M19-16)', () => {
+  it('DB の名前を変えると、島の保存・取り下げ鍵・控えが別の置き場になる。名前を渡さなければ biotope-island', async () => {
+    const indexedDB = new IDBFactory();
+    const aliceIsland = await openIslandStore({ indexedDB, now: () => 1, dbName: 'biotope-island@alice' });
+    const alice = await openHarborStore({ indexedDB, dbName: 'biotope-island@alice' });
+    const own = await openHarborStore({ indexedDB });
+    await alice.claimKey(other, () => keyA);
+    await alice.claim({ kind: 'received', id: 'c0ffee' as CargoId });
+    await (await openIslandStore({ indexedDB, now: () => 1 })).saveChronicle('sinking', FIXTURE_CHRONICLE);
+
+    expect(await own.keyOf(other)).toBeNull();
+    expect(await own.has({ kind: 'received', id: 'c0ffee' as CargoId })).toBe(false);
+    expect(await alice.keyOf(other)).toBe(keyA);
+    expect(await aliceIsland.loadChronicle('sinking')).toBeNull();
+    expect((await indexedDB.databases()).map((d) => d.name).sort()).toEqual(['biotope-island', 'biotope-island@alice']);
+  });
+});

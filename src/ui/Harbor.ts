@@ -57,6 +57,8 @@ export type HarborUiDeps = {
   /** 漂着を島の浜に放つ (M19-10)。訪問では null (浜の漂着を出さない) */
   land: ((d: DrawnCargo) => LandResult) | null;
   log: HarborLog;
+  /** 開発用の見守り手 (M19-16)。手元の置き場の DB の名前と、港への要求に添える名乗りの header。本番では無い */
+  player?: { dbName: string; headers: Readonly<Record<string, string>> };
 };
 
 /** 1 時間ごとに outbox を送り直す (設計書 §5.2) */
@@ -92,7 +94,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     toastTimer = setTimeout(() => (toast.hidden = true), TOAST_MS);
   };
 
-  const storeReady = openHarborStore({ indexedDB }).catch((e: unknown) => {
+  const storeReady = openHarborStore({ indexedDB, dbName: deps.player?.dbName }).catch((e: unknown) => {
     deps.log('warn', 'harbor.store.unavailable', { error: String(e) });
     return createMemoryHarborStore();
   });
@@ -115,6 +117,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
       catalog: { scenarios: new Set(deps.scenarios.map((d) => d.id)), species: new Set(deps.speciesIds), inscriptions: new Set(inscriptions.map((d) => d.id)) },
       turnstile: createTurnstile({ sitekey: deps.sitekey || TEST_SITEKEY, host: hostOf }),
       log: deps.log,
+      headers: deps.player?.headers,
     }),
   }));
 
@@ -129,14 +132,18 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   };
 
   const finishedSlot = el('div', { class: 'harbor-finished', hidden: '' });
+  // 石板ではその石板の島だけ。自由モードの港の口には、どの石板の判定の出た島も並べる (M19-15、石板を選び直さなくても港へ出せる)。訪問では並べない
+  const finishedScope = deps.visit ? [] : deps.scenarios.filter((d) => deps.scenarioId === null || d.id === deps.scenarioId);
+  const finishedLabel = (d: ScenarioDef) => (deps.scenarioId ? 'この石板で最後に判定の出た島' : `『${d.title}』で最後に判定の出た島`);
   /** 判定の出た最後の島 (手元に残したもの)。判定の板を閉じた後・開き直した後も、ここから港へ出せる */
-  const showFinished = async (scenarioId: string) => {
+  const showFinished = async () => {
     const ctx = await ready;
-    const island = await ctx.harbor.finished(scenarioId);
-    finishedSlot.hidden = island === null;
-    finishedSlot.replaceChildren(...(island ? [el('p', { class: 'harbor-sub' }, 'この石板で最後に判定の出た島'), publishPanel(ctx, island, refreshCount)] : []));
+    const found = await Promise.all(finishedScope.map(async (d) => ({ def: d, island: await ctx.harbor.finished(d.id) })));
+    const rows = found.flatMap(({ def, island }) => (island ? [el('p', { class: 'harbor-sub' }, finishedLabel(def)), publishPanel(ctx, island, refreshCount)] : []));
+    finishedSlot.hidden = rows.length === 0;
+    finishedSlot.replaceChildren(...rows);
   };
-  if (deps.scenarioId) void showFinished(deps.scenarioId);
+  void showFinished();
   const drawerState = el('p', { class: 'harbor-line harbor-state', id: 'harbor-state' });
   const list = el('ul', { class: 'harbor-list', 'aria-label': '流れ着いた年代記' });
   const more = el('button', { class: 'harbor-chip', hidden: '' }, 'もっと古い年代記');
@@ -210,7 +217,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     settle(island, cargo) {
       void ready.then(async (ctx) => {
         await ctx.harbor.keepFinished(island);
-        await showFinished(island.chronicle.scenarioId);
+        await showFinished();
         await ctx.harbor.reportOutcome(island);
         await showAvoidance(island.chronicle.scenarioId);
         if (cargo) say(castText(await ctx.harbor.castCargo(cargo)));

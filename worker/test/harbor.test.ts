@@ -215,6 +215,26 @@ describe('通報 POST /api/v1/chronicles/:id/report', () => {
     expect(JSON.stringify(await env.HARBOR.prepare('SELECT * FROM reports').all())).not.toContain(a);
   });
 
+  it('wrangler dev (loopback の host) では x-dev-sender で見守り手を分けられ、同じ IP の 3 人の通報で隠れる (M19-16)', async () => {
+    const { id } = await publish(33);
+    const local = { ip: '127.0.0.1', origin: 'http://localhost:8787' };
+    for (const who of ['alice', 'bob']) expect((await send({ kind: 'report', id, turnstile: HUMAN }, { ...local, headers: { 'x-dev-sender': who } })).status).toBe(204);
+    expect((await browse()).cards.map((x) => x.id)).toEqual([id]);
+
+    expect((await send({ kind: 'report', id, turnstile: HUMAN }, { ...local, headers: { 'x-dev-sender': 'carol' } })).status).toBe(204);
+    expect((await browse()).cards).toEqual([]);
+  });
+
+  it('本番の host では x-dev-sender を読まず、同じ IP の通報は名乗りを変えても 1 人に数える (M19-16)', async () => {
+    const { id } = await publish(34);
+    const ip = freshIp();
+    for (const who of ['alice', 'bob', 'carol']) expect((await send({ kind: 'report', id, turnstile: HUMAN }, { ip, headers: { 'x-dev-sender': who } })).status).toBe(204);
+
+    expect((await browse()).cards.map((x) => x.id)).toEqual([id]);
+    const row = await env.HARBOR.prepare('SELECT reports FROM chronicles WHERE id = ?').bind(id).first<{ reports: number }>();
+    expect(row?.reports).toBe(1);
+  });
+
   it('人間確認に落ちた通報は 422 で数えない。無い年代記は 404', async () => {
     const { id } = await publish(32);
 

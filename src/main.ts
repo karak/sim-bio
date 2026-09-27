@@ -32,6 +32,8 @@ import { mountHarbor, visitIdOf } from './ui/Harbor';
 
 /** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
 const AUTOSAVE_TICKS = 90;
+/** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
+const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
 
 /** 置き場から戻した島。石板なら runner の状態と年代記も持つ (続きからの復帰 M19-14 と、枠の読込 M19-17) */
 type Restored = { world: World; runner?: RunnerState; chronicle?: Chronicle };
@@ -41,11 +43,12 @@ async function boot(): Promise<void> {
     url: import.meta.env.VITE_LOG_URL,
     sendBeacon: (url, data) => navigator.sendBeacon(url, data),
   });
+  const dev = DEVTOOLS_BUILT ? (await import('./dev/session')).devSessionOf(new URLSearchParams(location.search)) : null;
   const [base, species, scenarios, store] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
     fetch('/data/scenarios.json').then((r) => r.json() as Promise<ScenarioDef[]>),
-    openIslandStore({ indexedDB, now: Date.now }).catch((e: unknown) => {
+    openIslandStore({ indexedDB, now: Date.now, dbName: dev?.dbName }).catch((e: unknown) => {
       log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.unavailable', error: String(e) });
       return null;
     }),
@@ -236,7 +239,7 @@ async function boot(): Promise<void> {
     onTowerArm: (v) => {
       towerArmed = v;
     },
-  }, { scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visitId });
+  }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visitId });
 
   const tablet = createTablet(
     app,
@@ -263,6 +266,9 @@ async function boot(): Promise<void> {
     }
     if (!commands.every(intervene)) return 'refused';
     hud.addMarker(s.year, `漂着 (${d.cargo.items.map((x) => speciesNames[x.speciesId] ?? x.speciesId).join('・')})`, '#8FEADF');
+    // 積荷は浜の 3×3 に着くので、島の総数ではほとんど動かない (M19-15)。着いた浜のセルを選び、周辺の密度の推移で見せる
+    selected = cell;
+    hud.showCell(cell, s);
     return 'ok';
   };
   const harbor = mountHarbor(app, {
@@ -276,6 +282,7 @@ async function boot(): Promise<void> {
     speciesNames,
     land: visitId ? null : landCargo,
     log: (level, event, extra) => persistLog(level, event, world.snapshot().tick, extra),
+    player: dev?.player,
   });
   /** 判定の前の石板の島の進め方。訪問では港から年代記が届くまで止め、届いたら記録の tick で打ち直す (M19-09) */
   let scenarioStep: (n?: number) => void = visitId
@@ -331,7 +338,7 @@ async function boot(): Promise<void> {
     },
   );
   if (scenario) {
-    const newRunner = (restored?: RunnerState) => createScenarioRunner(scenario, world, {
+    const newRunner = (restored?: RunnerState) => createScenarioRunner(dev?.scenarioDef(scenario) ?? scenario, world, {
       ticksPerYear: config.ticksPerYear,
       onVerdict: (v) => {
         loop.setSpeed(0);
@@ -342,7 +349,7 @@ async function boot(): Promise<void> {
         const chronicle = recorder?.current();
         // 空の舟の積荷 (M19-10) は持ち出しと同じ瞬間の snapshot から作り、港に流す
         const cargo = hold ? cargoOfHold(hold) : null;
-        if (chronicle && v.status !== 'running') {
+        if (chronicle && v.status !== 'running' && !dev?.shortcut) {
           void digestOf(world.snapshot(), v.status).then((digest) => {
             harbor.offerPublish({ chronicle, digest });
             harbor.settle({ chronicle, digest }, cargo);
@@ -447,6 +454,15 @@ async function boot(): Promise<void> {
     hud.showCell(cell, world.snapshot());
   });
 
+  dev?.mount(app, {
+    scenario: !!scenario,
+    capture: () => {
+      const save = world.serialize();
+      localSave.flush(() => save);
+      saveChronicle();
+      return { save, chronicle: recorder?.current() ?? null };
+    },
+  });
   loop.start();
 }
 

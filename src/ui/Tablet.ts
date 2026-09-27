@@ -8,6 +8,7 @@ import { STAGE_NAMES } from '../simulation/civilization';
 import type { PrayerKind } from '../simulation/prayer';
 import { TOWER_RAIN_SCALE_DEFAULT } from '../simulation/weatherTower';
 import type { Cargo } from '../simulation/ship';
+import { makeMovable } from './movable';
 
 export type Tablet = {
   /** 開始からの年・判定・星の力 (budget が無いシナリオでは null)・現在の祈り (M9-02) を表示する */
@@ -145,7 +146,8 @@ export function createTablet(
     ${def.budget ? `<div class="row tablet-power"><span class="dim">力</span><span id="tablet-power" class="mono">${def.budget.start} / ${def.budget.max ?? def.budget.start * 3}</span><span id="tablet-power-flow" class="dim"></span></div>` : ''}` : ''}
   </div>
   <div class="verdict" id="verdict" hidden>
-    <div class="verdict-box">
+    <div class="verdict-box" id="verdict-box">
+      <button type="button" class="verdict-grip" id="verdict-grip" aria-label="判定の板を動かす (ドラッグか矢印キー)" title="ドラッグか矢印キーで動かす"><i></i></button>
       <div class="verdict-title" id="verdict-title"></div>
       <div class="verdict-reason" id="verdict-reason"></div>
       <div class="verdict-stats mono" id="verdict-stats"></div>
@@ -166,6 +168,7 @@ export function createTablet(
   });
   $('verdict-retry').addEventListener('click', () => onSelect(def?.id ?? null));
   $('verdict-free').addEventListener('click', () => onSelect(null));
+  const verdictBoard = makeMovable($('verdict-box'), $('verdict-grip'), 'biotope.verdict-offset');
   // 警告から種レイヤーを開ける (M21-02 D5): update() のたびに innerHTML ごと差し替わるチップに直接つけず、
   // #tablet-warnings 自体に 1 つだけ委譲リスナーを持たせる (要素が消えてもリスナーは残る)。
   // 自由モード (def === null) では #tablet-warnings 自体を描かないので、$ (無ければ例外) ではなく querySelector で確かめる
@@ -231,6 +234,7 @@ export function createTablet(
     showVerdict(verdict, cargo) {
       const box = $('verdict');
       box.hidden = false;
+      verdictBoard.show();
       box.classList.toggle('alive', verdict.status === 'alive');
       box.classList.toggle('dead', verdict.status === 'dead');
       box.classList.toggle('escaped', verdict.status === 'escaped');

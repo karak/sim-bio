@@ -18,7 +18,7 @@ const KEYS = ['K'.repeat(43), 'L'.repeat(43)] as WithdrawKey[];
 type Wire = (w: WireRequest) => Promise<FakeReply> | FakeReply;
 
 /** fetch の偽物。URL と init を本物の Worker と同じ WireRequest に戻して、港の写し (または差し替えの返事) に渡す */
-function harness(opts: { store?: HarborStore; human?: HumanAnswer['kind']; baseUrl?: string | undefined } = {}) {
+function harness(opts: { store?: HarborStore; human?: HumanAnswer['kind']; baseUrl?: string | undefined; headers?: Record<string, string> } = {}) {
   const fake = createFakeHarbor(catalog);
   const sent: WireRequest[] = [];
   let answer: Wire = (w) => fake.serve(w);
@@ -41,6 +41,7 @@ function harness(opts: { store?: HarborStore; human?: HumanAnswer['kind']; baseU
     fetch,
     turnstile: async (): Promise<HumanAnswer> => (human === 'token' ? { kind: 'token', token: DUMMY_TOKEN as TurnstileToken } : { kind: human }),
     newKey: () => KEYS[keys++ % KEYS.length],
+    headers: opts.headers,
   });
   return { harbor, store, fake, sent, answerWith: (w: Wire) => (answer = w), openAgain: () => (answer = (w) => fake.serve(w)) };
 }
@@ -54,6 +55,20 @@ const CLOSED_REPLIES: [string, Wire][] = [
 ];
 
 describe('港のクライアント createHarbor (M19-09、設計書 §5.2)', () => {
+  it('見守り手の header (M19-16) を、どの道の要求にも契約の header と並べて添える', async () => {
+    const h = harness({ headers: { 'x-dev-sender': 'alice' } });
+    await h.harbor.publish(island);
+    await h.harbor.report(id);
+    await h.harbor.browse({});
+
+    expect(h.sent.map((w) => [w.path, w.headers['x-dev-sender']])).toEqual([
+      ['/api/v1/chronicles', 'alice'],
+      [`/api/v1/chronicles/${id}/report`, 'alice'],
+      ['/api/v1/chronicles', 'alice'],
+    ]);
+    expect(h.sent[0].headers).toMatchObject({ 'cf-turnstile-response': DUMMY_TOKEN, authorization: `Bearer ${KEYS[0]}` });
+  });
+
   it('出港すると、港が年代記の id を返し、訪問のリンクが付く。人間確認の札と、手元で作った取り下げ鍵を添える', async () => {
     const h = harness();
     const r = await h.harbor.publish(island);

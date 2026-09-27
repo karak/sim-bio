@@ -5,4 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_HARBOR_URL?: string;
   /** Turnstile の site key (M19-09)。空なら常に通るテストの sitekey */
   readonly VITE_TURNSTILE_SITEKEY?: string;
+  /** 開発用の手段 (M19-16、src/dev) を入れた受入のビルド。"1" のときだけ入る (pnpm run build:acceptance)。本番のビルドには無い */
+  readonly VITE_DEVTOOLS?: string;
 }

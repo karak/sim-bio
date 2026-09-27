@@ -1,6 +1,7 @@
 import { decodeLogBatch, LOG_BATCH_LIMITS } from '../../src/core/log/batch';
 import type { LogLevel } from '../../src/core/log/types';
 import { bodyLimitOf, MAX_BODY_BYTES, writeRefusal, type Refusal, type WireRequest } from '../../src/harbor/wire';
+import { devSenderOf } from './guard';
 import { retryAfterOf, serve, type Outcome } from './harbor';
 import * as ledger from './ledger';
 import { HARBOR_CONFIG } from './policy';
@@ -138,7 +139,7 @@ async function harbor(request: Request, url: URL, env: Env): Promise<Response> {
   const body = await readBounded(request, maxBytes);
   if (body === null) return refuse({ error: 'payload_too_large', maxBytes });
   const wire: WireRequest = { method, path, headers: Object.fromEntries(request.headers), body };
-  const ip = request.headers.get('cf-connecting-ip') ?? '';
+  const ip = devSenderOf(url, request.headers) ?? request.headers.get('cf-connecting-ip') ?? '';
   return render(url, now, await serve(wire, { env, now, ip, config: HARBOR_CONFIG }));
 }
 

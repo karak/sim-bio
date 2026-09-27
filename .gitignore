@@ -42,6 +42,9 @@ test-results/
 # 他エージェントの worktree
 .claude/worktrees/
 
+# 受入の画面が受け取った状態の写し (M19-16)。手元の取り下げ鍵が入る
+.claude/acceptance/snapshots/
+
 # Python
 __pycache__/
 

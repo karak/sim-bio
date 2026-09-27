@@ -108,19 +108,20 @@ const SPEEDS: readonly { name: string; speed: Speed; intervals: readonly number[
   { name: '1x / 16.7 ms', speed: 1, intervals: [1000 / 60] },
   { name: '10x / 250・90・417 ms', speed: 10, intervals: [250, 90, 417] },
   { name: '100x / 16・33・3000 ms (上限 200 tick に当たる)', speed: 100, intervals: [16, 33, 3000] },
+  { name: '1000x (開発用、M19-16) / 16・50・250 ms (上限 200 tick に当たる)', speed: 1000, intervals: [16, 50, 250] },
 ];
 
 describe('決定論の刻み (M19-04): 速度とフレームの刻みに依らない', { timeout: 30_000 }, () => {
   const def = scenario('sinking', 4);
   const opening: Command = { type: 'set_climate', rainScale: 1.25 };
 
-  it('1x・10x・100x とフレーム間隔の違う 3 通りの結末が、台本 (年の境目ごとの update) の結末と一致する', () => {
+  it('1x・10x・100x・1000x とフレーム間隔の違う 4 通りの結末が、台本 (年の境目ごとの update) の結末と一致する', () => {
     const script = playByScript(def, opening);
     const byFrames = Object.fromEntries(SPEEDS.map(({ name, speed, intervals }) => [name, playByFrames(def, speed, intervals, { opening }).digest]));
     expect(byFrames).toEqual(Object.fromEntries(SPEEDS.map(({ name }) => [name, script])));
   });
 
-  it('年の途中と境目ちょうど (1x なら tick 720) のクリックも、打った tick を記録して再生すれば、3 通りとも実際の結末と一致する', () => {
+  it('年の途中と境目ちょうど (1x なら tick 720) のクリックも、打った tick を記録して再生すれば、4 通りとも実際の結末と一致する', () => {
     const clicks = [
       { atTick: 500, command: spawnClick('deer', 16 * SIZE + 16) },
       { atTick: 720, command: spawnClick('deer', 14 * SIZE + 17) },

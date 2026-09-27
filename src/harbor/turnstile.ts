@@ -11,6 +11,8 @@ export const TEST_SITEKEY = '1x00000000000000000000AA';
 export const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 /** script が読めない・札が来ないまま待つ上限。越えたら網が無いものとして閉港と同じに扱う */
 const WAIT_MS = 60_000;
+/** script の読み込みが終わらない (網が要求を止めたまま返さない) ときに待つ上限 (M19-15)。越えたら読めないものとして閉港と同じに扱う */
+export const LOAD_WAIT_MS = 10_000;
 
 type RenderOptions = {
   sitekey: string;
@@ -37,6 +39,7 @@ function loadApi(): Promise<TurnstileApi | null> {
     script.async = true;
     script.onload = () => resolve(window.turnstile ?? null);
     script.onerror = () => resolve(null);
+    setTimeout(() => resolve(window.turnstile ?? null), LOAD_WAIT_MS);
     document.head.appendChild(script);
   }).then((api) => {
     // 読めなければ次の確かめで読み直す (網が戻ったあとに)

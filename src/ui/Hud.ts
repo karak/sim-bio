@@ -119,7 +119,7 @@ export type Hud = {
 const LOCAL_SAMPLE_TICKS = 10;
 const LOCAL_YEARS = 5;
 const LOCAL_RADIUS = 3;
-const SPEEDS: Speed[] = [0, 1, 10, 100];
+const SPEEDS: readonly Speed[] = [0, 1, 10, 100];
 const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] = [
   { id: 'terrain', label: '地形' },
   { id: 'temperature', label: '気温' },
@@ -143,11 +143,12 @@ export function slotLabel(slot: SlotId, s: SlotSummary | undefined, titles: Reco
 }
 
 /** DOM・グラフ・ファイル入出力を隠す。World を直接持たず、handlers 経由で main.ts に渡す。 */
+/** speeds は速さの札の並び。開発用 (M19-16) のときだけ 1000x を足して渡す */
+// scenarioTitles は枠の一覧に出す石板の名前、inScenario は石板の中か (新しい島を「石板を初めから」と出す) (M19-17)
 export function createHud(
   root: HTMLElement,
   h: HudHandlers,
-  /** 石板の名前 (枠の一覧に出す) と、石板の中か (新しい島を「石板を初めから」と出す) (M19-17) */
-  stage: { scenarioTitles: Record<string, string>; inScenario: boolean } = { scenarioTitles: {}, inScenario: false },
+  { speeds = SPEEDS, scenarioTitles = {}, inScenario = false }: { speeds?: readonly Speed[]; scenarioTitles?: Record<string, string>; inScenario?: boolean } = {},
 ): Hud {
   root.insertAdjacentHTML(
     'beforeend',
@@ -158,7 +159,7 @@ export function createHud(
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
     <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span id="intercept-next" class="dim"></span><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span><span id="intercept-reason" class="dim"></span></div>
     <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span><span id="ship-reason" class="dim"></span></div>
-    <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
+    <div class="row" id="speed-row">${speeds.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
   <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
@@ -183,7 +184,7 @@ export function createHud(
     <select id="slot-select" class="chip">${SLOTS.map((s) => `<option value="${s}"${s === 'manual-1' ? ' selected' : ''}></option>`).join('')}</select>
     <button id="slot-save" class="chip">枠へ保存</button>
     <button id="slot-load" class="chip">枠から読込</button>
-    <button id="new-island" class="chip">${stage.inScenario ? '石板を初めから' : '新しい島'}</button>
+    <button id="new-island" class="chip">${inScenario ? '石板を初めから' : '新しい島'}</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>
@@ -224,7 +225,7 @@ export function createHud(
     $('layer-mode-density').classList.toggle('on', layerMode === 'density');
     $('layer-mode-suit').classList.toggle('on', layerMode === 'suit');
   };
-  for (const s of SPEEDS) {
+  for (const s of speeds) {
     $(`speed-${s}`).addEventListener('click', () => {
       h.onSpeed(s);
       setOn('speed-row', `speed-${s}`);
@@ -333,7 +334,7 @@ export function createHud(
   const selectedSlot = (): SlotId => SLOTS[slotSelect.selectedIndex];
   const renderSlots = () => {
     SLOTS.forEach((slot, i) => {
-      slotSelect.options[i].textContent = slotLabel(slot, slots.get(slot), stage.scenarioTitles);
+      slotSelect.options[i].textContent = slotLabel(slot, slots.get(slot), scenarioTitles);
     });
     const slot = selectedSlot();
     $<HTMLButtonElement>('slot-save').disabled = !replaceable || slot === 'auto';
@@ -352,7 +353,7 @@ export function createHud(
   $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
   $('new-island').addEventListener('click', () => {
     // 自動の枠をその場で上書きするので、押し間違いで島を失わないよう確かめる
-    const ask = stage.inScenario ? '今の続きを捨てて、石板を初めからやり直しますか (判定の出た島は港へ出せるまま残ります)' : '今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)';
+    const ask = inScenario ? '今の続きを捨てて、石板を初めからやり直しますか (判定の出た島は港へ出せるまま残ります)' : '今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)';
     if (window.confirm(ask)) h.onNewIsland();
   });
   renderSlots();

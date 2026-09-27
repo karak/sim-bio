@@ -31,6 +31,8 @@ import type { Chronicle, Digest } from './chronicle';
 export type WireRequest = { method: 'GET' | 'POST' | 'DELETE'; path: string; headers: Readonly<Record<string, string>>; body: string | null };
 
 /** Worker は Content-Length をこれと比べてから本文を読む。出港 (年代記 16 KB と要約) が最も大きい。道ごとのもっと狭い上限は readRequest が見る */
+/** 手元で別の見守り手として振る舞う (M19-16) ときの名乗りの header。港は wrangler dev のときだけ、送り手の IP の代わりに数える */
+export const DEV_SENDER_HEADER = 'x-dev-sender';
 export const MAX_BODY_BYTES = HARBOR_LIMITS.chronicleBytes + 4 * 1024;
 const SMALL_BODY_BYTES = 2 * 1024;
 const NO_BODY = 0;
