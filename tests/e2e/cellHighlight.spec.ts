@@ -50,7 +50,6 @@ async function expectHighlightAt(page: Page, at: { x: number; y: number }) {
 }
 
 test('M22-10: 操作画面で島を押すと、そのセルに境界の帯と浮かぶ印が出て、別のセルで移り、層を替えても残り、新しい島で消える', async ({ page }) => {
-  page.on('dialog', (d) => void d.accept());
   await page.goto('/');
   // 島を止めて、フレームごとの描画の数を比べられるようにする
   await page.click('#speed-0');
@@ -82,6 +81,7 @@ test('M22-10: 操作画面で島を押すと、そのセルに境界の帯と浮
 
   // 新しい島で選びが解けると消える
   await page.click('#new-island');
+  await page.getByRole('alertdialog').locator('.confirm-ok').click();
   await expect.poll(async () => (await selection(page))?.cell, { timeout: 15_000 }).toBeNull();
   const cleared = await selection(page);
   expect(cleared?.outline).toBeNull();
