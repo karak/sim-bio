@@ -57,6 +57,39 @@ describe('観察画面 (M22-03): 材質を頂点に焼く', () => {
   });
 });
 
+describe('観察画面 (遠距離版の追加): 薄い葉の両面の材質', () => {
+  it('flora_under で始まる両面の材質は、裏の法線を裏返さない別の共有の材質に焼く。他の両面と片面はそのまま', () => {
+    const root = new Group();
+    const node = new Group();
+    node.name = 'fern';
+    root.add(node);
+    const leafMat = (name: string) => {
+      const m = createToonMaterial({ color: '#00FF00', side: DoubleSide });
+      m.name = name;
+      return m;
+    };
+    const leafA = new Mesh(new BoxGeometry(1, 1, 1), leafMat('flora_under'));
+    const leafB = new Mesh(new BoxGeometry(1, 1, 1), leafMat('flora_under'));
+    leafB.position.set(2, 0, 0);
+    const sail = new Mesh(new BoxGeometry(1, 1, 1), leafMat('ship_sail'));
+    const sail2 = new Mesh(new BoxGeometry(1, 1, 1), leafMat('ship_sail'));
+    node.add(leafA, leafB, sail, sail2);
+    bakeMaterials(root);
+    const meshes = node.children as Mesh[];
+    // 葉の 2 つと帆の 2 つは別々の組にまとまる
+    expect(meshes.length).toBe(2);
+    const names = meshes.map((m) => (m.material as { name: string }).name).sort();
+    expect(names).toEqual(['observe-baked-double', 'observe-baked-leaf']);
+    const leaf = meshes.find((m) => (m.material as { name: string }).name === 'observe-baked-leaf')!;
+    expect((leaf.material as { side: number }).side).toBe(DoubleSide);
+    expect(leaf.geometry.getAttribute('position').count).toBe(48);
+    // シェーダーの控え (program cache) も分ける
+    const key = (m: Mesh) => (m.material as { customProgramCacheKey(): string }).customProgramCacheKey();
+    expect(key(meshes[0])).not.toBe(key(meshes[1]));
+    expect(key(leaf)).toContain('leaf');
+  });
+});
+
 describe('観察画面 (M22-03): 草の間引き', () => {
   it('28 m までは全部、70 m で 3 割、110 m 先は 2 割。途中は切れ目なく減る', () => {
     expect(grassKeep(0)).toBe(1);

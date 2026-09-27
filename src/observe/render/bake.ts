@@ -4,6 +4,7 @@ import {
   DoubleSide,
   FrontSide,
   Mesh,
+  ShaderChunk,
   type BufferGeometry,
   type Material,
   type MeshToonMaterial,
@@ -23,12 +24,28 @@ import { createToonMaterial } from './toon';
 export const glow = { value: 1 };
 
 const shared = new Map<number, MeshToonMaterial>();
+// (遠距離版の追加で追加) 薄い葉の両面の材質 (THIN_LEAF)。キーは side と別に持つ
+const sharedLeaf = new Map<number, MeshToonMaterial>();
 
-function bakedMaterial(side: number): MeshToonMaterial {
-  const hit = shared.get(side);
+/**
+ * (遠距離版の追加で追加) 薄い葉 (羊歯の小葉・小花の花弁、材質の名前が flora_under で始まる) は、両面でも裏の面の法線を裏返さない。
+ * 法線は Blender で上へ寄せてあるので、裏から見ても上向きの法線で陰る。裏返すと下向きの法線になって縁の光が一面に掛かり、
+ * 立ち上がった小葉が白茶けて見えた (葉のカード foliage.ts と同じ扱い)
+ */
+export const THIN_LEAF = /^flora_under/;
+const NORMAL_NO_FLIP = ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
+
+function leafOf(m: Bakeable): boolean {
+  return m.material.side === DoubleSide && THIN_LEAF.test(m.material.name);
+}
+
+function bakedMaterial(side: number, leaf = false): MeshToonMaterial {
+  const cache = leaf ? sharedLeaf : shared;
+  const hit = cache.get(side);
   if (hit) return hit;
   const m = createToonMaterial({ vertexColors: true, side: side as typeof FrontSide });
   m.name = side === DoubleSide ? 'observe-baked-double' : 'observe-baked';
+  if (leaf) m.name = 'observe-baked-leaf';
   const base = m.onBeforeCompile;
   m.onBeforeCompile = (shader, renderer) => {
     base.call(m, shader, renderer);
@@ -39,10 +56,11 @@ function bakedMaterial(side: number): MeshToonMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uGlow;\nvarying vec3 vEmissive;')
       .replace('vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = vEmissive * uGlow;');
+    if (leaf) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', NORMAL_NO_FLIP);
   };
   const key = m.customProgramCacheKey;
-  m.customProgramCacheKey = () => `baked-${key.call(m)}`;
-  shared.set(side, m);
+  m.customProgramCacheKey = () => `baked-${leaf ? 'leaf-' : ''}${key.call(m)}`;
+  cache.set(side, m);
   return m;
 }
 
@@ -106,8 +124,9 @@ export function bakeMaterials(root: Object3D): void {
   });
   const inPlace = (m: Bakeable) => {
     const side = m.material.side === DoubleSide ? DoubleSide : FrontSide;
+    const leaf = leafOf(m);
     m.geometry = bakeGeometry(m, false);
-    m.material = bakedMaterial(side);
+    m.material = bakedMaterial(side, leaf);
   };
   for (const parent of parents) {
     const kids = parent.children.filter(bakeable);
@@ -124,7 +143,8 @@ export function bakeMaterials(root: Object3D): void {
         continue;
       }
       const side = c.material.side === DoubleSide ? DoubleSide : FrontSide;
-      const key = `${sk ? `skin:${(c as unknown as SkinnedMesh).skeleton.uuid}` : 'static'}:${side}`;
+      // (遠距離版の追加で変更: 薄い葉 (leafOf) は別の組にする)
+      const key = `${sk ? `skin:${(c as unknown as SkinnedMesh).skeleton.uuid}` : 'static'}:${side}${leafOf(c) ? ':leaf' : ''}`;
       const list = buckets.get(key) ?? [];
       list.push(c);
       buckets.set(key, list);
@@ -134,7 +154,8 @@ export function bakeMaterials(root: Object3D): void {
         inPlace(list[0]);
         continue;
       }
-      const side = key.endsWith(`:${DoubleSide}`) ? DoubleSide : FrontSide;
+      const leaf = key.endsWith(':leaf');
+      const side = key.replace(/:leaf$/, '').endsWith(`:${DoubleSide}`) ? DoubleSide : FrontSide;
       const skinned = key.startsWith('skin:');
       // 骨つきは子の行列が単位なので、そのまま結合する。静物は親の座標に直して結合する
       let geos = list.map((m) => bakeGeometry(m, !skinned));
@@ -145,7 +166,7 @@ export function bakeMaterials(root: Object3D): void {
         list.forEach(inPlace);
         continue;
       }
-      const mat = bakedMaterial(side);
+      const mat = bakedMaterial(side, leaf);
       const first = list[0];
       let out: Mesh;
       if (skinned) {

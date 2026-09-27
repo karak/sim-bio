@@ -2,6 +2,7 @@ import { Mesh, MeshStandardMaterial, type Material, type Object3D } from 'three'
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { toonFromStandard } from './toon';
 import { bakeMaterials } from './bake';
+import { createFoliageMaterial, foliageDepth } from './foliage';
 
 /**
  * 観察画面の GLB (assets/models/observe/*.glb) を読む。材質は観察画面のトゥーンに置き換える (設計 §8)。
@@ -28,6 +29,12 @@ function convert(m: Material): Material {
   const hit = cache.get(m);
   if (hit) return hit;
   const s = m as MeshStandardMaterial;
+  // (木の磨き上げで追加) 絵のアルファで切り抜く材質 (葉のカード) は、葉のカードの材質にする (foliage.ts)
+  if (s.map && s.alphaTest > 0) {
+    const f = createFoliageMaterial(s.map, s.alphaTest, s.name);
+    cache.set(m, f);
+    return f;
+  }
   const t = toonFromStandard({
     color: s.color,
     map: s.map,
@@ -51,6 +58,12 @@ export function toToon(root: Object3D): void {
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(convert) : convert(mesh.material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    // (木の磨き上げで追加) 葉のカードは切り抜いた影を落とし、光線の当たり判定 (自動カメラの見通し) からは外す (奥の葉の塊が受け持つ)
+    const f = mesh.material as MeshStandardMaterial;
+    if (!Array.isArray(mesh.material) && f.map && f.alphaTest > 0) {
+      mesh.customDepthMaterial = foliageDepth(f.map, f.alphaTest);
+      mesh.userData.foliage = true;
+    }
   });
 }
 

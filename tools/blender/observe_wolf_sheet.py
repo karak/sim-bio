@@ -14,6 +14,13 @@ import sys
 from PIL import Image, ImageDraw
 
 raw, out = sys.argv[1], sys.argv[2]
+# (灰狼の作り直しで追加) 3 つ目の引数で出力の名前の頭を変える (既定 wolf。作り直しの後は wolf2)。4 つ目に作り直し前の撮影 (<raw_dir>) を渡すと、
+# 頭の寄り (head-*) の前後を <prefix>-head.png に並べる
+PRE = sys.argv[3] if len(sys.argv) > 3 else "wolf"
+BEFORE = sys.argv[4] if len(sys.argv) > 4 else None
+# (灰狼の 3 回目で追加) 5・6 つ目の引数で頭の寄りの前後の札を変える (既定 before / after。3 回目は "round 2" / "round 3")
+LB_BEFORE = sys.argv[5] if len(sys.argv) > 5 else "before"
+LB_AFTER = sys.argv[6] if len(sys.argv) > 6 else "after"
 os.makedirs(out, exist_ok=True)
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 REF = Image.open(os.path.join(ROOT, "assets/textures/board/creatures/wolf.png")).convert("RGB")
@@ -82,18 +89,75 @@ mods1 = [label(trim(rimg(f"view-{v}.png")), f"model {v}") for v in views]
 refs2 = [label(REF.crop(REF_BOX[p]), f"ref {p}") for p in poses]
 mods2 = [label(trim(rimg(f"pose-{p}.png")), f"model {p}") for p in poses]
 H = 300
-stack([row(refs1, H), row(mods1, H), row(refs2, H), row(mods2, H)], gap=10).save(os.path.join(out, "wolf-compare.png"))
+stack([row(refs1, H), row(mods1, H), row(refs2, H), row(mods2, H)], gap=10).save(os.path.join(out, f"{PRE}-compare.png"))
 for v in views + ["rear34"]:
-    rimg(f"view-{v}.png").resize((512, 512), Image.LANCZOS).save(os.path.join(out, f"wolf-view-{v}.png"))
+    rimg(f"view-{v}.png").resize((512, 512), Image.LANCZOS).save(os.path.join(out, f"{PRE}-view-{v}.png"))
 
 lod = [label(trim(rimg("view-side.png")), "hero (LOD0)"), label(trim(rimg("lod1-side.png")), "crowd (LOD1)"),
        label(trim(rimg("view-q34.png")), "hero q34"), label(trim(rimg("lod1-q34.png")), "crowd q34")]
-row(lod, 300).save(os.path.join(out, "wolf-lod.png"))
+row(lod, 300).save(os.path.join(out, f"{PRE}-lod.png"))
 
 anim = [label(trim(rimg(f"anim-{a}.png")), a) for a in ("idle", "walk", "stalk", "run", "pounce", "fall")]
-row(anim, 280).save(os.path.join(out, "wolf-anim.png"))
+row(anim, 280).save(os.path.join(out, f"{PRE}-anim.png"))
 
 for name in ("walk", "stalk", "run", "pounce", "fall"):
     frames = sorted(f for f in os.listdir(raw) if f.startswith(f"seq-{name}-"))
-    row([label(rimg(f), f.split("-")[-1][:-4]) for f in frames], 260).save(os.path.join(out, f"wolf-seq-{name}.png"))
+    row([label(rimg(f), f.split("-")[-1][:-4]) for f in frames], 260).save(os.path.join(out, f"{PRE}-seq-{name}.png"))
+# (灰狼の作り直しで追加) 頭の寄り: 上段 基準画の頭 (側面・正面・斜め前)、中段 作り直し前、下段 作り直し後。最後に忍び寄り・飛びかかりの口
+HEAD_BOX = {"side": (420, 60, 640, 280), "front": (680, 40, 840, 280), "q34": (1150, 40, 1330, 220)}
+
+
+def fig_box(im, thr=40):
+    """(灰狼の 4 回目で追加) 背景 (左上の色) と違う画素の外接枠"""
+    px = im.load()
+    bg = px[2, 2]
+    xs, ys = [], []
+    for y in range(0, im.height, 2):
+        for x in range(0, im.width, 2):
+            q = px[x, y]
+            if abs(q[0] - bg[0]) + abs(q[1] - bg[1]) + abs(q[2] - bg[2]) > thr:
+                xs.append(x)
+                ys.append(y)
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def front_same_scale(view):
+    """(灰狼の 4 回目で追加) 正面の頭を基準画の正面と同じ縮尺で切り出す: 全身の正面 (view-front) を基準画の正面の体の高さに合わせて縮め、
+    基準画の頭の枠 HEAD_BOX["front"] を体の外接枠からの相対位置で当てる"""
+    ref = REF.crop(REF_BOX["front"])
+    rx0, ry0, rx1, ry1 = fig_box(ref)
+    mx0, my0, mx1, my1 = fig_box(view)
+    k = (ry1 - ry0) / (my1 - my0)
+    im = view.resize((round(view.width * k), round(view.height * k)), Image.LANCZOS)
+    # 体の上端と左右の中心を揃える
+    ox = (mx0 + mx1) / 2 * k - (rx0 + rx1) / 2
+    oy = my0 * k - ry0
+    hb = HEAD_BOX["front"]
+    bx0, by0 = hb[0] - REF_BOX["front"][0], hb[1] - REF_BOX["front"][1]
+    bx1, by1 = hb[2] - REF_BOX["front"][0], hb[3] - REF_BOX["front"][1]
+    return im.crop((round(bx0 + ox), round(by0 + oy), round(bx1 + ox), round(by1 + oy)))
+
+
+SAME_SCALE_FRONT = len(sys.argv) > 7 and sys.argv[7] == "same-scale-front"  # (灰狼の 4 回目で追加) 7 つ目の引数
+if os.path.exists(os.path.join(raw, "head-q34.png")):
+    heads = ["side", "front", "q34"]
+    rows = [row([label(REF.crop(HEAD_BOX[v]), f"ref {v}") for v in heads], 300)]
+    def head_cell(d, v, lb):
+        # (灰狼の 4 回目で追加) 正面は基準画と同じ縮尺 (SAME_SCALE_FRONT のとき)
+        if v == "front" and SAME_SCALE_FRONT:
+            return label(front_same_scale(Image.open(os.path.join(d, "view-front.png")).convert("RGB")), f"{lb} {v} (same scale)")
+        return label(trim(Image.open(os.path.join(d, f"head-{v}.png")).convert("RGB")), f"{lb} {v}")
+    if BEFORE:
+        rows.append(row([head_cell(BEFORE, v, LB_BEFORE) for v in heads], 300))
+    rows.append(row([head_cell(raw, v, LB_AFTER) for v in heads], 300))
+    rows.append(row([label(trim(rimg(f"head-{a}.png")), f"{LB_AFTER} {a}") for a in ("stalk", "pounce")], 300))
+    # (灰狼の 5 回目で追加) 8 つ目の引数 bust で、頭・首・胸の寄り (bust-*) の前後を頭の寄りの下に足す (基準画は BUST_BOX で切る)
+    if len(sys.argv) > 8 and sys.argv[8] == "bust" and os.path.exists(os.path.join(raw, "bust-q34.png")):
+        BUST_BOX = {"side": (330, 50, 640, 330), "front": (672, 36, 848, 312), "q34": (1070, 36, 1330, 310)}
+        rows.append(row([label(REF.crop(BUST_BOX[v]), f"ref bust {v}") for v in heads], 320))
+        if BEFORE and os.path.exists(os.path.join(BEFORE, "bust-q34.png")):
+            rows.append(row([label(trim(Image.open(os.path.join(BEFORE, f"bust-{v}.png")).convert("RGB")), f"{LB_BEFORE} bust {v}")
+                             for v in heads], 320))
+        rows.append(row([label(trim(rimg(f"bust-{v}.png")), f"{LB_AFTER} bust {v}") for v in heads], 320))
+    stack(rows, gap=10).save(os.path.join(out, f"{PRE}-head.png"))
 print("sheets written to", out)

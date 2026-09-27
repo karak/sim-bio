@@ -27,3 +27,4 @@ M21-01, M21-02, M21-03, M19-03
 
 ## 作業ログ
 
+- 2026-09-26 設計書(docs/design/2026-09-26-cloudflare-architecture.md)に合わせた方針: Workers Static Assets で配り、港の Worker と同じ 1 本に同梱する(`/api/*` だけ fetch handler、SPA の fallback は Worker を起こさない)。配備は GitHub Actions(lfs: true)から `wrangler deploy`。`.assetsignore` で `*.blend` と `textures/concept/**` を配らない。ログの受け口は Workers Logs に書く(「保管」は D1 ではなく Workers Logs の 7 日)。港の API は M19-08 以降、構成検査は M19-12。

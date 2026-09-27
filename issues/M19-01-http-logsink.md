@@ -27,3 +27,4 @@ None (can start immediately)
 
 ## 作業ログ
 
+- 2026-09-26 設計書(docs/design/2026-09-26-cloudflare-architecture.md)に合わせた方針: 送るのは warn/error と年ごとの要約だけ。受け口は Workers Logs(7 日)に構造化ログで書き、D1 には入れない。受け口の日次の粗い上限を超えた分は 204 で黙って捨てる(失敗しても本体は止まらない)。

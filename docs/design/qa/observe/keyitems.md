@@ -63,13 +63,13 @@ blender -b --factory-startup --python tools/blender/observe_render.py -- lineup 
 | `woven_screen` | 360 | ≤ 400 | 2.14 × 0.30 × 2.07 | wood, weave, rope, vine, bell, bell_rim |
 | `stone_wall_corner` | 680 | ≤ 800 | 3.40 × 3.10 × 1.02 | stone, moss |
 | `lantern_post`(格子を足した) | 512(368 から) | ≤ 600 | 1.36 × 0.86 × 2.35 | stone, moss, rope, frame, lantern |
-| `forest_tree`(M22-07 で房 6 つに分けた) | 1,625(1,740 から) | ≤ 2,000 | 5.92 × 5.73 × 7.87(試作 3 で房を大きくした) | forest_bark, forest_leaf |
-| `forest_tree_lod1`(M22-07 で房 6 つ) | 575(579 から) | ≤ 600 | 5.74 × 5.74 × 7.88(試作 3 で房を大きくした) | forest_bark, forest_leaf |
+| `forest_tree`(M22-07 で房 6 つに分けた、木の磨き上げで葉のカード 174 枚) | 1,288(木の磨き上げで 1,625 から) | ≤ 2,000 | 6.97 × 6.88 × 8.64(木の磨き上げ: カードの角まで。前は 5.92 × 5.73 × 7.87) | forest_trunk, forest_bark, forest_leaf, forest_foliage |
+| `forest_tree_lod1`(M22-07 で房 6 つ、木の磨き上げで葉のカード 80 枚) | 380(木の磨き上げで 575 から) | ≤ 600 | 8.13 × 7.49 × 8.75(木の磨き上げ: カードの角まで。前は 5.74 × 5.74 × 7.88) | forest_trunk, forest_bark, forest_leaf, forest_foliage |
 | `moongrass_tuft_seed` | 52 | ≤ 60 | 0.38 × 0.49 × 0.95 | moongrass, moonseed |
 | `fern` | 80 | ≤ 80 | 1.33 × 1.21 × 0.42 | fern |
 | `flower_patch` | 67 | ≤ 80 | 0.41 × 0.42 × 0.29 | stem, petal |
-| `belltree_mature`(鐘を直した、M22-07 で房 8 つ) | 3,917(3,952 から) | ≤ 4,000 | 9.85 × 9.91 × 10.22(試作 3 で房を大きくした) | bark, leaf, bell, bell_rim |
-| `belltree_mature_lod1`(鐘を直した、M22-07 で房 8 つ) | 1,112 | ≤ 1,200 | 10.24 × 10.09 × 10.28(試作 3 で房を大きくした) | bark, leaf, bell, bell_rim |
+| `belltree_mature`(鐘を直した、M22-07 で房 8 つ、木の磨き上げで葉のカード) | 3,646(木の磨き上げで 3,917 から) | ≤ 4,000 | 11.64 × 11.55 × 11.17(木の磨き上げ: カードの角まで) | trunk, bark, leaf, foliage, bell, bell_rim |
+| `belltree_mature_lod1`(鐘を直した、M22-07 で房 8 つ、木の磨き上げで葉のカード) | 1,080(木の磨き上げで 1,112 から) | ≤ 1,200 | 12.61 × 12.39 × 11.36(木の磨き上げ: カードの角まで) | trunk, bark, leaf, foliage, bell, bell_rim |
 
 予算は試作 2 の判断で各段 ≤ 6,000 から ≤ 12,000 に上げました。`ship_sails`・`ship_flying` の奥行き 28.08 m(試作 3 の渦巻きで 27.89 m)は船首の鐘の腕のぶん、`ship_flying` の高さは竜骨の下の光の輪のぶんを含みます。`ship_flying` の `ship_block` は船尾楼の戸口の板戸です。
 `ship_keel` の奥行き 16.67 m は、船首と船尾の柱を支える斜めの支柱のぶんです(作り直した後は 26.72 m で、船首の巻きと船尾の柱の長さと同じです。試作 3 の渦巻きで 26.56 m)。`stone_wall_corner` の原点は L の外側の角で、腕は +X に 3 m、−Z(glTF)に 2.4 m 伸びます。

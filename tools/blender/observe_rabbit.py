@@ -5,6 +5,7 @@
   (末尾に --parts を付けると、部品ごとの三角形数を出す)
 出力: <out_dir>/rabbit.glb と rabbit.blend
   - メッシュ `rabbit` (近 LOD、~1,500 三角形)、`rabbit_lod1` (群れ LOD、~500)。どちらも同じアーマチュア `rabbit_rig` (骨 24) にスキン
+  - (M23-08) メッシュ `rabbit_far` (遠い段、~80 三角形): 群れ LOD を島ごとに削った形 (creature_far.py)。耳は多く残し、光る紋は除く。描画は切ってある (hide_render)
   - アクション idle (4 s)・hop (0.5 s)・run (0.35 s)・graze (4 s)・alert (3 s)・fall (1.5 s、ループしない)。30 fps、その場 (root は動かさない)
   - 材質 rabbit_body (頂点色で地・腹の影・鼻づら・六角の縁取りの暗い青緑) / rabbit_ear (耳の内側と先の焦げ茶) / rabbit_nose / rabbit_glow (発光 #8FF5E6: 目・六角の紋・継ぎ目)
 基準画: assets/textures/board/creatures/rabbit.png (承認済み: 四方図・採食・立ち上がり)。造形の元は assets/textures/concept/rabbit-angular.png。
@@ -26,6 +27,10 @@ import bmesh
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.interpolate import poly_3d_calc  # (土兎の手直しで追加) 付け根の継ぎ目を消す Blend
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from creature_far import build_far  # noqa: E402  (M23-08)
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT_DIR = argv[0] if argv else "assets/models/observe"
@@ -68,6 +73,7 @@ PAL = {k: lin(v) for k, v in {
     "glow": "#8FF5E6",
 }.items()}
 WHITE = (1.0, 1.0, 1.0)
+PAL["lid"] = lin("#6A4A32")  # (土兎の手直し 4 で追加) 瞼の線: 基準画の目の上の眉の陰 (地の陰 #8E7049 と耳の焦げ茶 #5E3D2D のあいだ)
 
 BODY, EAR, NOSE, GLOW = range(4)
 MAT_NAMES = ["rabbit_body", "rabbit_ear", "rabbit_nose", "rabbit_glow"]
@@ -102,6 +108,134 @@ def make_materials():
 EAR_BASE_X, EAR_BASE = 0.030, (-0.122, 0.330)
 EAR_TIP_X, EAR_TIP = 0.090, (-0.058, 0.556)
 EAR_MID = 0.46  # 耳の 1 本目の骨の長さ (付け根からの割合)
+# (土兎の手直し 4 で追加) 審査台 r3-rabbit「前足を折ったときに胸にめりこむがもっと肩にあたるパーツが横に出るはず」。
+# 前脚の付け根に肩 (肩甲・上腕) の塊 (build_shoulder) を胸の脇へ張り出させ、前脚をその下へ外へ出す (FL_X4)。折るときは肘を外へ開く (FL_SPLAY4)
+SHOULDER4 = True
+FL_X4 = 0.052  # 前脚の骨の横の位置 (元は 0.040)
+# (土兎の手直し 5 で追加) 審査台 r4-rabbit「目の縁の茶色はいらない。また正面から見た時の顔の形が左右に膨らんで見える。
+# 鼻部分を今の半分くらいまで削ってその分顔を水平に潰す方向で」。頭を組んだあと (目・鼻・口を載せる前) に頭の頂点を face5 で動かす:
+# 鼻づら (FACE5_Y0 より前) の前への出を FACE5_K 倍に縮め、顔の横幅を後頭部 (FACE5_WY[0]) から顔 (FACE5_WY[1]) へ FACE5_W 倍まで詰める。
+# 頭の色と重みの y のしきい値は元の頭の座標で読む (face5_y_inv)。瞼の線 (build_eye_lid) は付けない (LID5_OFF)
+FACE5 = True
+FACE5_Y0 = -0.10
+FACE5_K = 0.6
+FACE5_W = 0.85
+FACE5_WY = (-0.095, -0.135)
+FACE5_TIP_W, FACE5_TIP_Y = 0.65, (-0.165, -0.255)  # 鼻づらの横幅をさらに詰める割合 (元の y の範囲で 1 → FACE5_TIP_W)
+FACE5_CHIN_W, FACE5_CHIN_Z = 0.80, (0.27, 0.235)  # 顔の下 (口と顎) の横幅をさらに詰める割合 (z の範囲で 1 → FACE5_CHIN_W)
+LID5_OFF = True
+EYE5_DIR = (0.86, -0.50, 0.10)  # 近 LOD の目を載せる向き (EYE4 の dir は (0.67, -0.73, 0.10))
+EYE5_AXIS = (0, -1, -0.60)  # 目の長軸 (EYE4 の axis は (0, -1, -0.50))
+EYE5_SCALE = 0.85  # 目の大きさ (EYE4 の形に対して。形の比と尖りはそのまま)
+
+
+def face5_ramp(x, a, b):
+    """(土兎の手直し 5 で追加) a → b で 0 → 1 のなめらかな段 (smoothstep と同じ。smoothstep より前に定義が要るため)"""
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
+def face5_y(y):
+    """(土兎の手直し 5 で追加) 鼻づらの前後を縮める (FACE5_Y0 より後ろは動かさない)"""
+    return FACE5_Y0 + (y - FACE5_Y0) * FACE5_K if FACE5 and y < FACE5_Y0 else y
+
+
+def face5_y_inv(y):
+    """(土兎の手直し 5 で追加) face5_y の逆 (動かした頭の頂点の y から元の y へ)"""
+    return FACE5_Y0 + (y - FACE5_Y0) / FACE5_K if FACE5 and y < FACE5_Y0 else y
+
+
+def face5(co):
+    """(土兎の手直し 5 で追加) 頭の頂点を動かす: 鼻づらの前後を縮め、顔の横幅を詰める (元の y で詰める割合を決める)"""
+    if not FACE5:
+        return co
+    t = face5_ramp(co[1], *FACE5_WY)
+    m = min(1.0, max(0.0, (co[1] - FACE5_TIP_Y[0]) / (FACE5_TIP_Y[1] - FACE5_TIP_Y[0])))  # 鼻づらの先ほど細く (正面で顔の下半分が V に絞れる)
+    c = face5_ramp(co[2], *FACE5_CHIN_Z) * t
+    chin_w = 1.0 if FACE6 else FACE5_CHIN_W  # (土兎の手直し 6 で変更: 口と顎を詰めるのをやめる)
+    w = (1.0 + (FACE5_W - 1.0) * t) * (1.0 + (FACE5_TIP_W - 1.0) * m) * (1.0 + (chin_w - 1.0) * c)
+    return (co[0] * w, face5_y(co[1]), co[2])
+
+
+# (土兎の手直し 6 で追加) 審査台 r5-rabbit「正面からのシルエットについて、間違った修正をしている。顔の上半分はよくなっている。
+# 顔の下半分は、悪くなっている。頬がなくなり、首の中にめり込んでいるレベル。頬を膨らませて丸みを。」
+# 手直し 5 の口と顎の詰め (FACE5_CHIN_W) をやめ、face5 のあとに頭の頂点を face6 で横へ膨らませる: 目の下 (FACE6_Z[0]) から
+# 顎 (FACE6_Z[1]) へ横幅を 1 → 1 + FACE6_A 倍へなめらかに増やす (目より上の顔の上半分は動かさない)。後頭部 (FACE6_Y[0] より後ろ) も動かさない
+FACE6 = True
+FACE6_A = 0.65
+FACE6_Z = (0.287, 0.240)
+FACE6_Y = (-0.095, -0.120)
+
+
+def face6(co):
+    """(土兎の手直し 6 で追加) 頭の頂点の顔の下半分 (頬・口・顎) を横へ膨らませる (face5 のあとの座標で)"""
+    if not FACE6:
+        return co
+    k = face5_ramp(co[2], *FACE6_Z) * face5_ramp(co[1], *FACE6_Y)
+    return (co[0] * (1.0 + FACE6_A * k), co[1], co[2])
+
+
+# (土兎の手直し 7 で追加) 審査台 r6-rabbit「はりすぎではない。むしろまだ頬と首が一部めり込んでいる。頬の頂点、顎、鼻頭のいちそのものは
+# 違和感がないので、頬を丸くふくらませる and 口鼻全体を前方に伸ばし、そのうえで形を３方位からみたシルエットを整える」。
+# (1) 頬を丸く: 近 LOD の頭の断面の顎の縁の角 (頬の張り → 顎の下の間) を外へ出して (FACE7_JAW)、頬の張りの下の面を内へ切れ込む斜面から
+#     外へふくらむ面にする。頬の張りの 2 本の硬いエッジはなめらかにする (眉・鼻筋の角は硬いまま)。群れ LOD の断面も同じ向きへ (FACE7_JAW_LOD1)
+# (2) 口鼻を前へ: face6 のあと、頬の頂点より前 (FACE7_Y0 より前) の頭の頂点の前への出を FACE7_K 倍に伸ばす (face7)。正面から見た
+#     x・z は動かさないので、正面の頬の頂点・顎・鼻頭の位置はそのまま。伸ばし始めはなめらかに (FACE7_W の幅で傾きを 1 → FACE7_K)
+# (1) で頬の下 (z 0.235〜0.26) の横幅が首の上の側面より片側 1.4〜2.2 cm 外へ出て、(2) で顎が首の前より前へ張り出す (首は変えていない)
+FACE7 = True
+FACE7_JAW = (0.70, 0.80, 0.30)  # 顎の縁の角 (横の割合、下の割合、下側の絞りの効き)。元は (0.64, 0.80, 0.5)
+FACE7_JAW_LOD1 = (0.84, 0.72, 0.15)  # 群れ LOD の顎の縁の角。元は (0.66, 0.78, 0.5)
+FACE7_FAR = 0.18  # 遠い段で頭の島を削る割合 (ほかは 0.2)
+GRAZE7_NECK, GRAZE7_HEAD = 55, -42  # 採食の首の下げと頭の起こし (GRAZE5 の neck / head)
+FACE7_SMOOTH = (5, 6, 10, 11)  # 硬いエッジから外す頬の張りの角 (HEAD_SHARP_EDGES の並び)
+FACE7_Y0 = -0.140
+FACE7_W = 0.020
+FACE7_K = 1.45
+
+
+def face7_dy(y):
+    """(土兎の手直し 7 で追加) 頬の頂点より前の y を前へ伸ばす量 (傾きを FACE7_W の幅で 1 → FACE7_K へなめらかに上げる)"""
+    s = FACE7_Y0 - y
+    if not FACE7 or s <= 0:
+        return 0.0
+    k = FACE7_K - 1.0
+    if s < FACE7_W:
+        t = s / FACE7_W
+        return -k * FACE7_W * (t ** 3 - t ** 4 / 2)
+    return -k * (FACE7_W / 2 + (s - FACE7_W))
+
+
+def face7_y(y):
+    """(土兎の手直し 7 で追加)"""
+    return y + face7_dy(y)
+
+
+def face7_y_inv(y):
+    """(土兎の手直し 7 で追加) face7_y の逆 (二分法。face7_y は単調に増える)"""
+    if not FACE7 or y >= FACE7_Y0:
+        return y
+    lo, hi = y - 0.2, FACE7_Y0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if face7_y(mid) < y:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def face7(co):
+    """(土兎の手直し 7 で追加) 口鼻を前へ伸ばす (face6 のあとの座標で。x・z は動かさない)"""
+    if not FACE7:
+        return co
+    return (co[0], face7_y(co[1]), co[2])
+
+
+def face_y_inv(y):
+    """(土兎の手直し 7 で追加) 動かした頭の y から元の頭の y へ (face7 → face5 の順に戻す)"""
+    return face5_y_inv(face7_y_inv(y))
+
+
 BONES = {
     "root": ((0, 0, 0), (0, -0.1, 0), None),
     "pelvis": ((0, 0.11, 0.14), (0, 0.02, 0.17), "root"),
@@ -119,6 +253,8 @@ for s, sx in (("L", -1), ("R", 1)):
     BONES[f"ear1_{s}"] = (tuple(base), tuple(mid), "head")
     BONES[f"ear2_{s}"] = (tuple(mid), tuple(tip), f"ear1_{s}")
     fx, hx = sx * 0.040, sx * 0.072
+    if SHOULDER4:  # (土兎の手直し 4 で追加) 前脚を肩の塊の下へ外へ出す
+        fx = sx * FL_X4
     # 前脚: 肩 → 肘 → 手首 → 指先
     fl = [(fx, -0.115, 0.165), (fx, -0.105, 0.085), (fx, -0.125, 0.022), (fx, -0.172, 0.010)]
     # 後脚: 股関節 → 膝 (前下) → 踵 (後ろ下) → 指先 (前、足裏は地面)
@@ -129,6 +265,14 @@ for s, sx in (("L", -1), ("R", 1)):
             bn = f"{pre}_{nm}_{s}"
             BONES[bn] = (pts[i], pts[i + 1], prev)
             prev = bn
+if FACE5:  # (土兎の手直し 5 で追加) 頭の骨の先と鼻の骨を縮めた鼻づらへ
+    for k in ("head", "nose"):
+        h, t, p = BONES[k]
+        BONES[k] = (face5(h) if k == "nose" else h, face5(t), p)
+if FACE7:  # (土兎の手直し 7 で追加) 頭の骨の先と鼻の骨を伸ばした鼻づらへ
+    for k in ("head", "nose"):
+        h, t, p = BONES[k]
+        BONES[k] = (face7(h) if k == "nose" else h, face7(t), p)
 BONES = {k: (Vector(h), Vector(t), p) for k, (h, t, p) in BONES.items()}
 LEG_BONES = {f"{pre}_{s}": [f"{pre}_{nm}_{s}" for nm in names]
              for s in "LR" for pre, names in (("fl", ("upper", "fore", "paw")), ("hl", ("thigh", "shin", "foot")))}
@@ -238,9 +382,27 @@ def frame_of(d):
 HERO = dict(name="hero", body=(9, 12), neck=(2, 10), head=(8, 12), ear=(6, 8), fleg=(6, 6), hleg=(5, 6), thigh=(5, 8),
             tail=(3, 6), eye=8, hex_ring=True, ribbon_seg=6, sq=2.15, hexes=None, seams=("back", "thigh", "shoulder"),
             comb_net=True, comb_glow=None)
+def far_ratio(c, mats, n):
+    """(M23-08) 遠い段で群れ LOD の島を削る割合 (creature_far.build_far)。光る紋と継ぎ目 (6 三角形ほどの小さな島) は除き、耳は 4 割、ほかは 2 割"""
+    if "rabbit_glow" in mats:
+        return 0.0
+    if "rabbit_ear" in mats:
+        return 0.4
+    if FACE7 and c.y < -0.12 and c.z > 0.2:  # (土兎の手直し 7 で追加) 頭の形を変えて削った後の三角形が 2 つ増えたので、頭の島だけ少し多く削る
+        return FACE7_FAR
+    return 0.2
+
+
 LOD1 = dict(name="lod1", body=(6, 8), neck=(2, 6), head=(5, 8), ear=(3, 4), fleg=(3, 4), hleg=(3, 4), thigh=(3, 6),
             tail=(2, 4), eye=4, hex_ring=False, ribbon_seg=3, sq=2.1, hexes={"chest": [0], "back": [0, 2], "top": [0]},
             seams=("back", "thigh"), comb_net=False, comb_glow=None)
+HERO["mouth"] = True  # (土兎の手直しで追加) 鼻の下の口の線 (build_mouth) は近 LOD だけ
+LOD1.update(mouth=True, mouth_w=0.0095)  # (土兎の手直し 3 で追加) 群れ LOD にも口 (2〜10 m で読めるよう太い線)
+HERO["shoulder"], LOD1["shoulder"] = (5, 8), (3, 6)  # (土兎の手直し 4 で追加) 肩の塊 (build_shoulder) の断面数・周の頂点数
+# (土兎の手直し 8 で追加) 群れ LOD の首が正面・斜めから柱に見えた (審査台 r7-rabbit「首の左右（扁桃腺あたり）に2本、首輪より外側に柱上の部位がある」)。
+# 首の断面が 6 角 (左右が平らな面) で、首輪の帯 (8 区間) の弦が首の前の角の中へ潜って、首輪の端より外の首の平らな面が縦の柱に読めていた。
+# 首の周を 6 → 8 頂点にして丸め、首輪を 8 → 12 区間にして首を回り込ませる (三角形 +8 / +8)。近 LOD (周 10・首輪 12 区間) は変えない
+LOD1.update(neck=(2, 8), collar_seg=12)
 
 # 胴 (尻 → 胸): (y, 背の高さ, 腹の高さ, 半幅, 腹側の絞り)。基準画の側面から (座った姿勢: 尻は地面すれすれ)
 BODY_KEYS = [
@@ -314,9 +476,43 @@ HEAD_KEYS = [
 ]
 
 
-def head_corners(rx, rt, rb, pinch):
+def face7_jaw(jaw, spec, rx, rb, pinch, y):
+    """(土兎の手直し 7 で追加) 顎の縁の角を spec (横の割合、下の割合、絞りの効き) の位置へ、頭の前 (元の y) ほど強く寄せる"""
+    fx, fz, fp = spec
+    w = smoothstep(-0.100, -0.140, y)
+    new = (fx * rx * (1 - fp * pinch), -fz * rb)
+    return (jaw[0] + (new[0] - jaw[0]) * w, jaw[1] + (new[1] - jaw[1]) * w)
+
+
+def head_corners(rx, rt, rb, pinch, y=None):
     """(M22-05 残りの手直しで追加) 頭の断面の角 (右半分、上から下): 頭頂の平ら・額と頬の境・頬の張り (最も広い、目の下)・顎の縁・顎の下"""
-    return [(0.0, rt), (0.62 * rx, 0.86 * rt), (rx, -0.08 * rb), (0.66 * rx * (1 - 0.5 * pinch), -0.78 * rb), (0.0, -rb)]
+    jaw = (0.66 * rx * (1 - 0.5 * pinch), -0.78 * rb)
+    if FACE7 and y is not None:  # (土兎の手直し 7 で追加) 群れ LOD も顎の縁の角を外へ
+        jaw = face7_jaw(jaw, FACE7_JAW_LOD1, rx, rb, pinch, y)
+    return [(0.0, rt), (0.62 * rx, 0.86 * rt), (rx, -0.08 * rb), jaw, (0.0, -rb)]
+
+
+# (土兎の手直し 3 で追加) 顔つきをシャープに (審査台 r2-rabbit「顔つきと目はもっとシャープなので、正面を見比べて忠実度をあげて」)。
+# 基準画の正面・斜め前の顔は、平らな額の面が目のすぐ上の眉の角で横の面へ折れ、目は眉の下の横の面に収まる。頬は目の下で最も張り、
+# 顎の縁で下の面へ折れる。鼻筋は額から鼻先へ細い平らな面で通る。断面の角: 鼻筋の縁・眉 (目の上)・頬の張り (目の下)・顎の縁
+HEAD_SHARP = True
+HEAD_SHARP_PAIRS = [False, True, True, True, False, False]
+# 硬いエッジにする断面の頂点 (facet_ring の並び: 0 頭頂、1-2 / 15-14 鼻筋の縁、3-4 / 13-12 眉、5-6 / 11-10 頬の張り、7 / 9 顎の縁、8 顎の下)
+HEAD_SHARP_EDGES = (1, 2, 14, 15, 3, 4, 12, 13, 5, 6, 10, 11)
+HEAD_SHARP_Y = -0.105  # これより前 (鼻先の側) の断面のあいだだけ
+HEAD_SHARP_MUZZLE = 0.5  # 鼻先の断面の下の半径を増やす割合。鼻の下を顎の下へ逃がさず前を向く面にし、上から見下ろしても口の線が見えるように
+
+
+def head_corners_sharp(rx, rt, rb, pinch, y):
+    """(土兎の手直し 3 で追加) 頭の断面の角 (右半分、上から下): 頭頂・鼻筋の縁 (額の面の縁)・眉・頬の張り・顎の縁・顎の下。
+    鼻づら (y < -0.2) では鼻筋の縁を内へ寄せて細い鼻筋にする"""
+    bridge = 0.50 - 0.16 * smoothstep(-0.17, -0.235, y)
+    rb *= 1.0 + HEAD_SHARP_MUZZLE * smoothstep(-0.215, -0.25, y)  # 鼻の下の面 (口の載る面) を前へ立てる
+    jaw = (0.64 * rx * (1 - 0.5 * pinch), -0.80 * rb)
+    if FACE7:  # (土兎の手直し 7 で追加) 顎の縁の角を外へ出して、頬の張りの下を外へふくらむ面に (後頭部はそのまま)
+        jaw = face7_jaw(jaw, FACE7_JAW, rx, rb, pinch, y)
+    return [(0.0, rt), (bridge * rx, 0.97 * rt), (0.90 * rx, 0.56 * rt), (rx, -0.22 * rb),
+            jaw, (0.0, -rb)]
 
 
 def build_head(bm, lod):
@@ -326,10 +522,27 @@ def build_head(bm, lod):
     #  近 LOD は額の縁と頬の張りの角を 2 点にして面を立てる (周 10 → 12)。元は
     #  ring(bm, Vector((0, y, zc)), X, Z, rx * 1.06, rt, rb, n, pinch, sq=2.45, phase=math.pi / 2))
     pairs = [False, True, True, False, False] if lod["name"] == "hero" else [False] * 5
-    rings = [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners(rx * 1.08, rt, rb, pinch), pairs) for y, zc, rx, rt, rb, pinch in secs]
+    if lod["name"] == "hero" and HEAD_SHARP:
+        # (土兎の手直し 3 で追加) 近 LOD は目の上の眉の角を足した断面 (head_corners_sharp)
+        rings = [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners_sharp(rx * 1.08, rt, rb, pinch, y), HEAD_SHARP_PAIRS, bevel=0.16)
+                 for y, zc, rx, rt, rb, pinch in secs]
+    else:
+        rings = [facet_ring(bm, Vector((0, y, zc)), X, Z, head_corners(rx * 1.08, rt, rb, pinch, y if FACE7 else None), pairs)
+                 for y, zc, rx, rt, rb, pinch in secs]  # (土兎の手直し 7 で変更: 元の頭の y を渡す)
     back = bm.verts.new((0, secs[0][0] + 0.006, secs[0][1]))
     tip = bm.verts.new((0, secs[-1][0] - 0.007, secs[-1][1]))
     loft(bm, [back] + rings + [tip])
+    if lod["name"] == "hero" and HEAD_SHARP:
+        # (土兎の手直し 3 で追加) 顔 (耳の付け根より前) の眉と頬の張りの角は硬いエッジ (面の立った顔。後頭部はなめらかなまま)
+        for (ya, ra), (yb, rb_) in zip(zip([s_[0] for s_ in secs], rings), zip([s_[0] for s_ in secs[1:]], rings[1:])):
+            if max(ya, yb) > HEAD_SHARP_Y:
+                continue
+            for j in HEAD_SHARP_EDGES:
+                if FACE7 and j in FACE7_SMOOTH:  # (土兎の手直し 7 で追加) 頬の張りの角はなめらかに (丸い頬)
+                    continue
+                e = bm.edges.get((ra[j], rb_[j]))
+                if e is not None:
+                    e.smooth = False
 
 
 def ear_frame(side):
@@ -359,6 +572,15 @@ def build_ear(bm, lod, side):
     secs = resample(keys, nsec)
     # 近 LOD は縁のすぐ内側に頂点を寄せる (内側の焦げ茶の面を広く、地色の縁を細く)
     angs = [0, 40, 90, 140, 180, 204, 270, 336] if n == 8 else [360 * i / n for i in range(n)]
+    if EAR_RIM:
+        # (土兎の手直しで追加) 0° を外寄りの縁にそろえ、外寄りの細い地色の縁の境 (35°) に頂点を置く。内寄りの幅の広い楔は ear_pattern で切る
+        if w.x * side < 0:
+            w = -w
+        if n == 8:
+            angs = [0, 35, 90, 150, 180, 205, 270, 335]
+        if EAR_FOLD and n == 8:  # (土兎の手直し 3 で追加) 近 LOD は内寄りの楔を折り返しの段 (形) にする
+            build_ear_fold(bm, base, axis, front, w, L, keys, side)
+            return front
     rings = []
     for t, wd, th in secs:
         c = base + axis * (L * t)
@@ -374,6 +596,10 @@ def build_ear(bm, lod, side):
     faces = loft(bm, rings + [tipv])
     cap(bm, list(reversed(rings[0])))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    if EAR_RIM:
+        # (土兎の手直しで追加) 耳の模様を基準画の縁の出方へ: 下の inner_k の割り当ての代わりに ear_pattern で塗り分ける
+        ear_pattern(bm, base, axis, front, w, L, secs, side, cut_back=n == 8)
+        return front
     inner_k = {1, 2} if n == 8 else {0, 1}  # 前面の面 (近 LOD は縁の細い面を地色に残す)
     for idx, f in enumerate(faces):
         c = f.calc_center_median()
@@ -381,6 +607,155 @@ def build_ear(bm, lod, side):
         if (idx % n in inner_k and t > 0.2) or t > 0.76:
             f.material_index = EAR
     return front
+
+
+# (土兎の手直しで追加) 耳の模様 (基準画 creatures/rabbit.png の正面・斜め前・側面、concept/rabbit-angular.png の寄りから):
+# 前面 (内側) は焦げ茶だが、内寄り (顔の側) の縁に地色の幅の広い楔が付け根から立ち上がり、長さの 2/3 ほどで斜めに切れて尖る。
+# その上は先まで縁いっぱいに焦げ茶。外寄りの縁は細い地色の縁 (幅の 1 割)。背は地色で、先の 1/4 ほどが焦げ茶、その境は内寄りほど低い斜め。
+# 塗り分けの境は面の中心で選ぶと階段になるので、境の線を含む平面で耳を切って (bmesh.ops.bisect_plane) 真っ直ぐな縁にする
+EAR_RIM = True
+EAR_WEDGE = ((-1.0, 0.70), (0.42, 0.07))  # 楔の縁の線: 内寄りの縁の t = 0.66 から、外寄りへ 3 割の所の t = 0.07 へ ((横の位置 -1 = 内寄りの縁, t))
+EAR_LAT_RIM = 0.80                        # 外寄りの縁の地色: 横の位置がこれより外の面 (前面の外寄りの角の頂点 35° の外側)
+EAR_BACK_TIP = ((1.0, 0.79), (-1.0, 0.69))  # 背の先の焦げ茶の境: 外寄りの縁の t = 0.79 から内寄りの縁の t = 0.69 へ
+EAR_TIP_ALL = 0.93                        # これより先は表裏とも焦げ茶
+
+
+def ear_pattern(bm, base, axis, front, w, L, secs, side, cut_back=True):
+    """(土兎の手直しで追加) 耳の塗り分け。w は外寄り (頭の外側) を向く横の向き、secs は (t, 半幅, 厚さ) の断面。
+    cut_back=False (群れ LOD) は背の先の斜めの境で切らず、面の中心で選ぶ (三角形を節約。遠目には楔だけが読める)"""
+    if w.x * side < 0:
+        w = -w  # 横の位置 +1 を外寄りの縁にそろえる
+
+    def half(t):
+        for (t0, w0, _), (t1, w1, _) in zip(secs, secs[1:]):
+            if t0 <= t <= t1:
+                return w0 + (w1 - w0) * (t - t0) / (t1 - t0)
+        return secs[0][1] if t < secs[0][0] else secs[-1][1]
+
+    def pt(s, t):
+        return base + axis * (L * t) + w * (half(t) * s)
+
+    def cut(line):
+        a, b = pt(*line[0]), pt(*line[1])
+        no = (b - a).cross(front).normalized()  # 前後 (厚さ) の向きを含む平面で切る
+        bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces), plane_co=a, plane_no=no, dist=1e-6)
+        return a, no
+
+    wa, wn = cut(EAR_WEDGE)
+    ba, bn = cut(EAR_BACK_TIP) if cut_back else (pt(*EAR_BACK_TIP[0]), (pt(*EAR_BACK_TIP[0]) - pt(*EAR_BACK_TIP[1])).cross(front).normalized())
+    tip_side = pt(0.0, 0.98)
+    wsign = 1 if (tip_side - wa).dot(wn) > 0 else -1  # 楔の線の焦げ茶の側 (先と外寄りの側)
+    bsign = 1 if (tip_side - ba).dot(bn) > 0 else -1
+    bm.normal_update()
+    for f in bm.faces:
+        c = f.calc_center_median()
+        t = (c - base).dot(axis) / L
+        s = (c - base).dot(w) / max(1e-4, half(min(max(t, 0.0), 0.95)))
+        is_front = f.normal.dot(front) > 0.0
+        if t > EAR_TIP_ALL:
+            dark = True
+        elif is_front:
+            dark = (c - wa).dot(wn) * wsign > 0 and s < EAR_LAT_RIM
+        else:
+            dark = (c - ba).dot(bn) * bsign > 0
+        f.material_index = EAR if dark else BODY
+
+
+# (土兎の手直し 3 で追加) 耳の折り返しの段 (審査台 r2-rabbit「耳の模様」、基準画 creatures/rabbit.png の正面・斜め前、concept/rabbit-angular.png)。
+# 基準画の内寄り (顔の側) の地色の楔は塗り分けではなく、耳の縁が前へ折り返した厚みの段に見える: 楔の面は前へ張り出して平らで、
+# 楔の縁の線 (EAR_WEDGE) で焦げ茶のくぼんだ面へ段になって落ちる。近 LOD は耳の断面をこの段の形で組む (楔の縁の線に断面の頂点を置くので、
+# 塗り分けの境と段の角が一致し、面の中心で選んでも階段にならない)。段の角 (楔の上の縁と段の下) は硬いエッジ。群れ LOD は前のまま (塗り分け)
+EAR_FOLD = True
+EAR_FOLD_H = 0.006  # 楔の面が前へ張り出す量 (m、耳の厚みの中心から)。段の高さはこれとくぼみの深さの和 (~1 cm)
+EAR_FOLD_T = [0.0, 0.12, 0.25, 0.38, 0.51, 0.63, 0.70, 0.82, 0.95]  # 断面の位置 (長さの割合)。0.70 は楔の先 (EAR_WEDGE の内寄りの縁の t)
+EAR_FOLD_EPS = 0.08  # 段の上の縁と下の縁の横の間 (横の位置の単位)。段の壁が少し斜めに立ち、地色の陰の細い帯に見える
+EAR_WALL_SHADE = 0.85  # 段の壁の陰の濃さ (fur → fur_shade)
+
+
+def build_ear_fold(bm, base, axis, front, w, L, keys, side):
+    """(土兎の手直し 3 で追加) 近 LOD の耳: 断面は前面 7 点 (外寄りの縁・外寄りの細い地色の縁・くぼみ・段の下・段の上・楔の面・内寄りの縁) と
+    背 3 点。w は外寄りを向く横の向き (横の位置 +1 = 外寄りの縁、-1 = 内寄りの縁)。材質は作るときに帯ごとに決め、背の先の斜めの境だけ
+    ear_pattern と同じく平面で切って塗り分ける"""
+    dense = resample(keys, 41)
+
+    def prof(t):
+        for (t0, w0, h0), (t1, w1, h1) in zip(dense, dense[1:]):
+            if t0 <= t <= t1:
+                k = (t - t0) / max(1e-9, t1 - t0)
+                return w0 + (w1 - w0) * k, h0 + (h1 - h0) * k
+        return dense[-1][1], dense[-1][2]
+
+    (s0, t0), (s1, t1) = EAR_WEDGE
+    t_end = t0 if s0 < s1 else t1  # 楔の先 (内寄りの縁に届く t)
+
+    def edge_s(t):
+        """楔の縁の線の横の位置 (t で線形)。付け根では外寄りのくぼみの幅を残して止める"""
+        return min(0.55, s0 + (s1 - s0) * (t - t0) / (t1 - t0))
+
+    zone = bm.faces.layers.int.new("ear_zone")  # 1 = 前面 (作るときの材質のまま)、0 = 背 (先の斜めの境で塗り分ける)
+    wall = bm.faces.layers.int.new("ear_wall")  # 1 = 段の壁 (make_part が地色の陰で塗り、属性を消す)
+    rings, folded = [], []
+    for t in EAR_FOLD_T:
+        wd, th = prof(t)
+        if t < t_end - 1e-6:
+            sb = edge_s(t)
+            hf = EAR_FOLD_H * smoothstep(0.0, 0.25, sb + 1.0)
+            s4 = sb - EAR_FOLD_EPS
+            s5 = s4 - 0.45 * (s4 + 1.0)
+            front_pts = [(1.0, 0.0), (0.80, 0.10 * th), ((0.80 + sb) / 2, -0.55 * th), (sb, -0.45 * th),
+                         (s4, hf), (s5, hf), (-1.0, 0.6 * hf)]
+            folded.append(True)
+        else:  # 楔の先より上: 段は無く、縁いっぱいまで焦げ茶のくぼみ (段の頂点は内寄りの縁へ寄せて細く残す)
+            front_pts = [(1.0, 0.0), (0.80, 0.10 * th), (-0.10, -0.55 * th), (-0.88, -0.25 * th), (-0.92, -0.12 * th),
+                         (-0.96, -0.04 * th), (-1.0, 0.0)]
+            folded.append(False)
+        back_pts = [(math.cos(math.radians(a)), th * math.sin(math.radians(a))) for a in (205, 270, 335)]
+        c = base + axis * (L * t)
+        rings.append([bm.verts.new(c + w * (wd * s) + front * dz) for s, dz in front_pts + back_pts])
+    tipv = bm.verts.new(base + axis * L)
+    faces = loft(bm, rings + [tipv])
+    n = len(rings[0])
+    for idx, f in enumerate(faces):
+        r, j = divmod(idx, n)
+        if r == len(rings) - 1:
+            dark = True  # 先 (最後の断面から先の扇)
+        elif j == 0:
+            dark = False  # 外寄りの細い地色の縁
+        elif j in (1, 2):
+            dark = True  # くぼみ
+        elif j == 3:
+            dark = not folded[r]  # 段の壁 (地色の陰)。楔の先より上は焦げ茶
+            f[wall] = 1 if folded[r] else 0
+        elif j in (4, 5):
+            dark = not folded[r]  # 楔の面 (楔の先より上は焦げ茶)
+        else:
+            dark = False  # 背 (下で先の斜めの境を切る)
+        f.material_index = EAR if dark else BODY
+        f[zone] = 1 if j < 6 else 0
+    cap(bm, list(reversed(rings[0])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    # 段の角は硬いエッジ: 段の下 (前面 3) と楔の上の縁 (前面 4) を断面から断面へ繋ぐ辺
+    for r in range(len(rings) - 1):
+        if not (folded[r] and folded[r + 1]):
+            continue
+        for j in (3, 4):
+            e = bm.edges.get((rings[r][j], rings[r + 1][j]))
+            if e is not None:
+                e.smooth = False
+    # 背の先の焦げ茶の斜めの境 (ear_pattern と同じ平面で切る)
+    half = lambda t: prof(min(max(t, 0.0), 0.95))[0]  # noqa: E731
+    pa = base + axis * (L * EAR_BACK_TIP[0][1]) + w * (half(EAR_BACK_TIP[0][1]) * EAR_BACK_TIP[0][0])
+    pb = base + axis * (L * EAR_BACK_TIP[1][1]) + w * (half(EAR_BACK_TIP[1][1]) * EAR_BACK_TIP[1][0])
+    bn = (pb - pa).cross(front).normalized()
+    bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces), plane_co=pa, plane_no=bn, dist=1e-6)
+    tip_side = base + axis * (L * 0.98)
+    bsign = 1 if (tip_side - pa).dot(bn) > 0 else -1
+    for f in bm.faces:
+        if f[zone] == 0:
+            c = f.calc_center_median()
+            t = (c - base).dot(axis) / L
+            f.material_index = EAR if (t > EAR_TIP_ALL or (c - pa).dot(bn) * bsign > 0) else BODY
+    bm.faces.layers.int.remove(zone)
 
 
 # 脚の断面: (関節 i から i+1 への位置 t, 横半径, 前後半径)
@@ -435,6 +810,37 @@ def build_thigh(bm, lod, side):
     a = bm.verts.new((c.x, c.y - ry, c.z + 0.012))
     b = bm.verts.new((c.x, c.y + ry, c.z - 0.012))
     loft(bm, [a] + rings + [b])
+
+
+# (土兎の手直し 4 で追加) 肩の塊: 基準画の採食・立ち上がりと concept/rabbit-angular.png の前脚の付け根の面の立った板。胸の脇の低いところに
+# 肩の関節から肘へ向かう平たい卵形 (外の面を平らに、sq 2.7) を置き、胸の脇から 1〜2 cm、胸の下では上腕として 3 cm ほど外へ出す。
+# 重みは上腕 (fl_upper) が主なので、前脚を折ると塊ごと肘へ振れ、肘を外へ開く (FL_SPLAY4) と胸の外へ出る。
+# (上の中心 (x, y, z), 下の中心, 横の半径, 前後の半径)。x は +側 (右) の値
+SH_TOP4, SH_BOT4 = (0.064, -0.124, 0.168), (0.063, -0.104, 0.076)
+SH_RX4, SH_RY4 = 0.029, 0.042
+
+
+def build_shoulder(bm, lod, side):
+    """(土兎の手直し 4 で追加) 肩の塊 (build_thigh と同じ作り: 両端を尖らせた断面のロフト)"""
+    nsec, n = lod["shoulder"]
+    a = Vector((side * SH_TOP4[0], *SH_TOP4[1:]))
+    b = Vector((side * SH_BOT4[0], *SH_BOT4[1:]))
+    axis = (b - a).normalized()
+    uy = X.cross(axis).normalized()  # 前後 (+ は後ろ)
+    rings = []
+    for i in range(nsec):
+        t = -1 + 2 * (i + 1) / (nsec + 1)
+        k = math.sqrt(max(0.0, 1 - t * t)) ** 0.6  # 箱に近い塊 (腿より角ばる)
+        c = (a + b) / 2 + (b - a) / 2 * t
+        rings.append(ring(bm, c, X, uy, SH_RX4 * k, SH_RY4 * k, SH_RY4 * k * 0.9, n, phase=math.pi / 2, sq=2.7))
+    ends = [bm.verts.new(a - axis * 0.004), bm.verts.new(b + axis * 0.004)]
+    loft(bm, [ends[0]] + rings + [ends[1]])
+
+
+def shoulder_weights(co):
+    """(土兎の手直し 4 で追加) 肩の塊: 上腕が主、上の端は胸へ"""
+    side = "L" if co.x < 0 else "R"
+    return weights_for(co, [(f"fl_upper_{side}", 1.0), ("chest", 0.9), (f"fl_fore_{side}", 0.1)])
 
 
 def build_tail(bm, lod):
@@ -738,8 +1144,9 @@ def build_decals(shell, lod, mats, obj_name):
         build_ribbon(bm_glow, shell, pts, lod, 0.0042, 0.0040, GLOW, seg=max(2, lod["ribbon_seg"] // 2 + 1))
     # 首輪: 暗い青緑の帯 (群れ LOD も持つ。遠目にも頭と胴の境が読める)
     # (M22-05 残りの手直しで変更: 首輪が首と胴の境で途切れて見えたので、浮かせる量を 0.003 → 0.0045 に)
+    # (土兎の手直し 8 で変更: 群れ LOD の区間数を LOD1["collar_seg"] (8 → 12) に。元は seg=12 if lod["hex_ring"] else 8)
     build_ribbon(bm_teal, shell, collar_points(shell), lod, 0.013, 0.0045, BODY, closed=True,
-                 seg=12 if lod["hex_ring"] else 8)
+                 seg=12 if lod["hex_ring"] else lod.get("collar_seg", 8))
     parts = []
     for bm, part in ((bm_glow, "glow"), (bm_teal, "teal")):
         if not bm.faces:
@@ -749,10 +1156,45 @@ def build_decals(shell, lod, mats, obj_name):
     return parts
 
 
+# (土兎の手直し 3 で追加) 目をシャープに (審査台 r2-rabbit)。基準画の目は両端の尖った大きなアーモンド: 目頭は前下へ尖り、目尻は後ろ上へ尖る。
+# 近 LOD は八角形の代わりに eye_lens の形 (k 頂点)。axis は目の長軸 (前下がり)、shape は (目頭までの長さ, 目尻までの長さ, 上まぶたの高さ, 下まぶたの高さ)
+EYE_SHARP = dict(k=20, axis=(0, -1, -0.62), shape=(0.034, 0.032, 0.0165, 0.0150), pf=1.1, pb=1.1, lift=0.10, dir=(0.72, -0.68, 0.08))
+
+
+# (土兎の手直し 4 で追加) 目をより鋭く (審査台 r3-rabbit「目は一歩進んだが道半ば。より鋭さを」)。基準画の正面・斜め前の目は、
+# 手直し 3 の目より細く (高さ/長さ 0.48 → 0.36)、両端が針のように尖り、目尻が上へ切れ上がる。目の縁は暗い瞼の線で締まり、
+# 上瞼の線は目尻へ太くなって目尻の先へ少し払う (眉の陰)。下瞼の線は細い。形は eye_lens に EYE4 の値を渡し、瞼の線は build_eye_lid
+EYE4 = dict(k=24, axis=(0, -1, -0.50), shape=(0.031, 0.035, 0.0128, 0.0104), pf=1.8, pb=2.6, lift=0.40, dir=(0.67, -0.73, 0.10))
+LID4 = dict(top=(0.0010, 0.0040, 0.0054), bottom=0.0012, flick=0.0090, off=0.0034, overlap=0.0007)
+
+
+def eye_lens(k, lf, lb, ht, hb, pf=0.2, pb=1.2, lift=0.0):
+    """(土兎の手直し 3 で追加) 目の形 (observe_deer.py の lens と同じ)。(前 (目頭) へ +, 上へ +) の 2D 点を k 個、i = 0 が目頭、k/2 が目尻。
+    pf / pb は目頭 / 目尻の尖り (0 で楕円、1 で放物線の尖った角)、lift は目尻を上まぶたの高さに対して持ち上げる割合"""
+    out = []
+    for i in range(k):
+        a = 2 * math.pi * i / k
+        ca, sa = math.cos(a), math.sin(a)
+        x = ca * (lf if ca > 0 else lb)
+        y = sa * (ht if sa > 0 else hb) * abs(sa) ** (pf if ca > 0 else pb)
+        y += lift * ht * max(0.0, -ca) ** 2
+        out.append((x, y))
+    return out
+
+
 def build_eye(bm, bvh_head, lod, side):
     """光る目: 頭の横やや前向きのアーモンド形 (目頭が前・下、目尻が後ろ・上)"""
     aim = Vector((0, -0.155, 0.292))
     d = Vector((side * 0.84, -0.52, 0.06)).normalized()
+    if lod["name"] == "hero" and EYE_SHARP:  # (土兎の手直し 3 で追加) 目を前へ回して、正面から頬の内に収まって見えるように
+        d = Vector((side * EYE_SHARP["dir"][0], *EYE_SHARP["dir"][1:])).normalized()
+    es4 = EYE4 if lod["name"] == "hero" and EYE4 else None  # (土兎の手直し 4 で追加) 近 LOD はより鋭い目 (EYE4)
+    if es4:
+        d = Vector((side * es4["dir"][0], *es4["dir"][1:])).normalized()
+    if FACE5:  # (土兎の手直し 5 で追加) 狙う点も縮めた頭の上の同じ所へ
+        aim = Vector(face5(aim))
+    if es4 and FACE5:  # (土兎の手直し 5 で追加) 鼻づらを縮めた頭では目を横寄りへ向け、頬の脇 (正面で顔の縁の内) に載せる
+        d = Vector((side * EYE5_DIR[0], *EYE5_DIR[1:])).normalized()
     loc, n, _, _ = bvh_head.ray_cast(aim + d * 1.0, -d)
     if n.dot(d) < 0:
         n = -n
@@ -763,6 +1205,31 @@ def build_eye(bm, bvh_head, lod, side):
         v = -v
     k = lod["eye"]
     L, H = 0.028, 0.0175
+    shape = None
+    if lod["name"] == "hero" and EYE_SHARP:  # (土兎の手直し 3 で追加) 近 LOD は両端の尖ったレンズ (eye_lens)
+        es = EYE_SHARP
+        u = Vector(es["axis"])
+        u = (u - n * u.dot(n)).normalized()
+        v = n.cross(u).normalized()
+        if v.z < 0:
+            v = -v
+        k = es["k"]
+        shape = eye_lens(k, *es["shape"], pf=es["pf"], pb=es["pb"], lift=es["lift"])
+    if es4:  # (土兎の手直し 4 で追加)
+        u = Vector(es4["axis"])
+        u = (u - n * u.dot(n)).normalized()
+        v = n.cross(u).normalized()
+        if v.z < 0:
+            v = -v
+        k = es4["k"]
+        shape = eye_lens(k, *es4["shape"], pf=es4["pf"], pb=es4["pb"], lift=es4["lift"])
+        if FACE5:  # (土兎の手直し 5 で追加) 短くした頭に合わせて同じレンズの形のまま縮め、長軸を正面で「\ /」に傾ける
+            u = Vector(EYE5_AXIS)
+            u = (u - n * u.dot(n)).normalized()
+            v = n.cross(u).normalized()
+            if v.z < 0:
+                v = -v
+            shape = [(x * EYE5_SCALE, y * EYE5_SCALE) for x, y in shape]
     c = bm.verts.new(loc + n * 0.006)
     vs = []
     for i in range(k):
@@ -770,12 +1237,64 @@ def build_eye(bm, bvh_head, lod, side):
         ca, sa = math.cos(a), math.sin(a)
         sharp = 1.0 - 0.35 * max(0.0, -ca)  # 目尻 (後ろ) を尖らせる
         p = loc + u * (L * ca) + v * (H * sa * sharp)
+        if shape:  # (土兎の手直し 3 で追加)
+            p = loc + u * shape[i][0] + v * shape[i][1]
         best = bvh_head.find_nearest(p)
         p = best[0] + n * 0.0025 if best[0] is not None else p
         vs.append(bm.verts.new(p))
     for i in range(k):
         f = bm.faces.new((vs[i], vs[(i + 1) % k], c))
         f.material_index = GLOW
+        f.normal_update()
+        if f.normal.dot(n) < 0:
+            f.normal_flip()
+    # (土兎の手直し 4 で追加) 瞼の線 (build_eye_lid) のために、目の縁の点と向きを返す
+    return dict(pts=[x.co.copy() for x in vs], c=loc.copy(), n=n.copy(), u=u.copy(), v=v.copy(), k=k)
+
+
+def build_eye_lid(bm, bvh_head, eye):
+    """(土兎の手直し 4 で追加) 目の縁を回る暗い瞼の線。上瞼は目頭で細く目尻へ太く (LID4["top"])、目尻の先で後ろ上へ払う (LID4["flick"])。
+    下瞼は細い線。目の縁の少し内から外へ張る帯を頭の面に落として、目の発光の縁の上に重ねる"""
+    pts, c, n, u, v, k = eye["pts"], eye["c"], eye["n"], eye["u"], eye["v"], eye["k"]
+
+    def on_head(p, off):
+        q = bvh_head.find_nearest(p)
+        return q[0] + n * off if q[0] is not None else p
+
+    def width(i):
+        a = 2 * math.pi * i / k
+        ca, sa = math.cos(a), math.sin(a)
+        s = (1 - ca) / 2  # 0 = 目頭、1 = 目尻
+        t0, t1, t2 = LID4["top"]
+        w = t0 + (t1 - t0) * smoothstep(0.0, 0.5, s) + (t2 - t1) * smoothstep(0.5, 1.0, s)
+        if sa < 0:  # 下瞼は細く、目尻のそばだけ上瞼の太さからつなぐ
+            return LID4["bottom"] + (w - LID4["bottom"]) * smoothstep(0.8, 1.0, s) * (1 - smoothstep(0.0, 0.4, -sa))
+        if ca > 0:  # 目頭の側は下瞼の細さからつなぐ
+            return LID4["bottom"] + (w - LID4["bottom"]) * smoothstep(0.0, 0.35, sa)
+        return w
+
+    rows = []
+    for i, p in enumerate(pts):
+        # 縁の線に直交する向き (目の中心から放射状に張ると、尖った目頭・目尻で帯が先へ伸びて細い筋になる)
+        d = (pts[(i + 1) % k] - pts[i - 1]).cross(n)
+        d = (d - n * d.dot(n)).normalized()
+        if d.dot(p - c) < 0:
+            d = -d
+        rows.append((bm.verts.new(on_head(p - d * LID4["overlap"], LID4["off"])), bm.verts.new(on_head(p + d * width(i), LID4["off"]))))
+    faces = []
+    for i in range(k):
+        a, b = rows[i], rows[(i + 1) % k]
+        faces.append(bm.faces.new((a[0], a[1], b[1], b[0])))
+    # 目尻 (i = k/2) の先の払い: 目の長軸の延長へ細る三角 (上瞼の線の続き)
+    m = k // 2
+    pm = pts[m]
+    e = pm - c
+    e = (e - n * e.dot(n)).normalized()
+    w2 = LID4["top"][2]
+    tip = bm.verts.new(on_head(pm + e * LID4["flick"] + v * (w2 * 0.35), LID4["off"]))
+    faces.append(bm.faces.new((rows[m][1], tip, rows[m - 1][1])))
+    for f in faces:
+        f.material_index = BODY
         f.normal_update()
         if f.normal.dot(n) < 0:
             f.normal_flip()
@@ -800,10 +1319,59 @@ def build_nose(bm, bvh_head):
     f.material_index = NOSE
 
 
+# (土兎の手直しで追加) 鼻の下の口: 基準画の正面・斜め前・立ち上がりの顔は、鼻の逆三角の下の角から短い縦の線が下り、
+# 左右へ分かれて外・下へゆるく流れる「人」の形。穏やかな顔にしたいので、分かれた線は下げすぎず短く止める。
+# 正面から見た (x, z)。鼻の下の角 (0, 0.246) から。線は鼻と同じ焦げ茶 (rabbit_nose)、頭の表面から少し浮かせた細い帯
+MOUTH_STEM = [(0.0, 0.2465), (0.0, 0.2405)]
+MOUTH_BRANCH = [(0.0, 0.2410), (0.0042, 0.2380), (0.0085, 0.2364), (0.0118, 0.2362)]
+MOUTH_W = 0.0032
+# (土兎の手直し 3 で変更: 審査台 r2-rabbit「口元の線が見えない」。観察画面の 2〜10 m で読めるよう、線を太く (3.2 → 7.5 mm)、縦の線を長く、
+#  分かれた線を鼻の幅まで伸ばして外・下へ流す。群れ LOD にも太い線 (9.5 mm、LOD1 の mouth_w) で入れる。元の線は上の MOUTH_STEM / MOUTH_BRANCH / MOUTH_W)
+MOUTH3 = True
+MOUTH3_STEM = [(0.0, 0.2465), (0.0, 0.2395)]
+MOUTH3_BRANCH = [(0.0, 0.2405), (0.0045, 0.2362), (0.0100, 0.2336), (0.0162, 0.2324)]
+MOUTH3_W = 0.0075
+
+
+def build_mouth(bm, bvh_head, width=None):
+    """(土兎の手直しで追加) 口の線を正面から頭へ投影した細い帯にする"""
+    stem, branch = (MOUTH3_STEM, MOUTH3_BRANCH) if MOUTH3 else (MOUTH_STEM, MOUTH_BRANCH)  # (土兎の手直し 3 で追加)
+    width = width or (MOUTH3_W if MOUTH3 else MOUTH_W)
+
+    def hit(x, z):
+        loc, n, _, _ = bvh_head.ray_cast(Vector((x, -1.0, z)), Y)
+        if loc is None:
+            raise RuntimeError(f"mouth miss {x} {z}")
+        if n.y > 0:
+            n = -n
+        return loc, n
+
+    def strip(path):
+        pts = resample_path([Vector((x, 0, z)) for x, z in path], max(3, len(path) * 2 - 1))
+        hits = [hit(p.x, p.z) for p in pts]
+        rows = []
+        for i, (loc, n) in enumerate(hits):
+            d = (hits[min(i + 1, len(hits) - 1)][0] - hits[max(i - 1, 0)][0]).normalized()
+            sv = n.cross(d).normalized() * (width / 2)  # (土兎の手直し 3 で変更: MOUTH_W → width)
+            rows.append((bm.verts.new(loc - sv + n * 0.0012), bm.verts.new(loc + sv + n * 0.0012), n))
+        for a, b in zip(rows, rows[1:]):
+            f = bm.faces.new((a[0], a[1], b[1], b[0]))
+            f.material_index = NOSE
+            f.normal_update()
+            if f.normal.dot(a[2]) < 0:
+                f.normal_flip()
+
+    strip(stem)  # (土兎の手直し 3 で変更: MOUTH_STEM → stem、MOUTH_BRANCH → branch)
+    for sx in (-1, 1):
+        strip([(sx * x, z) for x, z in branch])
+
+
 # ---------------------------------------------------------------- 頂点色と重み
 def color_for(part, co, n):
     if part == "teal":
         return PAL["teal"]
+    if part == "lid":  # (土兎の手直し 4 で追加) 瞼の線 (眉の陰の焦げ茶)
+        return PAL["lid"]
     if part in ("glow", "rigid"):
         return WHITE
     # (M22-05 残りの手直しで変更: 陰影が平たかったので、上を向く面を fur_lit へ、下・奥を向く面を fur_shade へ寄せて明暗の幅を広げた。
@@ -820,6 +1388,9 @@ def color_for(part, co, n):
         c = mix(PAL["fur"], PAL["light"], smoothstep(-0.1, -0.7, n.y) * 0.3)
         return mix(c, PAL["fur_shade"], smoothstep(0.0, -0.6, n.z) * 0.5)  # (M22-05 残りの手直しで追加) 顎の下の陰
     if part == "head":
+        co = Vector((co.x, face5_y_inv(co.y), co.z))  # (土兎の手直し 5 で追加) 縮めた鼻づらの頂点も元の頭の座標で塗る
+        if FACE7:  # (土兎の手直し 7 で追加) 伸ばした鼻づらも元の頭の座標で (face7 → face5 の順に戻す)
+            co = Vector((co.x, face_y_inv(face5_y(co.y)), co.z))
         c = mix(PAL["fur"], PAL["fur_lit"], smoothstep(0.4, 0.9, n.z) * 0.8)  # (M22-05 残りの手直しで追加) 頭頂・額の面は明るく
         c = mix(c, PAL["light"], smoothstep(-0.205, -0.245, co.y) * 0.7)
         c = mix(c, PAL["light"], smoothstep(-0.2, -0.7, n.z) * 0.6)
@@ -828,7 +1399,11 @@ def color_for(part, co, n):
         # (M22-05 残りの手直しで変更: 上の 2 行を足したので、元の 2 行の mix の起点 PAL["fur"] を c に)
         return c
     if part.startswith("ear"):
+        if EAR_RIM and n.dot(EAR_FRONT[part]) > 0.3:
+            return mix(PAL["fur"], PAL["fur_lit"], 0.8)  # (土兎の手直しで追加) 前面の地色の楔と縁は光を受けて明るい (基準画)
         return mix(PAL["fur"], PAL["light"], 0.35 if n.dot(EAR_FRONT[part]) < -0.3 else 0.0)
+    if part.startswith("shoulder"):  # (土兎の手直し 4 で追加) 肩の塊は腿と同じく、上の面を明るく前と下を陰にして塊を立てる
+        return color_for("thigh" + part[len("shoulder"):], co, n)
     if part.startswith("thigh"):
         # (M22-05 残りの手直しで変更: 腿の上の面は明るく、前の面と下は陰にして腿の塊を立てる。元は下への fur_dark の 1 段だけ)
         c = mix(PAL["fur"], PAL["fur_dark"], smoothstep(0.0, -0.8, n.z) * 0.7)
@@ -843,6 +1418,82 @@ def color_for(part, co, n):
     if part == "tail":
         return PAL["light"]
     return WHITE
+
+
+# (土兎の手直し 4 で追加) 体毛の毛羽立ち (審査台 r3-rabbit「体毛の毛羽だった感じをリアルよりすぎないテクスチャで乗るとよい」)。
+# 灰狼への判断 (「テクスチャが細かすぎる。もとの絵画的ないい意味で荒い毛並み」) を踏まえ、細かいノイズではなく基準画の荒い筆の跡にする。
+# 観察画面は材質を焼いて 1 体 1 draw call にするので、絵 (テクスチャ) は使わず頂点色で塗る。近 LOD の胴・首・腿は辺を 1 回ずつ割って
+# (densify4、形は変えず、法線は割る前のなめらかな値) 筆の跡を受ける。筆は胴の軸の周りに開いた (前後 y, 背から測った弧の長さ s) の平面に置き、
+# 毛並みの向き (後ろ下へ) に長い明るい跡と暗い跡を交互に。顔 (頭) には塗らない (穏やかな顔を保つ)
+FUR4 = True
+FUR4_PARTS = ("body", "neck", "thigh", "shoulder")
+FUR4_R = 0.09          # 弧の長さに直す半径 (胴の半幅ほど)
+FUR4_N = 22            # 片側の本数
+FUR4_L = (0.10, 0.18)  # 長さ (m)
+FUR4_W = (0.024, 0.040)  # 幅 (m)
+FUR4_K = (0.75, 0.60)  # 明るい跡・暗い跡の濃さ
+SMOOTH_N4 = {}         # 割った部品のなめらかな法線 (メッシュ名 → 頂点ごと)。Blend が親の法線に使う
+FUR4_STROKES = []
+
+
+def densify4(bm, lod):
+    """(土兎の手直し 4 で追加) 近 LOD の部品の辺を 1 回ずつ割る (形は変えない)。割る前の頂点の法線を面の上で補間する関数を返す"""
+    if not (FUR4 and lod["name"] == "hero"):
+        return None
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.normal_update()
+    bm.verts.index_update()
+    vs = [v.co.copy() for v in bm.verts]
+    ns = [v.normal.copy() for v in bm.verts]
+    tris = [[lp.vert.index for lp in lt] for lt in bm.calc_loop_triangles()]
+    bvh = BVHTree.FromPolygons(vs, tris)
+    bmesh.ops.subdivide_edges(bm, edges=list(bm.edges), cuts=1, use_grid_fill=True)
+
+    def nfn(co):
+        loc, _, idx, _ = bvh.find_nearest(co)
+        tri = tris[idx]
+        ws = poly_3d_calc([vs[i] for i in tri], loc)
+        return sum((ns[i] * w for i, w in zip(tri, ws)), Vector()).normalized()
+    return nfn
+
+
+def make_fur4():
+    """(土兎の手直し 4 で追加) 筆の跡の列 (乱数の種は固定)。(y, s) は跡の始点、d は毛並みの向き (後ろ (+y) と下 (|s| が増す向き))"""
+    import random
+    rng = random.Random(23)
+    out = []
+    for side in (-1, 1):
+        for i in range(FUR4_N):
+            y = rng.uniform(-0.20, 0.13)
+            s = side * rng.uniform(0.0, 0.20)
+            a = math.radians(rng.uniform(12, 48))
+            d = Vector((math.cos(a), side * math.sin(a)))
+            out.append((Vector((y, s)), d, rng.uniform(*FUR4_L), rng.uniform(*FUR4_W), 1 if i % 2 == 0 else -1))
+    return out
+
+
+def fur4_paint(part, co, c):
+    """(土兎の手直し 4 で追加) 頂点色 c に筆の跡を重ねる (FUR4_PARTS の部品だけ)"""
+    if not part.startswith(FUR4_PARTS):
+        return c
+    if not FUR4_STROKES:
+        FUR4_STROKES.extend(make_fur4())
+    zc = body_zc(co.y)
+    p = Vector((co.y, math.atan2(co.x, co.z - zc) * FUR4_R))
+    for a, d, L, W, tone in FUR4_STROKES:
+        t = (p - a).dot(d) / L
+        if t < -0.1 or t > 1.1:
+            continue
+        dist = (p - (a + d * (L * max(0.0, min(1.0, t))))).length
+        w = W * (0.55 + 0.45 * math.sin(math.pi * max(0.0, min(1.0, t))))  # 筆の入りと抜きを細く
+        k = smoothstep(w, 0.0, dist) * (1 - smoothstep(0.75, 1.1, t)) * smoothstep(-0.1, 0.25, t)
+        if k <= 0:
+            continue
+        if tone > 0:
+            c = mix(c, mix(PAL["fur_lit"], PAL["light"], 0.6), k * FUR4_K[0])
+        else:
+            c = mix(c, mix(PAL["fur_shade"], PAL["fur_dark"], 0.3), k * FUR4_K[1])
+    return c
 
 
 def seg_dist(p, a, b):
@@ -886,6 +1537,9 @@ def thigh_weights(co):
 
 
 def head_weights(co):
+    co = Vector((co.x, face5_y_inv(co.y), co.z))  # (土兎の手直し 5 で追加) 縮めた鼻づらの頂点も元の頭の座標で重みを決める
+    if FACE7:  # (土兎の手直し 7 で追加) 伸ばした鼻づらも元の頭の座標で
+        co = Vector((co.x, face_y_inv(face5_y(co.y)), co.z))
     wn = smoothstep(-0.215, -0.245, co.y)  # 鼻先は nose の骨
     out = [("head", 1.0 - wn)]
     if wn > 0.02:
@@ -911,7 +1565,61 @@ def ear_weights(s):
 
 
 # ---------------------------------------------------------------- メッシュの組み立て
-def make_part(name, bm, part, cands, mats, recalc=True):
+# (土兎の手直しで追加) 付け根をなじませる幅 (m): 前脚 → 胴、後脚 → 腿、腿 → 胴 (腿は基準画でも塊として立つので狭く)。空にすると前と同じ
+JOIN_R = dict(fleg=0.045, hleg=0.035, thigh=0.02)
+# (土兎の手直しで追加) 付け根の裾を広げる量 (m)。交わる線のところで子の面を外へ押し出し、筒が胴へ差し込まれた角をなだらかな裾にする
+JOIN_FLARE = dict(fleg=0.011, hleg=0.008, thigh=0.0)
+# (土兎の手直しで追加) 付け根の頂点のスキンの重みを親の面の重みへ寄せる割合 (なじませる割合に掛ける)。跳ね・走りで脚を振っても裾が胴に付いたまま
+JOIN_SKIN = 0.85
+
+
+class Blend:
+    """(土兎の手直しで追加) 付け根の継ぎ目を消す: 子の部品 (脚・腿) の頂点のうち親の面 (胴・腿) に近いものは、
+    法線と頂点色を親の面の最も近い点の値へ寄せる (距離 0 で親と同じ、radius で子のまま)。親の中に埋まった頂点は親と同じにする。
+    差し込んだだけの筒は、交わる線で陰影と色が折れて継ぎ目に見える。形はそのままで、交わる線の両側の塗りをそろえて線を消す"""
+
+    def __init__(self, parents, radius, flare=0.0):
+        self.radius = radius
+        self.flare = flare
+        vs, tris, self.src = [], [], []
+        for ob, part in parents:
+            me = ob.data
+            me.calc_loop_triangles()
+            o = len(vs)
+            vs += [v.co.copy() for v in me.vertices]
+            for lt in me.loop_triangles:
+                tris.append([o + i for i in lt.vertices])
+                self.src.append((me, part, tuple(lt.vertices)))
+        self.bvh = BVHTree.FromPolygons(vs, tris)
+
+    def at(self, co):
+        """co に最も近い親の面の点: (点, 頂点の法線を補間した法線, 親の頂点色, 距離の符号つき (外が正))"""
+        loc, _, idx, dist = self.bvh.find_nearest(co)
+        me, part, tri = self.src[idx]
+        ps = [me.vertices[i].co for i in tri]
+        ws = poly_3d_calc(ps, loc)
+        n = sum((me.vertices[i].normal * w for i, w in zip(tri, ws)), Vector()).normalized()
+        if me.name in SMOOTH_N4:  # (土兎の手直し 4 で追加) 割った親はなめらかな法線 (カスタム法線) で
+            n = sum((SMOOTH_N4[me.name][i] * w for i, w in zip(tri, ws)), Vector()).normalized()
+        pc = color_for(part, loc, n)
+        if FUR4:  # (土兎の手直し 4 で追加) 親の筆の跡の色へなじませる
+            pc = fur4_paint(part, loc, pc)
+        return loc, n, pc, dist if (co - loc).dot(n) >= 0 else -dist  # (土兎の手直し 4 で変更: color_for(part, loc, n) → pc)
+
+    def weights(self, co):
+        """co に最も近い親の面の点のスキンの重み (付け根を親と一緒に動かす)"""
+        loc, _, idx, _ = self.bvh.find_nearest(co)
+        part = self.src[idx][1]
+        if part.startswith("shoulder"):  # (土兎の手直し 4 で追加) 前脚は肩の塊へなじませる
+            return shoulder_weights(loc)
+        fn = body_weights if part == "body" else neck_weights if part == "neck" else thigh_weights
+        return fn(loc)
+
+    def factor(self, sd):
+        return 1.0 if sd <= 0 else 1.0 - smoothstep(0.0, self.radius, sd)
+
+
+def make_part(name, bm, part, cands, mats, recalc=True, blend=None, nrm_fn=None):
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
     if recalc:
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
@@ -925,17 +1633,59 @@ def make_part(name, bm, part, cands, mats, recalc=True):
         me.materials.append(m)
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
+    # (土兎の手直しで追加) blend (Blend) を渡した部品は、付け根の頂点の法線 (カスタム法線) と頂点色を親の面へ寄せる
+    nrm = [v.normal.copy() for v in me.vertices]
+    if nrm_fn is not None:  # (土兎の手直し 4 で追加) 割った部品 (densify4) は割る前のなめらかな法線 (カスタム法線) を使う
+        nrm = [nrm_fn(v.co) for v in me.vertices]
+        SMOOTH_N4[me.name] = nrm
+    tint = {}
+    wmix = {}
+    if blend is not None:
+        for v in me.vertices:
+            _, pn, pc, sd = blend.at(v.co)
+            f = blend.factor(sd)
+            if f <= 1e-3:
+                continue
+            if blend.flare:  # 交わる線 (sd = 0) で最も外へ、内外とも radius で 0 に
+                v.co += v.normal * (blend.flare * (1.0 - smoothstep(0.0, blend.radius, abs(sd))))
+            nrm[v.index] = (nrm[v.index] * (1 - f) + pn * f).normalized()  # (土兎の手直し 4 で変更: v.normal → nrm[v.index]。割った部品のなめらかな法線から寄せる)
+            tint[v.index] = (pc, f)
+            wmix[v.index] = (blend.weights(v.co), f * JOIN_SKIN)
+        me.normals_split_custom_set_from_vertices(nrm)
+    elif nrm_fn is not None:  # (土兎の手直し 4 で追加)
+        me.normals_split_custom_set_from_vertices(nrm)
     # 頂点色は面の角ごと (耳の焦げ茶の面などは白、毛の面だけ色を持つ)。Three.js は COLOR_0 を全材質に掛けるため
     col = me.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
+    wall = me.attributes.get("ear_wall")  # (土兎の手直し 3 で追加) 耳の折り返しの段の壁 (build_ear_fold)
     for p in me.polygons:
         for li in p.loop_indices:
             vi = me.loops[li].vertex_index
             v = me.vertices[vi]
             c = color_for(part, v.co, v.normal) if p.material_index == BODY else WHITE
+            if p.material_index == BODY and vi in tint:  # (土兎の手直しで追加) 寄せた法線で塗り、親の色へ混ぜる
+                c = mix(color_for(part, v.co, nrm[vi]), tint[vi][0], tint[vi][1])
+            elif nrm_fn is not None and p.material_index == BODY:  # (土兎の手直し 4 で追加) 割った部品はなめらかな法線で塗る
+                c = color_for(part, v.co, nrm[vi])
+            if FUR4 and p.material_index == BODY and wall is None:  # (土兎の手直し 4 で追加) 毛の部品に筆の跡 (fur4_paint)
+                c = fur4_paint(part, v.co, c)
+            if wall is not None and p.material_index == BODY and wall.data[p.index].value:  # (土兎の手直し 3 で追加) 段の壁は地色の陰
+                c = mix(PAL["fur"], PAL["fur_shade"], EAR_WALL_SHADE)
             col.data[li].color = (*c, 1.0)
+    if wall is not None:
+        me.attributes.remove(wall)
     groups = {}
     for v in me.vertices:
         ws = cands(v.co) if callable(cands) else weights_for(v.co, cands)
+        if v.index in wmix:  # (土兎の手直しで追加) 付け根の頂点は親の面の重みへ寄せる (上位 3 本に絞って足して 1)
+            pw, f = wmix[v.index]
+            acc = {}
+            for b, w in ws:
+                acc[b] = acc.get(b, 0.0) + w * (1 - f)
+            for b, w in pw:
+                acc[b] = acc.get(b, 0.0) + w * f
+            top = sorted(acc.items(), key=lambda x: (-x[1], x[0]))[:3]
+            tot = sum(w for _, w in top)
+            ws = [(b, w / tot) for b, w in top]
         for b, w in ws:
             if b not in groups:
                 groups[b] = ob.vertex_groups.new(name=b)
@@ -949,41 +1699,80 @@ def build_lod(lod, obj_name, mats):
 
     bm = bmesh.new()
     build_body(bm, lod)
+    nf = densify4(bm, lod)  # (土兎の手直し 4 で追加) 筆の跡を受けるため近 LOD の胴を割る
     shell.add(bm, body_weights)
-    parts.append(make_part(obj_name + "_body", bm, "body", body_weights, mats))
+    parts.append(make_part(obj_name + "_body", bm, "body", body_weights, mats, nrm_fn=nf))  # (土兎の手直し 4 で変更: nrm_fn)
     bm = bmesh.new()
     build_neck(bm, lod)
+    nf = densify4(bm, lod)  # (土兎の手直し 4 で追加)
     shell.add(bm, neck_weights)
-    parts.append(make_part(obj_name + "_neck", bm, "neck", neck_weights, mats))
+    parts.append(make_part(obj_name + "_neck", bm, "neck", neck_weights, mats, nrm_fn=nf))  # (土兎の手直し 4 で変更: nrm_fn)
+    # (土兎の手直しで追加) 付け根の継ぎ目を消す先: 前脚と腿は胴 (と首) へ、後脚はその側の腿へ
+    blend_body = Blend([(parts[0], "body"), (parts[1], "neck")], JOIN_R["thigh"]) if JOIN_R else None
+    thighs = {}
     for side, s in ((-1, "L"), (1, "R")):
         bm = bmesh.new()
         build_thigh(bm, lod, side)
+        nf = densify4(bm, lod)  # (土兎の手直し 4 で追加)
         shell.add(bm, thigh_weights)
-        parts.append(make_part(f"{obj_name}_thigh_{s}", bm, f"thigh_{s}", thigh_weights, mats))
+        parts.append(make_part(f"{obj_name}_thigh_{s}", bm, f"thigh_{s}", thigh_weights, mats, blend=blend_body, nrm_fn=nf))  # (土兎の手直し 4 で変更: nrm_fn)
+        thighs[s] = parts[-1]
+    shoulders = {}
+    if SHOULDER4:  # (土兎の手直し 4 で追加) 肩の塊 (胴へなじませる。継ぎ目の帯も載るよう殻に入れる)
+        for side, s in ((-1, "L"), (1, "R")):
+            bm = bmesh.new()
+            build_shoulder(bm, lod, side)
+            shell.add(bm, shoulder_weights)
+            parts.append(make_part(f"{obj_name}_shoulder_{s}", bm, f"shoulder_{s}", shoulder_weights, mats, blend=blend_body))
+            shoulders[s] = parts[-1]
     shell.build()
 
     bm = bmesh.new()
     build_head(bm, lod)
+    if FACE5:  # (土兎の手直し 5 で追加) 鼻づらを縮め、顔の横幅を詰める (目・鼻・口はこの頭へ載せる)
+        for v in bm.verts:
+            v.co = face5(v.co)
+    if FACE6:  # (土兎の手直し 6 で追加) 頬・口・顎を横へ膨らませる (目・鼻・口はこの頭へ載せる)
+        for v in bm.verts:
+            v.co = face6(v.co)
+    if FACE7:  # (土兎の手直し 7 で追加) 口鼻を前へ伸ばす (目・鼻・口はこの頭へ載せる)
+        for v in bm.verts:
+            v.co = face7(v.co)
     bm.normal_update()
     bvh_head = BVHTree.FromBMesh(bm)
     parts.append(make_part(obj_name + "_head", bm, "head", head_weights, mats))
     bm = bmesh.new()
     build_nose(bm, bvh_head)
     parts.append(make_part(obj_name + "_nose", bm, "rigid", lambda co: [("nose", 1.0)], mats, recalc=False))
+    if lod.get("mouth"):  # (土兎の手直しで追加) 鼻の下の口 (近 LOD だけ)
+        bm = bmesh.new()
+        build_mouth(bm, bvh_head, lod.get("mouth_w"))  # (土兎の手直し 3 で変更: 群れ LOD にも太い線で入れる (mouth_w))
+        parts.append(make_part(obj_name + "_mouth", bm, "rigid", head_weights, mats, recalc=False))
     for side, s in ((-1, "L"), (1, "R")):
         bm = bmesh.new()
         EAR_FRONT[f"ear_{s}"] = build_ear(bm, lod, side)
         parts.append(make_part(f"{obj_name}_ear_{s}", bm, f"ear_{s}", ear_weights(s), mats, recalc=False))
         bm = bmesh.new()
-        build_eye(bm, bvh_head, lod, side)
+        eye = build_eye(bm, bvh_head, lod, side)  # (土兎の手直し 4 で変更: 目の縁の点を受け取る)
         parts.append(make_part(f"{obj_name}_eye_{s}", bm, "glow", lambda co: [("head", 1.0)], mats, recalc=False))
+        if lod["name"] == "hero" and EYE4 and not LID5_OFF:  # (土兎の手直し 4 で追加) 瞼の線 (土兎の手直し 5 で変更: LID5_OFF で付けない)
+            bm = bmesh.new()
+            build_eye_lid(bm, bvh_head, eye)
+            parts.append(make_part(f"{obj_name}_lid_{s}", bm, "lid", lambda co: [("head", 1.0)], mats, recalc=False))
         for pre in ("fl", "hl"):
             name = f"{pre}_{s}"
             bones = LEG_BONES[name]
             parent = "chest" if pre == "fl" else "pelvis"
             bm = bmesh.new()
             build_leg(bm, lod, name)
-            parts.append(make_part(f"{obj_name}_leg_{name}", bm, f"leg_{name}", [(b, 1.0) for b in bones] + [(parent, 0.4)], mats))
+            # (土兎の手直しで追加) 付け根の継ぎ目を消す (前脚は胴へ、後脚は腿へ)
+            bl = None
+            if JOIN_R:
+                bl = Blend([(parts[0], "body"), (parts[1], "neck")], JOIN_R["fleg"], JOIN_FLARE["fleg"]) if pre == "fl" else \
+                    Blend([(thighs[s], f"thigh_{s}")], JOIN_R["hleg"], JOIN_FLARE["hleg"])
+                if pre == "fl" and shoulders:  # (土兎の手直し 4 で追加) 前脚は肩の塊 (と胴・首) へ
+                    bl = Blend([(shoulders[s], f"shoulder_{s}"), (parts[0], "body"), (parts[1], "neck")], JOIN_R["fleg"], JOIN_FLARE["fleg"])
+            parts.append(make_part(f"{obj_name}_leg_{name}", bm, f"leg_{name}", [(b, 1.0) for b in bones] + [(parent, 0.4)], mats, blend=bl))
     bm = bmesh.new()
     build_tail(bm, lod)
     parts.append(make_part(obj_name + "_tail", bm, "tail", [("tail", 1.0), ("pelvis", 0.3)], mats))
@@ -1104,6 +1893,43 @@ def solve_leg(rig, basis, leg, W, dth_f):
         basis[bn] = Matrix.Rotation(delta, 4, "X")
 
 
+# (土兎の手直し 4 で追加) 前脚を折ったときに肘を外へ開く: 肩と手首を結ぶ線の回りに脚の面を回す (IK の膝の向き)。
+# 肩と手首は動かないので立脚の足は地面に残り、足先の骨は回した分を戻して向きを保つ。開く角は肘の曲がり (rest からの増え) に比例
+FL_SPLAY4 = math.radians(34)  # 肘を 60° 余分に曲げたときの開きの角
+FL_SPLAY4_FOLD = math.radians(60)
+
+
+def splay_front(rig, basis):
+    """(土兎の手直し 4 で追加) 前脚 2 本の脚の面を肩 → 手首の線の回りに外へ回す (basis を書き換えて返す)"""
+    for s, sx in (("L", -1), ("R", 1)):
+        up, fore, paw = LEG_BONES[f"fl_{s}"]
+        P = posed(rig, basis)
+        sh = P[up].translation
+        el = P[fore].translation
+        wr = P[paw].translation
+        v1, v2 = (el - sh), (wr - el)
+        r1, r2 = BONES[up][1] - BONES[up][0], BONES[fore][1] - BONES[fore][0]
+        bend = v1.angle(v2, 0.0) - r1.angle(r2, 0.0)
+        phi = FL_SPLAY4 * smoothstep(0.0, FL_SPLAY4_FOLD, bend)
+        ax = wr - sh
+        if phi < 1e-4 or ax.length < 1e-4:
+            continue
+        ax.normalize()
+        perp = (el - sh) - ax * (el - sh).dot(ax)
+        if ax.cross(perp).x * sx < 0:
+            phi = -phi
+        Rw = Matrix.Rotation(phi, 3, ax)
+        par = rig.data.bones[up].parent
+        Q = (P[par.name] @ (par.matrix_local.inverted() @ rig.data.bones[up].matrix_local)).to_3x3().normalized()
+        basis[up] = (Q.inverted() @ Rw @ Q).to_4x4() @ basis.get(up, Matrix.Identity(4))
+        P2 = posed(rig, basis)
+        bpaw = rig.data.bones[paw]
+        off = bpaw.parent.matrix_local.inverted() @ bpaw.matrix_local
+        M = (P2[fore] @ off).inverted() @ P[paw]
+        basis[paw] = Matrix.LocRotScale(None, M.to_quaternion(), None)
+    return basis
+
+
 def foot_target(leg, toe, dth_f):
     """指先を toe に置き、足先の骨をワールドで dth_f 回したときの手首・踵の位置"""
     j2, j3 = joint(leg, 2), joint(leg, 3)
@@ -1216,6 +2042,8 @@ def pose_bound(rig, t, T, stride_h, stride_f, lift, pitch_amp, flex_amp, duty_h,
             e = s * s * (3 - 2 * s)
             y = toe0.y + stride / 2 - stride * e
             z = toe0.z + (0.05 if front else 0.035) * math.sin(math.pi * s) + (0.015 if front else 0.0) * math.sin(math.pi * s) ** 2
+            if SHOULDER4 and front:  # (土兎の手直し 4 で追加) 振り出しの前足を胸の下へたたみ込みすぎて胸に潜っていたので、持ち上げを 2 割下げる
+                z -= 0.2 * (z - toe0.z)
             dth = (D(45) if front else D(55) * (1 - s) + D(-15) * math.sin(math.pi * s))
         W = foot_target(leg, Vector((toe0.x, y, z)), dth)
         solve_leg(rig, b, leg, W, dth)
@@ -1228,6 +2056,12 @@ def pose_hop(rig, t):
 
 def pose_run(rig, t):
     return pose_bound(rig, t, 0.35, 0.30, 0.22, 0.035, 11, 13, 0.36, 0.26, 0.40, -38)
+
+
+GRAZE4 = dict(lift=0.036, pelvis=18, spine=8, chest=2, neck=52, head=-34)  # (土兎の手直し 4 で追加) 採食の姿勢 (元は 0.030 / 18 / 14 / 8 / 24 / -25)
+GRAZE5 = dict(lift=0.036, pelvis=22, spine=8, chest=2, neck=60, head=-40, paw=0.075, paw_z=0.012)  # (土兎の手直し 5 で追加) 短い鼻づらで鼻先を地面へ届かせる採食の姿勢 (GRAZE4 の代わり)
+if FACE7:  # (土兎の手直し 7 で追加) 口鼻を前へ伸ばしたので鼻先が地面と前足へ届きすぎる。首の下げを浅くする (元は neck=60, head=-40)
+    GRAZE5 = dict(GRAZE5, neck=GRAZE7_NECK, head=GRAZE7_HEAD)
 
 
 def pose_graze(rig, t):
@@ -1244,6 +2078,23 @@ def pose_graze(rig, t):
     nib = math.sin(2 * math.pi * 4 * t) * chew
     b["neck"] = rot_basis(D(24) * down + D(1.5) * nib)
     b["head"] = rot_basis(-D(25) * down + D(2.5) * nib, 0, D(4) * math.sin(2 * math.pi * t / 2) * chew)
+    if SHOULDER4:
+        # (土兎の手直し 4 で追加) 胸が地面すれすれ (+7 mm) まで下がって前脚が胸に埋まっていた。基準画の採食は胸の下が地面から離れ、
+        # 前脚が肘を後ろへ折って見える。胸を上げ (背骨・胸の曲げを弱め、腰を高く)、首と頭を深く下げて鼻先を地面へ届かせる
+        b["pelvis"] = pelvis_basis(rig, Vector((0, -0.004 * down, GRAZE4["lift"] * down)), wrot=Quaternion(X, D(GRAZE4["pelvis"]) * down),
+                                   pivot=Vector((0, 0.12, 0.03)))
+        b["spine"] = rot_basis(D(GRAZE4["spine"]) * down)
+        b["chest"] = rot_basis(D(GRAZE4["chest"]) * down)
+        b["neck"] = rot_basis(D(GRAZE4["neck"]) * down + D(1.5) * nib)
+        b["head"] = rot_basis(D(GRAZE4["head"]) * down + D(2.5) * nib, 0, D(4) * math.sin(2 * math.pi * t / 2) * chew)
+    if FACE5:
+        # (土兎の手直し 5 で追加) 鼻づらを縮めたので鼻先が地面から 1.5 → 6.6 cm に浮いた。首をもう少し下げ、頭の起こしを弱めて鼻先を地面へ
+        b["pelvis"] = pelvis_basis(rig, Vector((0, -0.004 * down, GRAZE5["lift"] * down)), wrot=Quaternion(X, D(GRAZE5["pelvis"]) * down),
+                                   pivot=Vector((0, 0.12, 0.03)))
+        b["spine"] = rot_basis(D(GRAZE5["spine"]) * down)
+        b["chest"] = rot_basis(D(GRAZE5["chest"]) * down)
+        b["neck"] = rot_basis(D(GRAZE5["neck"]) * down + D(1.5) * nib)
+        b["head"] = rot_basis(D(GRAZE5["head"]) * down + D(2.5) * nib, 0, D(4) * math.sin(2 * math.pi * t / 2) * chew)
     b["nose"] = rot_basis(D(10) * math.sin(2 * math.pi * 7 * t) * chew)
     # 耳は頭が下がった分だけ後ろへ寝かせ、上へ立てたままにする (基準画の採食)
     b["ear1_L"] = rot_basis(-D(40) * down, 0, D(8) * down)
@@ -1252,7 +2103,14 @@ def pose_graze(rig, t):
     b["tail"] = rot_basis(D(5) * math.sin(2 * math.pi * t / 2))
     for leg in LEG_BONES:
         planted(rig, b, leg)
+    if FACE5:  # (土兎の手直し 5 で追加) 胸を下げる分、前足を前へ置き直して上腕を胸から離す
+        for leg in LEG_BONES:
+            if leg.startswith("fl"):
+                solve_leg(rig, b, leg, joint(leg, 2) + Vector((0, -GRAZE5["paw"] * down, GRAZE5["paw_z"] * down)), 0.0)
     return b
+
+
+ALERT4 = (20, 32, 28)  # (土兎の手直し 4 で追加) 立ち上がりの前脚の曲げ (上腕・前腕・前足、元は 38 / 30 / 35)
 
 
 def pose_alert(rig, t):
@@ -1279,6 +2137,12 @@ def pose_alert(rig, t):
         b[f"fl_upper_{s}"] = rot_basis(D(38) * k)
         b[f"fl_fore_{s}"] = rot_basis(D(30) * k)
         b[f"fl_paw_{s}"] = rot_basis(D(35) * k)
+        if SHOULDER4:
+            # (土兎の手直し 4 で追加) 前足の先が腹へ 11 mm 潜っていた。基準画の立ち上がりは上腕を前下へ出して肘を胸の前に置き、
+            # 前腕を下へ垂らす。上腕の倒しを弱め (38° → ALERT4)、前腕・前足の曲げで先を丸める
+            b[f"fl_upper_{s}"] = rot_basis(D(ALERT4[0]) * k)
+            b[f"fl_fore_{s}"] = rot_basis(D(ALERT4[1]) * k)
+            b[f"fl_paw_{s}"] = rot_basis(D(ALERT4[2]) * k)
     b["tail"] = rot_basis(-D(15) * k)
     for leg in ("hl_L", "hl_R"):
         planted(rig, b, leg)
@@ -1364,6 +2228,8 @@ def bake_actions(rig, hero):
         for f in range(nf + 1):
             t = f / FPS
             basis = fn(rig, t if (f < nf or not loop) else 0.0)  # ループは最後のフレームを最初と同じにする
+            if SHOULDER4:  # (土兎の手直し 4 で追加) 前脚を折ったときに肘を外へ開く (splay_front)
+                basis = splay_front(rig, basis)
             if name in GROUND:
                 rig.animation_data.action = None
                 basis = ground(rig, hero, basis, z_rest)
@@ -1414,6 +2280,7 @@ def main():
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"mesh {ob.name}: {len(ob.data.vertices)} verts / {tris} tris, groups {len(ob.vertex_groups)}")
     bake_actions(rig, meshes[0])
+    build_far(meshes[1], "rabbit_far", rig, far_ratio)  # (M23-08) 遠い段
     scene.frame_set(0)
     for o in scene.objects:
         o.select_set(True)

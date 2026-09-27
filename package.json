@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run lint && npm run test",
     "test:e2e": "playwright test",
-    "test:slow": "SLOW=1 vitest run"
+    "test:slow": "SLOW=1 vitest run",
+    "bench:observe": "node tools/bench-observe.ts",
+    "bench:observe:compare": "node tools/bench-observe-compare.ts"
   },
   "keywords": [],
   "author": "",
