@@ -3,6 +3,9 @@ import type { TimeSeries } from './timeSeries';
 export type GraphLine = { key: string; color: string; label: string; axis?: 'left' | 'right' };
 export type GraphMarker = { x: number; label: string; color: string };
 
+const AXIS_FONT = '10px ui-monospace, monospace';
+const MARKER_FONT = 'bold 18px system-ui, sans-serif';
+
 /** Canvas 2D に折れ線グラフを描く。左軸は個体数、右軸は気温 (破線)。 */
 export function drawGraph(
   ctx: CanvasRenderingContext2D,
@@ -49,7 +52,7 @@ export function drawGraph(
     ctx.stroke();
   }
   ctx.fillStyle = '#9FB3C2';
-  ctx.font = '10px ui-monospace, monospace';
+  ctx.font = AXIS_FONT;
   ctx.textAlign = 'right';
   const fy = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(2));
   ctx.fillText(fy(rl[1]), pad.l - 4, pad.t + 4);
@@ -73,7 +76,12 @@ export function drawGraph(
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = m.color;
-    ctx.fillText(m.label, x, pad.t - 6);
+    // M19-15: 今の年の目印は右の縁にあり、中央揃えでは半分切れた。線の内側へ寄せ、表示で半分に縮むので大きく書く
+    const right = x > pad.l + iw / 2;
+    ctx.textAlign = right ? 'right' : 'left';
+    ctx.font = MARKER_FONT;
+    ctx.fillText(m.label, right ? x - 4 : x + 4, pad.t + 16);
+    ctx.font = AXIS_FONT;
   }
 
   for (const l of lines) {

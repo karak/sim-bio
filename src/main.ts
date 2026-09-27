@@ -198,6 +198,9 @@ async function boot(): Promise<void> {
     }
     if (!commands.every(intervene)) return 'refused';
     hud.addMarker(s.year, `漂着 (${d.cargo.items.map((x) => speciesNames[x.speciesId] ?? x.speciesId).join('・')})`, '#8FEADF');
+    // 積荷は浜の 3×3 に着くので、島の総数ではほとんど動かない (M19-15)。着いた浜のセルを選び、周辺の密度の推移で見せる
+    selected = cell;
+    hud.showCell(cell, s);
     return 'ok';
   };
   const harbor = mountHarbor(app, {

@@ -66,3 +66,12 @@
 
 /* hidden 属性を .row などの display 指定より優先する (M10-04 のプレイテストで、hidden の勅令・迎撃・舟の行が display:flex で見えたままだった) */
 [hidden] { display: none !important; }
+
+/* 判定の板を動かす取っ手 (M19-15)。板を脇へ寄せれば、下の画面 (観察画面の入口・石板・HUD) を押せる。取っ手は港の板の継ぎ目と同じ青緑の光 */
+.verdict { pointer-events: none; }
+.verdict-box { pointer-events: auto; position: relative; }
+.verdict-grip { display: block; width: 100%; height: 18px; margin: -16px 0 6px; padding: 0; border: 0; background: none; cursor: grab; touch-action: none; }
+.verdict-grip:active { cursor: grabbing; }
+.verdict-grip i { display: block; width: 56px; height: 6px; margin: 0 auto; border-radius: 3px; background: radial-gradient(circle, rgba(143, 234, 223, 0.75) 1.2px, transparent 1.6px) 0 0 / 7px 6px; opacity: 0.7; }
+.verdict-grip:hover i, .verdict-grip:focus-visible i { opacity: 1; box-shadow: 0 0 6px rgba(143, 234, 223, 0.45); }
+.verdict-grip:focus-visible { outline: 2px solid #8feadf; outline-offset: 2px; }

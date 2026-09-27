@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect, type Locator, type Page, type Route } from '@playwright/test';
 import { chronicleId } from '../../src/harbor/contract';
 import { writeRequest, type WireRequest } from '../../src/harbor/wire';
 import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
@@ -34,14 +34,15 @@ const wireOf = (route: Route): WireRequest => {
 async function routeHarbor(page: Page) {
   const fake = createFakeHarbor(catalog);
   const sent: WireRequest[] = [];
-  const state = { closed: false };
+  // abortWith: DevTools の Network request blocking は ERR_BLOCKED_BY_CLIENT (M19-15)
+  const state: { closed: boolean; abortWith: 'failed' | 'blockedbyclient' } = { closed: false, abortWith: 'failed' };
   await page.route('https://challenges.cloudflare.com/turnstile/**', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_TURNSTILE }));
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs',
     async (route) => {
       const wire = wireOf(route);
       sent.push(wire);
-      if (state.closed) return route.abort('failed');
+      if (state.closed) return route.abort(state.abortWith);
       const r = await fake.serve(wire);
       return route.fulfill({ status: r.status, headers: r.headers, body: r.body ?? '' });
     },
@@ -346,4 +347,114 @@ test('M19-14 の直し: 判定の後に閉じて開き直し、次の挑戦が�
   const [id] = [...harbor.fake.ledger.keys()];
   expect(harbor.fake.ledger.get(id)?.card).toMatchObject({ scenarioId: 'test-quick', verdict: 'dead' });
   await shot(page, '12-finished-publish');
+});
+
+/** DevTools を下に開いたときの画面の高さ (受入試験の画面) */
+const DEVTOOLS_OPEN = { width: 1200, height: 420 };
+
+/** 板の中で切れずに読める: 板の中を寄せてから、板の枠と画面の枠の内に収まる (M19-15) */
+async function expectReadableIn(page: Page, item: Locator, board: Locator) {
+  await item.scrollIntoViewIfNeeded();
+  const a = await item.boundingBox();
+  const b = await board.boundingBox();
+  if (!a || !b) throw new Error('板か文が描かれていない');
+  const bottom = Math.min(b.y + b.height, page.viewportSize()?.height ?? Infinity);
+  expect(a.y).toBeGreaterThanOrEqual(Math.max(b.y, 0));
+  expect(a.y + a.height).toBeLessThanOrEqual(bottom);
+}
+
+const CLOSED_PUBLISH = '港は今日は閉まっている。年代記は手元に預けた。港が開いたら、同じ島として送り直す';
+
+test('M19-15 (1): DevTools の request blocking と同じ閉じ方 (ERR_BLOCKED_BY_CLIENT) で、DevTools を開いた高さでも、判定の板と港の板の出港で閉港の知らせが読める', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize(DEVTOOLS_OPEN);
+  const harbor = await routeHarbor(page);
+  harbor.state.closed = true;
+  harbor.state.abortWith = 'blockedbyclient';
+
+  await playToVerdict(page, 'test-quick');
+  const panel = publishFrom(page);
+  await panel.getByRole('button', { name: '出港する' }).click();
+  await expect(panel.getByRole('status').first()).toHaveText(CLOSED_PUBLISH);
+  await expectReadableIn(page, panel.getByRole('status').first(), page.locator('#verdict .verdict-box'));
+  await shot(page, '13-closed-devtools-verdict');
+
+  // 開き直して、港の口の板 (判定の出た島) から出港する
+  await page.reload();
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  const drawer = page.getByRole('complementary', { name: '港' });
+  await expect(drawer.locator('#harbor-state')).toHaveText('港は今日は閉まっている。遊ぶ・保存するはそのまま続けられる');
+  await expectReadableIn(page, drawer.locator('#harbor-state'), drawer);
+  const late = drawer.getByRole('region', { name: '港へ出す' });
+  await late.getByRole('button', { name: '出港する' }).click();
+  await expect(late.getByRole('status').first()).toHaveText(CLOSED_PUBLISH);
+  await expectReadableIn(page, late.getByRole('status').first(), drawer);
+  await shot(page, '14-closed-devtools-drawer');
+});
+
+test('M19-15 (1): Turnstile の script が返ってこない (待ち続ける) ときも、出港は閉港として預け、知らせを出す', async ({ page }) => {
+  test.setTimeout(120_000);
+  const harbor = await routeHarbor(page);
+  harbor.state.closed = true;
+  // 後から登録した route が先に当たる。答えずに放っておく (challenges.cloudflare.com へ届かないまま待ち続ける)
+  await page.route('https://challenges.cloudflare.com/turnstile/**', () => {});
+  await playToVerdict(page, 'test-quick');
+  const panel = publishFrom(page);
+  await panel.getByRole('button', { name: '出港する' }).click();
+  await expect(panel.getByRole('status').first()).toHaveText('港へ運んでいる…');
+  await expect(panel.getByRole('status').first()).toHaveText(CLOSED_PUBLISH, { timeout: 20_000 });
+  await expect(page.locator('#harbor-dock-count')).toHaveText('預け 1');
+});
+
+test('M19-15 (2): 受入の手順 (判定まで進め、出港せずに閉じ、開き直して次の挑戦を少し進める) のあと、DevTools を開いた高さでも港の口から判定の出た島を出港できる。自由モードの港の口にも並ぶ', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize(DEVTOOLS_OPEN);
+  const harbor = await routeHarbor(page);
+  await playToVerdict(page, 'test-quick');
+  await expect.poll(() => stored(page, 'finished', 'test-quick')).not.toBeNull();
+  await page.reload();
+  await page.click('#speed-100');
+  await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 30_000 });
+  await page.click('#speed-0');
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  const drawer = page.getByRole('complementary', { name: '港' });
+  await expect(drawer.locator('.harbor-finished')).toContainText('『試し読み』で最後に判定の出た島');
+  await expect(drawer.getByRole('region', { name: '港へ出す' }).getByRole('button', { name: '出港する' })).toBeEnabled();
+
+  await page.goto('/?scenario=test-quick');
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  await expect(drawer.locator('.harbor-finished')).toContainText('この石板で最後に判定の出た島');
+  const late = drawer.getByRole('region', { name: '港へ出す' });
+  await late.getByRole('button', { name: '出港する' }).click();
+  await expect(late.getByRole('status').first()).toHaveText('港へ出した。リンクを渡せば、誰でもこの島をたどれる');
+  await expectReadableIn(page, late.getByRole('textbox', { name: '訪問のリンク' }), drawer);
+  const [id] = [...harbor.fake.ledger.keys()];
+  expect(harbor.fake.ledger.get(id)?.card).toMatchObject({ scenarioId: 'test-quick', verdict: 'dead' });
+  await shot(page, '15-late-publish-devtools');
+});
+
+test('M19-15 (4): 漂着を受け取ると、積荷の着いた浜のセルを選んで見せ、放たれた種の密度がそのセルで読める', async ({ page }) => {
+  const harbor = await routeHarbor(page);
+  await harbor.fake.serve(writeRequest({ kind: 'cast_cargo', cargo: { items: [{ speciesId: 'wolf', amount: 0.411 }, { speciesId: 'deer', amount: 0.254 }] } }));
+  await page.goto('/');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-0');
+  await expect(page.locator('#cell-panel')).toBeHidden();
+  await page.getByRole('button', { name: /^港を開く/ }).click();
+  const drift = page.getByRole('region', { name: '浜の漂着' });
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await drift.getByRole('button', { name: '受け取る' }).click();
+  await expect(drift.locator('#harbor-drift-status')).toHaveText('積荷を受け取った。外来種が島の浜に放たれた');
+  await expect(page.locator('#cell-panel')).toBeVisible();
+  await expect(page.locator('#cell-info')).toContainText(/^セル \(\d+, \d+\)/);
+  // 放流は次の刻みで島に効く (港の板は速さの列に重なるので閉じる)
+  await page.getByRole('complementary', { name: '港' }).getByRole('button', { name: '閉じる' }).click();
+  await page.click('#speed-1');
+  const density = (name: string) => page.locator('#cell-info > div', { has: page.locator('span', { hasText: new RegExp(`^${name}$`) }) }).locator('.mono');
+  await expect.poll(async () => Number(await density('狼').textContent()), { timeout: 10_000 }).toBeGreaterThan(0.3);
+  await page.click('#speed-0');
+  expect(Number(await density('鹿').textContent())).toBeGreaterThan(0.2);
+  await shot(page, '16-drift-landing-cell');
 });
