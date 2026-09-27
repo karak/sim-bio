@@ -65,8 +65,10 @@ export type ScenarioRunner = {
   budget(): BudgetInfo | null;
   /** 現在有効な祈りと残り年数 (石板表示用、M9-02)。祈りが無ければ null */
   prayer(): { kind: PrayerKind; yearsLeft: number } | null;
-  /** 直近の年次評価で出た警告 (年に 1 回更新) */
+  /** 直近の年次評価で出た警告 (年に 1 回更新)。種 id 付きの告知は押される (acknowledgeEvent) まで先頭に残る */
   warnings(): Warning[];
+  /** 警告の「〜を見る」チップが押された (M21-02 D5)。その種 id 付きの告知を警告から外す */
+  acknowledgeEvent(key: string): void;
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
   timeline(): TimelineEvent[];
   /** 石板に出す予言の節目 (M10-02)。迎撃で取り消した隕石の年の節目は消える */
@@ -164,8 +166,13 @@ export function createScenarioRunner(
     return c;
   };
 
-  /** 今年発火した text 付きの予定 (M10R-07)。年次評価の警告に足してから空にする */
+  /** 今年発火した text 付きの予定 (M10R-07)。年次評価の警告に足してから空にする。種 id 付きのものは pendingEvents 側に持つ */
   let announced: Warning[] = [];
+  /**
+   * 種 id 付きの告知 (チップが出るもの) は押されるまで残す (M21-02 D5)。100x では 1 年が数秒で、
+   * 遅い環境では押す前に消えていた。予定の添字ごとに 1 件だけ持ち、次の発火で置き換える
+   */
+  const pendingEvents = new Map<number, Warning>();
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
       if (cancelled.has(idx)) continue;
@@ -183,7 +190,13 @@ export function createScenarioRunner(
         if (!sc.everyYears) timeline.push({ year: y, kind: 'scheduled', command: sc.command });
         else if (sc.text) timeline.push({ year: y, kind: 'scheduled', command: sc.command, text: sc.text });
         // 警告から種レイヤーを開ける (M21-02 D5): spawn_species の予定なら id を種 id にする (species_low と同じ規約)
-        if (sc.text) announced.push({ kind: 'event', key: `event:${idx}@${y}`, text: sc.text, ...(sc.command.type === 'spawn_species' ? { id: sc.command.speciesId } : {}) });
+        if (sc.text) {
+          const w: Warning = { kind: 'event', key: `event:${idx}@${y}`, text: sc.text, ...(sc.command.type === 'spawn_species' ? { id: sc.command.speciesId } : {}) };
+          if (w.id) {
+            pendingEvents.delete(idx);
+            pendingEvents.set(idx, w);
+          } else announced.push(w);
+        }
         if (!sc.everyYears) break;
       }
     }
@@ -278,7 +291,10 @@ export function createScenarioRunner(
     power: () => power,
     budget: () => (budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null),
     prayer: () => (currentPrayer ? { kind: currentPrayer.kind, yearsLeft: Math.max(0, currentPrayer.deadlineYear - currentYear) } : null),
-    warnings: () => warnings,
+    warnings: () => (pendingEvents.size ? [...pendingEvents.values(), ...warnings] : warnings),
+    acknowledgeEvent(key) {
+      for (const [idx, w] of pendingEvents) if (w.key === key) pendingEvents.delete(idx);
+    },
     timeline: () => timeline,
     milestones: () => {
       const gone = new Set([...cancelled].map((idx) => def.schedule[idx].atYear));

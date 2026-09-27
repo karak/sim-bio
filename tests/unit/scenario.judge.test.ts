@@ -85,6 +85,15 @@ describe('assets/data/scenarios.json', () => {
       expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 }, civ: { stage: 6 } }), 0)).status).toBe('running');
     }
   });
+  it('test-event (E2E の「狼を見る」チップ) は 1 年目に狼を 1 回だけ撃ち、判定の幕がチップを覆わないだけの年数がある', () => {
+    const d = defs.find((x) => x.id === 'test-event');
+    expect(d?.schedule).toHaveLength(1);
+    const sc = d!.schedule[0];
+    expect(sc).toMatchObject({ atYear: 1, text: expect.any(String), command: { type: 'spawn_species', speciesId: 'wolf' } });
+    expect(sc.everyYears).toBeUndefined();
+    // 遅い CI では一時停止が効くまでに数年進む。3 年だと止まる前に判定の幕が出てチップを押せなかった
+    expect(d!.years).toBeGreaterThanOrEqual(30);
+  });
 });
 
 describe('species_mean', () => {

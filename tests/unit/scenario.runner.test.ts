@@ -37,7 +37,8 @@ describe('createScenarioRunner', () => {
     const eventsByYear: Record<number, string[]> = {};
     for (let y = 0; y <= 7; y++) { r.update(w.snapshot()); eventsByYear[y] = r.warnings().filter((x) => x.kind === 'event').map((x) => x.text); w.step(360); }
     expect(eventsByYear[2]).toEqual(['狼の群れが北の谷に下りた']);
-    expect(eventsByYear[3]).toEqual([]);
+    // 種 id 付きの告知はチップが押されるまで残る。同じ予定の次の発火は前の告知を置き換える (重ねない)
+    expect(eventsByYear[3]).toEqual(['狼の群れが北の谷に下りた']);
     expect(eventsByYear[4]).toEqual(['狼の群れが北の谷に下りた']);
     const scheduled = r.timeline().filter((e) => e.kind === 'scheduled');
     expect(scheduled).toEqual([2, 4, 6].map((year) => ({ year, kind: 'scheduled', command: wave, text: '狼の群れが北の谷に下りた' })));
@@ -54,6 +55,36 @@ describe('createScenarioRunner', () => {
     r.update(w.snapshot());
     const events = r.warnings().filter((x) => x.kind === 'event');
     expect(events).toEqual([{ kind: 'event', key: 'event:0@1', text: '狼の群れが北の谷に下りた', id: 'wolf' }]);
+  });
+  it('種 id 付きの告知は年をまたいでも残り、acknowledgeEvent で押された時点で消えて、翌年も戻らない (M21-02 D5: 遅い環境でもチップを押せる)', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 5, schedule: [{ atYear: 1, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    const events = () => r.warnings().filter((x) => x.kind === 'event');
+    for (let y = 0; y <= 3; y++) { r.update(w.snapshot()); w.step(360); }
+    expect(events()).toEqual([{ kind: 'event', key: 'event:0@1', text: '狼の群れが北の谷に下りた', id: 'wolf' }]);
+    r.acknowledgeEvent('event:0@1');
+    expect(events()).toEqual([]);
+    r.update(w.snapshot());
+    expect(events()).toEqual([]);
+  });
+  it('種 id 付きの告知は、同じ予定の次の発火で新しい年の key に置き換わる', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 7, schedule: [{ atYear: 2, everyYears: 2, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    for (let y = 0; y <= 4; y++) { r.update(w.snapshot()); w.step(360); }
+    expect(r.warnings().filter((x) => x.kind === 'event').map((x) => x.key)).toEqual(['event:0@4']);
+  });
+  it('種 id の無い告知 (チップが出ない) は今まで通り発火した年だけ出る', () => {
+    const w = fakeWorld({ deer: 1 });
+    const cmd: Command = { type: 'disaster', kind: 'meteor', cell: -1, radius: 1 };
+    const d: ScenarioDef = { ...def, years: 3, schedule: [{ atYear: 1, text: '星が近づいている', command: cmd }] };
+    const r = createScenarioRunner(d, w);
+    const texts: string[][] = [];
+    for (let y = 0; y <= 2; y++) { r.update(w.snapshot()); texts.push(r.warnings().filter((x) => x.kind === 'event').map((x) => x.text)); w.step(360); }
+    expect(texts).toEqual([[], ['星が近づいている'], []]);
   });
   it('spawn_species でない予定 (text 付き) の警告には id を持たせない', () => {
     const w = fakeWorld({ deer: 1 });
