@@ -13,7 +13,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 |---|---|---|
 | Worker の名前 | `biotope-island`(`wrangler.jsonc` の `name`) | 決まっている |
 | D1 の名前 | `biotope-harbor`(binding は `HARBOR`) | 決まっている |
-| workers.dev のサブドメイン | `<sub>`(配った画面は `https://biotope-island.<sub>.workers.dev`) | H |
+| workers.dev のサブドメイン | `dev-sim-bio`(配った画面は `https://biotope-island.dev-sim-bio.workers.dev`。2026-09-27 に API で確かめた) | H(済) |
 | GitHub の repo | `karak/sim-bio` | 決まっている |
 
 ## 1. アカウントとログイン(人)
@@ -21,7 +21,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
 | H1 | 人(済 2026-09-27、アカウント名 sim-bio、既存のユーザーに追加) | このゲーム専用の Cloudflare アカウントを作る。**支払い方法は登録しない**(無料枠を使い切った日に課金されず止まるため) | https://dash.cloudflare.com/sign-up |
-| H2 | 人 | workers.dev のサブドメイン `<sub>` を決める | ダッシュボード → Workers & Pages → Account details の Subdomain |
+| H2 | 人(済 2026-09-27、`dev-sim-bio`) | workers.dev のサブドメインを決める | ダッシュボード → Workers & Pages → Account details の Subdomain |
 | H3 | 人(済 2026-09-27) | 手元の wrangler をこのアカウントでログインする(ブラウザで OAuth、sim-bio だけを許し、スコープを絞る) | `pnpm exec wrangler login --scopes account:read user:read workers_scripts:write workers_tail:read d1:write challenge-widgets.write` |
 | A1 | AI(済 2026-09-27、sim-bio `14c725d39e9cf53743be403ab146174f`) | ログインしたアカウントを確かめる。account_id を控える(秘密ではない) | `pnpm exec wrangler whoami` |
 
@@ -37,7 +37,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
-| H4 | 人 | Turnstile の widget を 1 つ作る。Hostname に `biotope-island.<sub>.workers.dev`、Widget Mode は Managed。**site key**(公開してよい)と **secret key**(秘密)が出る | ダッシュボード → Turnstile → Add widget |
+| H4 | 人 | Turnstile の widget を 1 つ作る。Hostname に `biotope-island.dev-sim-bio.workers.dev`、Widget Mode は Managed。**site key**(公開してよい)と **secret key**(秘密)が出る | ダッシュボード → Turnstile → Add widget |
 | H5 | 人 | Turnstile の secret key を Worker に置く。値は対話の入力で渡し、チャットにもファイルにも書かない | `! pnpm exec wrangler secret put TURNSTILE_SECRET_KEY` |
 | A5 | AI | 送り手の HMAC の鍵(乱数)を作って Worker に置く。値は画面にも出さずパイプで渡す | `openssl rand -base64 32 \| pnpm exec wrangler secret put SENDER_SECRET` |
 | A6 | AI | 2 つの secret の名前が置かれたことを確かめる(値は出ない) | `pnpm exec wrangler secret list` |
@@ -84,10 +84,10 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
-| A13 | AI | 画面と港が答えるか | `curl -sI https://biotope-island.<sub>.workers.dev/` と `curl -s https://biotope-island.<sub>.workers.dev/api/v1/chronicles` |
+| A13 | AI | 画面と港が答えるか | `curl -sI https://biotope-island.dev-sim-bio.workers.dev/` と `curl -s https://biotope-island.dev-sim-bio.workers.dev/api/v1/chronicles` |
 | A14 | AI | ログが流れるか(画面を開いた人の操作に合わせて見る) | `pnpm exec wrangler tail biotope-island --format pretty` |
 | A15 | AI | D1 に行が入るか(出港のあと) | `uv run scripts/mod.py --remote budget` と `pnpm exec wrangler d1 execute biotope-harbor --remote --command "SELECT COUNT(*) FROM chronicles"` |
-| H9 | 人 | 本物の Turnstile で出港 → リンク → 訪問 → 年表を読む を通す。積荷と回避率も見る | ブラウザで `https://biotope-island.<sub>.workers.dev/?scenario=test-quick` |
+| H9 | 人 | 本物の Turnstile で出港 → リンク → 訪問 → 年表を読む を通す。積荷と回避率も見る | ブラウザで `https://biotope-island.dev-sim-bio.workers.dev/?scenario=test-quick` |
 | H10 | 人 | Observability で CPU Time(10 ms の内か)・429 が返るか(Rate Limiting が無料で効くか)・`harbor.cron.stats` の行(毎日 00:10 UTC)を見る | ダッシュボード → Workers & Pages → biotope-island → Observability |
 
 ## 9. 片づけと戻し方
