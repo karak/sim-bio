@@ -27,7 +27,7 @@ const storedAutoTick = (page: Page): Promise<number | null> =>
           const req = open.result.transaction('saves').objectStore('saves').get('auto');
           req.onsuccess = () => {
             open.result.close();
-            resolve((req.result as { tick: number } | undefined)?.tick ?? null);
+            resolve((req.result as { save: { tick: number } } | undefined)?.save.tick ?? null);
           };
           req.onerror = () => reject(req.error);
         };
@@ -91,6 +91,7 @@ test('M19-05: 手動の枠に保存し、先へ進めてから読み込むと保
   await page.click('#speed-100');
   await expect(page.locator('#hud-year')).not.toHaveText(savedYear, { timeout: 30_000 });
   await page.click('#speed-0');
+  page.once('dialog', (d) => void d.accept());
   await page.click('#slot-load');
   await expect(page.locator('#hud-year')).toHaveText(savedYear);
   // 読み込んだ島をその場で自動の枠に書く (止めたまま閉じても、読み込む前の島に戻らない)
@@ -123,7 +124,7 @@ test('M19-05: 「新しい島」は確かめてから Year 0 に作り直し (�
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
 });
 
-test('M19-05: シナリオ中は島を差し替えられず (予言と矛盾する)、自動保存からも戻さず、自動の枠にも書かない', async ({ context }) => {
+test('M19-05: シナリオ中は自由モードの自動の枠から戻さず、自動の枠にも書かない (M19-17 から、石板の中でも枠の読込と「石板を初めから」は押せる)', async ({ context }) => {
   const free = await context.newPage();
   const freeLogs = collectLogs(free);
   await free.goto('/');
@@ -138,9 +139,9 @@ test('M19-05: シナリオ中は島を差し替えられず (予言と矛盾す�
   expect(before).not.toBeNull();
   await page.selectOption('#slot-select', 'auto');
   await expect(page.locator('#slot-select option[value="auto"]')).toHaveText(`自動 · Year ${Math.floor((before ?? 0) / TICKS_PER_YEAR)}`);
-  await expect(page.locator('#slot-load')).toBeDisabled();
-  await expect(page.locator('#load-input')).toBeDisabled();
-  await expect(page.locator('#new-island')).toBeDisabled();
+  await expect(page.locator('#slot-load')).toBeEnabled();
+  await expect(page.locator('#load-input')).toBeEnabled();
+  await expect(page.getByRole('button', { name: '石板を初めから' })).toBeEnabled();
 
   await page.click('#speed-100');
   await expect(page.locator('#hud-year')).toHaveText('Year 1', { timeout: 30_000 });

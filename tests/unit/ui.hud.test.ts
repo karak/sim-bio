@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCiv, formatShipHint } from '../../src/ui/Hud';
+import { formatCiv, formatShipHint, slotLabel } from '../../src/ui/Hud';
 import type { CivState } from '../../src/simulation/civilization';
 import { SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
 
@@ -118,5 +118,17 @@ describe('formatCiv: 星の民 (M10 レビュー)', () => {
     expect(formatCiv(civ)).toBe('文明 塔(6) · 進み 100% · 民 320 · 星の民 370');
     expect(formatCiv({ ...civ, stage: 5 })).toBe('文明 帆(5) · 進み 100% · 民 320');
     expect(formatCiv({ ...civ, populationStar: undefined })).toBe('文明 塔(6) · 進み 100% · 民 320');
+  });
+});
+
+describe('slotLabel: 枠の一覧の 1 行 (M19-17)', () => {
+  const titles = { sinking: '沈む欠片' };
+  it('石板の枠は石板の名前と年、自由モードの枠は Year、空の枠は空き', () => {
+    expect(slotLabel('manual-1', { slot: 'manual-1', savedAt: 1, year: 32, stage: 'scenario', scenarioId: 'sinking' }, titles)).toBe('枠 1 · 沈む欠片 · 32 年');
+    expect(slotLabel('manual-2', { slot: 'manual-2', savedAt: 1, year: 3, stage: 'free' }, titles)).toBe('枠 2 · Year 3');
+    expect(slotLabel('auto', undefined, titles)).toBe('自動 · 空き');
+  });
+  it('名前の無い石板 (消えた石板) は id で出す', () => {
+    expect(slotLabel('manual-3', { slot: 'manual-3', savedAt: 1, year: 0, stage: 'scenario', scenarioId: 'gone' }, titles)).toBe('枠 3 · gone · 0 年');
   });
 });

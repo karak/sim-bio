@@ -18,7 +18,7 @@ async function seeded(dbName: string) {
   const harbor = await openHarborStore({ indexedDB, dbName });
   const world = World.create(testConfig(), { log: createMemorySink() });
   world.step(400);
-  await island.save('manual-2', world.serialize());
+  await island.save('manual-2', { stage: 'free', save: world.serialize() });
   await island.saveChronicle('sinking', FIXTURE_CHRONICLE);
   await harbor.claimKey(id, () => key);
   await harbor.claim({ kind: 'counted', id });
@@ -43,8 +43,8 @@ describe('状態の受け渡し (M19-16)', () => {
     await restoreDb(other, parsed.value.db);
     const island = await openIslandStore({ indexedDB: other, now: () => 2000, dbName: 'biotope-island@alice' });
     const harbor = await openHarborStore({ indexedDB: other, dbName: 'biotope-island@alice' });
-    expect(await island.list()).toEqual([{ slot: 'manual-2', savedAt: 1000, year: 1 }]);
-    expect((await island.load('manual-2'))?.tick).toBe(400);
+    expect(await island.list()).toEqual([{ slot: 'manual-2', savedAt: 1000, year: 1, stage: 'free' }]);
+    expect((await island.load('manual-2'))?.save.tick).toBe(400);
     expect(await island.loadChronicle('sinking')).toEqual({ ok: true, value: FIXTURE_CHRONICLE });
     expect(await harbor.keyOf(id)).toBe(key);
     expect(await harbor.has({ kind: 'counted', id })).toBe(true);
