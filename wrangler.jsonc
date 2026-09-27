@@ -4,6 +4,9 @@
   "name": "biotope-island",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-09-25",
+  // 公開の URL は workers.dev だけ (https://biotope-island.dev-sim-bio.workers.dev)。版ごとの Preview URL は出さない (古い版を別の URL で開かせない)
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     // npm run build:cloudflare の出力。配らないものは assets/.assetsignore (vite が dist/ へ写す)
     "directory": "./dist",

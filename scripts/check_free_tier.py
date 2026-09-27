@@ -38,6 +38,8 @@ ALLOWED_KEYS: Mapping[str, str] = {
     "ratelimits": "Rate Limiting binding (M19-08)",
     "secrets": "secret の名前だけ (値は wrangler secret put)。型の生成と手元の警告に使う (M19-08)",
     "env": "環境ごとの設定。中身も同じ表で見る",
+    "workers_dev": "workers.dev の URL で出すか。無料 (2026-09-27、初回の配備の警告を受けて明示)",
+    "preview_urls": "版ごとの Preview URL を出すか。無料。この repo は false (2026-09-27)",
 }
 
 # 表に無い key のうち、なぜ落とすかを言える key。言えない key は「表に無い」とだけ言う
