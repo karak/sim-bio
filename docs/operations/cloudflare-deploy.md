@@ -20,10 +20,10 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
-| H1 | 人 | このゲーム専用の Cloudflare アカウントを作る。**支払い方法は登録しない**(無料枠を使い切った日に課金されず止まるため) | https://dash.cloudflare.com/sign-up |
+| H1 | 人(済 2026-09-27、アカウント名 sim-bio、既存のユーザーに追加) | このゲーム専用の Cloudflare アカウントを作る。**支払い方法は登録しない**(無料枠を使い切った日に課金されず止まるため) | https://dash.cloudflare.com/sign-up |
 | H2 | 人 | workers.dev のサブドメイン `<sub>` を決める | ダッシュボード → Workers & Pages → Account details の Subdomain |
-| H3 | 人 | 手元の wrangler をこのアカウントでログインする(ブラウザで OAuth) | `! pnpm exec wrangler login` |
-| A1 | AI | ログインしたアカウントを確かめる。account_id を控える(秘密ではない) | `pnpm exec wrangler whoami` |
+| H3 | 人(済 2026-09-27) | 手元の wrangler をこのアカウントでログインする(ブラウザで OAuth、sim-bio だけを許し、スコープを絞る) | `pnpm exec wrangler login --scopes account:read user:read workers_scripts:write workers_tail:read d1:write challenge-widgets.write` |
+| A1 | AI(済 2026-09-27、sim-bio `14c725d39e9cf53743be403ab146174f`) | ログインしたアカウントを確かめる。account_id を控える(秘密ではない) | `pnpm exec wrangler whoami` |
 
 ## 2. 港の D1(AI)
 
@@ -48,9 +48,9 @@ secret は Worker が一度も配られていないと置けないことがあ�
 
 | # | 誰 | 作業 | 画面 |
 |---|---|---|---|
-| H6 | 人 | Account API token を作る。テンプレート **Edit Cloudflare Workers** をもとに、**D1 の Edit** の権限を足す(配備の前に `d1 migrations apply --remote` が D1 に問い合わせるため。Worker を配るだけなら D1 の権限は要らない)。Account Resources はこのアカウントだけに絞る | ダッシュボード → Manage Account → Account API Tokens → Create Token |
+| H6 | 人 | CI 用の API トークンを、最小の権限のテンプレート(docs/operations/cloudflare-api-token.md)で作る。Workers の Editor を Worker `biotope-island` だけに、D1 の Edit、Account は sim-bio だけ。**Worker が初めて配られた後(7 の手元からの配備の後)に作る**(まだ無い Worker は選べない) | ダッシュボード → Manage Account → Account API Tokens → Create Custom Token |
 
-権限の根拠: [Workers の権限](https://developers.cloudflare.com/workers/authorization/workers/)(bound resource への権限は、そのリソースを直に触るときだけ要る)。
+権限の根拠と作り方の欄の値は docs/operations/cloudflare-api-token.md。
 
 ## 5. GitHub の Environment
 
@@ -78,7 +78,7 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 | # | 誰 | 作業 | コマンド |
 |---|---|---|---|
 | A12 | AI | 配備のワークフローを main で起こし、終わりまで見る | `gh workflow run deploy.yml --ref main --repo karak/sim-bio` → `gh run watch --repo karak/sim-bio` |
-| (代わり) | AI | 手元から配る場合(CI を通さない。初回の確かめに限る) | `VITE_TURNSTILE_SITEKEY=<site key> pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote && pnpm exec wrangler deploy` |
+| A12a | AI | **初回だけは手元から配る**(新しい Worker を作るには product scope の Admin が要り、CI のトークンでは作れない)。その後に H6 のトークンを作る | `VITE_TURNSTILE_SITEKEY=<site key> pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote && pnpm exec wrangler deploy` |
 
 ## 8. 配ったあとの確かめ
 
