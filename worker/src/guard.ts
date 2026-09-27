@@ -1,5 +1,6 @@
 import { isObject } from '../../src/core/parse';
 import type { TurnstileToken } from '../../src/harbor/contract';
+import { DEV_SENDER_HEADER } from '../../src/harbor/wire';
 
 /**
  * 港の門 (設計書 §6.3): 送り手の数え方・人間確認・回数制限。
@@ -18,8 +19,6 @@ export async function senderOf(secret: string, day: string, ip: string): Promise
   return hex(await crypto.subtle.sign('HMAC', key, encoder.encode(ip))).slice(0, 32);
 }
 
-/** 手元で別の見守り手として振る舞う (M19-16) ときに、送り手の IP の代わりに数える名乗りの header */
-export const DEV_SENDER_HEADER = 'x-dev-sender';
 const LOOPBACK: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**

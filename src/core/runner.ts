@@ -1,6 +1,7 @@
 import type { WorldSnapshot } from '../simulation/types';
 
-export type Speed = 0 | 1 | 10 | 100;
+/** 1000 は開発用 (M19-16)。HUD は開発のときだけ 1000x の札を出す */
+export type Speed = 0 | 1 | 10 | 100 | 1000;
 
 export type Runner = {
   setSpeed(s: Speed): void;

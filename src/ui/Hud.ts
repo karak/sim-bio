@@ -115,7 +115,7 @@ export type Hud = {
 const LOCAL_SAMPLE_TICKS = 10;
 const LOCAL_YEARS = 5;
 const LOCAL_RADIUS = 3;
-const SPEEDS: Speed[] = [0, 1, 10, 100];
+const SPEEDS: readonly Speed[] = [0, 1, 10, 100];
 const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] = [
   { id: 'terrain', label: '地形' },
   { id: 'temperature', label: '気温' },
@@ -133,7 +133,8 @@ const DISASTERS: { kind: DisasterKind; label: string }[] = [
 ];
 
 /** DOM・グラフ・ファイル入出力を隠す。World を直接持たず、handlers 経由で main.ts に渡す。 */
-export function createHud(root: HTMLElement, h: HudHandlers): Hud {
+/** speeds は速さの札の並び。開発用 (M19-16) のときだけ 1000x を足して渡す */
+export function createHud(root: HTMLElement, h: HudHandlers, { speeds = SPEEDS }: { speeds?: readonly Speed[] } = {}): Hud {
   root.insertAdjacentHTML(
     'beforeend',
     `
@@ -143,7 +144,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
     <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span id="intercept-next" class="dim"></span><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span><span id="intercept-reason" class="dim"></span></div>
     <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span><span id="ship-reason" class="dim"></span></div>
-    <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
+    <div class="row" id="speed-row">${speeds.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
   <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
@@ -209,7 +210,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     $('layer-mode-density').classList.toggle('on', layerMode === 'density');
     $('layer-mode-suit').classList.toggle('on', layerMode === 'suit');
   };
-  for (const s of SPEEDS) {
+  for (const s of speeds) {
     $(`speed-${s}`).addEventListener('click', () => {
       h.onSpeed(s);
       setOn('speed-row', `speed-${s}`);
