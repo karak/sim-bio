@@ -1,9 +1,15 @@
+import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 
 /**
  * 判定の板 (M19-15 の 3)。板を上の取っ手で動かし、覆っていた画面 (観察画面の入口「3D で見る」) を押せるようにする。
  * 港は閉じたまま (網の失敗) にして、外へ出ない
  */
+/** HARBOR_SHOTS に置き場を渡すと、画面の撮影を残す (harbor.spec.ts と同じ) */
+async function shot(page: Page, name: string) {
+  const dir = process.env.HARBOR_SHOTS;
+  if (dir) await page.screenshot({ path: join(dir, `${name}.png`) });
+}
 const box = (page: Page) => page.locator('#verdict .verdict-box');
 const grip = (page: Page) => page.getByRole('button', { name: /^判定の板を動かす/ });
 
@@ -42,6 +48,7 @@ test('M19-15 (3): 判定の板は上の取っ手のドラッグとキーボー�
   await page.keyboard.press('Shift+ArrowUp');
   const moved = { x: start.x + 260 - 16, y: start.y + 120 - 64 };
   expect(await at(page)).toEqual(moved);
+  await shot(page, '17-verdict-moved');
 
   // 動かした板は下の画面を塞がない
   await open.click();
