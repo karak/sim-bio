@@ -172,8 +172,6 @@ export function createScenarioRunner(
     return c;
   };
 
-  /** 今年発火した text 付きの予定 (M10R-07)。年次評価の警告に足してから空にする。足す先は notices (noticeYears のあいだ残す) */
-  let announced: Notice[] = [];
   /**
    * 表示中の告知。予定の添字ごとに 1 件だけ持ち、次の発火で置き換える。発火した年から noticeYears 年 (既定 1 = 発火した年だけ)
    * 残し、その種のレイヤーが開かれたら消す (M21-02 D5: 100x では 1 年が数秒で、遅い環境ではチップを押す前に消えていた)
@@ -199,7 +197,9 @@ export function createScenarioRunner(
         // 警告から種レイヤーを開ける (M21-02 D5): spawn_species の予定なら id を種 id にする (species_low と同じ規約)
         if (sc.text) {
           const w: Warning = { kind: 'event', key: `event:${idx}@${y}`, text: sc.text, ...(sc.command.type === 'spawn_species' ? { id: sc.command.speciesId } : {}) };
-          announced.push({ idx, untilYear: y + (sc.noticeYears ?? 1), warning: w });
+          // その種のレイヤーを見ている間の告知は最初から出さない。期限切れは年次評価で消す
+          if (viewedSpecies !== null && w.id === viewedSpecies) notices.delete(idx);
+          else notices.set(idx, { idx, untilYear: y + (sc.noticeYears ?? 1), warning: w });
         }
         if (!sc.everyYears) break;
       }
@@ -385,11 +385,6 @@ export function createScenarioRunner(
         // 舟の警告 (M10-04): 前年の進みと比べる。前年に舟が無ければ null
         warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ, { year, prevProgress: prevShipProgress });
         // text 付きの予定 (M10R-07) はその年の警告の先頭に出す (年表には fireDue で積んである)
-        for (const n of announced) {
-          if (viewedSpecies !== null && n.warning.id === viewedSpecies) notices.delete(n.idx);
-          else notices.set(n.idx, n);
-        }
-        announced = [];
         for (const [idx, n] of notices) if (year >= n.untilYear) notices.delete(idx);
         prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;
         for (const w of warnings) {
