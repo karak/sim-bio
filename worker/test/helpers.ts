@@ -24,11 +24,11 @@ export async function publishReq(seed: number, over: Partial<Extract<HarborReque
 }
 
 /** クライアントと同じ writeRequest で書いた要求を、Worker の fetch に当てる */
-export function send(req: HarborRequest, { ip = '198.51.100.1', headers = {} }: { ip?: string; headers?: Record<string, string> } = {}): Promise<Response> {
+export function send(req: HarborRequest, { ip = '198.51.100.1', headers = {}, origin = ORIGIN }: { ip?: string; headers?: Record<string, string>; origin?: string } = {}): Promise<Response> {
   const w = writeRequest(req);
-  return exports.default.fetch(`${ORIGIN}${w.path}`, {
+  return exports.default.fetch(`${origin}${w.path}`, {
     method: w.method,
-    headers: { origin: ORIGIN, 'cf-connecting-ip': ip, ...w.headers, ...headers },
+    headers: { origin, 'cf-connecting-ip': ip, ...w.headers, ...headers },
     body: w.body,
   });
 }

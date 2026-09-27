@@ -18,6 +18,20 @@ export async function senderOf(secret: string, day: string, ip: string): Promise
   return hex(await crypto.subtle.sign('HMAC', key, encoder.encode(ip))).slice(0, 32);
 }
 
+/** 手元で別の見守り手として振る舞う (M19-16) ときに、送り手の IP の代わりに数える名乗りの header */
+export const DEV_SENDER_HEADER = 'x-dev-sender';
+const LOOPBACK: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * wrangler dev (loopback の host で受けた要求) のときだけ、x-dev-sender の名乗りを送り手の IP の代わりにする。
+ * Cloudflare の網は Host で Worker を選ぶので、本番の Worker に loopback の host の要求は届かない。本番では常に null
+ */
+export function devSenderOf(url: URL, headers: Headers): string | null {
+  if (!LOOPBACK.has(url.hostname)) return null;
+  const name = headers.get(DEV_SENDER_HEADER);
+  return name ? `dev:${name}` : null;
+}
+
 export type HumanCheck = { kind: 'human' } | { kind: 'bot'; codes: readonly string[] } | { kind: 'unavailable' };
 
 /** Turnstile の siteverify (https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)。札は 1 回きり・300 秒で切れる */
