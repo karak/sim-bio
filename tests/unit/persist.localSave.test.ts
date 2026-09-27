@@ -6,17 +6,18 @@ import { openIslandStore, type IslandStore } from '../../src/persist/islandStore
 import { createLocalSave, type SaveLog } from '../../src/persist/localSave';
 import type { SaveData } from '../../src/simulation/types';
 import type { SlotSummary } from '../../src/persist/slots';
+import type { SlotSave } from '../../src/persist/slotSave';
 import { testConfig } from './helpers';
 
 const EVERY = 90;
 
 /** 置き場の API を通さず、saves の key を直に読む (脇へ退けた記録を確かめる) */
-const rawSave = (indexedDB: IDBFactory, key: string): Promise<SaveData | undefined> =>
+const rawSave = (indexedDB: IDBFactory, key: string): Promise<SlotSave | undefined> =>
   new Promise((resolve, reject) => {
     const open = indexedDB.open('biotope-island');
     open.onsuccess = () => {
       const req = open.result.transaction('saves').objectStore('saves').get(key);
-      req.onsuccess = () => resolve(req.result as SaveData | undefined);
+      req.onsuccess = () => resolve(req.result as SlotSave | undefined);
       req.onerror = () => reject(req.error);
     };
     open.onerror = () => reject(open.error);
@@ -37,6 +38,8 @@ const tracked = (store: IslandStore): IslandStore => ({
 });
 const world = () => World.create(testConfig(), { log: createMemorySink() });
 const restore = (s: SaveData) => World.restore(s, { log: createMemorySink() });
+const open = (s: SlotSave) => restore(s.save);
+const free = (w: World): SlotSave => ({ stage: 'free', save: w.serialize() });
 
 type Logged = { level: string; event: string; tick: number } & Record<string, unknown>;
 
@@ -48,7 +51,7 @@ async function setup(opts: { mode?: 'free' | 'scenario'; store?: IslandStore | n
   const saved: SlotSummary[] = [];
   const log: SaveLog = (level, event, tick, extra = {}) => logs.push({ level, event, tick, ...extra });
   const local = createLocalSave({ store, mode: opts.mode ?? 'free', every: EVERY, log, onSaved: (s) => saved.push(s) });
-  const autoTick = async () => (await store?.load('auto'))?.tick ?? null;
+  const autoTick = async () => (await store?.load('auto'))?.save.tick ?? null;
   return { local, store, logs, saved, autoTick, indexedDB };
 }
 
@@ -167,7 +170,7 @@ describe('閉じて開き直すと続きから (M19-05)', () => {
     ]);
     expect(await second.autoTick()).toBeNull();
     expect(await second.local.list()).toEqual([]);
-    expect((await rawSave(first.indexedDB, 'unreadable:auto'))?.tick).toBe(100);
+    expect((await rawSave(first.indexedDB, 'unreadable:auto'))?.save.tick).toBe(100);
 
     const fresh = world();
     await play(second.local, fresh, 1, 90);
@@ -180,16 +183,16 @@ describe('手動の枠 (M19-05)', () => {
     const { local, saved, autoTick } = await setup();
     const w = world();
     w.step(400);
-    await local.saveSlot('manual-1', w.serialize());
-    expect(saved).toEqual([{ slot: 'manual-1', savedAt: 1000, year: 1 }]);
-    expect((await local.loadSlot('manual-1', restore))?.snapshot().tick).toBe(400);
-    expect(await local.list()).toEqual([{ slot: 'manual-1', savedAt: 1000, year: 1 }]);
+    await local.saveSlot('manual-1', free(w));
+    expect(saved).toEqual([{ slot: 'manual-1', savedAt: 1000, year: 1, stage: 'free' }]);
+    expect((await local.loadSlot('manual-1', open))?.snapshot().tick).toBe(400);
+    expect(await local.list()).toEqual([{ slot: 'manual-1', savedAt: 1000, year: 1, stage: 'free' }]);
     expect(await autoTick()).toBeNull();
   });
 
   it('枠の島が読めない (restore が投げる) ときは null を返し、warn の記録に原因を残す', async () => {
     const { local, logs } = await setup();
-    await local.saveSlot('manual-3', world().serialize());
+    await local.saveSlot('manual-3', free(world()));
     const broken = () => {
       throw new Error('unsupported save version');
     };
@@ -204,6 +207,7 @@ describe('手動の枠 (M19-05)', () => {
       save: () => Promise.reject(new Error('QuotaExceededError')),
       load: () => Promise.resolve(null),
       list: () => Promise.resolve([]),
+      stashImport: () => Promise.resolve(),
       setAside: () => Promise.resolve('unreadable:auto'),
       saveChronicle: () => Promise.resolve(),
       loadChronicle: () => Promise.resolve(null),
@@ -212,7 +216,7 @@ describe('手動の枠 (M19-05)', () => {
       setAsideScenario: () => Promise.resolve('unreadable:test-quick'),
     };
     const { local, logs, saved } = await setup({ store: failing });
-    await local.saveSlot('manual-2', world().serialize());
+    await local.saveSlot('manual-2', free(world()));
     expect(saved).toEqual([]);
     expect(logs).toEqual([expect.objectContaining({ level: 'warn', event: 'persist.save.failed', slot: 'manual-2', error: 'Error: QuotaExceededError' })]);
   });
@@ -221,10 +225,10 @@ describe('手動の枠 (M19-05)', () => {
     const { local, saved } = await setup({ store: null });
     const w = world();
     await play(local, w, 2, 100);
-    await local.saveSlot('manual-1', w.serialize());
+    await local.saveSlot('manual-1', free(w));
     expect(saved).toEqual([]);
     expect(await local.resume(restore)).toBeNull();
-    expect(await local.loadSlot('manual-1', restore)).toBeNull();
+    expect(await local.loadSlot('manual-1', open)).toBeNull();
     expect(await local.list()).toEqual([]);
   });
 });

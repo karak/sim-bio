@@ -1,5 +1,7 @@
-import type { ChronicleHead } from '../harbor/chronicle';
-import { runnerStateMismatch } from '../scenario/ScenarioRunner';
+import type { Parsed } from '../core/parse';
+import type { Chronicle, ChronicleHead } from '../harbor/chronicle';
+import { runnerStateMismatch, type RunnerState } from '../scenario/ScenarioRunner';
+import type { SaveData } from '../simulation/types';
 import type { IslandStore, ScenarioSave } from './islandStore';
 import type { SaveLog } from './localSave';
 
@@ -21,17 +23,15 @@ export async function resumeScenario<W>(deps: { store: IslandStore | null; head:
     return null;
   });
   if (!loaded) return null;
-  const { save, runner, chronicle } = loaded;
+  const { save, runner } = loaded;
   const setAside = async (reason: string) => {
     const key = await store.setAsideScenario(head.scenarioId).catch((err: unknown) => `failed: ${String(err)}`);
     log('warn', 'persist.scenario.resume.failed', save.tick, { reason, setAside: key });
     return null;
   };
-  if (!chronicle.ok) return setAside(`chronicle: ${chronicle.error.path} ${chronicle.error.reason}`);
-  const c = chronicle.value;
-  if (c.simVersion !== head.simVersion || c.scenarioId !== head.scenarioId || c.seed !== head.seed) return setAside('chronicle head differs');
-  const mismatch = runnerStateMismatch(runner, head.scenarioId);
-  if (mismatch) return setAside(mismatch);
+  const checked = checkScenarioSave(loaded, head);
+  if (!checked.ok) return setAside(checked.reason);
+  const c = checked.value.chronicle;
   // 判定の出た石板は終わっている。開き直したら次の挑戦 (石板の初め) にする。年代記は港への出港のために残る
   if (runner.verdict.status !== 'running') {
     log('info', 'persist.scenario.finished', save.tick, { status: runner.verdict.status });
@@ -46,11 +46,22 @@ export async function resumeScenario<W>(deps: { store: IslandStore | null; head:
   }
 }
 
+/** 石板の島・runner の状態・年代記が、この版・この石板・この seed のものか。続きからの復帰と枠の読込 (M19-17) が同じ確かめを通す */
+export function checkScenarioSave(s: { save: SaveData; runner: RunnerState; chronicle: Parsed<Chronicle> }, head: ChronicleHead): { ok: true; value: ScenarioSave } | { ok: false; reason: string } {
+  const { chronicle } = s;
+  if (!chronicle.ok) return { ok: false, reason: `chronicle: ${chronicle.error.path} ${chronicle.error.reason}` };
+  const c = chronicle.value;
+  if (c.simVersion !== head.simVersion || c.scenarioId !== head.scenarioId || c.seed !== head.seed) return { ok: false, reason: 'chronicle head differs' };
+  const mismatch = runnerStateMismatch(s.runner, head.scenarioId);
+  if (mismatch) return { ok: false, reason: mismatch };
+  return { ok: true, value: { save: s.save, runner: s.runner, chronicle: c } };
+}
+
 export type ScenarioAutosave = {
   /** 毎フレーム。自由モードの自動保存 (localSave.onTick) と同じ周期で、書き込み中は次を書かない */
   onTick(tick: number): void;
   /** 周期を待たずに書く: 受理された介入の後・判定のとき・タブが隠れたとき */
-  flush(): void;
+  flush(): Promise<void>;
 };
 
 /** 石板の途中の島を書く。capture は島・runner・年代記を同じ tick で取る。from は数え始める tick (開き直した島ならその tick) */
@@ -63,7 +74,7 @@ export function createScenarioAutosave(deps: { store: IslandStore | null; scenar
     const { tick } = captured.save;
     last = tick;
     writing = true;
-    void s
+    return s
       .saveScenario(deps.scenarioId, captured)
       .then(
         () => log('info', 'persist.scenario.saved', tick, { scenario: deps.scenarioId }),
@@ -76,10 +87,10 @@ export function createScenarioAutosave(deps: { store: IslandStore | null; scenar
   return {
     onTick(tick) {
       if (!store || writing || tick - last < deps.every) return;
-      write(store);
+      void write(store);
     },
     flush() {
-      if (store) write(store);
+      return store ? write(store) : Promise.resolve();
     },
   };
 }

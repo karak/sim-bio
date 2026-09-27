@@ -23,6 +23,8 @@ export type Tablet = {
   ): void;
   /** 勝敗が確定したときの大きな表示。escaped なら cargo があれば「持ち出しを保存」を出す (M10-03) */
   showVerdict(verdict: Verdict, cargo?: Cargo): void;
+  /** 判定の表示を閉じる (M19-17)。判定の前の枠を読んだ・石板を初めからにしたとき */
+  hideVerdict(): void;
   /** 介入が弾かれた・力が尽きたときに石板を短く揺らして知らせる */
   flash(): void;
 };
@@ -222,6 +224,9 @@ export function createTablet(
       void el.offsetWidth;
       el.classList.add('shake');
       setTimeout(() => el.classList.remove('shake'), 300);
+    },
+    hideVerdict() {
+      $('verdict').hidden = true;
     },
     showVerdict(verdict, cargo) {
       const box = $('verdict');

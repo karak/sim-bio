@@ -1,5 +1,5 @@
 import { World } from './simulation/World';
-import type { DisasterKind, SaveData, SpeciesDef, WorldConfig } from './simulation/types';
+import type { DisasterKind, SpeciesDef, WorldConfig } from './simulation/types';
 import { createAppLogSink } from './core/log/appSink';
 import { createRunner } from './core/runner';
 import { createSceneView, type SceneView } from './render/SceneView';
@@ -20,8 +20,11 @@ import { createObserveEntry } from './observe/entry';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
 import { createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
+import { checkSlot, planSlotLoad, putPendingSlot, slotSaveOf, takePendingSlot, type Here, type SlotSave } from './persist/slotSave';
+import type { PendingSlot, SlotId, Stage } from './persist/slots';
+import type { Chronicle } from './harbor/chronicle';
 import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
-import type { InterveneResult } from './scenario/ScenarioRunner';
+import type { InterveneResult, RunnerState } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';
 import { digestOf } from './chronicle/digest';
 import { createPlayback } from './chronicle/playback';
@@ -29,6 +32,9 @@ import { mountHarbor, visitIdOf } from './ui/Harbor';
 
 /** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
 const AUTOSAVE_TICKS = 90;
+
+/** 置き場から戻した島。石板なら runner の状態と年代記も持つ (続きからの復帰 M19-14 と、枠の読込 M19-17) */
+type Restored = { world: World; runner?: RunnerState; chronicle?: Chronicle };
 
 async function boot(): Promise<void> {
   const { log, flushViaBeacon } = createAppLogSink({
@@ -47,6 +53,14 @@ async function boot(): Promise<void> {
   // ?scenario=<id> で石板を選ぶ。無ければ自由モード
   const params = new URLSearchParams(location.search);
   const scenario = scenarios.find((d) => d.id === params.get('scenario')) ?? null;
+  // 知らない石板は自由モードで開き、URL からも消す (M19-17)。URL と画面の島を食い違わせない
+  const asked = params.get('scenario');
+  if (asked !== null && !scenario) {
+    params.delete('scenario');
+    params.delete('visit');
+    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params.toString()}` : ''}${location.hash}`);
+    log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.url.unknown_scenario', scenario: asked });
+  }
   const config: WorldConfig = { ...base, species: species.map((d) => ({ ...d, ...(scenario?.start?.species?.[d.id] ?? {}) })) };
   if (scenario?.start) {
     if (scenario.start.seed !== undefined) config.seed = scenario.start.seed;
@@ -74,22 +88,42 @@ async function boot(): Promise<void> {
     log: persistLog,
     onSaved: (s) => hud.setSlot(s),
   });
+  const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
+  const here: Here = head ? { stage: 'scenario', head } : { stage: 'free' };
+  const stageHere: Stage = scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' };
+  /** 枠とファイルの包みを、今の舞台の島 (石板なら runner の状態と年代記も) に戻す (M19-17)。違う舞台・読めない包みは投げる */
+  const openSlot = (data: SlotSave): Restored => {
+    const checked = checkSlot(data, here);
+    if (!checked.ok) throw new Error(checked.reason);
+    const s = checked.value;
+    const world = World.restore(s.save, { log });
+    return s.stage === 'scenario' ? { world, runner: s.runner, chronicle: s.chronicle } : { world };
+  };
+  // 違う舞台の枠を読むために移ってきた (M19-17 §4)。読めなければ、この舞台の自動の続きで開く。訪問では読まない
+  const pending = takePendingSlot(sessionStorage);
+  const fromSlot = pending && !visitId ? await localSave.loadSlot(pending, openSlot) : null;
+  if (pending && !fromSlot) persistLog('warn', 'persist.slot.load.failed', 0, { slot: pending });
   // 石板の途中で閉じた島の続き (M19-14): 島・runner の状態・年代記を戻す。無い・判定の出た石板・読めない続きなら石板の初めから。
   // 訪問 (M19-09) では戻さない (他人の島を訪れているので、自分の続きを差し込まない)
-  const resumed = scenario && !visitId
-    ? await resumeScenario({ store, head: { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed }, log: persistLog }, (s) => ({
+  const resumed: Restored | null = fromSlot ?? (head && !visitId
+    ? await resumeScenario({ store, head, log: persistLog }, (s) => ({
         world: World.restore(s.save, { log }),
         runner: s.runner,
         chronicle: s.chronicle,
       }))
-    : null;
+    : null);
   // 閉じる前の続きから (M19-05)
   let world = resumed?.world ?? (await localSave.resume((save) => World.restore(save, { log }))) ?? World.create(config, { log });
+  // 枠から開いた自由モードの島は、読込と同じくその場で自動の枠に書く
+  if (fromSlot) localSave.replaced(world.serialize());
   const selectScenario = (id: string | null) => {
     const q = new URLSearchParams(location.search);
     if (id) q.set('scenario', id);
     else q.delete('scenario');
-    location.search = q.toString();
+    // 移る前に、今の島と石板の続きを書き切る (M19-17)。訪問ではどちらも何も書かない
+    void Promise.all([localSave.flush(() => world.serialize()), saveChronicle()]).then(() => {
+      location.search = q.toString();
+    });
   };
 
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
@@ -139,27 +173,59 @@ async function boot(): Promise<void> {
     selected = null;
     localSave.replaced(world.serialize());
   };
-  const load = (save: SaveData) => {
-    if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
-    replaceWorld(World.restore(save, { log }));
+  /** 枠とファイルの包み (M19-17)。石板の中では島・runner の状態・年代記の 3 つ */
+  const slotSave = (): SlotSave =>
+    scenario && runner && recorder
+      ? { stage: 'scenario', scenarioId: scenario.id, save: world.serialize(), runner: runner.save(), chronicle: recorder.current() }
+      : { stage: 'free', save: world.serialize() };
+  /** 石板を今の島で始め直す (M19-17)。枠を読んだとき (枠の runner の状態と年代記から) と、石板を初めからにしたとき。石板を開いたときに作る */
+  let restartScenario: (from: { runner: RunnerState; chronicle: Chronicle } | null) => void = () => {};
+  /**
+   * 枠とファイルの読込 (M19-17 §4)。確かめてから、同じ舞台ならその場で差し替え、違う舞台ならその舞台へ移って読む。
+   * 移った先へは読む枠の名前を sessionStorage で渡す。ファイルは枠の一覧に出さない置き場 (import) に置いてから移る
+   */
+  const load = async (data: SlotSave, slot: SlotId | null) => {
+    // シナリオ中の読込は予言と矛盾するので無効
+    // (M19-17 で変更: 石板の中でも、同じ石板の枠は runner の状態・年代記と一緒に戻すので読める。別の島の差し込みは openSlot の舞台の確かめで弾く。無効は訪問だけ)
+    if (visitId) return;
+    const plan = planSlotLoad(data, stageHere, (id) => scenarios.find((d) => d.id === id)?.title ?? id);
+    if (!window.confirm(plan.confirm)) return;
+    if (plan.kind === 'navigate') {
+      if (!slot) await store?.stashImport(data).catch((e: unknown) => persistLog('warn', 'persist.save.failed', data.save.tick, { slot: 'import', error: String(e) }));
+      putPendingSlot(sessionStorage, slot ?? ('import' satisfies PendingSlot));
+      selectScenario(plan.to.stage === 'scenario' ? plan.to.scenarioId : null);
+      return;
+    }
+    let restored: Restored;
+    try {
+      restored = openSlot(data);
+    } catch (e) {
+      persistLog('warn', 'persist.load.failed', data.save.tick, { slot: slot ?? 'file', error: String(e) });
+      return;
+    }
+    replaceWorld(restored.world);
+    if (restored.runner && restored.chronicle) restartScenario({ runner: restored.runner, chronicle: restored.chronicle });
   };
 
   const hud = createHud(app, {
     onCommand: intervene,
     onSpeed: (s) => loop.setSpeed(s),
     onLayer: (l) => view.setLayer(l),
-    onSave: () => world.serialize(),
-    onLoad: load,
-    onSlotSave: (slot) => void localSave.saveSlot(slot, world.serialize()),
+    onSave: slotSave,
+    onLoad: (raw) => void load(slotSaveOf(raw), null),
+    onSlotSave: (slot) => void localSave.saveSlot(slot, slotSave()),
     onSlotLoad: (slot) => {
-      if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
-      void localSave.loadSlot(slot, (save) => World.restore(save, { log })).then((w) => {
-        if (w) replaceWorld(w);
+      // シナリオ中の読込は予言と矛盾するので無効
+      // (M19-17 で変更: 読めるかどうかは load が舞台で決める)
+      void localSave.loadSlot(slot, (data) => data).then((data) => {
+        if (data) void load(data, slot);
       });
     },
     onNewIsland: () => {
-      if (runner) return;
+      if (visitId) return;
       replaceWorld(World.create(config, { log }));
+      // 石板の中では「石板を初めから」(M19-17)。今の続きを Year 0 で上書きする。判定の出た島 (港へ出せる島) は別の置き場に残る
+      if (scenario) restartScenario(null);
     },
     onDisasterArm: (k) => {
       armed = k;
@@ -171,7 +237,7 @@ async function boot(): Promise<void> {
     onTowerArm: (v) => {
       towerArmed = v;
     },
-  });
+  }, { scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visitId });
 
   const tablet = createTablet(
     app,
@@ -181,7 +247,7 @@ async function boot(): Promise<void> {
     Object.fromEntries(species.map((d) => [d.id, d.name])),
     (id) => hud.showSpeciesLayer(id),
   );
-  hud.setReplaceable(!scenario);
+  hud.setReplaceable(!visitId);
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
   /** 受け取った漂着 (M19-10) を浜のセルに放つ。石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
   const landCargo = (d: DrawnCargo): LandResult => {
@@ -266,7 +332,7 @@ async function boot(): Promise<void> {
     },
   );
   if (scenario) {
-    runner = createScenarioRunner(scenario, world, {
+    const newRunner = (restored?: RunnerState) => createScenarioRunner(scenario, world, {
       ticksPerYear: config.ticksPerYear,
       onVerdict: (v) => {
         loop.setSpeed(0);
@@ -298,8 +364,9 @@ async function boot(): Promise<void> {
         const snap = world.snapshot();
         log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.power.exhausted', scenario: scenario.id });
       },
-    }, resumed?.runner);
-    const scenarioRunner = runner;
+    }, restored);
+    runner = newRunner(resumed?.runner);
+    let scenarioRunner = runner;
     recorder = visitId ? null : recordChronicle(
       { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => world.snapshot() },
       { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
@@ -308,7 +375,7 @@ async function boot(): Promise<void> {
     // 石板の途中の島の自動保存 (M19-14) は、記録する島 (自分の島) だけ。訪問している他人の島を自分の続きとして書かない
     const scenarioRecorder = recorder;
     if (scenarioRecorder) {
-      if (resumed) scenarioRecorder.resume(resumed.chronicle);
+      if (resumed?.chronicle) scenarioRecorder.resume(resumed.chronicle);
       scenarioAutosave = createScenarioAutosave({
         store,
         scenarioId: scenario.id,
@@ -320,6 +387,21 @@ async function boot(): Promise<void> {
     }
     // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る
     scenarioRunner.update(world.snapshot());
+    // 枠から開いた石板は、その場で石板の続きに書く (開き直してもその時点から)
+    if (fromSlot) void saveChronicle();
+    restartScenario = (from) => {
+      runner = scenarioRunner = newRunner(from?.runner);
+      // 記録器は runner を scenarioRunner 越しに包むので、命令の列だけを枠の年代記 (初めからなら空) に差し替える
+      scenarioRecorder?.resume(from?.chronicle ?? { ...scenarioRecorder.current(), commands: [] });
+      scenarioRunner.update(world.snapshot());
+      void saveChronicle();
+      const verdict = scenarioRunner.verdict();
+      if (verdict.status === 'running') tablet.hideVerdict();
+      else {
+        loop.setSpeed(0);
+        tablet.showVerdict(verdict);
+      }
+    };
     if (visitId) {
       void harbor.visitChronicle().then((c) => {
         if (!c) return;

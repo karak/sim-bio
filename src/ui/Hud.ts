@@ -1,4 +1,4 @@
-import type { Command, DisasterKind, SaveData, WorldSnapshot } from '../simulation/types';
+import type { Command, DisasterKind, WorldSnapshot } from '../simulation/types';
 import type { CivState } from '../simulation/civilization';
 import { STAGE_NAMES, NEED, cellDistance } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
@@ -13,6 +13,7 @@ import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
 import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import { SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/slots';
+import type { SlotSave } from '../persist/slotSave';
 import { seasonOf } from '../core/season';
 import './hud.css';
 
@@ -74,12 +75,14 @@ export type HudHandlers = {
   onCommand(cmd: Command): void;
   onSpeed(s: Speed): void;
   onLayer(l: LayerKind): void;
-  onSave(): SaveData;
-  onLoad(save: SaveData): void;
+  /** ファイルへの保存と読込 (M19-17 で舞台を名乗る包みにした。読んだ値の確かめは main.ts が持つ) */
+  onSave(): SlotSave;
+  onLoad(data: unknown): void;
   /** 手元の保存の枠 (M19-05)。自動の枠へは自動保存だけが書く */
   onSlotSave(slot: ManualSlot): void;
   onSlotLoad(slot: SlotId): void;
   /** 自由モードの島を作り直す (自動保存から再開するので、開き直しても新しい島にはならない) */
+  // (M19-17 で変更: 石板の中では「石板を初めから」。今の続きを捨てて Year 0 から)
   onNewIsland(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
@@ -108,6 +111,7 @@ export type Hud = {
   /** 枠の一覧の 1 行を出す (書いたら上書き) */
   setSlot(s: SlotSummary): void;
   /** 島の差し替え (ファイルと枠の読込、新しい島) を受け付けるか。シナリオ中は予言と矛盾するので false */
+  // (M19-17 で変更: 石板の中も受け付ける。false は訪問 (他人の島) だけで、枠への保存も止める)
   setReplaceable(on: boolean): void;
 };
 
@@ -132,8 +136,19 @@ const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'plague', label: '疫病' },
 ];
 
+/** 枠の一覧の 1 行 (M19-17)。石板の枠は石板の名前と石板の年で出す */
+export function slotLabel(slot: SlotId, s: SlotSummary | undefined, titles: Record<string, string>): string {
+  if (!s) return `${SLOT_NAMES[slot]} · 空き`;
+  return s.stage === 'free' ? `${SLOT_NAMES[slot]} · Year ${s.year}` : `${SLOT_NAMES[slot]} · ${titles[s.scenarioId] ?? s.scenarioId} · ${s.year} 年`;
+}
+
 /** DOM・グラフ・ファイル入出力を隠す。World を直接持たず、handlers 経由で main.ts に渡す。 */
-export function createHud(root: HTMLElement, h: HudHandlers): Hud {
+export function createHud(
+  root: HTMLElement,
+  h: HudHandlers,
+  /** 石板の名前 (枠の一覧に出す) と、石板の中か (新しい島を「石板を初めから」と出す) (M19-17) */
+  stage: { scenarioTitles: Record<string, string>; inScenario: boolean } = { scenarioTitles: {}, inScenario: false },
+): Hud {
   root.insertAdjacentHTML(
     'beforeend',
     `
@@ -168,7 +183,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <select id="slot-select" class="chip">${SLOTS.map((s) => `<option value="${s}"${s === 'manual-1' ? ' selected' : ''}></option>`).join('')}</select>
     <button id="slot-save" class="chip">枠へ保存</button>
     <button id="slot-load" class="chip">枠から読込</button>
-    <button id="new-island" class="chip">新しい島</button>
+    <button id="new-island" class="chip">${stage.inScenario ? '石板を初めから' : '新しい島'}</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>
@@ -304,7 +319,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const f = input.files?.[0];
     if (!f) return;
     f.text()
-      .then((t) => h.onLoad(JSON.parse(t) as SaveData))
+      .then((t) => h.onLoad(JSON.parse(t)))
       .catch((err: unknown) => console.error('load failed', err))
       .finally(() => {
         input.value = '';
@@ -318,17 +333,16 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   const selectedSlot = (): SlotId => SLOTS[slotSelect.selectedIndex];
   const renderSlots = () => {
     SLOTS.forEach((slot, i) => {
-      const s = slots.get(slot);
-      slotSelect.options[i].textContent = `${SLOT_NAMES[slot]} · ${s ? `Year ${s.year}` : '空き'}`;
+      slotSelect.options[i].textContent = slotLabel(slot, slots.get(slot), stage.scenarioTitles);
     });
     const slot = selectedSlot();
-    $<HTMLButtonElement>('slot-save').disabled = slot === 'auto';
+    $<HTMLButtonElement>('slot-save').disabled = !replaceable || slot === 'auto';
     $<HTMLButtonElement>('slot-load').disabled = !replaceable || !slots.has(slot);
     const loadInput = $<HTMLInputElement>('load-input');
     loadInput.disabled = !replaceable;
     $<HTMLButtonElement>('new-island').disabled = !replaceable;
-    const why = replaceable ? '' : 'シナリオ中は島を差し替えられない (予言と矛盾する)';
-    for (const el of [$('slot-load'), $('new-island'), loadInput.parentElement]) if (el) el.title = why;
+    const why = replaceable ? '' : '訪れている島は差し替えられない (他人の島)';
+    for (const el of [$('slot-save'), $('slot-load'), $('new-island'), loadInput.parentElement]) if (el) el.title = why;
   };
   slotSelect.addEventListener('change', renderSlots);
   $('slot-save').addEventListener('click', () => {
@@ -338,7 +352,8 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
   $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
   $('new-island').addEventListener('click', () => {
     // 自動の枠をその場で上書きするので、押し間違いで島を失わないよう確かめる
-    if (window.confirm('今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)')) h.onNewIsland();
+    const ask = stage.inScenario ? '今の続きを捨てて、石板を初めからやり直しますか (判定の出た島は港へ出せるまま残ります)' : '今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)';
+    if (window.confirm(ask)) h.onNewIsland();
   });
   renderSlots();
 

@@ -83,8 +83,8 @@ describe('年代記の置き場 (M19-06、IndexedDB)', () => {
     await openV1WithSave(indexedDB, w.serialize());
 
     const store = await openIslandStore({ indexedDB, now: () => 1000 });
-    expect((await store.load('auto'))?.tick).toBe(10);
-    expect(await store.list()).toEqual([{ slot: 'auto', savedAt: 500, year: 0 }]);
+    expect(await store.load('auto')).toEqual({ stage: 'free', save: w.serialize() });
+    expect(await store.list()).toEqual([{ slot: 'auto', savedAt: 500, year: 0, stage: 'free' }]);
     await store.saveChronicle('sinking', FIXTURE_CHRONICLE);
     expect((await store.loadChronicle('sinking'))?.ok).toBe(true);
   });

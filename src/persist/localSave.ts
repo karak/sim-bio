@@ -1,6 +1,7 @@
 import type { SaveData } from '../simulation/types';
 import type { IslandStore } from './islandStore';
-import type { ManualSlot, SlotId, SlotSummary } from './slots';
+import type { ManualSlot, PendingSlot, SlotId, SlotSummary } from './slots';
+import type { SlotSave } from './slotSave';
 
 export type SaveLog = (level: 'info' | 'warn', event: string, tick: number, extra?: Record<string, unknown>) => void;
 
@@ -19,10 +20,11 @@ export type LocalSave = {
   /** 読込・新しい島で島を差し替えた直後。自動の枠をその島にし、そこから数え直す */
   replaced(save: SaveData): void;
   /** タブが隠れたとき (閉じる直前を含む)。周期を待たずに書く */
-  flush(serialize: () => SaveData): void;
-  saveSlot(slot: ManualSlot, save: SaveData): Promise<void>;
+  flush(serialize: () => SaveData): Promise<void>;
+  saveSlot(slot: ManualSlot, data: SlotSave): Promise<void>;
   /** 読めない枠 (restore が投げる) は null にして記録に残す */
-  loadSlot<W>(slot: SlotId, restore: (save: SaveData) => W): Promise<W | null>;
+  // (M19-17 で変更: 枠は舞台を名乗る包み。open が舞台の確かめと restore をし、読めなければ投げる)
+  loadSlot<W>(slot: PendingSlot, open: (data: SlotSave) => W): Promise<W | null>;
   list(): Promise<readonly SlotSummary[]>;
 };
 
@@ -44,9 +46,10 @@ export function createLocalSave(deps: {
   let last = 0;
   let writing = false;
 
-  const write = (slot: SlotId, save: SaveData): Promise<void> => {
+  const write = (slot: SlotId, data: SlotSave): Promise<void> => {
     if (!store) return Promise.resolve();
-    return store.save(slot, save).then(
+    const { save } = data;
+    return store.save(slot, data).then(
       (summary) => {
         deps.onSaved(summary);
         log('info', 'persist.saved', save.tick, { slot });
@@ -55,10 +58,10 @@ export function createLocalSave(deps: {
     );
   };
   // replaced と flush は書き込み中でも重ねて書く。IndexedDB は作った順に transaction を確定させるので、最後に作ったものが残る
-  const writeAuto = (save: SaveData) => {
+  const writeAuto = (save: SaveData): Promise<void> => {
     last = save.tick;
     writing = true;
-    void write('auto', save).finally(() => {
+    return write('auto', { stage: 'free', save }).finally(() => {
       writing = false;
     });
   };
@@ -71,7 +74,7 @@ export function createLocalSave(deps: {
   return {
     async resume(restore) {
       if (!autosaves || !store) return null;
-      const save = await read('load', null, store.load('auto'));
+      const save = (await read('load', null, store.load('auto')))?.save;
       if (!save) return null;
       try {
         const w = restore(save);
@@ -86,24 +89,24 @@ export function createLocalSave(deps: {
     },
     onTick(tick, serialize) {
       if (!autosaves || writing || tick - last < deps.every) return;
-      writeAuto(serialize());
+      void writeAuto(serialize());
     },
     replaced(save) {
       if (!autosaves) return;
-      writeAuto(save);
+      void writeAuto(save);
     },
     flush(serialize) {
-      if (!autosaves) return;
-      writeAuto(serialize());
+      if (!autosaves) return Promise.resolve();
+      return writeAuto(serialize());
     },
     saveSlot: write,
-    async loadSlot(slot, restore) {
-      const save = await read('load', null, store?.load(slot));
-      if (!save) return null;
+    async loadSlot(slot, open) {
+      const data = await read('load', null, store?.load(slot));
+      if (!data) return null;
       try {
-        return restore(save);
+        return open(data);
       } catch (e) {
-        log('warn', 'persist.load.failed', save.tick, { slot, error: String(e) });
+        log('warn', 'persist.load.failed', data.save.tick, { slot, error: String(e) });
         return null;
       }
     },

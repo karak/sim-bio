@@ -2,13 +2,17 @@ import { fail, type Parsed } from '../core/parse';
 import type { SaveData } from '../simulation/types';
 import { parseChronicle, type Chronicle } from '../harbor/chronicle';
 import type { RunnerState } from '../scenario/ScenarioRunner';
-import { SLOTS, type SlotId, type SlotSummary } from './slots';
+import { SLOTS, type PendingSlot, type SlotId, type SlotSummary } from './slots';
+import { slotSaveOf, type SlotSave } from './slotSave';
 
 /** 島の手元の保存 (M19-05)。SaveData は数 MB になり localStorage に複数は入らないので IndexedDB に置く */
 export type IslandStore = {
   /** 書いた枠の一覧の 1 行を返す (一覧を読み直さずに表示を更新できる) */
-  save(slot: SlotId, data: SaveData): Promise<SlotSummary>;
-  load(slot: SlotId): Promise<SaveData | null>;
+  save(slot: SlotId, data: SlotSave): Promise<SlotSummary>;
+  /** 包みの無い古い SaveData は自由モードの枠として返す (M19-17) */
+  load(slot: PendingSlot): Promise<SlotSave | null>;
+  /** ファイルから読んだ違う舞台の包みを、一覧に出さずに置く。移った先で load('import') で読む (M19-17) */
+  stashImport(data: SlotSave): Promise<void>;
   /** 保存のある枠だけを SLOTS の順に返す */
   list(): Promise<readonly SlotSummary[]>;
   /** 読めない枠 (版違いなど) を saves の別の key へ移し、枠を空ける。移した先の key を返す */
@@ -94,7 +98,9 @@ export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => 
   const db = await openDb(deps.indexedDB);
   return {
     async save(slot, data) {
-      const summary: SlotSummary = { slot, savedAt: deps.now(), year: Math.floor(data.tick / data.config.ticksPerYear) };
+      const { save } = data;
+      const stage = data.stage === 'free' ? { stage: data.stage } : { stage: data.stage, scenarioId: data.scenarioId };
+      const summary: SlotSummary = { slot, savedAt: deps.now(), year: Math.floor(save.tick / save.config.ticksPerYear), ...stage };
       const tx = db.transaction(['saves', 'slots'], 'readwrite');
       tx.objectStore('saves').put(data, slot);
       tx.objectStore('slots').put(summary);
@@ -102,11 +108,17 @@ export async function openIslandStore(deps: { indexedDB: IDBFactory; now: () => 
       return summary;
     },
     async load(slot) {
-      const data: SaveData | undefined = await requestDone(db.transaction('saves').objectStore('saves').get(slot));
-      return data ?? null;
+      const raw: unknown = await requestDone(db.transaction('saves').objectStore('saves').get(slot));
+      return raw === undefined ? null : slotSaveOf(raw);
+    },
+    async stashImport(data) {
+      const tx = db.transaction('saves', 'readwrite');
+      tx.objectStore('saves').put(data, 'import');
+      await transactionDone(tx);
     },
     async list() {
-      const rows: SlotSummary[] = await requestDone(db.transaction('slots').objectStore('slots').getAll());
+      // M19-17 より前の行は舞台を持たない。そのころの枠は自由モードの島だけ
+      const rows = (await requestDone<SlotSummary[]>(db.transaction('slots').objectStore('slots').getAll())).map((r): SlotSummary => ('stage' in r ? r : { ...(r as SlotSummary), stage: 'free' }));
       return rows.sort((a, b) => SLOTS.indexOf(a.slot) - SLOTS.indexOf(b.slot));
     },
     async setAside(slot) {
