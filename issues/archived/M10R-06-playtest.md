@@ -12,7 +12,7 @@ evidence: ["b5ae7b5 tests/slow/scenarios.playthrough.test.ts", "7eff673 レビ�
 
 ## What to build
 
-ビルド済みで祈りに応えるな・空の舟・迎撃の塔を 1 回ずつ遊び、docs/specs/plans に記録する(M9/M10 と同じ書式)。
+ビルド済みで祈りに応えるな・空の舟・迎撃の塔を 1 回ずつ遵び、docs/specs/plans に記録する(M9/M10 と同じ書式)。
 
 ## Blocked by
 

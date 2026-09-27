@@ -3,7 +3,7 @@ id: M10R-08
 title: 空の舟の作り直し(枯れにくい鐘樹、一定量の伐採、民の林、UI 並みの放流)
 status: done
 milestone: M10R
-plan: docs/design/2026-09-22-level-design-faith-economy.md#89-空の舟の作り直し-仮説--部品--縮約モデル--本体計測m10r-082026-09-23
+plan: docs/design/2026-09-22-level-design-faith-economy.md#89-空の舟の作り直し-仅説--部品--縮約モデル--本体計測m10r-082026-09-23
 depends_on: [M10R-05]
 evidence: ["e746bf2 ba9bbac 970ed4e tests/unit/ship.test.ts tests/unit/scenario.runner.test.ts tests/unit/ui.hud.test.ts", "tests/slow/scenarios.playthrough.test.ts sky-ship 8 件 / tower scenario v2 5 件", "docs/specs/plans/2026-09-23-m10r-08-playtest.md"]
 ---
@@ -12,8 +12,8 @@ evidence: ["e746bf2 ba9bbac 970ed4e tests/unit/ship.test.ts tests/unit/scenario.
 
 ## What to build
 
-LD §8.7〜8.8。手動受入で、通し実行の想定解(環 4 の放流)が UI(環 1)では再現できず、机上でも「林だけでは塔が飢え、舟の割合伐採では林の大きさが意味を持たない」
-と分かった。仮説 → 縮約モデル(scratchpad の ship_desk.py)→ 本体計測 の順で: (a) 鐘樹を遅く枯れにくい樹に(生物の特性。塔の重さの校正に掛かる)、
+LD §8.7〜8.8。手動受入で、通し実行の想定解(環 4 の放流)が UI(環 1)では再現できず、机上でも「林だけでは塔が颢え、舟の割合伐採では林の大きさが意味を持たない」
+と分かった。仅説 → 縮約モデル(scratchpad の ship_desk.py)→ 本体計測 の順で: (a) 鐘樹を遅く枯れにくい樹に(生物の特性。塔の重さの校正に掛かる)、
 (b) 舟は毎年一定量を伐る(舞台装置)、(c) 開始時の民の林、(d) 通し実行の台本を UI と同じ環 1 に揃える。空の舟の定義は M10 の状態(薪 800)に戻してある。
 
 ## Blocked by
@@ -29,7 +29,7 @@ M10R-05
 
 ## 作業ログ(2026-09-23)
 
-- 仮説 → 部品 → 縮約モデル(scratchpad ship_desk2/3.py)→ 本体計測 A〜C を LD §8.9 に記した。
+- 仅説 → 部品 → 縮約モデル(scratchpad ship_desk2/3.py)→ 本体計測 A〜C を LD §8.9 に記した。
 - 計測で分かったこと: 枯れにくい樹は拡散を残すと島中に広がって草を絶やす(拡散 0 が必須)。成長 0.002 は林が尽きて全滅、0.003 は薄く植えても逃げられる。
   **0.0025 / 0.0005 / 拡散 0** で 林だけ dead・薄い dead・早い着工 dead・遅い着工 dead・毎年 1 本 + 20〜45 年目に着工 escaped 40〜65 の行列が出た。
 - (a)(b) を e746bf2 でコミット。塔の重さの通し実行 5 件は据え置きで通る(272 秒)。

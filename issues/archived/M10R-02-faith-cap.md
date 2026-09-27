@@ -13,7 +13,7 @@ evidence: ["a4377b7 tests/unit/faith.test.ts", "a4377b7 tests/unit/world.civiliz
 ## What to build
 
 LD §3.1/§3.2。`CivState.faithCap`(初期 1.0)を足し、祈りの無視で −0.10、応えで +0.10、祈りの無い年に +0.01 回復。
-毎年の信仰の更新の後で `min(faith, faithCap)` に抑え、内乱の戻りは min(0.4, 上限)。祈りの間隔(PRAYER_COOLDOWN)を 0 にする。
+毎年の信仰の更新の後で `min(faith, faithCap)` に抱え、内乱の戻りは min(0.4, 上限)。祈りの間隔(PRAYER_COOLDOWN)を 0 にする。
 HUD の信仰行に上限、石板の年表に「民は忘れない」、保存に含める。
 
 ## Blocked by

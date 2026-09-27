@@ -3,7 +3,7 @@ id: M9-03
 title: 信仰の効き(内乱と採掘の制止)
 status: done
 milestone: M9
-plan: docs/design/2026-09-19-scenarios-and-world.md#5-システムへの逆算
+plan: docs/specs/plans/2026-09-19-scenarios-and-world.md#5-システムへの逆算
 depends_on: [M9-02, M9-06]
 evidence: ["c310e0d 1e342f0 tests/unit/world.civilization.edict.test.ts", "1e342f0 tests/unit/unrest.test.ts", "1e342f0 tests/unit/vein.test.ts tests/unit/world.vein.test.ts", "1e342f0 tests/unit/prayer.test.ts tests/unit/world.civilization.prayer.test.ts", "1e342f0 tests/e2e/smoke.spec.ts", "1e342f0 tests/slow/scenarios.playthrough.test.ts"]
 ---
