@@ -136,7 +136,16 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     finishedSlot.hidden = island === null;
     finishedSlot.replaceChildren(...(island ? [el('p', { class: 'harbor-sub' }, 'この石板で最後に判定の出た島'), publishPanel(ctx, island, refreshCount)] : []));
   };
+  /** 自由モードの港の口には、どの石板の判定の出た島も並べる (M19-15)。石板を選び直さなくても港へ出せる */
+  const showAllFinished = async () => {
+    const ctx = await ready;
+    const found = await Promise.all(deps.scenarios.map(async (d) => ({ def: d, island: await ctx.harbor.finished(d.id) })));
+    const rows = found.flatMap(({ def, island }) => (island ? [el('p', { class: 'harbor-sub' }, `『${def.title}』で最後に判定の出た島`), publishPanel(ctx, island, refreshCount)] : []));
+    finishedSlot.hidden = rows.length === 0;
+    finishedSlot.replaceChildren(...rows);
+  };
   if (deps.scenarioId) void showFinished(deps.scenarioId);
+  else if (!deps.visit) void showAllFinished();
   const drawerState = el('p', { class: 'harbor-line harbor-state', id: 'harbor-state' });
   const list = el('ul', { class: 'harbor-list', 'aria-label': '流れ着いた年代記' });
   const more = el('button', { class: 'harbor-chip', hidden: '' }, 'もっと古い年代記');
