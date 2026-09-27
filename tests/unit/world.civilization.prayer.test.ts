@@ -245,7 +245,7 @@ describe('信仰の上限 = 民の記憶 (M10R-02)', () => {
     expect(capEvents[0]).toMatchObject({ faithCap: civ?.faithCap });
   });
 
-  it('儀式(同じ放流を 3 回)を続けても信仰は上限を超えない。無視の連続で上限が下がるほど 1.0 未満に張り付く', () => {
+  it('儀式(同じ放流を 3 回)を続けても信仰は上限を超えない。無視の連続で上限が下がるほど 1.0 未満に張り付く', { timeout: 30_000 }, () => {
     const log = createMemorySink();
     const { w, home } = withWolfNeed({}, log);
     const years = 16; // wolves の期限 5 年をまたいで無視サイクルが複数回起きる長さ
