@@ -1,7 +1,7 @@
 ---
 id: M19-17
 title: シナリオ中の保存・読込・初期化と URL・ゲームの状態の一貫性(仕様の見直し)
-status: todo
+status: in-progress
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-14]
@@ -25,7 +25,8 @@ M19-14
 
 ## Acceptance criteria
 
-- [ ] URL と手元の状態の対応表・遷移を設計に書き、ユーザーの承認を得る
+- [x] URL と手元の状態の対応表・遷移を設計に書き、ユーザーの承認を得る
+  - docs/design/2026-09-27-scenario-save-url.md(ce9da4a)。2026-09-27 にユーザーが §6 の 1〜3(巻き戻しを許す・違う舞台の枠はその舞台へ移って読む・石板の中は「石板を初めから」)を案のとおり承認
 - [ ] シナリオ中の保存・読込・初期化が設計どおりに動き、予言と矛盾しない(同じ石板の保存だけを読むなど)ことを E2E で確かめる
 - [ ] pnpm run check・E2E が通り、evidence に commit SHA とテストファイルを記す
 
