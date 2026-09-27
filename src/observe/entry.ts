@@ -6,8 +6,7 @@ import type { ObservationView } from './view';
  * 操作画面から観察画面に入る/戻る (M22-08)。操作画面の上に全面の層を重ね、観察画面を描く。
  * 観察画面のコード (Three.js・アセット) は初めて入るときに読み込む (操作画面の読み込みを重くしない)。
  * 時間は操作画面の runner が進め、入っている間は push で snapshot を渡す。100x のまま入ったら 10x に落とす (設計 §4)。
- * 入れるのは文明の集落があるとき (区域は集落を中心に切り出すので)。
- * (M19-18 で上の規則を変更: world の snapshot があればいつでも入れる。集落が無ければ島の真ん中を中心にする (area.ts の observeCenter))
+ * world の snapshot があればいつでも入れる。区域の中心は observeCenter (area.ts) が決め、集落が無ければ島の真ん中にする (M19-18)。
  */
 export type ObserveEntry = {
   /** 操作画面の毎フレームの snapshot。入っていれば観察画面へ渡し、入るボタンの可否を決める。timeline は石板の年表 (介入の場面に使う) */

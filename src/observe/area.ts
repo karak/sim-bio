@@ -1,6 +1,6 @@
 /**
  * 観察画面の区域 (M22-04、設計 docs/design/2026-09-23-observation-view-design.md §1〜§3)。
- * 集落 (home) を中心に半径 radius セルを snapshot から切り出す。純粋関数のみ (Three.js・DOM に依存しない)。
+ * observeCenter の決める中心 (集落、無ければ島の真ん中。引数名は home) から半径 radius セルを snapshot から切り出す。純粋関数のみ (Three.js・DOM に依存しない)。
  *
  * 契約:
  * - 区域のセルは forEachInRadius と同じ円判定で選び、index の昇順に並べる。
