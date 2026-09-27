@@ -16,11 +16,12 @@
     "head_sampling_rate": 1
   },
   // 港の帳簿 (M19-08)。database_id は本番の DB を作るまでの仮の値。作り方は README「配備(人が行う)」
+  // (2026-09-27 に本番の DB を sim-bio のアカウントで作り、id を書いた。マイグレーション 0001 は当て済み)
   "d1_databases": [
     {
       "binding": "HARBOR",
       "database_name": "biotope-harbor",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "4b9db893-5306-4a01-9eb9-4926c2b34d17",
       "migrations_dir": "worker/migrations"
     }
   ],
