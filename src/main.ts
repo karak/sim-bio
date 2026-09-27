@@ -78,12 +78,9 @@ async function boot(): Promise<void> {
   const hud = createHud(app, {
     onCommand: intervene,
     onSpeed: (s) => loop.setSpeed(s),
-    onLayer: (l) => {
-      view.setLayer(l);
-      // 種のレイヤーを開いたら、その種の告知は読まれたものとして消す (M21-02 D5: 警告のチップからでも HUD からでも)
-      const species = /^(?:species|suit):(.+)$/.exec(l)?.[1];
-      if (species) runner?.acknowledgeSpecies(species);
-    },
+    onLayer: (l) => view.setLayer(l),
+    // 種のレイヤーを見ている間はその種の告知を出さない (M21-02 D5: 警告のチップからでも HUD からでも開けば消える)
+    onSpeciesLayer: (id) => runner?.setViewedSpecies(id),
     onSave: () => world.serialize(),
     onLoad: (save: SaveData) => {
       if (runner) return; // シナリオ中の読込は予言と矛盾するので無効

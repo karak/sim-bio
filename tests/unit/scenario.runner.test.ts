@@ -56,7 +56,7 @@ describe('createScenarioRunner', () => {
     const events = r.warnings().filter((x) => x.kind === 'event');
     expect(events).toEqual([{ kind: 'event', key: 'event:0@1', text: '狼の群れが北の谷に下りた', id: 'wolf' }]);
   });
-  it('noticeYears があれば告知は発火した年から noticeYears 年のあいだ残り、その種のレイヤーを開く (acknowledgeSpecies) とその場で消えて戻らない (M21-02 D5)', () => {
+  it('noticeYears があれば告知は発火した年から noticeYears 年のあいだ残り、その種のレイヤーを開く (setViewedSpecies) とその場で消えて戻らない (M21-02 D5)', () => {
     const w = fakeWorld({ deer: 1 });
     const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
     const d: ScenarioDef = { ...def, years: 8, schedule: [{ atYear: 1, noticeYears: 5, text: '狼の群れが北の谷に下りた', command: wave }] };
@@ -65,12 +65,26 @@ describe('createScenarioRunner', () => {
     for (let y = 0; y <= 3; y++) { r.update(w.snapshot()); w.step(360); }
     expect(events()).toEqual([{ kind: 'event', key: 'event:0@1', text: '狼の群れが北の谷に下りた', id: 'wolf' }]);
     // 別の種を開いても消えない
-    r.acknowledgeSpecies('deer');
+    r.setViewedSpecies('deer');
     expect(events()).toHaveLength(1);
-    r.acknowledgeSpecies('wolf');
+    r.setViewedSpecies('wolf');
     expect(events()).toEqual([]);
+    r.setViewedSpecies(null);
     r.update(w.snapshot());
     expect(events()).toEqual([]);
+  });
+  it('その種のレイヤーを見ている間に発火した告知は最初から出さない。見るのをやめた後の次の発火は出る', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 8, schedule: [{ atYear: 1, everyYears: 2, noticeYears: 2, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    const keys = () => r.warnings().filter((x) => x.kind === 'event').map((x) => x.key);
+    r.setViewedSpecies('wolf');
+    for (let y = 0; y <= 1; y++) { r.update(w.snapshot()); w.step(360); }
+    expect(keys()).toEqual([]);
+    r.setViewedSpecies(null);
+    for (let y = 2; y <= 3; y++) { r.update(w.snapshot()); w.step(360); }
+    expect(keys()).toEqual(['event:0@3']);
   });
   it('noticeYears を過ぎた告知は、押されていなくても消える (「着くまで三月」が何年も残らない)', () => {
     const w = fakeWorld({ deer: 1 });
@@ -92,6 +106,28 @@ describe('createScenarioRunner', () => {
     const r = createScenarioRunner(d, w);
     for (let y = 0; y <= 4; y++) { r.update(w.snapshot()); w.step(360); }
     expect(r.warnings().filter((x) => x.kind === 'event').map((x) => x.key)).toEqual(['event:0@4', 'event:1@3']);
+  });
+  it('告知は発火の順ではなく予定の順に並ぶ (添字の大きい予定が先に発火した場合 / 期限切れの後に再発火した場合)', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const meteor: Command = { type: 'disaster', kind: 'meteor', cell: -1, radius: 1 };
+    // idx0 は 2 年目、idx1 は 1 年目に発火する
+    const d1: ScenarioDef = { ...def, years: 5, schedule: [
+      { atYear: 2, noticeYears: 3, text: '狼の群れが北の谷に下りた', command: wave },
+      { atYear: 1, noticeYears: 3, text: '星が近づいている', command: meteor },
+    ] };
+    const r1 = createScenarioRunner(d1, w);
+    for (let y = 0; y <= 2; y++) { r1.update(w.snapshot()); w.step(360); }
+    expect(r1.warnings().filter((x) => x.kind === 'event').map((x) => x.key)).toEqual(['event:0@2', 'event:1@1']);
+    // idx0 は 1 年目に出て 2 年目に期限切れで消え、4 年目に再発火する。その間に idx1 が 2 年目に入る
+    const w2 = fakeWorld({ deer: 1 });
+    const d2: ScenarioDef = { ...def, years: 6, schedule: [
+      { atYear: 1, everyYears: 3, noticeYears: 1, text: '狼の群れが北の谷に下りた', command: wave },
+      { atYear: 2, noticeYears: 5, text: '星が近づいている', command: meteor },
+    ] };
+    const r2 = createScenarioRunner(d2, w2);
+    for (let y = 0; y <= 4; y++) { r2.update(w2.snapshot()); w2.step(360); }
+    expect(r2.warnings().filter((x) => x.kind === 'event').map((x) => x.key)).toEqual(['event:0@4', 'event:1@2']);
   });
   it('spawn_species でない予定 (text 付き) の警告には id を持たせない', () => {
     const w = fakeWorld({ deer: 1 });

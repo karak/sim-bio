@@ -85,16 +85,27 @@ describe('assets/data/scenarios.json', () => {
       expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 }, civ: { stage: 6 } }), 0)).status).toBe('running');
     }
   });
-  it('test-event (E2E の「狼を見る」チップ) は定義をホワイトリストで固定する: 1 年目に狼を 1 回だけ撃ち、告知は 30 年残り、判定の幕がチップを覆わないだけの年数がある', () => {
-    const d = defs.find((x) => x.id === 'test-event')!;
-    // 予定は完全一致。ここに無いキー (untilYear・everyYears 等) や値の変更は落ちる
-    expect(d.schedule).toEqual([
-      { atYear: 1, noticeYears: 30, text: '狼の群れが北の谷に下りた', command: { type: 'spawn_species', speciesId: 'wolf', cell: -1, amount: 1, radius: 3 } },
-    ]);
-    // 定義に載ってよいキーを列挙する。ここに無いキー (budget 等) を足すと落ちる
-    expect(Object.keys(d).sort()).toEqual(['alive', 'hidden', 'id', 'kind', 'prophecy', 'schedule', 'start', 'title', 'years']);
-    // 遅い CI では一時停止が効くまでに数年進む。3 年だと止まる前に判定の幕が出てチップを押せなかった
-    expect(d.years).toBeGreaterThanOrEqual(30);
+  it('test-event (E2E の「狼を見る」チップ) は定義全体を完全一致で固定する: 入れ子のキーや値を変えると e2e の前提が黙って変わるため', () => {
+    // 1 年目に狼を 1 回だけ撃ち、告知は判定の年 (30 年) まで残す。遅い CI では一時停止が効くまでに数年進み、
+    // 3 年で終わる石板では止まる前に判定の幕がチップを覆った
+    expect(defs.find((x) => x.id === 'test-event')).toEqual({
+      id: 'test-event',
+      title: '警告の試し読み',
+      hidden: true,
+      prophecy: 'この石板は試し読み用。一年目に狼の群れが下りる警告(狼レイヤーへの案内チップ付き)だけを確かめる。',
+      kind: 'endure',
+      start: { seed: 42 },
+      years: 30,
+      schedule: [{ atYear: 1, noticeYears: 30, text: '狼の群れが北の谷に下りた', command: { type: 'spawn_species', speciesId: 'wolf', cell: -1, amount: 1, radius: 3 } }],
+      alive: { type: 'year_reached', year: 30 },
+    });
+  });
+  it('予定の noticeYears は省略するか 1 以上の整数 (0・負・小数だと告知が石板に届く前に消える)', () => {
+    const bad = defs.flatMap((d) => d.schedule.filter((sc) => sc.noticeYears !== undefined && !(Number.isInteger(sc.noticeYears) && sc.noticeYears >= 1)).map((sc) => `${d.id}: ${sc.noticeYears}`));
+    expect(bad).toEqual([]);
+    // 陽性対照: 検査式そのものが不正な値を拾うこと
+    const isBad = (v: number) => !(Number.isInteger(v) && v >= 1);
+    expect([0, -1, 1.5].map(isBad)).toEqual([true, true, true]);
   });
 });
 

@@ -70,8 +70,11 @@ export type ScenarioRunner = {
   prayer(): { kind: PrayerKind; yearsLeft: number } | null;
   /** 直近の年次評価で出た警告 (年に 1 回更新)。予定の告知は予定の順に先頭に並び、noticeYears のあいだ残る */
   warnings(): Warning[];
-  /** 種のレイヤーが開かれた (M21-02 D5: 警告のチップからでも HUD からでも)。その種 id を持つ告知を警告から外す */
-  acknowledgeSpecies(id: string): void;
+  /**
+   * いま見ている種のレイヤー (M21-02 D5)。見始めたら (警告のチップからでも HUD からでも) その種の告知を警告から外し、
+   * 見ている間に発火したその種の告知は最初から出さない。種のレイヤー以外に切り替えたら null
+   */
+  setViewedSpecies(id: string | null): void;
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
   timeline(): TimelineEvent[];
   /** 石板に出す予言の節目 (M10-02)。迎撃で取り消した隕石の年の節目は消える */
@@ -176,6 +179,7 @@ export function createScenarioRunner(
    * 残し、その種のレイヤーが開かれたら消す (M21-02 D5: 100x では 1 年が数秒で、遅い環境ではチップを押す前に消えていた)
    */
   const notices = new Map<number, Notice>();
+  let viewedSpecies: string | null = null;
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
       if (cancelled.has(idx)) continue;
@@ -293,11 +297,12 @@ export function createScenarioRunner(
     prayer: () => (currentPrayer ? { kind: currentPrayer.kind, yearsLeft: Math.max(0, currentPrayer.deadlineYear - currentYear) } : null),
     warnings: () => {
       if (!notices.size) return warnings;
-      const live = [...notices.values()].filter((n) => currentYear < n.untilYear).sort((a, b) => a.idx - b.idx).map((n) => n.warning);
-      return [...live, ...warnings];
+      // 期限切れは年次評価で消してある。ここでは予定の順に並べるだけ (Map は入れた順なので、発火の順とは限らない)
+      return [...[...notices.values()].sort((a, b) => a.idx - b.idx).map((n) => n.warning), ...warnings];
     },
-    acknowledgeSpecies(id) {
-      for (const [idx, n] of notices) if (n.warning.id === id) notices.delete(idx);
+    setViewedSpecies(id) {
+      viewedSpecies = id;
+      if (id !== null) for (const [idx, n] of notices) if (n.warning.id === id) notices.delete(idx);
     },
     timeline: () => timeline,
     milestones: () => {
@@ -380,7 +385,10 @@ export function createScenarioRunner(
         // 舟の警告 (M10-04): 前年の進みと比べる。前年に舟が無ければ null
         warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ, { year, prevProgress: prevShipProgress });
         // text 付きの予定 (M10R-07) はその年の警告の先頭に出す (年表には fireDue で積んである)
-        for (const n of announced) notices.set(n.idx, n);
+        for (const n of announced) {
+          if (viewedSpecies !== null && n.warning.id === viewedSpecies) notices.delete(n.idx);
+          else notices.set(n.idx, n);
+        }
         announced = [];
         for (const [idx, n] of notices) if (year >= n.untilYear) notices.delete(idx);
         prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;
