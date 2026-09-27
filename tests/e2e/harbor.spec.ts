@@ -125,6 +125,36 @@ test('M19-09: 出港 → リンク → 訪問 (3D 観察画面) → 照合 (年�
   await shot(page, '05-visit-read');
 });
 
+test('M19-18: 集落の無い島 (test-quick) の訪問でも 3D 観察画面に入り、戻ると「3D で見る」は時間の箱の端で覆われず押せる', async ({ page }) => {
+  test.setTimeout(180_000);
+  await routeHarbor(page);
+  await playToVerdict(page, 'test-quick');
+  await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
+  const panel = publishFrom(page);
+  await panel.getByRole('radio', { name: '海が勝った' }).click();
+  await panel.getByRole('button', { name: '出港する' }).click();
+  await expect(panel.getByRole('status').first()).toHaveText('港へ出した。リンクを渡せば、誰でもこの島をたどれる');
+  const url = await panel.getByRole('textbox', { name: '訪問のリンク' }).inputValue();
+
+  await page.goto(url);
+  await expect(page.getByRole('region', { name: '訪れている島' })).toBeVisible();
+  await expect(page.locator('#observe-layer')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^\d+ 年 · [春夏秋冬]$/, { timeout: 90_000 });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#observe-layer')).toBeHidden();
+  const open = page.getByRole('button', { name: '3D で見る' });
+  await expect(open).toBeEnabled();
+  await expect(page.locator('.hud-tl #speed-row > #observe-open')).toHaveText('3D で見る');
+  const topmost = await page.evaluate(() => {
+    const b = document.getElementById('observe-open')!;
+    const r = b.getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b;
+  });
+  expect(topmost).toBe(true);
+  await open.click();
+  await expect(page.locator('#observe-layer')).toBeVisible();
+});
+
 test('M19-09: 照合は「やめる」で止まり、もう一度読める', async ({ page }) => {
   test.setTimeout(180_000);
   const harbor = await routeHarbor(page);

@@ -7,6 +7,7 @@ import type { ObservationView } from './view';
  * 観察画面のコード (Three.js・アセット) は初めて入るときに読み込む (操作画面の読み込みを重くしない)。
  * 時間は操作画面の runner が進め、入っている間は push で snapshot を渡す。100x のまま入ったら 10x に落とす (設計 §4)。
  * 入れるのは文明の集落があるとき (区域は集落を中心に切り出すので)。
+ * (M19-18 で上の規則を変更: world の snapshot があればいつでも入れる。集落が無ければ島の真ん中を中心にする (area.ts の observeCenter))
  */
 export type ObserveEntry = {
   /** 操作画面の毎フレームの snapshot。入っていれば観察画面へ渡し、入るボタンの可否を決める。timeline は石板の年表 (介入の場面に使う) */
@@ -21,10 +22,12 @@ export type ObserveEntryOptions = {
   names?: Record<string, string>;
   getSpeed(): number;
   setSpeed(s: 0 | 1 | 10): void;
+  /** 入るボタンを置く所 (M19-18: 操作画面では左上の時間の箱の速さの列の端)。省略時は app */
+  buttonHost?: HTMLElement;
 };
 
 const CSS = `
-#observe-open { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 20; font: 13px system-ui, sans-serif; padding: 5px 14px; border-radius: 14px; border: 1px solid rgba(233, 239, 243, 0.5); background: rgba(27, 43, 58, 0.72); color: #e9eff3; cursor: pointer; }
+#observe-open { margin-left: 6px; font: 12px system-ui, sans-serif; padding: 2px 12px; border-radius: 14px; border: 1px solid rgba(233, 239, 243, 0.5); background: rgba(27, 43, 58, 0.72); color: #e9eff3; cursor: pointer; }
 #observe-open[disabled] { opacity: 0.4; cursor: default; }
 #observe-layer { position: absolute; inset: 0; z-index: 30; background: #CFE0E4; }
 #observe-layer canvas { display: block; width: 100%; height: 100%; }
@@ -55,7 +58,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
   open.id = 'observe-open';
   open.textContent = '3D で見る';
   open.disabled = true;
-  app.appendChild(open);
+  (opts.buttonHost ?? app).appendChild(open);
 
   let layer: HTMLDivElement | null = null;
   let view: ObservationView | null = null;
@@ -103,7 +106,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
     push(s, timeline) {
       latest = s;
       latestTimeline = timeline;
-      open.disabled = !s.civ || s.civ.home < 0;
+      open.disabled = false;
       if (isActive && view) {
         view.setSnapshot(s, timeline);
         syncBar();

@@ -236,3 +236,41 @@ function bowToward(area: Area, from: AreaCell): Point {
   }
   return { x: 1, z: 0 };
 }
+
+/** 観察画面の中心のセルと、そこが集落か (M19-18) */
+export type ObserveCenter = { cell: number; settlement: boolean };
+
+/**
+ * 観察画面の区域の中心 (M19-18、ユーザーの判断 2026-09-27)。集落 (civ.home ≥ 0) があれば集落のセル。
+ * 無ければ島の真ん中 = 陸セルの重心 (列・行の平均) に最も近い陸セル (同じ近さなら index の小さい方)。陸が無ければ地図の真ん中のセル。
+ * 地形だけで決め、個体の密度には依らない
+ */
+export function observeCenter(s: WorldSnapshot): ObserveCenter {
+  if (s.civ && s.civ.home >= 0) return { cell: s.civ.home, settlement: true };
+  const size = s.size;
+  const elevation = s.layers.elevation;
+  let n = 0;
+  let sumCol = 0;
+  let sumRow = 0;
+  for (let i = 0; i < size * size; i++) {
+    if (elevation[i] < SEA_LEVEL) continue;
+    n++;
+    sumCol += i % size;
+    sumRow += Math.floor(i / size);
+  }
+  const middle = Math.floor(size / 2) * size + Math.floor(size / 2);
+  if (n === 0) return { cell: middle, settlement: false };
+  const mc = sumCol / n;
+  const mr = sumRow / n;
+  let best = middle;
+  let bestD = Infinity;
+  for (let i = 0; i < size * size; i++) {
+    if (elevation[i] < SEA_LEVEL) continue;
+    const d = (i % size - mc) ** 2 + (Math.floor(i / size) - mr) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return { cell: best, settlement: false };
+}

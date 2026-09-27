@@ -300,6 +300,8 @@ async function boot(): Promise<void> {
     names: Object.fromEntries(species.map((d) => [d.id, d.name])),
     getSpeed: () => loop.getSpeed(),
     setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
+    // (M19-18) 入口は左上の時間の箱の速さの列の端 (上の真ん中の石板に覆われない)
+    buttonHost: document.getElementById('speed-row') ?? undefined,
   });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)

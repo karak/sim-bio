@@ -81,6 +81,8 @@ const vertex = /* glsl */ `
 /** 水たまりの置き場所: 踏み固めた所の円 (中心・半径) の中から、周りより低い所を選ぶ。rng で決め、count まで */
 export function puddleSpots(worn: readonly { x: number; z: number; r: number }[], heightAt: (x: number, z: number) => number, rng: () => number, count: number): PuddleSpot[] {
   const out: PuddleSpot[] = [];
+  // (M19-18) 集落の無い島には踏み固めた所が無い
+  if (worn.length === 0) return out;
   for (let tries = 0; tries < count * 30 && out.length < count; tries++) {
     const w = worn[Math.floor(rng() * worn.length)];
     const a = rng() * Math.PI * 2;

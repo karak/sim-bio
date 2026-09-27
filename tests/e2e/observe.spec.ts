@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
-test('observe view: no settlement in free mode, so the entry is disabled', async ({ page }) => {
+test('observe view: no settlement in free mode, but the entry is enabled and centers on the island (M19-18)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
-  await expect(page.getByRole('button', { name: '3D で見る' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '3D で見る' })).toBeEnabled();
 });
 
 test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the game clock, and back returns to the map', async ({ page }) => {

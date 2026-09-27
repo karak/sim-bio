@@ -52,7 +52,7 @@ import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './sc
 import { AtmospherePass, createSky } from './render/atmosphere';
 import { createDynamicResolution } from './render/dynamicResolution';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
-import { extractArea, landmarks } from './area';
+import { extractArea, landmarks, observeCenter } from './area';
 import { K_DEFAULT, BUDGET_PER_SECOND, folkRuleFor, reconcile, targetCounts } from './population';
 import { applyPlan, stepAgents, type AgentWorld } from './agents';
 
@@ -230,7 +230,8 @@ export type ObservationView = {
 export async function createObservationView(host: ObserveHost): Promise<ObservationView> {
   const status = host.status;
   const s = host.snapshot;
-  const home = s.civ?.home ?? 2787;
+  // (M19-18) 区域の中心。集落が無ければ島の真ん中の陸セルにし、集落だけの形 (小屋・船台など)・踏み固めた道・切り開き・民を置かない
+  const { cell: home, settlement: hasSettlement } = observeCenter(s);
   const field = createTerrainField(s, home, WINDOW);
 
   const canvas = host.canvas;
@@ -300,17 +301,19 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
 
   // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
   let area = extractArea(s, home, AREA_R);
-  const marks = landmarks(area);
+  const marks = hasSettlement ? landmarks(area) : { ...landmarks(area), lanterns: [] };
   // (M22-06 試作 2: 船台が 27 m になったので、船台の点 (外海に接する陸のセルの中心) から陸の側へ 6.5 m ずらし、
   //  舳先の端が水際を 2 m ほど越えるところに置く。舟・丸太の山・切り開きはこの中心に合わせる)
   const slip = { x: marks.slipway.x - marks.slipwayBow.x * 6.5, z: marks.slipway.z - marks.slipwayBow.z * 6.5 };
   // (草の磨き上げ) 集落の広場・小屋の戸口への道・船台への道を踏み固めた土にし、そこの草を減らす (小屋の位置は下の集落の一角と同じ)
   const plaza = { x: marks.center.x, z: marks.center.z - 6 };
-  const worn: Worn[] = [
-    { ax: plaza.x, az: plaza.z, bx: plaza.x, bz: plaza.z, r: 9 },
-    { ax: plaza.x, az: plaza.z, bx: slip.x, bz: slip.z, r: 2.6 },
-    ...hutPlacements(marks.center, plaza, field.heightAt).map((h) => ({ ax: plaza.x, az: plaza.z, bx: h.x, bz: h.z, r: 2.2 })),
-  ];
+  const worn: Worn[] = hasSettlement
+    ? [
+        { ax: plaza.x, az: plaza.z, bx: plaza.x, bz: plaza.z, r: 9 },
+        { ax: plaza.x, az: plaza.z, bx: slip.x, bz: slip.z, r: 2.6 },
+        ...hutPlacements(marks.center, plaza, field.heightAt).map((h) => ({ ax: plaza.x, az: plaza.z, bx: h.x, bz: h.z, r: 2.2 })),
+      ]
+    : [];
   wearTerrain(terrain, worn);
   grass.trample(worn);
 
@@ -327,7 +330,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
     // 集落の広場と船台は民が切り開いた場所として木を置かない (本体の鐘樹は集落を中心に立つが、小屋が林に埋もれて見えない)
     // (M22-06: 船台の切り開きは南の固定位置 (0, 20) から目印の船台へ)
-    if (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20) continue;
+    if (hasSettlement && (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20)) continue;
     spots.push({ x, z, th: rng(), k: 0.65 + rng() * 0.3, rot: rng() * Math.PI * 2 });
   }
   let treeCount = 0;
@@ -352,7 +355,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     return out;
   };
   Object.assign(byKind, selectBelltrees(bt));
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < (hasSettlement ? 6 : 0); i++) {
     const a = rng() * Math.PI * 2;
     const x = slip.x + Math.cos(a) * (15 + rng() * 6);
     const z = slip.z + Math.sin(a) * (15 + rng() * 6);
@@ -406,7 +409,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const x = (rng() * 2 - 1) * AREA_R * CELL_M;
     const z = (rng() * 2 - 1) * AREA_R * CELL_M;
     if (Math.hypot(x, z) > AREA_R * CELL_M || field.heightAt(x, z) < 1.2) continue;
-    if (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20) continue;
+    if (hasSettlement && (Math.hypot(x - slip.x, z - slip.z) < 19 || Math.hypot(x, z + 6) < 20)) continue;
     forestSpots.push({ x, z, th: rng(), k: 0.8 + rng() * 0.35, rot: rng() * Math.PI * 2 });
   }
   const selectForest = (layer: Float32Array | undefined) => {
@@ -442,7 +445,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   for (let i = 0; i < 9000; i++) {
     const x = (rng() * 2 - 1) * (AREA_R + 1) * CELL_M;
     const z = (rng() * 2 - 1) * (AREA_R + 1) * CELL_M;
-    if (Math.hypot(x, z) > (AREA_R + 1) * CELL_M || field.heightAt(x, z) < 1.0 || Math.hypot(x - slip.x, z - slip.z) < 9) continue;
+    if (Math.hypot(x, z) > (AREA_R + 1) * CELL_M || field.heightAt(x, z) < 1.0 || (hasSettlement && Math.hypot(x - slip.x, z - slip.z) < 9)) continue;
     const shade = (bt ? field.layerAt(bt, x, z) : 0) + (forest ? field.layerAt(forest, x, z) : 0);
     const open = grassLayer ? field.layerAt(grassLayer, x, z) : 0;
     const r = rng();
@@ -476,6 +479,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const settlementPlacements = new Map<string, Matrix4[]>();
   // (集落の建物の作り直しで変更: y を渡すとその高さに置く (小屋は戸口の外の地面に合わせる、敷石は斜面に沿わせる))
   const place = (name: string, x: number, z: number, ry = 0, y = field.heightAt(x, z) - 0.15) => {
+    // (M19-18) 集落が無い島では集落の部品を 1 つも置かない
+    if (!hasSettlement) return;
     const list = settlementPlacements.get(name) ?? [];
     list.push(new Matrix4().compose(new Vector3(x, y, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), ry), new Vector3(1, 1, 1)));
     settlementPlacements.set(name, list);
@@ -485,7 +490,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   place('slipway', slip.x, slip.z, toSea);
   const c0 = marks.center;
   // (集落の建物の作り直しで変更: 小屋は戸口を広場へ向ける (元は 0.4 / −0.6 / 0.1 の向き)。位置は settlementLayout.ts の HUT_OFFSETS)
-  const huts = hutPlacements(c0, plaza, field.heightAt);
+  const huts = hasSettlement ? hutPlacements(c0, plaza, field.heightAt) : [];
   for (const h of huts) {
     place('hut', h.x, h.z, h.ry, h.y);
     for (const st of h.steps) place('stepping_stone', st.x, st.z, st.ry, field.heightAt(st.x, st.z) - 0.03);
@@ -539,7 +544,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     shadowOnly.add(proxy);
   }
   const pile = findNode(shipGlb, 'timber_pile');
-  if (pile) {
+  if (pile && hasSettlement) {
     const px = slip.x + side.x * 9 - marks.slipwayBow.x * 3;
     const pz = slip.z + side.z * 9 - marks.slipwayBow.z * 3;
     scene.add(instanceProps(pile, [new Matrix4().compose(new Vector3(px, field.heightAt(px, pz) - 0.05, pz), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), toSea + 0.3), new Vector3(1, 1, 1))]));
@@ -585,7 +590,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // 個体層 (M22-04): 区域の密度 → 目標頭数 → 出入りの計画 → 状態機械。民は集落の近く (半径 3 セル) の鹿だけにする
   // (設計どおり支え半径 8 にすると区域の鹿が全部民になり、夜は全頭が灯りに寄り、飛び立ちで群れが消える。M22-04 の申し送り)
   status.textContent = '鹿を焼いています…';
-  const folk = folkRuleFor(s.civ, 3);
+  const folk = folkRuleFor(hasSettlement ? s.civ : null, 3);
   let K = { ...K_DEFAULT };
   if (OPT.deer > 0) {
     const sum = area.cells.reduce((acc, c) => acc + (c.isLand ? (c.density['deer'] ?? 0) : 0), 0);
@@ -625,7 +630,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // (M22-07 の手直しで変更: 海面はすぐには上げず、fx で SURGE_RATE m/s で追わせ、上がる間は波立ちと流れを見せる (沈む海岸「波立ちがない。流れが見えない。」))
     seaTarget = level;
     area = extractArea(snap, home, AREA_R);
-    targets = targetCounts(area, K, folkRuleFor(snap.civ, 3));
+    targets = targetCounts(area, K, folkRuleFor(hasSettlement ? snap.civ : null, 3));
     building = !!snap.ship && snap.ship.launchedYear === undefined && (snap.civ?.stage ?? 0) >= 5;
     if (OPT.ship === null && !OPT.launched && !OPT.depart) shipView.set(snap.ship);
   };
