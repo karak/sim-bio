@@ -34,7 +34,15 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
+      # 本番の Turnstile の site key (公開してよい値) を Environment production の variable から焼く。
+      # 無いまま焼くと画面がテストの sitekey に落ち、本物の secret では札が通らず出港が必ず not_human になるので、ここで止める
+      - name: Require the production Turnstile site key
+        run: test -n "$VITE_TURNSTILE_SITEKEY" || { echo "::error::Environment production の variable TURNSTILE_SITEKEY が無い"; exit 1; }
+        env:
+          VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
       - run: pnpm run build:cloudflare
+        env:
+          VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
       # 配る直前の dist と wrangler.jsonc が無料枠の内か。外なら deploy しない (設計書 §3.3、M19-12)
       - run: pnpm run check:free-tier
       # 港の帳簿 (D1) のマイグレーション。当て済みのものは飛ばす (M19-08)。新しい表や列を使う Worker より先に当てる
