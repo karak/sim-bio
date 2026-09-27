@@ -40,8 +40,8 @@ export function checkSlot(s: SlotSave, here: Here): { ok: true; value: SlotSave 
 export type SlotLoadPlan = { kind: 'replace'; confirm: string } | { kind: 'navigate'; to: Stage; confirm: string };
 
 /** 枠 (とファイル) を読む操作の行き先 (§4)。同じ舞台ならその場で差し替え、違う舞台ならその舞台へ移ってから読む。どちらも確かめてから */
-export function planSlotLoad(slot: Stage, here: Stage, titleOf: (scenarioId: string) => string): SlotLoadPlan {
-  if (sameStage(slot, here)) {
+export function planSlotLoad(slot: Stage, here: Here, titleOf: (scenarioId: string) => string): SlotLoadPlan {
+  if (sameStage(slot, stageOfHere(here))) {
     return { kind: 'replace', confirm: here.stage === 'free' ? '今の島を捨てて、枠の島を読み込みますか (自動の枠は上書きされます)' : '石板を枠の時点に戻しますか (今の続きは上書きされます)' };
   }
   const to: Stage = slot.stage === 'free' ? { stage: 'free' } : { stage: 'scenario', scenarioId: slot.scenarioId };

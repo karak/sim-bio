@@ -60,7 +60,7 @@ describe('枠を読む操作の行き先 (M19-17 §4)', () => {
   const titleOf = (id: string) => ({ 'test-quick': '試し読み' })[id] ?? id;
   it('同じ舞台の枠はその場で差し替え、違う舞台の枠はその舞台へ移る。どれも確かめの文を持つ', () => {
     expect(planSlotLoad({ stage: 'free' }, { stage: 'free' }, titleOf)).toEqual({ kind: 'replace', confirm: '今の島を捨てて、枠の島を読み込みますか (自動の枠は上書きされます)' });
-    expect(planSlotLoad({ stage: 'scenario', scenarioId: 'test-quick' }, { stage: 'scenario', scenarioId: 'test-quick' }, titleOf)).toEqual({
+    expect(planSlotLoad({ stage: 'scenario', scenarioId: 'test-quick' }, { stage: 'scenario', head }, titleOf)).toEqual({
       kind: 'replace',
       confirm: '石板を枠の時点に戻しますか (今の続きは上書きされます)',
     });
@@ -69,12 +69,12 @@ describe('枠を読む操作の行き先 (M19-17 §4)', () => {
       to: { stage: 'scenario', scenarioId: 'test-quick' },
       confirm: '石板『試し読み』の枠です。石板を開いて読みますか',
     });
-    expect(planSlotLoad({ stage: 'free' }, { stage: 'scenario', scenarioId: 'test-quick' }, titleOf)).toEqual({
+    expect(planSlotLoad({ stage: 'free' }, { stage: 'scenario', head }, titleOf)).toEqual({
       kind: 'navigate',
       to: { stage: 'free' },
       confirm: '自由モードの枠です。自由モードを開いて読みますか',
     });
-    expect(planSlotLoad({ stage: 'scenario', scenarioId: 'other' }, { stage: 'scenario', scenarioId: 'test-quick' }, titleOf).kind).toBe('navigate');
+    expect(planSlotLoad({ stage: 'scenario', scenarioId: 'other' }, { stage: 'scenario', head }, titleOf).kind).toBe('navigate');
   });
 
   it('移った先で読む枠の名前は sessionStorage に 1 回だけ置く (読み直しで二度読まない)', () => {

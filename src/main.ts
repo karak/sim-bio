@@ -21,7 +21,7 @@ import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
 import { createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
 import { checkSlot, planSlotLoad, putPendingSlot, slotSaveOf, takePendingSlot, type Here, type SlotSave } from './persist/slotSave';
-import type { PendingSlot, SlotId, Stage } from './persist/slots';
+import type { SlotId } from './persist/slots';
 import type { Chronicle } from './harbor/chronicle';
 import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
 import type { InterveneResult, RunnerState } from './scenario/ScenarioRunner';
@@ -90,7 +90,6 @@ async function boot(): Promise<void> {
   });
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
   const here: Here = head ? { stage: 'scenario', head } : { stage: 'free' };
-  const stageHere: Stage = scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' };
   /** 枠とファイルの包みを、今の舞台の島 (石板なら runner の状態と年代記も) に戻す (M19-17)。違う舞台・読めない包みは投げる */
   const openSlot = (data: SlotSave): Restored => {
     const checked = checkSlot(data, here);
@@ -188,11 +187,11 @@ async function boot(): Promise<void> {
     // シナリオ中の読込は予言と矛盾するので無効
     // (M19-17 で変更: 石板の中でも、同じ石板の枠は runner の状態・年代記と一緒に戻すので読める。別の島の差し込みは openSlot の舞台の確かめで弾く。無効は訪問だけ)
     if (visitId) return;
-    const plan = planSlotLoad(data, stageHere, (id) => scenarios.find((d) => d.id === id)?.title ?? id);
+    const plan = planSlotLoad(data, here, (id) => scenarios.find((d) => d.id === id)?.title ?? id);
     if (!window.confirm(plan.confirm)) return;
     if (plan.kind === 'navigate') {
       if (!slot) await store?.stashImport(data).catch((e: unknown) => persistLog('warn', 'persist.save.failed', data.save.tick, { slot: 'import', error: String(e) }));
-      putPendingSlot(sessionStorage, slot ?? ('import' satisfies PendingSlot));
+      putPendingSlot(sessionStorage, slot ?? 'import');
       selectScenario(plan.to.stage === 'scenario' ? plan.to.scenarioId : null);
       return;
     }
