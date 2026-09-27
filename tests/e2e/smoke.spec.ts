@@ -326,6 +326,7 @@ test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チッ�
   await expect(page.locator('#tablet-warnings')).toContainText('狼の群れが北の谷に下りた', { timeout: 20_000 });
   await expect(page.locator('#layer-species-wolf')).not.toHaveClass(/on/);
   // 100x のままだと警告の一覧が描き直され続け、遅い CI ではチップが押す前に DOM から外れる。止めてから押す
+  // 予定の台詞は撃った年の間しか警告に残らない。遅い CI ではこの click が効くまでに 1 年以上進むため、test-event は毎年撃つ
   await page.click('#speed-0');
   const chip = page.getByRole('button', { name: '狼を見る' });
   await expect(chip).toBeVisible();
