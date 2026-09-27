@@ -62,7 +62,8 @@ test('observe view: a prayer that comes while watching shows on the notice band,
   await expect(band).toHaveAttribute('data-kind', 'prayer');
   await expect(band).toHaveAccessibleName('祈り: 民が祈った: 狼を減らして');
   // 8 秒で霧のように消える
-  await expect(band).toHaveAttribute('data-state', 'out', { timeout: 12_000 });
+  // (帯は 1 コマに 0.5 秒までしか数えないので、fps が 2 を切る CI (ソフトウェア描画) では 8 秒に実時間でそれ以上かかる。待ちに幅を持たせる)
+  await expect(band).toHaveAttribute('data-state', 'out', { timeout: 30_000 });
   await expect(band).toBeHidden({ timeout: 5_000 });
 });
 
