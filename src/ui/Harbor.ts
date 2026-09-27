@@ -57,6 +57,8 @@ export type HarborUiDeps = {
   /** 漂着を島の浜に放つ (M19-10)。訪問では null (浜の漂着を出さない) */
   land: ((d: DrawnCargo) => LandResult) | null;
   log: HarborLog;
+  /** 開発用の見守り手 (M19-16)。手元の置き場の DB の名前と、港への要求に添える名乗りの header。本番では無い */
+  player?: { dbName: string; headers: Readonly<Record<string, string>> };
 };
 
 /** 1 時間ごとに outbox を送り直す (設計書 §5.2) */
@@ -92,7 +94,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     toastTimer = setTimeout(() => (toast.hidden = true), TOAST_MS);
   };
 
-  const storeReady = openHarborStore({ indexedDB }).catch((e: unknown) => {
+  const storeReady = openHarborStore({ indexedDB, dbName: deps.player?.dbName }).catch((e: unknown) => {
     deps.log('warn', 'harbor.store.unavailable', { error: String(e) });
     return createMemoryHarborStore();
   });
@@ -115,6 +117,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
       catalog: { scenarios: new Set(deps.scenarios.map((d) => d.id)), species: new Set(deps.speciesIds), inscriptions: new Set(inscriptions.map((d) => d.id)) },
       turnstile: createTurnstile({ sitekey: deps.sitekey || TEST_SITEKEY, host: hostOf }),
       log: deps.log,
+      headers: deps.player?.headers,
     }),
   }));
 
