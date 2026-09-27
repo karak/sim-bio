@@ -49,6 +49,9 @@ export type InterveneResult = { ok: true } | { ok: false; reason: 'budget' | 'fi
 /** 石板に出す力の残量情報。budget のないシナリオでは null */
 export type BudgetInfo = { power: number; max: number; incomeLastYear: number; upkeepLastYear: number };
 
+/** 表示中の予定の告知 (M21-02 D5)。untilYear になった年の評価で消える */
+type Notice = { idx: number; untilYear: number; warning: Warning };
+
 export type ScenarioRunner = {
   readonly def: ScenarioDef;
   /** 毎フレーム呼ぶ。予定コマンドの発火と年次判定を行う */
@@ -65,10 +68,10 @@ export type ScenarioRunner = {
   budget(): BudgetInfo | null;
   /** 現在有効な祈りと残り年数 (石板表示用、M9-02)。祈りが無ければ null */
   prayer(): { kind: PrayerKind; yearsLeft: number } | null;
-  /** 直近の年次評価で出た警告 (年に 1 回更新)。種 id 付きの告知は押される (acknowledgeEvent) まで先頭に残る */
+  /** 直近の年次評価で出た警告 (年に 1 回更新)。予定の告知は予定の順に先頭に並び、noticeYears のあいだ残る */
   warnings(): Warning[];
-  /** 警告の「〜を見る」チップが押された (M21-02 D5)。その種 id 付きの告知を警告から外す */
-  acknowledgeEvent(key: string): void;
+  /** 種のレイヤーが開かれた (M21-02 D5: 警告のチップからでも HUD からでも)。その種 id を持つ告知を警告から外す */
+  acknowledgeSpecies(id: string): void;
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
   timeline(): TimelineEvent[];
   /** 石板に出す予言の節目 (M10-02)。迎撃で取り消した隕石の年の節目は消える */
@@ -166,13 +169,13 @@ export function createScenarioRunner(
     return c;
   };
 
-  /** 今年発火した text 付きの予定 (M10R-07)。年次評価の警告に足してから空にする。種 id 付きのものは pendingEvents 側に持つ */
-  let announced: Warning[] = [];
+  /** 今年発火した text 付きの予定 (M10R-07)。年次評価の警告に足してから空にする。足す先は notices (noticeYears のあいだ残す) */
+  let announced: Notice[] = [];
   /**
-   * 種 id 付きの告知 (チップが出るもの) は押されるまで残す (M21-02 D5)。100x では 1 年が数秒で、
-   * 遅い環境では押す前に消えていた。予定の添字ごとに 1 件だけ持ち、次の発火で置き換える
+   * 表示中の告知。予定の添字ごとに 1 件だけ持ち、次の発火で置き換える。発火した年から noticeYears 年 (既定 1 = 発火した年だけ)
+   * 残し、その種のレイヤーが開かれたら消す (M21-02 D5: 100x では 1 年が数秒で、遅い環境ではチップを押す前に消えていた)
    */
-  const pendingEvents = new Map<number, Warning>();
+  const notices = new Map<number, Notice>();
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
       if (cancelled.has(idx)) continue;
@@ -192,10 +195,7 @@ export function createScenarioRunner(
         // 警告から種レイヤーを開ける (M21-02 D5): spawn_species の予定なら id を種 id にする (species_low と同じ規約)
         if (sc.text) {
           const w: Warning = { kind: 'event', key: `event:${idx}@${y}`, text: sc.text, ...(sc.command.type === 'spawn_species' ? { id: sc.command.speciesId } : {}) };
-          if (w.id) {
-            pendingEvents.delete(idx);
-            pendingEvents.set(idx, w);
-          } else announced.push(w);
+          announced.push({ idx, untilYear: y + (sc.noticeYears ?? 1), warning: w });
         }
         if (!sc.everyYears) break;
       }
@@ -291,9 +291,13 @@ export function createScenarioRunner(
     power: () => power,
     budget: () => (budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null),
     prayer: () => (currentPrayer ? { kind: currentPrayer.kind, yearsLeft: Math.max(0, currentPrayer.deadlineYear - currentYear) } : null),
-    warnings: () => (pendingEvents.size ? [...pendingEvents.values(), ...warnings] : warnings),
-    acknowledgeEvent(key) {
-      for (const [idx, w] of pendingEvents) if (w.key === key) pendingEvents.delete(idx);
+    warnings: () => {
+      if (!notices.size) return warnings;
+      const live = [...notices.values()].filter((n) => currentYear < n.untilYear).sort((a, b) => a.idx - b.idx).map((n) => n.warning);
+      return [...live, ...warnings];
+    },
+    acknowledgeSpecies(id) {
+      for (const [idx, n] of notices) if (n.warning.id === id) notices.delete(idx);
     },
     timeline: () => timeline,
     milestones: () => {
@@ -376,7 +380,9 @@ export function createScenarioRunner(
         // 舟の警告 (M10-04): 前年の進みと比べる。前年に舟が無ければ null
         warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ, { year, prevProgress: prevShipProgress });
         // text 付きの予定 (M10R-07) はその年の警告の先頭に出す (年表には fireDue で積んである)
-        if (announced.length) { warnings = [...announced, ...warnings]; announced = []; }
+        for (const n of announced) notices.set(n.idx, n);
+        announced = [];
+        for (const [idx, n] of notices) if (year >= n.untilYear) notices.delete(idx);
         prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;
         for (const w of warnings) {
           // text 付きの予定の台詞 (event) は fireDue が年表に scheduled として積んでいるので、警告としては重ねて積まない (手動受入で二重に出た)

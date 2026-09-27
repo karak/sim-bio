@@ -85,14 +85,16 @@ describe('assets/data/scenarios.json', () => {
       expect(judgeScenario(d, input(snap({ totals: { grass: 1, forest: 1, deer: 1, rabbit: 1, wolf: 1 }, civ: { stage: 6 } }), 0)).status).toBe('running');
     }
   });
-  it('test-event (E2E の「狼を見る」チップ) は 1 年目に狼を 1 回だけ撃ち、判定の幕がチップを覆わないだけの年数がある', () => {
-    const d = defs.find((x) => x.id === 'test-event');
-    expect(d?.schedule).toHaveLength(1);
-    const sc = d!.schedule[0];
-    expect(sc).toMatchObject({ atYear: 1, text: expect.any(String), command: { type: 'spawn_species', speciesId: 'wolf' } });
-    expect(sc.everyYears).toBeUndefined();
+  it('test-event (E2E の「狼を見る」チップ) は定義をホワイトリストで固定する: 1 年目に狼を 1 回だけ撃ち、告知は 30 年残り、判定の幕がチップを覆わないだけの年数がある', () => {
+    const d = defs.find((x) => x.id === 'test-event')!;
+    // 予定は完全一致。ここに無いキー (untilYear・everyYears 等) や値の変更は落ちる
+    expect(d.schedule).toEqual([
+      { atYear: 1, noticeYears: 30, text: '狼の群れが北の谷に下りた', command: { type: 'spawn_species', speciesId: 'wolf', cell: -1, amount: 1, radius: 3 } },
+    ]);
+    // 定義に載ってよいキーを列挙する。ここに無いキー (budget 等) を足すと落ちる
+    expect(Object.keys(d).sort()).toEqual(['alive', 'hidden', 'id', 'kind', 'prophecy', 'schedule', 'start', 'title', 'years']);
     // 遅い CI では一時停止が効くまでに数年進む。3 年だと止まる前に判定の幕が出てチップを押せなかった
-    expect(d!.years).toBeGreaterThanOrEqual(30);
+    expect(d.years).toBeGreaterThanOrEqual(30);
   });
 });
 

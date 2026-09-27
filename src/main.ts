@@ -78,7 +78,12 @@ async function boot(): Promise<void> {
   const hud = createHud(app, {
     onCommand: intervene,
     onSpeed: (s) => loop.setSpeed(s),
-    onLayer: (l) => view.setLayer(l),
+    onLayer: (l) => {
+      view.setLayer(l);
+      // 種のレイヤーを開いたら、その種の告知は読まれたものとして消す (M21-02 D5: 警告のチップからでも HUD からでも)
+      const species = /^(?:species|suit):(.+)$/.exec(l)?.[1];
+      if (species) runner?.acknowledgeSpecies(species);
+    },
     onSave: () => world.serialize(),
     onLoad: (save: SaveData) => {
       if (runner) return; // シナリオ中の読込は予言と矛盾するので無効
@@ -107,11 +112,7 @@ async function boot(): Promise<void> {
     scenario,
     selectScenario,
     Object.fromEntries(species.map((d) => [d.id, d.name])),
-    (id, key) => {
-      hud.showSpeciesLayer(id);
-      // 押された告知は警告から外す (M21-02 D5: 種 id 付きの告知は押されるまで残る)
-      runner?.acknowledgeEvent(key);
-    },
+    (id) => hud.showSpeciesLayer(id),
   );
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
   const observe = createObserveEntry(app, {

@@ -325,12 +325,16 @@ test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チッ�
   await page.click('#speed-100');
   await expect(page.locator('#tablet-warnings')).toContainText('狼の群れが北の谷に下りた', { timeout: 20_000 });
   await expect(page.locator('#layer-species-wolf')).not.toHaveClass(/on/);
-  // 遅い CI ではこの click が効くまでに数年進むことがある。種 id 付きの告知はチップが押されるまで残るので年をまたいでも押せるが、
-  // test-event が終わる年の判定の幕はチップを覆う。止まったこと (⏸ が選ばれた = setSpeed(0) 済み) を確かめてから押す
+  // 遅い CI ではこの click が効くまでに数年進むことがある。test-event の告知は noticeYears (30 年) のあいだ残るので年をまたいでも押せるが、
+  // 終わる年の判定の幕はチップを覆う。年の表示が進まなくなった (= 止まった) ことを確かめてから押す
   await page.click('#speed-0');
-  await expect(page.locator('#speed-0')).toHaveClass(/\bon\b/);
+  const year = await page.locator('#tablet-year').textContent();
+  await page.waitForTimeout(1_000);
+  await expect(page.locator('#tablet-year')).toHaveText(year ?? '');
   const chip = page.getByRole('button', { name: '狼を見る' });
   await expect(chip).toBeVisible();
   await chip.click();
   await expect(page.locator('#layer-species-wolf')).toHaveClass(/on/);
+  // 種のレイヤーを開いたら告知は読まれたものとして消える (チップ → 狼レイヤー → acknowledgeSpecies の経路)
+  await expect(page.locator('#tablet-warnings')).not.toContainText('狼の群れが北の谷に下りた');
 });
