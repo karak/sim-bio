@@ -13,6 +13,7 @@ node tools/readme-shots.ts --url http://localhost:5173 --only 05-night,08-rabbit
 - `--headed` でブラウザを表示して撮る。
 - 画面は 1600×900。GPU で描くため、headless shell ではなく Chromium 本体の新しい headless を使う。
 - 撮り終えたら画像を目で確かめ、README の説明文と合っているかを見てから commit する。
+- README が載せるのは縮小画(`docs/design/screenshots/small/*.jpg`、横 640 の JPEG)で、画を押すと元の PNG を開く。撮り直したら `tools/readme-thumbs.sh` で縮小画を作り直す(元の PNG は変えない。画質は `QUALITY=70 tools/readme-thumbs.sh` のように変えられ、既定は 60)。
 
 ## 撮る画
 
