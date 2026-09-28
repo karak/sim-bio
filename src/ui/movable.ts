@@ -3,6 +3,7 @@
  * ドラッグと矢印キー (Shift で大きく) で動き、取っ手は画面の外へ出さない。位置はそのタブの間だけ (sessionStorage) 覚える
  */
 export type Offset = { x: number; y: number };
+export type Rect = { left: number; top: number; right: number; bottom: number };
 
 const STEP = 16;
 const BIG_STEP = 64;
@@ -15,9 +16,60 @@ export function clampOffset(at: Offset, grip: { left: number; top: number; right
   return { x: at.x + dx, y: at.y + dy };
 }
 
-function readOffset(key: string): Offset {
+/** 板の位置と、押している指 (押した点と押したときの位置) (M21-05) */
+export type MoveState = { at: Offset; drag: { pointer: number; from: Offset; start: Offset } | null };
+/** 取っ手に来た出来事。show は板を見せた直後 */
+export type MoveInput =
+  | { type: 'down' | 'move'; pointerId: number; x: number; y: number }
+  | { type: 'up' | 'cancel'; pointerId: number }
+  | { type: 'key'; key: string; shift: boolean }
+  | { type: 'show' };
+/** 今の位置 (state.at) で描いた取っ手の矩形 (描かれていなければ null) と画面の大きさ */
+export type Frame = { grip: Rect | null; view: { width: number; height: number } };
+/** save: 位置を覚えに書く。handled: 出来事を受けた (キーなら既定の動きを止める) */
+export type MoveStep = { state: MoveState; save: boolean; handled: boolean };
+
+/** next へ動かす。取っ手の矩形を next へずらし、画面の外へ出るなら寄せる */
+function place(s: MoveState, next: Offset, f: Frame): Offset {
+  const g = f.grip;
+  if (!g) return next;
+  const dx = next.x - s.at.x;
+  const dy = next.y - s.at.y;
+  return clampOffset(next, { left: g.left + dx, top: g.top + dy, right: g.right + dx, bottom: g.bottom + dy }, f.view);
+}
+
+/** ドラッグの状態遷移 (M21-05)。DOM に触れない純粋な関数。makeMovable はこれを出来事ごとに呼んで translate と覚えへ写す */
+export function moveStep(s: MoveState, e: MoveInput, f: Frame): MoveStep {
+  const skip = { state: s, save: false, handled: false };
+  switch (e.type) {
+    case 'down':
+      return { state: { at: s.at, drag: { pointer: e.pointerId, from: { x: e.x, y: e.y }, start: s.at } }, save: false, handled: true };
+    case 'move': {
+      const d = s.drag;
+      if (d?.pointer !== e.pointerId) return skip;
+      return { state: { at: place(s, { x: d.start.x + e.x - d.from.x, y: d.start.y + e.y - d.from.y }, f), drag: d }, save: false, handled: true };
+    }
+    case 'up':
+    case 'cancel':
+      if (s.drag?.pointer !== e.pointerId) return skip;
+      return { state: { at: s.at, drag: null }, save: true, handled: true };
+    case 'key': {
+      const dir = KEYS[e.key];
+      if (!dir) return skip;
+      const step = e.shift ? BIG_STEP : STEP;
+      return { state: { at: place(s, { x: s.at.x + dir.x * step, y: s.at.y + dir.y * step }, f), drag: s.drag }, save: true, handled: true };
+    }
+    case 'show':
+      return { state: { at: place(s, s.at, f), drag: s.drag }, save: false, handled: true };
+  }
+}
+
+/** 位置の覚えの置き場 (M21-05)。sessionStorage か、試験の置き場 */
+export type OffsetStore = Pick<Storage, 'getItem' | 'setItem'>;
+
+export function readOffset(store: OffsetStore, key: string): Offset {
   try {
-    const v = JSON.parse(sessionStorage.getItem(key) ?? 'null') as unknown;
+    const v = JSON.parse(store.getItem(key) ?? 'null') as unknown;
     if (v && typeof v === 'object' && Number.isFinite((v as Offset).x) && Number.isFinite((v as Offset).y)) return { x: (v as Offset).x, y: (v as Offset).y };
   } catch {
     // 読めない置き場 (プライベートの窓など) は動かしていないものとする
@@ -25,49 +77,54 @@ function readOffset(key: string): Offset {
   return { x: 0, y: 0 };
 }
 
-function writeOffset(key: string, at: Offset) {
+export function writeOffset(store: OffsetStore, key: string, at: Offset) {
   try {
-    sessionStorage.setItem(key, JSON.stringify(at));
+    store.setItem(key, JSON.stringify(at));
   } catch {
     // 覚えられなくても、その場では動く
   }
 }
 
-/** board を grip で動かせるようにする。show は board を見せた直後に呼び、覚えた位置を画面に収め直す */
-export function makeMovable(board: HTMLElement, grip: HTMLElement, key: string): { show(): void } {
-  let at = readOffset(key);
-  const place = (next: Offset) => {
-    board.style.translate = `${next.x}px ${next.y}px`;
-    const r = grip.getBoundingClientRect();
-    at = r.width === 0 ? next : clampOffset(next, r, { width: innerWidth, height: innerHeight });
-    board.style.translate = `${at.x}px ${at.y}px`;
-  };
-  place(at);
+/** 部品の外 (画面の大きさ・覚えの置き場) (M21-05)。試験では差し替える */
+export type MovableEnv = { view(): { width: number; height: number }; store: OffsetStore };
 
-  let drag: { pointer: number; from: Offset; start: Offset } | null = null;
+/** ブラウザの画面と sessionStorage。sessionStorage を引くだけで投げる窓もあるので、読み書きのたびに引く */
+const browserEnv: MovableEnv = {
+  view: () => ({ width: innerWidth, height: innerHeight }),
+  store: { getItem: (k) => sessionStorage.getItem(k), setItem: (k, v) => sessionStorage.setItem(k, v) },
+};
+
+/** board を grip で動かせるようにする。show は board を見せた直後に呼び、覚えた位置を画面に収め直す */
+export function makeMovable(board: HTMLElement, grip: HTMLElement, key: string, env: MovableEnv = browserEnv): { show(): void } {
+  let state: MoveState = { at: readOffset(env.store, key), drag: null };
+  const frame = (): Frame => {
+    const r = grip.getBoundingClientRect();
+    return { grip: r.width === 0 ? null : r, view: env.view() };
+  };
+  const draw = () => {
+    board.style.translate = `${state.at.x}px ${state.at.y}px`;
+  };
+  // 取っ手の矩形は、いつも state.at で描いたものを測る (moveStep の Frame の約束)
+  const apply = (e: MoveInput): MoveStep => {
+    const r = moveStep(state, e, frame());
+    state = r.state;
+    draw();
+    if (r.save) writeOffset(env.store, key, state.at);
+    return r;
+  };
+  draw();
+  apply({ type: 'show' });
+
   grip.addEventListener('pointerdown', (e) => {
-    drag = { pointer: e.pointerId, from: { x: e.clientX, y: e.clientY }, start: at };
+    apply({ type: 'down', pointerId: e.pointerId, x: e.clientX, y: e.clientY });
     grip.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
-  grip.addEventListener('pointermove', (e) => {
-    if (drag?.pointer !== e.pointerId) return;
-    place({ x: drag.start.x + e.clientX - drag.from.x, y: drag.start.y + e.clientY - drag.from.y });
-  });
-  const drop = (e: PointerEvent) => {
-    if (drag?.pointer !== e.pointerId) return;
-    drag = null;
-    writeOffset(key, at);
-  };
-  grip.addEventListener('pointerup', drop);
-  grip.addEventListener('pointercancel', drop);
+  grip.addEventListener('pointermove', (e) => void apply({ type: 'move', pointerId: e.pointerId, x: e.clientX, y: e.clientY }));
+  grip.addEventListener('pointerup', (e) => void apply({ type: 'up', pointerId: e.pointerId }));
+  grip.addEventListener('pointercancel', (e) => void apply({ type: 'cancel', pointerId: e.pointerId }));
   grip.addEventListener('keydown', (e) => {
-    const dir = KEYS[e.key];
-    if (!dir) return;
-    e.preventDefault();
-    const step = e.shiftKey ? BIG_STEP : STEP;
-    place({ x: at.x + dir.x * step, y: at.y + dir.y * step });
-    writeOffset(key, at);
+    if (apply({ type: 'key', key: e.key, shift: e.shiftKey }).handled) e.preventDefault();
   });
-  return { show: () => place(at) };
+  return { show: () => void apply({ type: 'show' }) };
 }
