@@ -19,6 +19,7 @@
     "types:worker": "wrangler types worker/worker-configuration.d.ts",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run lint:py && pnpm run test && pnpm run test:worker && pnpm run test:scripts",
     "check:free-tier": "uv run scripts/check_free_tier.py",
+    "acceptance:page": "uv run scripts/acceptance.py page",
     "lint:py": "uvx ruff@0.16.9 check scripts && uvx ruff@0.16.9 format --check scripts",
     "test:scripts": "uv run --no-project python -m unittest discover -s scripts",
     "test:e2e": "playwright test",

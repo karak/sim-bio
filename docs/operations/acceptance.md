@@ -4,6 +4,22 @@
 どれも開発・受入のビルドだけにあり、本番のビルド (`pnpm run build:cloudflare`) には入らない。
 入らないことは `tests/unit/build.devtools.test.ts` が本番と同じ環境で vite build して確かめる。
 
+## 手順書の正本 (M21-06)
+
+受入の手順の正本は `docs/acceptance/scenarios.jsonl` (Gherkin の 1 シナリオが 1 行、id は `HBR-004` の形)。
+受入の画面の `items.json` は正本から作る。手で書かない (`base` もコマンドが wrangler.jsonc から決める)。
+
+```sh
+pnpm run dev:acceptance                           # 港つきの受入のビルド (別の端末)
+pnpm run acceptance:page                          # 人の 1 周 (TUR-*) の items.json を書く。書く前に画面の origin を GET する
+pnpm run acceptance:page -- --when deploy         # 配ったあとの本番 (OPS-*)
+uv run scripts/acceptance.py feature              # Gherkin の文で読む
+uv run scripts/acceptance.py next HBR             # 行を足すときの次の id
+```
+
+人が判じるのは mode が human の行だけで、1 回 15 分まで (待ちを含む)。複数の見守り手・2 つの島・閉港・成功までの待ち・組み合わせは auto の行で、covered_by の自動の試験が見る。
+行は消さず、要らなくなったら `status: "retired"` にする。設計は docs/design/2026-09-29-acceptance-redesign.md。
+
 ## 画面の立て方
 
 | 用途 | コマンド | 港 |
