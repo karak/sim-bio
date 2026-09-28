@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { expectUncovered } from './uncovered';
 
 /**
  * やり直しの効かない操作は確かめのダイアログを経る (M21-04)。取り消せば何も変わらず、受ければその操作をする。
@@ -189,11 +190,7 @@ test('M21-04: 判定の後に枠へ保存でき (判定の板に覆われない)
   // 枠へ保存は判定の板の下敷きにならない (札の真ん中の要素が札そのもの)
   const save = page.locator('#slot-save');
   await page.selectOption('#slot-select', 'manual-2');
-  const hit = await save.evaluate((b) => {
-    const r = b.getBoundingClientRect();
-    return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === b;
-  });
-  expect(hit).toBe(true);
+  await expectUncovered({ 枠へ保存: save });
   await save.click();
   await expect(page.locator('#slot-select option[value="manual-2"]')).toHaveText(`枠 2 · 試し読み · ${Math.floor(verdictTick / TICKS_PER_YEAR)} 年`);
   await shot(page, 'm21-04-verdict-save');

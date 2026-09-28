@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { topmostAtCenter as topmostOf } from './uncovered';
 
 /**
  * 観察画面の入口「3D で見る」の置き場所 (M19-18、受入 r2-publish-visit)。
@@ -14,14 +15,7 @@ async function shot(page: Page, name: string) {
 const openButton = (page: Page) => page.getByRole('button', { name: '3D で見る' });
 
 /** ボタンの中心の点で一番上にある要素がボタン自身か (石板・判定の板などに覆われていないか) */
-const topmostAtCenter = (page: Page) =>
-  page.evaluate(() => {
-    const b = document.getElementById('observe-open');
-    if (!b) return 'missing';
-    const r = b.getBoundingClientRect();
-    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    return hit === b ? 'self' : hit ? `${hit.tagName.toLowerCase()}#${hit.id}.${hit.className}` : 'nothing';
-  });
+const topmostAtCenter = (page: Page) => topmostOf(page.locator('#observe-open'));
 
 /** ボタンが時間の箱の速さの列の端 (100x の右、同じ行) にあり、石板と重ならない */
 async function expectInTimeBox(page: Page) {
