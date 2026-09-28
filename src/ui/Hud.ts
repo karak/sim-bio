@@ -352,7 +352,6 @@ export function createHud(
   });
   $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
   $('new-island').addEventListener('click', () => {
-    // 自動の枠をその場で上書きするので、押し間違いで島を失わないよう確かめる
     // (M21-04 で変更: 確かめは main.ts の onNewIsland が確かめのダイアログ (confirm.ts) で。文は confirmAsk.ts)
     h.onNewIsland();
   });
