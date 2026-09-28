@@ -164,9 +164,17 @@ test('M19-09: 照合は「やめる」で止まり、もう一度読める', asy
   const [id] = [...harbor.fake.ledger.keys()];
 
   await page.goto(`/?scenario=test-civ&visit=${id}`);
+  // 照合の worker の読み込みを「やめる」を押すまで止める。止めないと 5 年の照合が押す前に読み終わることがある
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  await page.context().route('**/replay.worker*', async (route) => {
+    await held;
+    await route.continue();
+  });
   const plaque = page.getByRole('region', { name: '訪れている島' });
   await plaque.getByRole('button', { name: '年表を読む' }).click();
   await plaque.getByRole('button', { name: 'やめる' }).click();
+  release();
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読むのをやめた。もう一度読むと、初めから読む');
   await expect(plaque.getByRole('button', { name: '年表を読む' })).toBeVisible();
   expect(harbor.sent.filter((w) => w.path.endsWith('/confirm'))).toEqual([]);
