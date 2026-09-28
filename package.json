@@ -1,7 +1,7 @@
 {
   "name": "biotope-island",
   "version": "1.0.0",
-  "description": "\u30d6\u30e9\u30a6\u30b6\u3067\u52d5\u304f\u5c0f\u3055\u306a\u5cf6\u306e\u751f\u614b\u7cfb\u30b7\u30df\u30e5\u30ec\u30fc\u30b7\u30e7\u30f3",
+  "description": "ブラウザで動く小さな島の生態系シミュレーション",
   "directories": {
     "doc": "docs",
     "test": "tests"
@@ -42,11 +42,14 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^26.6.2",
     "@types/three": "^0.186.0",
     "eslint": "^10.11.0",
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.12.0",
+    "happy-dom": "^20.14.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
     "vite": "^8.3.0",
