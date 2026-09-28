@@ -74,10 +74,10 @@ export type ScenarioRunner = {
    */
   warnings(): Warning[];
   /**
-   * いま見ている種のレイヤー (M21-02 D5)。見始めたら (警告のチップからでも HUD からでも) その種の告知を警告から外し、
-   * 見ている間に発火したその種の告知は最初から出さない。種のレイヤー以外に切り替えたら null
+   * いま見ている種のレイヤー (M21-02 D5)。見ている間に発火したその種の告知は最初から出さない。種のレイヤー以外に切り替えたら null。
+   * acknowledge (既定 true) なら、その種の既存の告知を既読として外す。観察画面から戻っただけの時は false を渡し、読めていない告知を残す
    */
-  setViewedSpecies(id: string | null): void;
+  setViewedSpecies(id: string | null, opts?: { acknowledge?: boolean }): void;
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
   timeline(): TimelineEvent[];
   /** 石板に出す予言の節目 (M10-02)。迎撃で取り消した隕石の年の節目は消える */
@@ -303,9 +303,9 @@ export function createScenarioRunner(
       // 期限切れは年次評価で消してある。ここでは予定の順に並べるだけ (Map は入れた順なので、発火の順とは限らない)
       return [...[...notices.values()].sort((a, b) => a.idx - b.idx).map((n) => n.warning), ...warnings];
     },
-    setViewedSpecies(id) {
+    setViewedSpecies(id, opts) {
       viewedSpecies = id;
-      if (id !== null) for (const [idx, n] of notices) if (n.warning.id === id) notices.delete(idx);
+      if (id !== null && (opts?.acknowledge ?? true)) for (const [idx, n] of notices) if (n.warning.id === id) notices.delete(idx);
     },
     timeline: () => timeline,
     milestones: () => {

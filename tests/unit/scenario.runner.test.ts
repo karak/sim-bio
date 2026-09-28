@@ -86,6 +86,25 @@ describe('createScenarioRunner', () => {
     for (let y = 2; y <= 3; y++) { r.update(w.snapshot()); w.step(360); }
     expect(keys()).toEqual(['event:0@3']);
   });
+  it('観察画面から戻って見ている状態に復帰した時 (acknowledge: false) は、観察中に出た告知を消さない。その後に開き直せば消える', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 8, schedule: [{ atYear: 1, noticeYears: 5, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    const events = () => r.warnings().filter((x) => x.kind === 'event').map((x) => x.key);
+    // 狼を見ていたが観察画面に入った (見ていない扱い) 間に発火する
+    r.setViewedSpecies('wolf');
+    r.setViewedSpecies(null);
+    for (let y = 0; y <= 1; y++) { r.update(w.snapshot()); w.step(360); }
+    expect(events()).toEqual(['event:0@1']);
+    // 観察画面から戻る: 見ている種は狼に戻るが、読めていない告知は残す
+    r.setViewedSpecies('wolf', { acknowledge: false });
+    r.update(w.snapshot());
+    expect(events()).toEqual(['event:0@1']);
+    // プレイヤーが狼のレイヤーを開き直したら既読
+    r.setViewedSpecies('wolf');
+    expect(events()).toEqual([]);
+  });
   it('noticeYears を過ぎた告知は、押されていなくても消える (「着くまで三月」が何年も残らない)', () => {
     const w = fakeWorld({ deer: 1 });
     const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };

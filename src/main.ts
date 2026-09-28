@@ -77,11 +77,11 @@ async function boot(): Promise<void> {
   };
 
   // いま地図で見ている種 (M21-02 D5)。変わったら石板の告知に反映し、ログに残す (e2e が HUD からの通知を確かめる)
-  const viewedSpecies = createViewedSpecies((id) => {
+  const viewedSpecies = createViewedSpecies((id, opts) => {
     if (!runner) return;
-    runner.setViewedSpecies(id);
+    runner.setViewedSpecies(id, opts);
     const snap = world.snapshot();
-    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: runner.def.id, id });
+    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: runner.def.id, id, acknowledge: opts.acknowledge });
   });
   const hud = createHud(app, {
     onCommand: intervene,
