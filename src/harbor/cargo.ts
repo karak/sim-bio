@@ -1,7 +1,9 @@
 import { SEA_LEVEL } from '../simulation/terrain';
 import type { Cargo as Hold } from '../simulation/ship';
 import { MAX_AMOUNT } from './chronicle';
-import { HARBOR_LIMITS, type Cargo, type CargoId } from './contract';
+import { HARBOR_LIMITS, type Cargo, type CargoId, type DrawnCargo } from './contract';
+import type { Command } from '../simulation/types';
+import { receiveCargoClick } from '../ui/clicks';
 
 /**
  * 空の舟の積荷 (M19-10、設計書 B5・§6.3)。持ち出し (simulation/ship.ts の exportCargo) から港へ流す積荷を作り、
@@ -50,4 +52,20 @@ export function landingCell(id: CargoId, island: { elevation: ArrayLike<number>;
   }
   const cells = shore.length > 0 ? shore : land;
   return cells.length === 0 ? null : cells[hashOf(id) % cells.length];
+}
+
+/** 受け取る島の門。finished は判定の出た石板の島か、budget は石板の星の力と放流 1 回の値段 (自由モードでは無い) */
+export type LandingGate = { finished: boolean; budget?: { power: number; spawnCost: number } };
+
+/** 受け取れない理由か、着く浜のセル・種ごとの放流の命令・グラフの目印 */
+export type Landing = { kind: 'no_shore' | 'refused' | 'budget' } | { kind: 'land'; cell: number; commands: Command[]; marker: string };
+
+/** 石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
+export function planLanding(d: DrawnCargo, island: { elevation: ArrayLike<number>; size: number }, gate: LandingGate, names: Readonly<Record<string, string>>): Landing {
+  const cell = landingCell(d.id, island);
+  if (cell === null) return { kind: 'no_shore' };
+  if (gate.finished) return { kind: 'refused' };
+  const commands = receiveCargoClick(d.cargo, cell);
+  if (gate.budget && gate.budget.power < gate.budget.spawnCost * commands.length) return { kind: 'budget' };
+  return { kind: 'land', cell, commands, marker: `漂着 (${d.cargo.items.map((x) => names[x.speciesId] ?? x.speciesId).join('・')})` };
 }

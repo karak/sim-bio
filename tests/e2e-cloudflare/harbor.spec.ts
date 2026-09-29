@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { cloudflarePort } from '../../playwright.cloudflare.config';
 import { decodeLogBatch } from '../../src/core/log/batch';
+import type { Cargo } from '../../src/harbor/contract';
+import { cargoItemsText } from '../../src/ui/harborText';
 
 const base = `http://127.0.0.1:${cloudflarePort}`;
 let wrangler: ChildProcess;
@@ -194,4 +196,45 @@ test('手元の 3 人の見守り手 (M19-16): wrangler dev では x-dev-sender 
     await context.close();
     expect(await listed(), `${name} (${i + 1} 人目) の通報のあと`).toBe(i < 2);
   }
+});
+
+test('積荷を流し、別の見守り手が引いて受け取る (本物の D1)', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const answerTurnstile = (p: Page) =>
+    p.route('https://challenges.cloudflare.com/turnstile/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.turnstile = { render(el, o) { setTimeout(() => o.callback('XXXX.DUMMY.TOKEN.XXXX'), 100); return 'w'; }, remove() {} };` }),
+    );
+  const names = Object.fromEntries((JSON.parse(readFileSync('dist/data/species.json', 'utf8')) as { id: string; name: string }[]).map((d) => [d.id, d.name]));
+
+  // 見守り手 a が帆の試し読みで空の舟を出し、次の島へ逃れて積荷を港 (wrangler dev のローカルの D1) に流す
+  const a = await browser.newContext({ extraHTTPHeaders: { 'x-dev-sender': 'cargo-a' } });
+  const ship = await a.newPage();
+  await answerTurnstile(ship);
+  const cast = ship.waitForRequest((r) => r.url() === `${base}/api/v1/cargo` && r.method() === 'POST', { timeout: 90_000 });
+  await ship.goto('/?scenario=test-ship');
+  await ship.click('#speed-100');
+  await expect(ship.locator('#verdict-title')).toHaveText('次の島へ', { timeout: 90_000 });
+  const sent = await cast;
+  expect((await sent.response())?.status()).toBe(204);
+  await expect(ship.locator('#harbor-toast')).toHaveText('積荷を港に流した。どこかの見守り手の浜に流れ着く');
+  const { cargo } = JSON.parse(sent.postData() ?? '{}') as { cargo: Cargo };
+  expect(cargo.items.length).toBeGreaterThanOrEqual(1);
+  await a.close();
+
+  // 別の見守り手 b (別の手元の置き場) が自由モードの浜で引き、受け取る。港に積荷はこの 1 件だけ
+  const b = await browser.newContext({ extraHTTPHeaders: { 'x-dev-sender': 'cargo-b' } });
+  const shore = await b.newPage();
+  await answerTurnstile(shore);
+  await shore.goto('/');
+  await shore.getByRole('button', { name: /^港を開く/ }).click();
+  const drift = shore.getByRole('region', { name: '浜の漂着' });
+  const status = drift.locator('#harbor-drift-status');
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await expect(status).toHaveText('積荷が流れ着いた。受け取れば、外来種として島の浜に放たれる');
+  await expect(drift.locator('#harbor-drift-items')).toHaveText(cargoItemsText(cargo, names));
+  await drift.getByRole('button', { name: '受け取る' }).click();
+  await expect(status).toHaveText('積荷を受け取った。外来種が島の浜に放たれた');
+  await drift.getByRole('button', { name: '浜を見る' }).click();
+  await expect(status).toHaveText('この積荷はもう受け取った');
+  await b.close();
 });
