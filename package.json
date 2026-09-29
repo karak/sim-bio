@@ -23,6 +23,7 @@
     "lint:py": "uvx ruff@0.16.9 check scripts && uvx ruff@0.16.9 format --check scripts",
     "test:scripts": "uv run --no-project python -m unittest discover -s scripts",
     "test:e2e": "playwright test",
+    "shots": "d=\"$(uv run scripts/acceptance.py dir)\" && ACCEPTANCE_DIR=\"$d\" playwright test tests/e2e/shots.spec.ts",
     "dev:cloudflare": "pnpm run build:cloudflare && pnpm run d1:local && wrangler dev",
     "build:acceptance": "VITE_DEVTOOLS=1 VITE_LOG_URL=/api/v1/logs VITE_HARBOR_URL=/ vite build",
     "dev:acceptance": "pnpm run build:acceptance && pnpm run d1:local && wrangler dev",

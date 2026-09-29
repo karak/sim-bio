@@ -1,17 +1,25 @@
+import contextlib
+import io
 import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from acceptance import (
     ROUND_MINUTES,
     base_of,
     check_repo,
     check_results,
+    check_shots,
     check_sot,
     load,
+    main,
     next_id,
     page_of,
     render_feature,
+    shots_of,
 )
 
 REPO = Path(__file__).resolve().parent.parent
@@ -328,7 +336,7 @@ class BaseTest(unittest.TestCase):
 
 
 class PageTest(unittest.TestCase):
-    def page(self, results=None, when="round"):
+    def page(self, results=None, when="round", shots=None):
         rows = (
             *BASE_ROWS,
             code("OPS", "本番", ["配った画面を開く"]),
@@ -344,6 +352,7 @@ class PageTest(unittest.TestCase):
             base="http://localhost:8787",
             round_label="2026-09-29 feat/m19 (abc1234)",
             results=results or {},
+            shots=shots or {},
         )
 
     def test_the_page_keeps_the_review_page_shape_and_holds_only_this_rounds_human_rows(
@@ -392,12 +401,125 @@ class PageTest(unittest.TestCase):
             ],
         )
 
+    def test_the_page_lists_each_items_shots_and_an_empty_list_without_them(self):
+        page = self.page(
+            shots={"TUR-001": ("shots/TUR-001-1.png", "shots/TUR-001-2.png")}
+        )
+        [item] = page["groups"][0]["items"]
+        self.assertEqual(item["shots"], ["shots/TUR-001-1.png", "shots/TUR-001-2.png"])
+        [item] = self.page()["groups"][0]["items"]
+        self.assertEqual(item["shots"], [])
+
     def test_the_deploy_page_holds_the_deploy_rows(self):
         page = self.page(when="deploy")
         self.assertEqual(
             [i["id"] for g in page["groups"] for i in g["items"]], ["OPS-001"]
         )
         self.assertEqual(page["prep"], ["配った画面を開く"])
+
+
+class ShotsTest(unittest.TestCase):
+    def test_shots_are_grouped_by_id_in_the_order_of_their_number(self):
+        names = [
+            "TUR-001-2.png",
+            "TUR-001-10.png",
+            "HBR-001-1.png",
+            "TUR-001-1.png",
+            ".DS_Store",
+            "TUR-001.png",
+            "TUR-001-1.jpg",
+            "tur-001-1.png",
+        ]
+        self.assertEqual(
+            shots_of(names),
+            {
+                "HBR-001": ("shots/HBR-001-1.png",),
+                "TUR-001": (
+                    "shots/TUR-001-1.png",
+                    "shots/TUR-001-2.png",
+                    "shots/TUR-001-10.png",
+                ),
+            },
+        )
+
+    def test_a_shot_names_an_active_human_row(self):
+        retired = human(
+            "TUR-002",
+            status="retired",
+            retired={
+                "on": "2026-09-29",
+                "reason": "畳んだ",
+                "replaced_by": ["TUR-001"],
+            },
+        )
+        sot, _ = load(text_of(*BASE_ROWS, auto(), human(), retired))
+        self.assertEqual(check_shots(sot, {"TUR-001": ("shots/TUR-001-1.png",)}), [])
+        shots = {
+            "TUR-001": ("shots/TUR-001-1.png",),
+            "HBR-001": ("shots/HBR-001-1.png",),
+            "TUR-002": ("shots/TUR-002-1.png",),
+            "TUR-009": ("shots/TUR-009-1.png",),
+        }
+        problems = check_shots(sot, shots)
+        self.assertEqual(
+            [(p.where, p.rule) for p in problems],
+            [("HBR-001", "shots"), ("TUR-002", "shots"), ("TUR-009", "shots")],
+        )
+        self.assertIn("shots/TUR-009-1.png", problems[2].detail)
+
+
+class MainTest(unittest.TestCase):
+    """page と dir を repo の正本で回す。items.json は一時の置き場に書く"""
+
+    def run_main(self, argv, acceptance):
+        out, err = io.StringIO(), io.StringIO()
+        env = {**os.environ, "ACCEPTANCE_DIR": str(acceptance)}
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            contextlib.redirect_stdout(out),
+            contextlib.redirect_stderr(err),
+        ):
+            code = main(argv, root=REPO)
+        return code, out.getvalue(), err.getvalue()
+
+    def human_ids(self):
+        sot, _ = load((REPO / "docs/acceptance/scenarios.jsonl").read_text("utf-8"))
+        return [
+            s.id
+            for s in sot.scenarios
+            if s.status == "active" and s.mode == "human" and s.when == "round"
+        ]
+
+    def test_page_puts_the_shots_in_the_acceptance_dir_on_the_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            acceptance = Path(tmp)
+            first = self.human_ids()[0]
+            (acceptance / "shots").mkdir()
+            for n in (2, 1):
+                (acceptance / "shots" / f"{first}-{n}.png").write_bytes(b"")
+            code, _, err = self.run_main(["page", "--no-probe"], acceptance)
+            self.assertEqual((code, err), (0, ""))
+            page = json.loads((acceptance / "items.json").read_text("utf-8"))
+            items = {i["id"]: i for g in page["groups"] for i in g["items"]}
+            self.assertEqual(
+                items[first]["shots"],
+                [f"shots/{first}-1.png", f"shots/{first}-2.png"],
+            )
+
+    def test_page_refuses_a_shot_of_an_unknown_row_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            acceptance = Path(tmp)
+            (acceptance / "shots").mkdir()
+            (acceptance / "shots" / "ZZZ-001-1.png").write_bytes(b"")
+            code, _, err = self.run_main(["page", "--no-probe"], acceptance)
+            self.assertEqual(code, 1)
+            self.assertIn("ZZZ-001", err)
+            self.assertFalse((acceptance / "items.json").exists())
+
+    def test_dir_prints_the_acceptance_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, _ = self.run_main(["dir"], Path(tmp))
+            self.assertEqual((code, out), (0, f"{tmp}\n"))
 
 
 class FeatureTest(unittest.TestCase):

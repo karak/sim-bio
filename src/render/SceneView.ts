@@ -19,6 +19,7 @@ import {
   Scene,
   SphereGeometry,
   Vector2,
+  Vector3,
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -32,6 +33,7 @@ import { dreamEaterShade } from './dreamEaterShade';
 import type { AssetTable } from './assetTable';
 import {
   cellMarkerAnchor,
+  hiddenFrom,
   markerBob,
   markerScale,
   outlineIndices,
@@ -249,8 +251,30 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       outline: outlineMesh.visible ? { minX, maxX, minZ, maxZ } : null,
       marker: markerMesh.visible ? { x: markerMesh.position.x, y: markerMesh.position.y, z: markerMesh.position.z, scale: markerMesh.scale.x } : null,
       drawCalls: renderer.info.render.calls,
+      view: markerMesh.visible ? viewOfCell(hlCell) : null,
+      camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
     };
   };
+  /**
+   * M21-08: 画を撮る前に、今のカメラからセルの面と印の頭が地形に隠れていないか、印の頭が画面の内にあるかを確かめる。
+   * screen はセルの面の canvas の上の位置 (CSS px)。地形は選んだセルを置いた時のもの
+   */
+  const viewOfCell = (cell: number) => {
+    const at = cellMarkerAnchor(surface, cell);
+    const k = markerScale(camera.position.distanceTo(controls.target));
+    const head = new Vector3(at.x, at.y + (CELL_HIGHLIGHT.gap + CELL_HIGHLIGHT.pin.height + CELL_HIGHLIGHT.pin.head * 0.6) * k, at.z);
+    const top = head.clone().project(camera);
+    const face = new Vector3(at.x, at.y, at.z).project(camera);
+    return {
+      sea: surface.elevation[cell] < SEA_LEVEL,
+      cellHidden: hiddenFrom(surface, camera.position, at),
+      markerHidden: hiddenFrom(surface, camera.position, head),
+      markerOnScreen: Math.abs(top.x) <= 1 && Math.abs(top.y) <= 1 && top.z < 1,
+      screen: { x: ((face.x + 1) / 2) * canvas.clientWidth, y: ((1 - face.y) / 2) * canvas.clientHeight },
+    };
+  };
+  // E2E・調整用 (M21-08): 選んだセルがあるとき、任意のセルの見え方を読む。読むだけで何も変えない
+  (window as unknown as { __sceneCell: unknown }).__sceneCell = (cell: number) => (markerMesh.visible && cell >= 0 && cell < n ? viewOfCell(cell) : null);
 
   let layer: LayerKind = 'terrain';
   let lastTick = -1;

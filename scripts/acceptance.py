@@ -13,6 +13,7 @@
     uv run scripts/acceptance.py page --when deploy    # 配ったあとの本番の回
     uv run scripts/acceptance.py feature               # Gherkin の文で読む
     uv run scripts/acceptance.py next HBR              # 次の id (退役した行も数える)
+    uv run scripts/acceptance.py dir                   # 受入の画面の置き場 (pnpm run shots が画を書く先)
 
 行は消さない。要らなくなった行は status を retired にし、retired に日付・理由・代わりの id を書く。
 行を消すと領域の連番に穴が空いて check が落ちる (一度付けた id を使い回さないため)。
@@ -29,7 +30,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,9 @@ SOT = Path("docs/acceptance/scenarios.jsonl")
 CODE_PATTERN = re.compile(r"^[A-Z]{3}$")
 ID_PATTERN = re.compile(r"^(?P<code>[A-Z]{3})-(?P<num>\d{3})$")
 TICKET_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*-\d{2}$")
+# tests/e2e/shots.spec.ts が受入の画面の置き場の shots/ に書く画 (M21-08)
+SHOT_PATTERN = re.compile(r"^(?P<id>[A-Z]{3}-\d{3})-(?P<n>\d+)\.png$")
+SHOTS_DIR = "shots"
 # 受入の画面のサーバー (server.mjs) が受ける id の形。旧い手順書の id もこれに収まる
 LEGACY_PATTERN = re.compile(r"^[\w-]+$")
 
@@ -422,6 +426,25 @@ def check_results(sot: Sot, results: Mapping[str, object]) -> list[Problem]:
     ]
 
 
+def shots_of(names: Iterable[str]) -> dict[str, tuple[str, ...]]:
+    """shots/ のファイル名から、id ごとの画の道 (受入の画面からの相対、番号の順)。形の違う名前は数えない"""
+    found: dict[str, list[tuple[int, str]]] = {}
+    for name in names:
+        if m := SHOT_PATTERN.match(name):
+            found.setdefault(m["id"], []).append((int(m["n"]), f"{SHOTS_DIR}/{name}"))
+    return {id_: tuple(path for _, path in sorted(rows)) for id_, rows in found.items()}
+
+
+def check_shots(sot: Sot, shots: Mapping[str, Sequence[str]]) -> list[Problem]:
+    """画はどれも active の human の行のもの (題名の打ち違いや古い画を黙って並べない・落とさない)"""
+    human = {s.id for s in sot.scenarios if s.status == "active" and s.mode == "human"}
+    return [
+        Problem(id_, "shots", f"active の human の行が無い: {'・'.join(paths)}")
+        for id_, paths in sorted(shots.items())
+        if id_ not in human
+    ]
+
+
 def next_id(sot: Sot, code: str) -> str:
     """領域の次の id。退役した行の番号も使ったものとして数える"""
     nums = [
@@ -453,6 +476,8 @@ def page_of(
     base: str,
     round_label: str,
     results: Mapping[str, Mapping[str, object]],
+    # 項目ごとの画 (shots_of)。items.json の項目の shots になる
+    shots: Mapping[str, Sequence[str]],
 ) -> dict[str, object]:
     """受入の画面の items.json。index.html の読む形 {title, round, base, prep, groups} に、
     項目ごとの judge・history (from の旧 id の結果) と、任せたものの一覧 delegated を足す。
@@ -485,6 +510,7 @@ def page_of(
                         "history": [
                             {"id": f, **results[f]} for f in s.from_ if f in results
                         ],
+                        "shots": list(shots.get(s.id, ())),
                     }
                     for s in mine
                 ],
@@ -597,6 +623,7 @@ def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
         "--no-probe", action="store_true", help="書く前に画面の origin を GET しない"
     )
     sub.add_parser("feature")
+    sub.add_parser("dir")
     nxt = sub.add_parser("next")
     nxt.add_argument("code")
     args = parser.parse_args(argv)
@@ -612,6 +639,8 @@ def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
         sys.stdout.write(render_feature(sot))
     elif args.cmd == "next":
         print(next_id(sot, args.code))
+    elif args.cmd == "dir":
+        print(acceptance_dir(root, os.environ))
     else:
         out_dir = acceptance_dir(root, os.environ)
         results_path = out_dir / "results.json"
@@ -620,7 +649,11 @@ def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
             if results_path.is_file()
             else {}
         )
-        problems = check_results(sot, results)
+        shots_dir = out_dir / SHOTS_DIR
+        shots = shots_of(
+            p.name for p in (shots_dir.iterdir() if shots_dir.is_dir() else ())
+        )
+        problems = check_results(sot, results) + check_shots(sot, shots)
         if problems:
             _print(problems)
             return 1
@@ -638,7 +671,12 @@ def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
             _git(root, "rev-parse", "--short", "HEAD"),
         )
         page_json = page_of(
-            sot, when=args.when, base=base, round_label=label, results=results
+            sot,
+            when=args.when,
+            base=base,
+            round_label=label,
+            results=results,
+            shots=shots,
         )
         target = out_dir / "items.json"
         tmp = target.with_suffix(".json.tmp")

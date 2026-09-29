@@ -114,3 +114,21 @@ export const outlineWidth = (cameraDistance: number): number => clamp(cameraDist
 /** 印のゆっくりした上下 (約 1.6 秒で 1 往復、振れ幅 0.25)。動きを減らす設定 (prefers-reduced-motion) なら止める */
 export const markerBob = (seconds: number, reducedMotion: boolean): number =>
   reducedMotion ? 0 : Math.sin((seconds * 2 * Math.PI) / 1.6) * 0.25;
+
+type Point3 = { x: number; y: number; z: number };
+
+/**
+ * 目 (カメラ) から点までの線分が、点より手前で地形の面の下をくぐるか (M21-08)。面は surfaceHeightAt で求めるので、描いている地形と揃う。
+ * 点の足もとの面 (点から near 以内) は数えない
+ */
+export function hiddenFrom(g: SurfaceGrid, eye: Point3, point: Point3, step = 0.25, near = 0.75): boolean {
+  const dx = point.x - eye.x;
+  const dy = point.y - eye.y;
+  const dz = point.z - eye.z;
+  const len = Math.hypot(dx, dy, dz);
+  for (let d = step; d < len - near; d += step) {
+    const t = d / len;
+    if (surfaceHeightAt(g, eye.x + dx * t, eye.z + dz * t) > eye.y + dy * t) return true;
+  }
+  return false;
+}
