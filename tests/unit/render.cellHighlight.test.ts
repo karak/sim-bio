@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BufferAttribute, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, Vector3 } from 'three';
 import {
   cellMarkerAnchor,
+  hiddenFrom,
   markerBob,
   markerScale,
   outlineIndices,
@@ -160,5 +161,45 @@ describe('印の大きさと上下 (M22-10)', () => {
     expect(Math.min(...ys)).toBeLessThan(-0.1);
     expect(Math.max(...ys.map(Math.abs))).toBeLessThanOrEqual(0.3);
     for (const t of [0, 0.4, 1.3, 7]) expect(markerBob(t, true)).toBe(0);
+  });
+});
+
+describe('hiddenFrom (M21-08: 選んだセルが手前の地形に隠れているか)', () => {
+  /** three の Raycaster で、目から点へ向かう光線が点より手前で地形に当たるか (描いている地形そのもの) */
+  const rayHidden = (m: Mesh, eye: Vector3, point: Vector3): boolean => {
+    const dir = point.clone().sub(eye);
+    const hit = new Raycaster(eye, dir.clone().normalize()).intersectObject(m, false)[0];
+    return !!hit && hit.distance < dir.length() - 0.3;
+  };
+  // 32 の島の真ん中 (z = 0 の行) に東西の尾根 (標高 1 × hs 12)。ほかは平ら (0.1)
+  const ridge = gridOf(32, (_, y) => (y === 16 ? 1 : 0.1));
+  const mesh = terrainMesh(ridge);
+  const onSurface = (x: number, z: number) => new Vector3(x, surfaceHeightAt(ridge, x, z) + 0.05, z);
+
+  it('尾根の向こうの低い所は、低い目からは隠れ、真上の目からは見える', () => {
+    const behind = onSurface(0.5, -8.5);
+    const low = new Vector3(0.5, 4, 14);
+    const high = new Vector3(0.5, 60, -8);
+    expect(hiddenFrom(ridge, low, behind)).toBe(true);
+    expect(hiddenFrom(ridge, high, behind)).toBe(false);
+    expect(rayHidden(mesh, low, behind)).toBe(true);
+    expect(rayHidden(mesh, high, behind)).toBe(false);
+  });
+
+  it('尾根の手前の点と、尾根より高く浮いた点は見える', () => {
+    const low = new Vector3(0.5, 4, 14);
+    const front = onSurface(0.5, 6.5);
+    const floating = new Vector3(0.5, 20, -8.5);
+    expect(hiddenFrom(ridge, low, front)).toBe(false);
+    expect(hiddenFrom(ridge, low, floating)).toBe(false);
+    expect(rayHidden(mesh, low, front)).toBe(false);
+    expect(rayHidden(mesh, low, floating)).toBe(false);
+  });
+
+  it('点の足もとの面 (尾根の頂の上の点) は、点を隠さない', () => {
+    const top = onSurface(0.5, 0.5);
+    const low = new Vector3(0.5, 4, 14);
+    expect(hiddenFrom(ridge, low, top)).toBe(false);
+    expect(rayHidden(mesh, low, top)).toBe(false);
   });
 });
