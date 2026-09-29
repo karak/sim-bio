@@ -8,6 +8,16 @@ import type { Ask } from './confirmAsk';
  */
 export type Confirm = (ask: Ask) => Promise<boolean>;
 
+/** 確かめの板が受けるキー (M21-09)。null は受けない (札の既定の動きに任せる) */
+export type ConfirmKey = { kind: 'cancel' } | { kind: 'focus'; to: 'cancel' | 'ok' } | null;
+
+/** key と、今 focus のある札 (板の外なら null) から、板のすることを決める。DOM に触れない純粋な関数 */
+export function confirmKeyOf(key: string, focus: 'cancel' | 'ok' | null): ConfirmKey {
+  if (key === 'Escape') return { kind: 'cancel' };
+  if (key === 'Tab') return { kind: 'focus', to: focus === 'cancel' ? 'ok' : 'cancel' };
+  return null;
+}
+
 export function createConfirm(root: HTMLElement): Confirm {
   let open = false;
   return (ask) => {
@@ -34,15 +44,13 @@ export function createConfirm(root: HTMLElement): Confirm {
       };
       // capture で先に受け、Esc を後ろの画面 (観察画面の Esc など) へ渡さない
       const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          e.stopPropagation();
-          close(false);
-        } else if (e.key === 'Tab') {
-          e.preventDefault();
-          e.stopPropagation();
-          (document.activeElement === cancel ? ok : cancel).focus();
-        }
+        const focus = document.activeElement === cancel ? 'cancel' : document.activeElement === ok ? 'ok' : null;
+        const k = confirmKeyOf(e.key, focus);
+        if (!k) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (k.kind === 'cancel') close(false);
+        else (k.to === 'ok' ? ok : cancel).focus();
       };
       cancel.addEventListener('click', () => close(false));
       ok.addEventListener('click', () => close(true));

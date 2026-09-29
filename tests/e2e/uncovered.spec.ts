@@ -41,3 +41,34 @@ test('M21-05: 判定の板が出ているとき、板の取っ手・札と、板
   await expect(page.locator('#verdict-box')).toHaveCSS('translate', '-64px 64px');
   await expectUncovered(targets);
 });
+
+test('M21-09: 石板 (?scenario=test-quick) の選び・年・年表・力は、どれも覆われない', async ({ page }) => {
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-0');
+  await expectUncovered({
+    石板の選び: page.locator('#tablet-select'),
+    石板の年: page.locator('#tablet-year'),
+    年表: page.locator('#tablet-timeline-summary'),
+    力: page.locator('#tablet-power'),
+  });
+});
+
+test('M21-09: 判定の板が出ているときに開いた確かめのダイアログの札は、判定の板に覆われない', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict-title')).toHaveText('島は滅びた', { timeout: 90_000 });
+  await page.getByRole('button', { name: '石板を初めから', exact: true }).click();
+  const d = page.getByRole('alertdialog', { name: '石板を初めから' });
+  await expectUncovered({
+    やめる: d.getByRole('button', { name: 'やめる', exact: true }),
+    初めからやり直す: d.getByRole('button', { name: '初めからやり直す', exact: true }),
+  });
+  await page.keyboard.press('Escape');
+  await expect(d).toBeHidden();
+  await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
+});
