@@ -1,7 +1,8 @@
 import type { LandResult } from '../harbor/cargo';
 import type { Chronicle, Digest } from '../harbor/chronicle';
 import { createHarbor, type HarborLog, type PublishResult } from '../harbor/client';
-import { chronicleId, parseChronicleId, type BrowseCursor, type Cargo, type ChronicleCard, type ChronicleId, type DrawnCargo, type InscriptionId } from '../harbor/contract';
+import { chronicleId, type BrowseCursor, type Cargo, type ChronicleCard, type DrawnCargo, type InscriptionId } from '../harbor/contract';
+import { cardActionsOf, finishedScopeOf } from '../harbor/dock';
 import { inscriptionText, islandName, parseInscriptions, type Inscription } from '../harbor/names';
 import { createTurnstile, TEST_SITEKEY } from '../harbor/turnstile';
 import { createMemoryHarborStore, openHarborStore, type HarborStore } from '../persist/harborStore';
@@ -70,13 +71,6 @@ export type HarborGuard = { ask(r: Risky): Promise<boolean>; leave(href: string)
 const RESEND_MS = 60 * 60 * 1000;
 const TOAST_MS = 6000;
 
-/** 訪問の道。石板の無い道 (自由モード) では訪問しない (その島を組めない) */
-export function visitIdOf(params: URLSearchParams, scenario: ScenarioDef | null): ChronicleId | null {
-  if (!scenario) return null;
-  const id = parseChronicleId(params.get('visit'));
-  return id.ok ? id.value : null;
-}
-
 type Ctx = HarborContext & { guard: HarborGuard };
 type Ready = Ctx & { store: HarborStore };
 
@@ -139,14 +133,12 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   };
 
   const finishedSlot = el('div', { class: 'harbor-finished', hidden: '' });
-  // 石板ではその石板の島だけ。自由モードの港の口には、どの石板の判定の出た島も並べる (M19-15、石板を選び直さなくても港へ出せる)。訪問では並べない
-  const finishedScope = deps.visit ? [] : deps.scenarios.filter((d) => deps.scenarioId === null || d.id === deps.scenarioId);
-  const finishedLabel = (d: ScenarioDef) => (deps.scenarioId ? 'この石板で最後に判定の出た島' : `『${d.title}』で最後に判定の出た島`);
+  const finishedScope = finishedScopeOf(deps.scenarios, { visiting: deps.visit !== null, scenarioId: deps.scenarioId });
   /** 判定の出た最後の島 (手元に残したもの)。判定の板を閉じた後・開き直した後も、ここから港へ出せる */
   const showFinished = async () => {
     const ctx = await ready;
-    const found = await Promise.all(finishedScope.map(async (d) => ({ def: d, island: await ctx.harbor.finished(d.id) })));
-    const rows = found.flatMap(({ def, island }) => (island ? [el('p', { class: 'harbor-sub' }, finishedLabel(def)), publishPanel(ctx, island, refreshCount)] : []));
+    const found = await Promise.all(finishedScope.map(async ({ def, label }) => ({ label, island: await ctx.harbor.finished(def.id) })));
+    const rows = found.flatMap(({ label, island }) => (island ? [el('p', { class: 'harbor-sub' }, label), publishPanel(ctx, island, refreshCount)] : []));
     finishedSlot.hidden = rows.length === 0;
     finishedSlot.replaceChildren(...rows);
   };
@@ -237,8 +229,9 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
 /** 一覧の 1 件は石碑: 島の呼び名・ひとこと・結末・確かめた人。版違いは要約だけで、訪れる札を出さない */
 function cardItem(ctx: Ctx, card: ChronicleCard, own: boolean): HTMLLIElement {
   const sameVersion = card.simVersion === ctx.simVersion;
+  const can = cardActionsOf(card, { simVersion: ctx.simVersion, own });
   const status = el('p', { class: 'harbor-line harbor-card-status', role: 'status' });
-  const actions = el('div', { class: 'harbor-actions' }, sameVersion && leaveLink(ctx, el('a', { class: 'harbor-chip harbor-primary', href: visitHref(card) }, '訪れる')));
+  const actions = el('div', { class: 'harbor-actions' }, can.visit && leaveLink(ctx, el('a', { class: 'harbor-chip harbor-primary', href: visitHref(card) }, '訪れる')));
   const item = el(
     'li',
     { class: `harbor-card ${card.verdict}`, 'data-id': card.id },
@@ -261,11 +254,13 @@ function cardItem(ctx: Ctx, card: ChronicleCard, own: boolean): HTMLLIElement {
     });
     actions.append(b);
   };
-  act('通報', async () => {
-    const r = await ctx.harbor.report(card.id);
-    return { text: reportText(r), done: r === 'ok' };
-  });
-  if (own) {
+  if (can.report) {
+    act('通報', async () => {
+      const r = await ctx.harbor.report(card.id);
+      return { text: reportText(r), done: r === 'ok' };
+    });
+  }
+  if (can.withdraw) {
     act('取り下げる', async () => {
       const r = await ctx.harbor.withdraw(card.id);
       item.classList.toggle('harbor-card-gone', r === 'ok');

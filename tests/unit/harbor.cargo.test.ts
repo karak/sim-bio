@@ -9,7 +9,7 @@ import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { exportCargo } from '../../src/simulation/ship';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
-import { cargoOfHold, landingCell } from '../../src/harbor/cargo';
+import { cargoOfHold, landingCell, planLanding } from '../../src/harbor/cargo';
 import { parseCargo, parsePublicChronicle, type CargoId } from '../../src/harbor/contract';
 import { recordChronicle } from '../../src/chronicle/recorder';
 import { digestOf } from '../../src/chronicle/digest';
@@ -130,5 +130,44 @@ describe('受け取った積荷は外来種の放流として年代記に載り�
     if (status === 'running') throw new Error('判定が出ていない');
     const live = await digestOf(world.snapshot(), status);
     expect(await replay(chronicle, island)).toEqual({ kind: 'done', digest: live });
+  });
+});
+
+describe('漂着を受け取るか planLanding (M21-07)', () => {
+  // 5×5 の島: 真ん中の 3×3 が陸、周りが海。陸の縁の 8 セルが浜
+  const size = 5;
+  const elevation = new Float32Array(size * size).map((_, i) => (i % size >= 1 && i % size <= 3 && i >= size && i < size * 4 ? SEA_LEVEL + 0.1 : 0));
+  const island = { elevation, size };
+  const drawn = { id: 'c0ffee00c0ffee00' as CargoId, cargo: { items: [{ speciesId: 'rabbit', amount: 2.5 }, { speciesId: 'nomad', amount: 0.3 }] } };
+  const names = { rabbit: 'ウサギ', wolf: '狼' };
+
+  it('planLanding (M21-07): 判定の後は refused、力が積荷の種の数だけの放流に足りなければ budget で、どちらも命令を 1 つも出さない', () => {
+    expect(planLanding(drawn, island, { finished: true, budget: { power: 30, spawnCost: 3 } }, names)).toEqual({ kind: 'refused' });
+    expect(planLanding(drawn, island, { finished: true }, names)).toEqual({ kind: 'refused' });
+    // 判定の後は力が足りなくても budget ではなく refused (石板を光らせない)
+    expect(planLanding(drawn, island, { finished: true, budget: { power: 0, spawnCost: 3 } }, names)).toEqual({ kind: 'refused' });
+    // 2 種 × 3 = 6。5 では 1 種分しか足りないが、1 種も放たない
+    expect(planLanding(drawn, island, { finished: false, budget: { power: 5, spawnCost: 3 } }, names)).toEqual({ kind: 'budget' });
+    expect(planLanding(drawn, island, { finished: false, budget: { power: 6, spawnCost: 3 } }, names).kind).toBe('land');
+    const sea = { elevation: new Float32Array(size * size), size };
+    expect(planLanding(drawn, sea, { finished: false }, names)).toEqual({ kind: 'no_shore' });
+    expect(planLanding(drawn, sea, { finished: true, budget: { power: 0, spawnCost: 3 } }, names)).toEqual({ kind: 'no_shore' });
+  });
+
+  it('planLanding (M21-07): 受け取れるなら、着く浜のセル・種ごとの放流の命令・「漂着 (種の名)」の目印を返す', () => {
+    const cell = landingCell(drawn.id, island);
+    expect(cell).not.toBeNull();
+    expect([6, 7, 8, 11, 13, 16, 17, 18]).toContain(cell);
+    for (const gate of [{ finished: false }, { finished: false, budget: { power: 30, spawnCost: 3 } }]) {
+      expect(planLanding(drawn, island, gate, names)).toEqual({
+        kind: 'land',
+        cell,
+        commands: [
+          { type: 'spawn_species', speciesId: 'rabbit', cell, amount: 2.5, radius: SPAWN_RADIUS },
+          { type: 'spawn_species', speciesId: 'nomad', cell, amount: 0.3, radius: SPAWN_RADIUS },
+        ],
+        marker: '漂着 (ウサギ・nomad)',
+      });
+    }
   });
 });

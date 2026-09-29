@@ -14,6 +14,7 @@ import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SH
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
 import { SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/slots';
 import type { SlotSave } from '../persist/slotSave';
+import { slotControlsOf } from '../app/place';
 import { seasonOf } from '../core/season';
 import './hud.css';
 
@@ -336,13 +337,13 @@ export function createHud(
       slotSelect.options[i].textContent = slotLabel(slot, slots.get(slot), scenarioTitles);
     });
     const slot = selectedSlot();
-    $<HTMLButtonElement>('slot-save').disabled = !replaceable || slot === 'auto';
-    $<HTMLButtonElement>('slot-load').disabled = !replaceable || !slots.has(slot);
+    const controls = slotControlsOf({ visiting: !replaceable, slot, filled: slots.has(slot) });
+    $<HTMLButtonElement>('slot-save').disabled = !controls.save;
+    $<HTMLButtonElement>('slot-load').disabled = !controls.load;
     const loadInput = $<HTMLInputElement>('load-input');
-    loadInput.disabled = !replaceable;
-    $<HTMLButtonElement>('new-island').disabled = !replaceable;
-    const why = replaceable ? '' : '訪れている島は差し替えられない (他人の島)';
-    for (const el of [$('slot-save'), $('slot-load'), $('new-island'), loadInput.parentElement]) if (el) el.title = why;
+    loadInput.disabled = !controls.file;
+    $<HTMLButtonElement>('new-island').disabled = !controls.newIsland;
+    for (const el of [$('slot-save'), $('slot-load'), $('new-island'), loadInput.parentElement]) if (el) el.title = controls.why;
   };
   slotSelect.addEventListener('change', renderSlots);
   $('slot-save').addEventListener('click', () => {
