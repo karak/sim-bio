@@ -206,14 +206,20 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   let hlCell = -1;
   let hlWidth = -1;
   const anchor = { x: 0, y: 0, z: 0 };
-  const placeHighlight = (s: WorldSnapshot) => {
+  /** 強調を置き、見た目が変わったか (出た・消えた・動いた) を返す */
+  const placeHighlight = (s: WorldSnapshot): boolean => {
     const cell = selectedCell;
     if (cell === null || cell < 0 || cell >= n) {
+      const shown = markerMesh.visible;
       outlineMesh.visible = false;
       markerMesh.visible = false;
       hlCell = -1;
-      return;
+      return shown;
     }
+    const shown = markerMesh.visible;
+    const { x: px, y: py, z: pz } = markerMesh.position;
+    const pk = markerMesh.scale.x;
+    let rewritten = false;
     const dist = camera.position.distanceTo(controls.target);
     const width = outlineWidth(dist);
     // 地形は tick ごとに変わりうるので、tick・セル・カメラの距離 (帯の幅) が変わった時だけ書き直す
@@ -225,6 +231,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       hlTick = s.tick;
       hlCell = cell;
       hlWidth = width;
+      rewritten = true;
     }
     const k = markerScale(dist);
     const bob = markerBob(performance.now() / 1000, reducedMotion?.matches ?? false);
@@ -232,6 +239,8 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     markerMesh.position.set(anchor.x, anchor.y + (CELL_HIGHLIGHT.gap + bob) * k, anchor.z);
     outlineMesh.visible = true;
     markerMesh.visible = true;
+    const p = markerMesh.position;
+    return rewritten || !shown || k !== pk || p.x !== px || p.y !== py || p.z !== pz;
   };
   // E2E・調整用: 強調の今の状態を読む (__sceneSelection())。読むだけで何も変えない
   (window as unknown as { __sceneSelection: unknown }).__sceneSelection = () => {
@@ -280,6 +289,14 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   let lastTick = -1;
   let lastLayer: LayerKind | null = null;
   const colorBuf = new Float32Array(n * 3);
+  // 見た目が変わるときだけ描く (M21-10)。止めた島を毎フレーム描き直すと、GPU の無い環境 (ソフトウェア描画) では 1 ページで 2 コア余りを使い続ける
+  let dirty = true;
+  const markDirty = () => {
+    dirty = true;
+  };
+  // カメラの動きは change で知る。ホイールやドラッグは controls が自分の update でカメラを動かすので、毎フレームの update の返り値には出ない
+  controls.addEventListener('change', markDirty);
+  canvas.addEventListener('webglcontextrestored', markDirty);
 
   const resize = () => {
     const w = canvas.clientWidth || 1;
@@ -287,6 +304,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    dirty = true;
   };
   resize();
   window.addEventListener('resize', resize);
@@ -365,11 +383,14 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       }
       lastTick = s.tick;
       lastLayer = layer;
+      dirty = true;
     }
     clampTarget();
     controls.update();
-    placeHighlight(s);
+    const highlighted = placeHighlight(s);
+    if (!dirty && !highlighted) return;
     renderer.render(scene, camera);
+    dirty = false;
   };
 
   const ray = new Raycaster();
@@ -393,6 +414,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     },
     getLayer: () => layer,
     setVolcanoHint: (active) => {
+      if (volcanoMarker.visible !== active) dirty = true;
       volcanoMarker.visible = active;
     },
     pickCell,
@@ -402,6 +424,8 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     resize,
     dispose: () => {
       window.removeEventListener('resize', resize);
+      canvas.removeEventListener('webglcontextrestored', markDirty);
+      controls.removeEventListener('change', markDirty);
       controls.dispose();
       renderer.dispose();
       geo.dispose();

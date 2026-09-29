@@ -146,6 +146,8 @@ test('M21-04: 枠の読込とファイルの読込は、取り消せば今の島
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
   await page.locator('#load-input').setInputFiles({ name: 'island.json', mimeType: 'application/json', buffer: file });
   await answer(page, read, true);
+  // HUD は次のフレームで読んだ島を写す。写るのを待ってから日まで比べる (M21-10)
+  await expect(page.locator('#hud-year')).toHaveText(savedYear);
   expect(await shownTick(page)).toBe(savedAt);
 });
 
