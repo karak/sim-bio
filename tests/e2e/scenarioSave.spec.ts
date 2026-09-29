@@ -326,6 +326,9 @@ test('M19-17: 石板の枠を自由モードで読むと、確かめてからそ
 test('M19-17: 移った先で渡された枠が読めなければ、その舞台の自動の続きで開き、記録に残す', async ({ page }) => {
   const logs = collectLogs(page);
   await page.goto('/');
+  // 自由モードのページが起動を終えてから置く (M21-10)。起動は load の後に置き場を開いてから渡された枠を読むので、
+  // 先に置くとこのページが読んでしまい、移った先のページは何も渡されない
+  await expect(page.locator('#hud-year')).toBeVisible();
   await page.evaluate(() => sessionStorage.setItem('biotope-pending-slot', 'manual-3'));
   await page.goto('/?scenario=test-quick');
   await expect(page.locator('#tablet-power')).toHaveText('10 / 30');
