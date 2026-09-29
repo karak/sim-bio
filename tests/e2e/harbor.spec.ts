@@ -204,6 +204,10 @@ test('M19-09: 港を全部閉じても 1 シナリオ遊べ、出港は outbox �
   const first = harbor.sent.find((w) => w.method === 'POST' && w.path === '/api/v1/chronicles');
   if (!first?.body) throw new Error('出港の要求が無い');
   const queuedId = await chronicleId(JSON.parse(first.body).chronicle);
+  // 自由モードで開いた直後の送り直しが閉港で断られるのを待ってから港を開く (M21-10)。
+  // 待たないと、遅い機械ではその送り直しが港を開いた後に届いて先に港へ出し、開き直しの送り直しと 2 回になる
+  const publishes = () => harbor.sent.filter((w) => w.method === 'POST' && w.path === '/api/v1/chronicles').length;
+  await expect.poll(publishes, { timeout: 30_000 }).toBe(2);
 
   harbor.state.closed = false;
   const before = harbor.sent.length;

@@ -46,6 +46,20 @@ async function shownTick(page: Page): Promise<number> {
 
 const dialog = (page: Page) => page.getByRole('alertdialog');
 
+/** 自動の枠を書く周期 (src/main.ts の AUTOSAVE_TICKS) */
+const AUTOSAVE_TICKS = 90;
+/** 自動の枠に書き終えた島の tick (persist.saved の記録) を順に集める */
+function collectAutoSaves(page: Page): number[] {
+  const ticks: number[] = [];
+  page.on('console', (m) => {
+    const t = m.text();
+    if (!t.includes('"event":"persist.saved"')) return;
+    const e = JSON.parse(t) as { slot?: string; tick: number };
+    if (e.slot === 'auto') ticks.push(e.tick);
+  });
+  return ticks;
+}
+
 /** 確かめのダイアログが title と message で出ていることを確かめ、取り消す (やめる) か受ける */
 async function answer(page: Page, want: { title: string; message: string }, accept: boolean) {
   const d = dialog(page);
@@ -109,6 +123,7 @@ test('M21-04: 確かめのダイアログは alertdialog で、開くと「や�
 });
 
 test('M21-04: 枠の読込とファイルの読込は、取り消せば今の島のまま (年・日・自動の枠の一覧)、受ければ読んだ島になる', async ({ page }) => {
+  const autoSavedTicks = collectAutoSaves(page);
   await runFree(page);
   await page.selectOption('#slot-select', 'manual-1');
   await page.click('#slot-save');
@@ -123,6 +138,8 @@ test('M21-04: 枠の読込とファイルの読込は、取り消せば今の島
   await expect(page.locator('#hud-year')).not.toHaveText(savedYear, { timeout: 30_000 });
   await page.click('#speed-0');
   const now = await shownTick(page);
+  // 止めた後も、前の自動保存から AUTOSAVE_TICKS 進んでいれば 1 回書く (M21-10)。書き終えてから一覧を覚える
+  await expect.poll(() => now - (autoSavedTicks.at(-1) ?? -Infinity)).toBeLessThan(AUTOSAVE_TICKS);
   const auto = page.locator('#slot-select option[value="auto"]');
   const autoText = await auto.textContent();
   const read = { title: '枠の島を読み込む', message: '今の島を捨てて、枠の島を読み込みますか (自動の枠は上書きされます)' };
@@ -146,6 +163,8 @@ test('M21-04: 枠の読込とファイルの読込は、取り消せば今の島
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
   await page.locator('#load-input').setInputFiles({ name: 'island.json', mimeType: 'application/json', buffer: file });
   await answer(page, read, true);
+  // HUD は次のフレームで読んだ島を写す。写るのを待ってから日まで比べる (M21-10)
+  await expect(page.locator('#hud-year')).toHaveText(savedYear);
   expect(await shownTick(page)).toBe(savedAt);
 });
 
