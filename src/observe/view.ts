@@ -36,7 +36,7 @@ import { createToonMaterial, rimLight } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { glow } from './render/bake';
 import { culledProps, instanceProps, lodProps, type CulledProps, type LodProps } from './render/instancer';
-import { HUT_NEAR_M, HUT_NEAR_SPREAD, PROP_NEAR_M, hutPlacements } from './settlementLayout';
+import { HUT_NEAR_M, HUT_NEAR_SPREAD, PROP_NEAR_M, hutPlacements, shadowNodeOf } from './settlementLayout';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
@@ -516,7 +516,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // (M23-09) 小屋は OPT.hut より先を遠距離版 hut_lod1 で描く (影は近い・遠いに依らず全部の小屋を hut_lod1 で落とす。M23-04 と同じ)
     const far = name === 'hut' && OPT.hut > 0 ? findNode(settleGlb, 'hut_lod1') : null;
     // (M23-09 のやり直しで追加) 影は hut_shadow (前の遠距離版、1,249 三角形) で落とす。遠距離版は 5 千三角形を超えたので影には重い (無ければ遠距離版)
-    const hutShadow = name === 'hut' ? (findNode(settleGlb, 'hut_shadow') ?? findNode(settleGlb, 'hut_lod1')) : null;
+    const hutShadow = name === 'hut' ? (findNode(settleGlb, shadowNodeOf('hut')) ?? findNode(settleGlb, 'hut_lod1')) : null;
     if (far) {
       hutSet = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), far, mats, OPT.hut, mats.length, hutShadow, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
       if (hutSet.shadow) shadowOnly.add(hutSet.shadow);
@@ -526,7 +526,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // (M23-09 の 3 回目で追加) 小屋でない部品は OPT.prop より先を遠距離版で描く (小屋と同じく置き場所ごとに揺らし、高さも入れた距離。影はそれぞれの形で落とす)
     const propFar = name !== 'hut' && OPT.prop > 0 ? findNode(settleGlb, `${name}_lod1`) : null;
     if (propFar) {
-      const set = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), propFar, mats, OPT.prop, mats.length, null, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
+      // (M23-10 で変更: 影は近い・遠いに依らず全部の置き場所を shadowNodeOf の形 (遠距離版) で落とす。近い形 (settle1 の格子の丸めた石) で落とすと影が 3〜4 倍になった)
+      const propShadow = findNode(settleGlb, shadowNodeOf(name));
+      const set = lodProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), propFar, mats, OPT.prop, mats.length, propShadow, null, { nearSpread: HUT_NEAR_SPREAD, height: true });
+      if (set.shadow) shadowOnly.add(set.shadow);
       propSets.push(set);
       settlement.add(set.group);
       continue;
@@ -534,7 +537,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const g = instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats);
     settlement.add(g);
     // (M23-04) 小屋 (1 棟 10 千三角形) の影は遠い段 hut_lod1 (766 三角形) で落とす
-    const lod1 = name === 'hut' ? findNode(settleGlb, 'hut_lod1') : null;
+    // (M23-10 で変更: 小屋でない部品も、遠距離版を切った (prop=0) ときは shadowNodeOf の形で影を落とす。既定の段と影を揃え、いつも近い形の比べの画で影が変わらない)
+    const lod1 = name === 'hut' ? findNode(settleGlb, 'hut_lod1') : findNode(settleGlb, shadowNodeOf(name));
     if (!lod1) continue;
     // (M23-09 のやり直しで追加) 影の形は hut_shadow (上と同じ)
     const lod1Shadow = hutShadow ?? lod1;

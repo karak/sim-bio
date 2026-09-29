@@ -37,6 +37,13 @@ export const HUT_NEAR_SPREAD = 0.2;
  */
 export const PROP_NEAR_M = HUT_NEAR_M;
 
+/**
+ * (M23-10) 集落の部品が影を落とす形 (settlement.glb のノードの名前)。近い・遠いに依らず、この形で全部の置き場所の影を落とす。
+ * 小屋は hut_shadow、小屋でない部品は遠距離版 <名前>_lod1。settle1 で近い形の石が格子の丸めた箱になり、近い形で落とすと
+ * 集落の影が 13 千 → 43〜53 千三角形になったため。影の地図の 1 texel は約 10 cm で normalBias も 0.6 なので、石の丸めと歪み (2 cm) は影に出ない
+ */
+export const shadowNodeOf = (name: string): string => (name === 'hut' ? 'hut_shadow' : `${name}_lod1`);
+
 /** 小屋の中心から炉までの距離 (m、戸口の側)。observe_settlement.py の炉 (Blender の y = −0.3) と同じ */
 export const HEARTH_M = 0.3;
 /** 高さを合わせる戸口の外の点 (中心から m) */
