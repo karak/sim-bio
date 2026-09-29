@@ -116,3 +116,5 @@ E2E でしか見ていない判断は、main.ts の閉包と Harbor.ts の DOM �
 ## 7. 決め方の記録
 
 3 つの案 (opus・fable・sonnet) を並べて書かせ、別の審査 (fable) が採点した(fable 28・opus 27・sonnet 16)。形は fable の案(code の行、人の 1 周を通しの 2 行、`test:scripts` の中で検査、画面は少し足すだけ)。auto の行の中身と検査の規則(`player=`・根からの道・planned・base を GET)、M21-07 の中身は opus の案から。旧い 27 件の取りこぼしを試験で縛るのと、M21-07 の「この票で移さないもの」は sonnet の案から。sonnet の M23-01・M23-02 は既にある票の id と重なり、results.json の書き換えはユーザーのデータを変えるので採らなかった。
+
+人が判じている見た目・読みやすさ・手触りを機械へ移す設計は docs/decisions/0001-acceptance-automation.md (2026-09-30、Proposed) にある。
