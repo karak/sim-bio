@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
+import { createViewedSpecies } from '../../src/ui/viewedSpecies';
 import { grass } from './helpers';
 
 const fakeWorld = (totals: Record<string, number>) => {
@@ -103,6 +104,22 @@ describe('createScenarioRunner', () => {
     expect(events()).toEqual(['event:0@1']);
     // プレイヤーが狼のレイヤーを開き直したら既読
     r.setViewedSpecies('wolf');
+    expect(events()).toEqual([]);
+  });
+  it('main.ts と同じく createViewedSpecies 経由でつなぐと、観察画面から戻った後にチップを押し直せば (同じ種を選び直せば) 観察中に出た告知が消える', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 8, schedule: [{ atYear: 1, noticeYears: 5, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    const vs = createViewedSpecies((id, opts) => r.setViewedSpecies(id, opts));
+    const events = () => r.warnings().filter((x) => x.kind === 'event').map((x) => x.key);
+    vs.select('wolf');
+    vs.setObserving(true);
+    for (let y = 0; y <= 1; y++) { r.update(w.snapshot()); w.step(360); }
+    expect(events()).toEqual(['event:0@1']);
+    vs.setObserving(false);
+    expect(events()).toEqual(['event:0@1']);
+    vs.select('wolf');
     expect(events()).toEqual([]);
   });
   it('noticeYears を過ぎた告知は、押されていなくても消える (「着くまで三月」が何年も残らない)', () => {
