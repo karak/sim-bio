@@ -1,7 +1,7 @@
 ---
 id: M23-10
 title: 集落の部品の影と遠距離版の軽量化
-status: review
+status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M22-06]
@@ -76,3 +76,4 @@ M22-06(L 字の石垣の苔の手直しのあと。見た目が決まってか�
 - レビュー: codex は `codex exec` が「access token could not be refreshed」で走らなかった(`codex login status` は ChatGPT でログイン済みと出る。ログインのやり直しが要る)。代わりに別のモデルのレビュアー(Claude Opus)に diff を見せた。指摘 3 件(いずれも軽微)のうち、`prop=0` の影が近い形のまま・頂点色の検査がどんな値でも通る、の 2 件を直して再レビューで問題なし。残りの 1 件(影の試験は view.ts のつなぎ方を見ていない。つなぎ方は台の内訳で確かめている)は残した。
 - 見た目が変わりうる所: 近い部品の自分の影(石の天端の縁が隣の石へ落とす影など)も箱の石の形で落ちる。
 - 確かめていないこと: 夜の見た目。M4 以外の GPU の fps。ユーザーの審査台での見た目の確認。
+- 2026-09-29 23:07 ユーザーの受入: 審査台 (.claude/localreview、項目 m10-settle-shadow、比較画 4 枚) で pass、メモ無し。夜の見た目と M4 以外の GPU の fps は確かめないまま。
