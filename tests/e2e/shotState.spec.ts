@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { Probe } from '../../src/dev/probe';
+import { advanceTo, openPaused } from '../driver/island';
 
 /**
  * 撮る状態を毎回同じにする口 (M25-02) の確かめ。shots.spec.ts が使う口 (?paused=1・?clock=・probe.advanceTo・pinMask) を、ACCEPTANCE_DIR なしで見る。
@@ -34,11 +35,6 @@ const drawsOver = async (page: Page, frames: number): Promise<number> => {
   return (await draws(page)) - before;
 };
 
-async function openPaused(page: Page, path: string) {
-  await page.goto(path);
-  await page.waitForFunction(() => '__probe' in window && document.querySelector('#speed-0.on') !== null);
-}
-
 /** 島の真ん中あたりを押して選び、印が出るまで待つ */
 async function selectCell(page: Page) {
   const box = await page.locator('#scene').boundingBox();
@@ -59,7 +55,7 @@ test.describe('止めた島から始める・tick で進める', () => {
     await expect(page.locator('#hud-season')).toHaveText(/ · Day 0$/);
     await page.waitForTimeout(2500);
     await expect(page.locator('#hud-season')).toHaveText(/ · Day 0$/);
-    const advance = (tick: number) => page.evaluate((t) => (window as unknown as { __probe: Probe }).__probe.advanceTo(t), tick);
+    const advance = (tick: number) => advanceTo(page, tick);
     await advance(359);
     await expect(page.locator('#hud-year')).toHaveText('Year 0');
     await expect(page.locator('#hud-season')).toHaveText(/ · Day 359$/);
@@ -74,7 +70,7 @@ test.describe('止めた島から始める・tick で進める', () => {
 
   test('グラフの点は年ごとに 1 つ。3 年進めると Y0 から Y3 の 4 点 (フレームの間隔に依らない)', async ({ page }) => {
     await openPaused(page, '/?paused=1');
-    await page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.advanceTo(3 * 360 + 5));
+    await advanceTo(page, 3 * 360 + 5);
     await expect(page.locator('#graph')).toHaveAttribute('aria-label', '個体数と気温の推移。Y0 から Y3、4 点');
   });
 });

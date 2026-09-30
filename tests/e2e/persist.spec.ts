@@ -1,7 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-
-/** assets/data/world.default.json の ticksPerYear。test-quick も上書きしない */
-const TICKS_PER_YEAR = 360;
+import { shownTick, TICKS_PER_YEAR } from '../driver/island';
 
 type Logged = { event: string; slot?: string; tick: number };
 
@@ -36,13 +34,6 @@ const storedAutoTick = (page: Page): Promise<number | null> =>
         };
       }),
   );
-
-/** HUD の年と日から今の tick を読む (Day は tick % ticksPerYear) */
-async function shownTick(page: Page): Promise<number> {
-  const year = Number((await page.locator('#hud-year').textContent())?.replace('Year ', ''));
-  const day = Number((await page.locator('#hud-season').textContent())?.split('Day ')[1]);
-  return year * TICKS_PER_YEAR + day;
-}
 
 async function runUntilAutosaved(page: Page, logs: Logged[], minTick: number) {
   await page.click('#speed-100');

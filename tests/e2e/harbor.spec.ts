@@ -1,70 +1,29 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test, expect, type Locator, type Page, type Route } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chronicleId } from '../../src/harbor/contract';
-import { writeRequest, type WireRequest } from '../../src/harbor/wire';
-import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { writeRequest } from '../../src/harbor/wire';
+import { catalog, routeHarbor } from '../driver/harbor';
+import { playScenarioToVerdict } from '../driver/verdict';
+import { DUMMY_TOKEN } from '../fixtures/fakeHarbor';
 
 /**
  * 港のクライアントと画面 (M19-09) を実際のブラウザで確かめる。港の API と Turnstile の script は page.route() で決定論的に答える
  * (本物の Worker と同じ readRequest で読み、writeResponse・writeRefusal で書く港の写し tests/fixtures/fakeHarbor.ts)。
  * HARBOR_SHOTS に置き場を渡すと、画面の撮影を残す
  */
-const data = (name: string) => JSON.parse(readFileSync(`assets/data/${name}.json`, 'utf8')) as { id: string }[];
-const catalog = catalogFrom({ scenarios: data('scenarios'), species: data('species'), inscriptions: data('inscriptions') });
-
-/** Turnstile の script の代わり。widget を置いて、少し待ってからテストの札を返す (本物のテストの sitekey と同じ札) */
-const FAKE_TURNSTILE = `window.turnstile = {
-  render(el, o) { const d = document.createElement('div'); d.className = 'fake-turnstile'; d.textContent = '確認中'; el.appendChild(d); setTimeout(() => o.callback(${JSON.stringify(DUMMY_TOKEN)}), 300); return 'w' + Math.random(); },
-  remove() {},
-};`;
+const WITH_WIDGET = { turnstile: { delayMs: 300, widget: true } };
 
 async function shot(page: Page, name: string) {
   const dir = process.env.HARBOR_SHOTS;
   if (dir) await page.screenshot({ path: join(dir, `${name}.png`) });
 }
 
-const wireOf = (route: Route): WireRequest => {
-  const req = route.request();
-  const url = new URL(req.url());
-  return { method: req.method() as WireRequest['method'], path: url.pathname + url.search, headers: req.headers(), body: req.postData() };
-};
-
-/** 港の API を港の写しで答える。closed の間は網の失敗 (abort) にする。送られた要求を順に残す */
-async function routeHarbor(page: Page) {
-  const fake = createFakeHarbor(catalog);
-  const sent: WireRequest[] = [];
-  // abortWith: DevTools の Network request blocking は ERR_BLOCKED_BY_CLIENT (M19-15)
-  const state: { closed: boolean; abortWith: 'failed' | 'blockedbyclient' } = { closed: false, abortWith: 'failed' };
-  await page.route('https://challenges.cloudflare.com/turnstile/**', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_TURNSTILE }));
-  await page.route(
-    (url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs',
-    async (route) => {
-      const wire = wireOf(route);
-      sent.push(wire);
-      if (state.closed) return route.abort(state.abortWith);
-      const r = await fake.serve(wire);
-      return route.fulfill({ status: r.status, headers: r.headers, body: r.body ?? '' });
-    },
-  );
-  await page.route('**/api/v1/logs', (route) => route.fulfill({ status: 204 }));
-  return { fake, sent, state };
-}
-
-/** 石板を 100 倍速で判定まで回す */
-async function playToVerdict(page: Page, scenario: string) {
-  await page.goto(`/?scenario=${scenario}`);
-  await expect(page.locator('#hud-year')).toHaveText('Year 0');
-  await page.click('#speed-100');
-  await expect(page.locator('#verdict')).toBeVisible({ timeout: 90_000 });
-}
-
 const publishFrom = (page: Page) => page.getByRole('region', { name: '港へ出す' });
 
 test('M19-09: 出港 → リンク → 訪問 (3D 観察画面) → 照合 (年表を読む) の一連', async ({ page }) => {
   test.setTimeout(180_000);
-  const harbor = await routeHarbor(page);
-  await playToVerdict(page, 'test-civ');
+  const harbor = await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-civ');
   await expect(page.locator('#verdict-title')).toHaveText('島は生き延びた');
 
   const panel = publishFrom(page);
@@ -127,8 +86,8 @@ test('M19-09: 出港 → リンク → 訪問 (3D 観察画面) → 照合 (年�
 
 test('M19-18: 集落の無い島 (test-quick) の訪問でも 3D 観察画面に入り、戻ると「3D で見る」は時間の箱の端で覆われず押せる', async ({ page }) => {
   test.setTimeout(180_000);
-  await routeHarbor(page);
-  await playToVerdict(page, 'test-quick');
+  await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-quick');
   await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
   const panel = publishFrom(page);
   await panel.getByRole('radio', { name: '海が勝った' }).click();
@@ -157,8 +116,8 @@ test('M19-18: 集落の無い島 (test-quick) の訪問でも 3D 観察画面に
 
 test('M19-09: 照合は「やめる」で止まり、もう一度読める', async ({ page }) => {
   test.setTimeout(180_000);
-  const harbor = await routeHarbor(page);
-  await playToVerdict(page, 'test-civ');
+  const harbor = await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-civ');
   await publishFrom(page).getByRole('button', { name: '出港する' }).click();
   await expect(publishFrom(page).getByRole('textbox', { name: '訪問のリンク' })).toBeVisible();
   const [id] = [...harbor.fake.ledger.keys()];
@@ -182,10 +141,10 @@ test('M19-09: 照合は「やめる」で止まり、もう一度読める', asy
 
 test('M19-09: 港を全部閉じても 1 シナリオ遊べ、出港は outbox に入る。港が開いてから開き直すと、同じ id・同じ鍵で送り直す', async ({ page }) => {
   test.setTimeout(180_000);
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   harbor.state.closed = true;
 
-  await playToVerdict(page, 'test-quick');
+  await playScenarioToVerdict(page, 'test-quick');
   await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
   const panel = publishFrom(page);
   await panel.getByRole('button', { name: '出港する' }).click();
@@ -264,7 +223,7 @@ const storedCommands = async (page: Page, scenarioId: string) =>
   ((await stored(page, 'chronicles', scenarioId)) as { commands: { tick: number; command: Record<string, unknown> }[] } | null)?.commands ?? null;
 
 test('M19-10: 浜の漂着を引き、追い払う・受け取る。受け取った積荷は外来種の放流として年代記に載り、二度は受け取れない (開き直しても)', async ({ page }) => {
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   // ほかの見守り手が流した積荷 (本物の wire で港の写しに流す)
   await harbor.fake.serve(writeRequest({ kind: 'cast_cargo', cargo: { items: [{ speciesId: 'rabbit', amount: 2.5 }, { speciesId: 'wolf', amount: 0.3 }] } }));
   await page.goto('/?scenario=test-quick');
@@ -306,7 +265,7 @@ test('M19-10: 浜の漂着を引き、追い払う・受け取る。受け取っ
 });
 
 test('M19-10: 星の力が足りなければ積荷を受け取らず (1 種も放たない)、控えも残さない', async ({ page }) => {
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   const items = ['rabbit', 'wolf', 'deer', 'grass'].map((speciesId) => ({ speciesId, amount: 1 }));
   await harbor.fake.serve(writeRequest({ kind: 'cast_cargo', cargo: { items } }));
   await page.goto('/?scenario=test-quick');
@@ -321,7 +280,7 @@ test('M19-10: 星の力が足りなければ積荷を受け取らず (1 種も�
 });
 
 test('M19-10: 空の舟で次の島へ逃れると、積荷 (種と量) を港に流す', async ({ page }) => {
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   await page.goto('/?scenario=test-ship');
   await page.click('#speed-100');
   await expect(page.locator('#verdict-title')).toHaveText('次の島へ', { timeout: 30_000 });
@@ -342,7 +301,7 @@ test('M19-10: 空の舟で次の島へ逃れると、積荷 (種と量) を港�
 
 test('M19-11: 石板を終えると 1 回数え、石板と判定の板に回避率を出す。同じ年代記は二度数えない', async ({ page }) => {
   test.setTimeout(120_000);
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   await harbor.fake.serve(writeRequest({ kind: 'report_outcome', scenarioId: 'test-civ', verdict: 'dead' }));
   await page.goto('/?scenario=test-civ');
   await expect(page.locator('#tablet-avoidance')).toBeHidden();
@@ -365,9 +324,9 @@ test('M19-11: 石板を終えると 1 回数え、石板と判定の板に回避
 
 test('M19-11: 閉港なら回避率を出さない', async ({ page }) => {
   test.setTimeout(120_000);
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   harbor.state.closed = true;
-  await playToVerdict(page, 'test-quick');
+  await playScenarioToVerdict(page, 'test-quick');
   await expect(page.locator('#verdict-harbor')).toContainText('港へ出す');
   await expect.poll(() => harbor.sent.filter((w) => w.path.startsWith('/api/v1/outcomes')).length).toBeGreaterThanOrEqual(1);
   await expect(page.locator('#verdict-avoidance')).toBeHidden();
@@ -376,8 +335,8 @@ test('M19-11: 閉港なら回避率を出さない', async ({ page }) => {
 
 test('M19-14 の直し: 判定の後に閉じて開き直し、次の挑戦が進んでも、判定の出た島を港の板から出港できる', async ({ page }) => {
   test.setTimeout(120_000);
-  const harbor = await routeHarbor(page);
-  await playToVerdict(page, 'test-quick');
+  const harbor = await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-quick');
   await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
   await expect(publishFrom(page).getByRole('button', { name: '出港する' })).toBeVisible();
   await expect.poll(() => stored(page, 'finished', 'test-quick')).not.toBeNull();
@@ -414,11 +373,11 @@ const CLOSED_PUBLISH = '港は今日は閉まっている。年代記は手元�
 test('M19-15 (1): DevTools の request blocking と同じ閉じ方 (ERR_BLOCKED_BY_CLIENT) で、DevTools を開いた高さでも、判定の板と港の板の出港で閉港の知らせが読める', async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize(DEVTOOLS_OPEN);
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   harbor.state.closed = true;
   harbor.state.abortWith = 'blockedbyclient';
 
-  await playToVerdict(page, 'test-quick');
+  await playScenarioToVerdict(page, 'test-quick');
   const panel = publishFrom(page);
   await panel.getByRole('button', { name: '出港する' }).click();
   await expect(panel.getByRole('status').first()).toHaveText(CLOSED_PUBLISH);
@@ -440,11 +399,11 @@ test('M19-15 (1): DevTools の request blocking と同じ閉じ方 (ERR_BLOCKED_
 
 test('M19-15 (1): Turnstile の script が返ってこない (待ち続ける) ときも、出港は閉港として預け、知らせを出す', async ({ page }) => {
   test.setTimeout(120_000);
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   harbor.state.closed = true;
   // 後から登録した route が先に当たる。答えずに放っておく (challenges.cloudflare.com へ届かないまま待ち続ける)
   await page.route('https://challenges.cloudflare.com/turnstile/**', () => {});
-  await playToVerdict(page, 'test-quick');
+  await playScenarioToVerdict(page, 'test-quick');
   const panel = publishFrom(page);
   await panel.getByRole('button', { name: '出港する' }).click();
   await expect(panel.getByRole('status').first()).toHaveText('港へ運んでいる…');
@@ -455,8 +414,8 @@ test('M19-15 (1): Turnstile の script が返ってこない (待ち続ける) �
 test('M19-15 (2): 受入の手順 (判定まで進め、出港せずに閉じ、開き直して次の挑戦を少し進める) のあと、DevTools を開いた高さでも港の口から判定の出た島を出港できる。自由モードの港の口にも並ぶ', async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize(DEVTOOLS_OPEN);
-  const harbor = await routeHarbor(page);
-  await playToVerdict(page, 'test-quick');
+  const harbor = await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-quick');
   await expect.poll(() => stored(page, 'finished', 'test-quick')).not.toBeNull();
   await page.reload();
   await page.click('#speed-100');
@@ -482,7 +441,7 @@ test('M19-15 (2): 受入の手順 (判定まで進め、出港せずに閉じ、
 });
 
 test('M19-15 (4): 漂着を受け取ると、積荷の着いた浜のセルを選んで見せ、放たれた種の密度がそのセルで読める', async ({ page }) => {
-  const harbor = await routeHarbor(page);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
   await harbor.fake.serve(writeRequest({ kind: 'cast_cargo', cargo: { items: [{ speciesId: 'wolf', amount: 0.411 }, { speciesId: 'deer', amount: 0.254 }] } }));
   await page.goto('/');
   await expect(page.locator('#hud-year')).toHaveText('Year 0');

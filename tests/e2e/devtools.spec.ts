@@ -1,19 +1,20 @@
 import { createServer, type Server } from 'node:http';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import type { WireRequest } from '../../src/harbor/wire';
 import { snapshotRoutes } from '../../tools/acceptance-snapshots.ts';
-import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { catalog, routeHarbor } from '../driver/harbor';
+import { shownTick, TICKS_PER_YEAR } from '../driver/island';
+import { createFakeHarbor } from '../fixtures/fakeHarbor';
 import { openSnapshot, readSnapshot } from '../fixtures/devSnapshot';
 
 /**
  * 受入を AI が確かめる仕組み (M19-16) を、vite dev (開発のビルド) の画面で確かめる。
  * 受入の画面のサーバーの写しの道 (tools/acceptance-snapshots.ts) は、使い捨ての置き場で spec が立てる。港は港の写し (page.route) で答える
  */
-const TICKS_PER_YEAR = 360;
 const dir = mkdtempSync(join(tmpdir(), 'acceptance-e2e-'));
 let server: Server;
 let acceptance = '';
@@ -30,33 +31,6 @@ test.beforeAll(async () => {
   acceptance = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 test.afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
-
-async function shownTick(page: Page): Promise<number> {
-  const year = Number((await page.locator('#hud-year').textContent())?.replace('Year ', ''));
-  const day = Number((await page.locator('#hud-season').textContent())?.split('Day ')[1]);
-  return year * TICKS_PER_YEAR + day;
-}
-
-const data = (name: string) => JSON.parse(readFileSync(`assets/data/${name}.json`, 'utf8')) as { id: string }[];
-const catalog = catalogFrom({ scenarios: data('scenarios'), species: data('species'), inscriptions: data('inscriptions') });
-const FAKE_TURNSTILE = `window.turnstile = { render(el, o) { setTimeout(() => o.callback(${JSON.stringify(DUMMY_TOKEN)}), 50); return 'w'; }, remove() {} };`;
-
-/** 1 つの港の写しを、見守り手の page すべてで分け合う (手元で別の人として同じ港に当たる) */
-async function routeHarbor(page: Page, harbor: ReturnType<typeof createFakeHarbor>, sent: WireRequest[]) {
-  await page.route('https://challenges.cloudflare.com/turnstile/**', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_TURNSTILE }));
-  await page.route('**/api/v1/logs', (route) => route.fulfill({ status: 204 }));
-  await page.route(
-    (url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs',
-    async (route) => {
-      const req = route.request();
-      const url = new URL(req.url());
-      const wire: WireRequest = { method: req.method() as WireRequest['method'], path: url.pathname + url.search, headers: req.headers(), body: req.postData() };
-      sent.push(wire);
-      const r = await harbor.serve(wire);
-      return route.fulfill({ status: r.status, headers: r.headers, body: r.body ?? '' });
-    },
-  );
-}
 
 test('M19-16: 状態を受入の画面へ送って id を得、その id の写しを別のブラウザに流し込むと、同じ島・同じ枠から続く', async ({ page, browser }) => {
   test.setTimeout(120_000);
@@ -97,7 +71,7 @@ test('M19-16: ?player= で見守り手を分けると、置き場・取り下げ
   const harbor = createFakeHarbor(catalog);
   const sent: WireRequest[] = [];
   const alice = await context.newPage();
-  await routeHarbor(alice, harbor, sent);
+  await routeHarbor(alice, { fake: harbor, sent, turnstile: { delayMs: 50 } });
   await alice.goto('/?scenario=test-quick&player=alice&dev=1');
   await expect(alice.locator('#hud-year')).toHaveText('Year 0');
   await alice.click('#speed-1000');
@@ -108,7 +82,7 @@ test('M19-16: ?player= で見守り手を分けると、置き場・取り下げ
   const [id] = [...harbor.ledger.keys()];
 
   const bob = await context.newPage();
-  await routeHarbor(bob, harbor, sent);
+  await routeHarbor(bob, { fake: harbor, sent, turnstile: { delayMs: 50 } });
   await bob.goto('/?player=bob');
   await bob.getByRole('button', { name: /^港を開く/ }).click();
   const card = bob.getByRole('list', { name: '流れ着いた年代記' }).locator(`[data-id="${id}"]`);
@@ -133,7 +107,7 @@ test('M19-16: 沈む欠片でも、開発の板の近道で次の年の境目に
   test.setTimeout(120_000);
   const harbor = createFakeHarbor(catalog);
   const sent: WireRequest[] = [];
-  await routeHarbor(page, harbor, sent);
+  await routeHarbor(page, { fake: harbor, sent, turnstile: { delayMs: 50 } });
   await page.goto('/?scenario=sinking&dev=1');
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
   await page.getByRole('region', { name: '開発' }).getByRole('button', { name: '近道: 次の年の境目で alive にする' }).click();
