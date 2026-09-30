@@ -48,7 +48,6 @@ async function selectCell(page: Page) {
 }
 
 const markerOf = (page: Page) => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.scene?.selection().marker ?? null);
-const tickOf = (page: Page) => page.evaluate(() => Number(/\d+/.exec(document.querySelector('#hud-year')?.textContent ?? '')?.[0]));
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(COUNT_DRAWS);
@@ -57,17 +56,19 @@ test.beforeEach(async ({ page }) => {
 test.describe('止めた島から始める・tick で進める', () => {
   test('?paused=1 は最初のフレームの前に ⏸ を押し、待っても島は進まない。advanceTo は年の境目をまたいで進め、戻せない', async ({ page }) => {
     await openPaused(page, '/?paused=1');
-    await expect(page.locator('#hud-year')).toHaveText('Year 0');
-    await page.waitForTimeout(1500);
-    await expect(page.locator('#hud-year')).toHaveText('Year 0');
+    await expect(page.locator('#hud-season')).toHaveText(/ · Day 0$/);
+    await page.waitForTimeout(2500);
+    await expect(page.locator('#hud-season')).toHaveText(/ · Day 0$/);
     const advance = (tick: number) => page.evaluate((t) => (window as unknown as { __probe: Probe }).__probe.advanceTo(t), tick);
     await advance(359);
     await expect(page.locator('#hud-year')).toHaveText('Year 0');
+    await expect(page.locator('#hud-season')).toHaveText(/ · Day 359$/);
     await advance(360);
     await expect(page.locator('#hud-year')).toHaveText('Year 1');
+    await expect(page.locator('#hud-season')).toHaveText(/ · Day 0$/);
     await advance(800);
     await expect(page.locator('#hud-year')).toHaveText('Year 2');
-    expect(await tickOf(page)).toBe(2);
+    await expect(page.locator('#hud-season')).toHaveText(/ · Day 80$/);
     await expect(advance(100)).rejects.toThrow(/戻せ/);
   });
 

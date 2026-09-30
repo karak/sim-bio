@@ -51,7 +51,8 @@ export function createRunner(world: SteppableWorld, opts: RunnerOptions): Runner
       const k = Math.min(left, toBoundary);
       world.step(k);
       left -= k;
-      if (k === toBoundary) onYear(world.snapshot());
+      const after = world.snapshot();
+      if (after.tick % ticksPerYear === 0) onYear(after);
       if (stopOnPause && speed === 0) return;
     }
   };
