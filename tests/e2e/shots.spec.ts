@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { writeRequest } from '../../src/harbor/wire';
 import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { baselineName, CANVAS_TARGET, optionsFor, shouldCompareBaselines } from './baseline';
 import { expectLegible, installLens } from './lens';
 import { expectUncovered } from './uncovered';
 
@@ -63,6 +64,9 @@ const autoIds = new Set(
     .map((r) => r.id),
 );
 
+/** 基準画と比べるのは手元の Mac だけ (ADR 0001 決定 1)。CI は lens の検査だけ */
+const COMPARE_BASELINES = shouldCompareBaselines(process.env, process.platform);
+
 /** 題名の <ID> の画の置き場と、その行の画を消す手段 */
 function shotsDirOf(info: TestInfo) {
   const id = /^([A-Z]{3}-\d{3}): /.exec(info.title)?.[1];
@@ -86,14 +90,22 @@ function shotsOf(info: TestInfo) {
   clear();
   const isAuto = autoIds.has(id);
   let n = 0;
-  return async (page: Page, shown: Record<string, Locator>) => {
+  return async (page: Page, shown: Record<string, Locator>, canvas?: Locator) => {
     const targets = Object.values(shown);
     if (targets.length === 0) throw new Error('写すものを 1 つ以上渡す');
     for (const t of targets) await expect(t).toBeInViewport({ ratio: 1 });
     await expectUncovered(shown);
     await expectLegible(page, shown);
+    n++;
+    // 基準画 (M25-03)。auto の行も比べる。置き場は tests/e2e/baselines で、受入の画面の shots/ とは別。soft なので 1 つの画が落ちても残りの差も集まる
+    if (COMPARE_BASELINES) {
+      const targets = { ...shown, ...(canvas ? { [CANVAS_TARGET]: canvas } : {}) };
+      for (const [name, target] of Object.entries(targets)) {
+        await expect.soft(target).toHaveScreenshot(baselineName(id, n, name), optionsFor(name));
+      }
+    }
     if (isAuto) return;
-    await page.screenshot({ path: join(dir, `${id}-${++n}.png`), style: HIDE_DEV });
+    await page.screenshot({ path: join(dir, `${id}-${n}.png`), style: HIDE_DEV });
   };
 }
 
@@ -285,14 +297,14 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
   await expect(cellInfo).toContainText(/^セル \(\d+, \d+\)/);
   await expect.poll(async () => seen((await selection(page))?.view), { timeout: 15_000 }).toEqual(visible);
-  await shoot(page, { セルの詳細: cellInfo });
+  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'));
 
   const far = (await selection(page))?.marker?.scale ?? 0;
   for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -400);
   await settle(page);
   expect((await selection(page))?.marker?.scale).toBeLessThan(far / 2);
   expect(seen((await selection(page))?.view)).toEqual(visible);
-  await shoot(page, { セルの詳細: cellInfo });
+  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'));
 
   // 丘に隠れたセル: 倒したカメラで、陸のセルの面が隠れ印の頭は見えるセルを探し、寄ったカメラに戻してそのセルを押し、もう一度倒す
   const size = (await selection(page))?.size ?? 0;
@@ -340,5 +352,5 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   }
   expect(view).toEqual({ sea: false, cellHidden: true, markerHidden: false, markerOnScreen: true });
   await expect(cellInfo).not.toContainText('· 海');
-  await shoot(page, { セルの詳細: cellInfo });
+  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'));
 });
