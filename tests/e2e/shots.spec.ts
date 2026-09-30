@@ -138,7 +138,7 @@ test('HBR-006: 港の知らせと板の文 (回避率の行・出港のリンク
 });
 
 /** 放流が効いて狼の密度が 0.3 を越える tick (止めた島から進める) */
-const DRIFT_TICKS = 10;
+const DRIFT_TICKS = 4;
 
 test('CRG-005: 漂着を受け取った港の口の文、HUD のグラフの漂着の目印、着いた浜のセルの密度', async ({ page }, info) => {
   const shoot = shotsOf(info);

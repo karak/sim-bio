@@ -4,7 +4,7 @@ import { STAGE_NAMES, NEED, cellDistance } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
-import { drawGraph, type GraphLine, type GraphMarker } from './graph';
+import { renderGraph, type GraphLine, type GraphMarker } from './graph';
 import { describeGraph } from './graphDescription';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { EDICT_FAITH } from '../simulation/edict';
@@ -366,14 +366,14 @@ export function createHud(
   if (!ctx) throw new Error('2d context unavailable');
   canvas.setAttribute('role', 'img');
   const redraw = () => {
-    drawGraph(ctx, ts, lines, markers, canvas.width, canvas.height);
+    renderGraph(canvas, ctx, ts, lines, markers);
     canvas.setAttribute('aria-label', describeGraph(ts.xRange(), ts.length, markers));
   };
   const localCanvas = $<HTMLCanvasElement>('local-graph');
   const localCtx = localCanvas.getContext('2d');
   if (!localCtx) throw new Error('2d context unavailable');
   const redrawLocal = () =>
-    drawGraph(localCtx, local, lines.filter((l) => l.axis !== 'right'), [], localCanvas.width, localCanvas.height);
+    renderGraph(localCanvas, localCtx, local, lines.filter((l) => l.axis !== 'right'), []);
 
   /** 選択セル周辺の種ごとの平均密度 */
   const localDensities = (cell: number, s: WorldSnapshot): Record<string, number> => {
@@ -538,6 +538,7 @@ export function createHud(
     const L = s.layers;
     const sea = L.elevation[cell] < SEA_LEVEL;
     p.hidden = false;
+    redrawLocal();
     // 気象塔 (M10-01): このセルが効いている塔の半径内なら「気象塔: 雨 N×」を出す。
     // 複数の塔が重なれば towers 配列の後ろ (= 後で建てたもの) を優先する (World.towerFactors と同じ規約)
     let tower: WorldSnapshot['towers'][number] | null = null;
