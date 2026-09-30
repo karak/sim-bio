@@ -16,7 +16,7 @@ export const SCROLLS_X_ALLOWED: Record<string, string> = {
   訪問のリンク: 'input[aria-label="訪問のリンク"]',
 };
 
-type TextBox = { text: string; x: number; y: number; w: number; h: number; color: string; alpha: number; fontPx: number; pressable: boolean };
+type TextBox = { text: string; x: number; y: number; w: number; h: number; color: string; alpha: number; fontPx: number };
 type CanvasFonts = { canvas: string; clientWidth: number; width: number; fonts: { font: string; scale: number }[] };
 type Found = { covered: { text: string; by: string }[]; outside: string[]; cut: string[]; boxes: TextBox[]; domFonts: { text: string; px: number }[]; canvases: CanvasFonts[] };
 
@@ -41,6 +41,32 @@ function measure(root: Element, allowed: string[]): Found {
   const rootRect = root.getBoundingClientRect();
   const inside = (r: { left: number; right: number; top: number; bottom: number }, box: DOMRect) => r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
 
+  /**
+   * 字の上に載る、押せない (pointer-events: none) 暗い幕 (判定の板の背の幕) があるか。elementFromPoint は幕を素通りするので覆いには出ない。
+   * 幕の下の字は操作を受けない札 (押せない札と同じ) として、コントラストの検査から除く。幕の下の石板の字は幕で 2.3 まで暗くなるが、それは判定の板を読ませるための意図の暗さである
+   */
+  const stackOf = (el: Element) => {
+    let z = 0;
+    for (let e: Element | null = el; e; e = e.parentElement) {
+      const cs = getComputedStyle(e);
+      if (cs.position !== 'static' && cs.zIndex !== 'auto') z = Math.max(z, Number(cs.zIndex));
+    }
+    return z;
+  };
+  const veilsOver = (owner: Element, rects: DOMRect[]) => {
+    const r = rects[0];
+    if (!r) return false;
+    const [cx, cy] = [r.left + r.width / 2, r.top + r.height / 2];
+    return Array.from(document.body.querySelectorAll('*')).some((v) => {
+      const cs = getComputedStyle(v);
+      if (cs.pointerEvents !== 'none' || v.contains(owner) || owner.contains(v)) return false;
+      const alpha = Number(/rgba\([\d.]+, [\d.]+, [\d.]+, ([\d.]+)\)/.exec(cs.backgroundColor)?.[1] ?? 0);
+      const vr = v.getBoundingClientRect();
+      if (alpha === 0 || cx < vr.left || cx > vr.right || cy < vr.top || cy > vr.bottom) return false;
+      return stackOf(v) > stackOf(owner) || (stackOf(v) === stackOf(owner) && Boolean(owner.compareDocumentPosition(v) & Node.DOCUMENT_POSITION_FOLLOWING));
+    });
+  };
+
   const consider = (owner: Element, text: string, rects: DOMRect[]) => {
     const cs = getComputedStyle(owner);
     if (cs.visibility === 'hidden') return;
@@ -50,6 +76,7 @@ function measure(root: Element, allowed: string[]): Found {
     const m = /rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)/.exec(cs.color);
     const alpha = Number(m?.[4] ?? 1) * opacity;
     const pressable = !owner.closest('button:disabled, [aria-disabled="true"], input:disabled');
+    const veiled = veilsOver(owner, rects);
     const label = text.trim().slice(0, 16);
     let ancestors: Element[] = [];
     for (let e: Element | null = owner; e && e !== root.parentElement; e = e.parentElement) ancestors = [...ancestors, e];
@@ -71,7 +98,7 @@ function measure(root: Element, allowed: string[]): Found {
       }
       const fontPx = parseFloat(cs.fontSize);
       out.domFonts.push({ text: label, px: fontPx });
-      if (pressable) out.boxes.push({ text: label, x: r.left, y: r.top, w: r.width, h: r.height, color: cs.color, alpha, fontPx, pressable });
+      if (pressable && !veiled) out.boxes.push({ text: label, x: r.left, y: r.top, w: r.width, h: r.height, color: cs.color, alpha, fontPx });
     }
   };
 

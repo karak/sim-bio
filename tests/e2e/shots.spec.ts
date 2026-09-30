@@ -42,6 +42,16 @@ async function routeHarbor(page: Page) {
 /** 開発の板は人の見る画面に無いので、画から外す */
 const HIDE_DEV = '.dev-panel { visibility: hidden !important; }';
 
+/** 正本で auto の行 (M25-01)。auto の行は撮る前の確かめだけをして、人に並べる画は撮らない (受入の画面は human の行の画だけを受ける) */
+const autoIds = new Set(
+  readFileSync('docs/acceptance/scenarios.jsonl', 'utf8')
+    .split('\n')
+    .filter((l) => l.startsWith('{'))
+    .map((l) => JSON.parse(l) as { kind: string; id: string; mode?: string; status?: string })
+    .filter((r) => r.kind === 'scenario' && r.status === 'active' && r.mode === 'auto')
+    .map((r) => r.id),
+);
+
 /** 題名の <ID> の画の置き場と、その行の画を消す手段 */
 function shotsDirOf(info: TestInfo) {
   const id = /^([A-Z]{3}-\d{3}): /.exec(info.title)?.[1];
@@ -63,6 +73,7 @@ function shotsOf(info: TestInfo) {
   const { id, dir, clear } = shotsDirOf(info);
   mkdirSync(dir, { recursive: true });
   clear();
+  const isAuto = autoIds.has(id);
   let n = 0;
   return async (page: Page, shown: Record<string, Locator>) => {
     const targets = Object.values(shown);
@@ -70,6 +81,7 @@ function shotsOf(info: TestInfo) {
     for (const t of targets) await expect(t).toBeInViewport({ ratio: 1 });
     await expectUncovered(shown);
     await expectLegible(page, shown);
+    if (isAuto) return;
     await page.screenshot({ path: join(dir, `${id}-${++n}.png`), style: HIDE_DEV });
   };
 }

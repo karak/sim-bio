@@ -47,9 +47,13 @@ describe('p10ContrastOver (箱の中の背景の画素ごとの比の 10 パー�
     const bg = Array.from({ length: 50 }, () => WHITE);
     expect(p10ContrastOver([0x76, 0x76, 0x76], 1, bg)).toBeCloseTo(4.54, 2);
   });
-  it('暗い画素が 1 割を越えて混ざれば、その悪い側の比を返す (平均で隠さない)', () => {
+  it('字と近い色の背景の画素が 1 割を越えて混ざれば、その悪い側の比を返す (平均で隠さない)', () => {
     const bg: Rgb[] = [...Array.from({ length: 80 }, () => BLACK), ...Array.from({ length: 20 }, () => WHITE)];
     expect(p10ContrastOver(WHITE, 1, bg)).toBeCloseTo(1, 10);
+  });
+  it('悪い画素が 1 割に満たなければ無視する (最小ではなく 10 パーセンタイル)', () => {
+    const bg: Rgb[] = [...Array.from({ length: 95 }, () => BLACK), ...Array.from({ length: 5 }, () => WHITE)];
+    expect(p10ContrastOver(WHITE, 1, bg)).toBeCloseTo(21, 10);
   });
   it('薄い字 (opacity 0.4 の灰) は 4.5 を割る (押せない札の値)', () => {
     const bg = Array.from({ length: 10 }, () => [15, 26, 36] as Rgb);
