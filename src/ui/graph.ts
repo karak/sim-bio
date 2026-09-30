@@ -3,8 +3,8 @@ import type { TimeSeries } from './timeSeries';
 export type GraphLine = { key: string; color: string; label: string; axis?: 'left' | 'right' };
 export type GraphMarker = { x: number; label: string; color: string };
 
-const AXIS_FONT = '10px ui-monospace, monospace';
-const MARKER_FONT = 'bold 18px system-ui, sans-serif';
+const AXIS_FONT = '11px ui-monospace, monospace';
+const MARKER_FONT = 'bold 12px system-ui, sans-serif';
 
 /** Canvas 2D に折れ線グラフを描く。左軸は個体数、右軸は気温 (破線)。 */
 export function drawGraph(
@@ -16,7 +16,7 @@ export function drawGraph(
   h: number,
 ): void {
   ctx.clearRect(0, 0, w, h);
-  const pad = { l: 40, r: 44, t: 18, b: 16 };
+  const pad = { l: 32, r: 44, t: 16, b: 16 };
   const iw = w - pad.l - pad.r;
   const ih = h - pad.t - pad.b;
   const [x0, x1] = ts.xRange();
@@ -62,8 +62,8 @@ export function drawGraph(
   ctx.fillText(`${rr[0].toFixed(1)}℃`, w - pad.r + 4, pad.t + ih);
   ctx.textAlign = 'center';
   const fx = (x: number) => (Number.isInteger(x) ? `Y${x}` : `Y${x.toFixed(1)}`);
-  ctx.fillText(fx(x0), pad.l, h - 4);
-  ctx.fillText(fx(x1), w - pad.r, h - 4);
+  ctx.fillText(fx(x0), pad.l, h - 3);
+  ctx.fillText(fx(x1), w - pad.r, h - 3);
 
   for (const m of markers) {
     if (m.x < x0 || m.x > x1) continue;
@@ -80,7 +80,7 @@ export function drawGraph(
     const right = x > pad.l + iw / 2;
     ctx.textAlign = right ? 'right' : 'left';
     ctx.font = MARKER_FONT;
-    ctx.fillText(m.label, right ? x - 4 : x + 4, pad.t + 16);
+    ctx.fillText(m.label, right ? x - 4 : x + 4, pad.t + 12);
     ctx.font = AXIS_FONT;
   }
 
@@ -106,4 +106,28 @@ export function drawGraph(
     ctx.stroke();
     ctx.setLineDash([]);
   }
+}
+
+/**
+ * canvas の描く解像度を画面の大きさ × devicePixelRatio に合わせ、CSS px の座標系で drawGraph する。
+ * 字は画面の上で font の px のまま読める (属性の大きさと CSS の大きさが違うと縮む)。
+ */
+export function renderGraph(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  ts: TimeSeries,
+  lines: GraphLine[],
+  markers: GraphMarker[],
+  dpr: number = globalThis.devicePixelRatio || 1,
+): void {
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (w === 0 || h === 0) return;
+  const scale = Math.max(2, dpr);
+  const pw = Math.round(w * scale);
+  const ph = Math.round(h * scale);
+  if (canvas.width !== pw) canvas.width = pw;
+  if (canvas.height !== ph) canvas.height = ph;
+  ctx.setTransform(pw / w, 0, 0, ph / h, 0, 0);
+  drawGraph(ctx, ts, lines, markers, w, h);
 }

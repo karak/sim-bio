@@ -132,13 +132,13 @@ test('HBR-006: 港の知らせと板の文 (回避率の行・出港のリンク
 
 /** canvas に書いた文を拾う (HUD のグラフの目印は canvas の中の文で、DOM では読めない)。文ごとに最後に書いた所 */
 function recordCanvasText() {
-  type Drawn = { canvas: string; x: number; align: CanvasTextAlign; width: number; canvasWidth: number };
+  type Drawn = { canvas: string; x: number; align: CanvasTextAlign; width: number; canvasWidth: number; shownPx: number };
   const drawn: Record<string, Drawn> = {};
   (window as unknown as { __canvasText: () => Record<string, Drawn> }).__canvasText = () => ({ ...drawn });
   const fill = CanvasRenderingContext2D.prototype.fillText;
   CanvasRenderingContext2D.prototype.fillText = function (this: CanvasRenderingContext2D, ...args: Parameters<typeof fill>) {
     const [text, x] = args;
-    drawn[text] = { canvas: this.canvas.id, x, align: this.textAlign, width: this.measureText(text).width, canvasWidth: this.canvas.width };
+    drawn[text] = { canvas: this.canvas.id, x, align: this.textAlign, width: this.measureText(text).width, canvasWidth: this.canvas.clientWidth, shownPx: (Number(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1]) * this.getTransform().a * this.canvas.clientWidth) / this.canvas.width };
     return fill.apply(this, args);
   };
 }
@@ -168,12 +168,13 @@ test('CRG-005: 漂着を受け取った港の口の文、HUD のグラフの漂�
   await page.click('#speed-0');
   expect(Number(await density('鹿').textContent())).toBeGreaterThan(0.2);
   const label = '漂着 (狼・鹿)';
-  const marker = await page.evaluate((text) => (window as unknown as { __canvasText: () => Record<string, { canvas: string; x: number; align: string; width: number; canvasWidth: number }> }).__canvasText()[text], label);
+  const marker = await page.evaluate((text) => (window as unknown as { __canvasText: () => Record<string, { canvas: string; x: number; align: string; width: number; canvasWidth: number; shownPx: number }> }).__canvasText()[text], label);
   expect(marker?.canvas).toBe('graph');
   if (!marker) throw new Error(`${label} が HUD のグラフに書かれていない`);
   const [left, right] = marker.align === 'right' ? [marker.x - marker.width, marker.x] : [marker.x, marker.x + marker.width];
   expect(left).toBeGreaterThanOrEqual(0);
   expect(right).toBeLessThanOrEqual(marker.canvasWidth);
+  expect(marker.shownPx).toBeGreaterThanOrEqual(12);
   await shoot(page, { 'HUD のグラフ': page.locator('#graph'), セルの詳細: page.locator('#cell-info') });
 });
 
