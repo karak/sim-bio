@@ -1,0 +1,41 @@
+---
+id: M25-09
+title: 本番の bundle に入った試験の口 (__scene*・__observe*) を開発のビルドに閉じ、inspect() と probe の型にする
+status: todo
+milestone: M25
+plan: docs/decisions/0001-acceptance-automation.md
+depends_on: []
+evidence: []
+---
+
+# 本番の bundle に入った試験の口 (__scene*・__observe*) を開発のビルドに閉じ、inspect() と probe の型にする
+
+優先度: Must
+
+## What to build
+
+ADR 0001 の「この ADR の外で起こす票」。設計に依らない製品の欠陥。
+
+`pnpm run build:cloudflare` と同じ環境で vite build すると、出た JS に `__sceneSelection`・`__sceneCell` (src/render/SceneView.ts:246・286) と `__observeAir`・`__observeNotice`・`__observeFx`・`__observeLook`・`__observeHuts`・`__observeProps`・`__observeBreakdown`・`__observeScreen`・`__observeStats`・`__observeDebug` (src/observe/view.ts:657-1008) が入っている (2026-09-30 に確かめた)。
+docs/operations/acceptance.md は「開発・受入のビルドだけにあり、本番のビルドには入らない」と言うが、tests/unit/build.devtools.test.ts:8 の MARKERS はこれらを見ていない。
+
+作るもの:
+- SceneView と観察画面は window に書かず、読むだけの `inspect()` を返す (純粋な読み。単体で試せる)
+- window に載せるのは `DEVTOOLS_BUILT` (src/main.ts:39) の下で動的に import する `src/dev/probe.ts` だけ。名前は `window.__probe` に揃える
+- build.devtools.test.ts の MARKERS に `__scene`・`__observe`・`__probe` を足す
+- shots.spec.ts・cellHighlight.spec.ts・sceneIdle.spec.ts・observe.spec.ts と tools/bench-observe*.ts の呼び出しを `__probe` に直す
+
+## Blocked by
+
+- なし
+
+## Acceptance criteria
+
+- [ ] build.devtools.test.ts の本番の確かめが、直す前は落ち (MARKERS を足した時点)、直した後は通る
+- [ ] 受入のビルド (VITE_DEVTOOLS=1) には入る (空振りしていない)
+- [ ] E2E (shots を含む) と bench が今と同じに通る
+- [ ] `inspect()` の単体試験がある (選んだセル・カメラ・見え方)
+
+## 作業ログ
+
+- 2026-10-01: 起票 (ADR 0001 の外の票 外-1)
