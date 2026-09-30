@@ -14,6 +14,7 @@ from acceptance import (
     check_results,
     check_shots,
     check_sot,
+    lens_names,
     load,
     main,
     next_id,
@@ -58,6 +59,8 @@ LEGACY_IDS = [
 
 TEST_FILE = "tests/e2e/harbor.spec.ts"
 TEST_TEXT = "test('M19-09: 出港 → リンク → 訪問', async () => {});\n"
+LENS_FILE = "tests/e2e/lens.ts"
+LENS_TEXT = "export const LENSES = { legible: expectLegible } as const;\n"
 
 
 def code(c="HBR", name="港", background=()):
@@ -100,7 +103,7 @@ def human(id_="TUR-001", **over):
         "steps": [
             ["前提", "開いている"],
             ["もし", "進める"],
-            ["ならば", "【見た目】読める"],
+            ["ならば", "【見た目】読める", {"judge": "human"}],
         ],
         "covered_by": [],
     }
@@ -124,7 +127,7 @@ def problems_of(*rows, read=None, ticket_status=None):
     sot, problems = load(text_of(*rows))
     return problems + check_sot(
         sot,
-        read or files({TEST_FILE: TEST_TEXT}),
+        read or files({TEST_FILE: TEST_TEXT, LENS_FILE: LENS_TEXT}),
         ticket_status or tickets({}),
     )
 
@@ -223,6 +226,108 @@ class ShapeTest(unittest.TestCase):
         )
         for row in (active_with_block, retired_without, dangling):
             self.assertEqual(rules(problems_of(*BASE_ROWS, row)), ["retired"])
+
+
+def tagged(mark=None, text="【読みやすさ】板の文が読める"):
+    step = ["ならば", text]
+    return step if mark is None else [*step, mark]
+
+
+def with_then(step):
+    return [["前提", "開いている"], ["もし", "進める"], step]
+
+
+LEGIBLE = {"checks": [{"lens": "legible", "target": "判定の板"}]}
+
+
+class StepMarkTest(unittest.TestCase):
+    def rules_of(self, step, row=human):
+        return rules(problems_of(*BASE_ROWS, row(steps=with_then(step))))
+
+    def test_a_tagged_step_without_checks_or_judge_fails_the_check(self):
+        for tag in ("見た目", "読みやすさ", "手触り"):
+            self.assertEqual(
+                self.rules_of(tagged(text=f"【{tag}】読める")), ["step-checks"], tag
+            )
+
+    def test_a_tagged_step_passes_with_checks_or_a_judge_or_both(self):
+        for mark in (
+            LEGIBLE,
+            {"judge": "human"},
+            {"judge": "llm"},
+            {**LEGIBLE, "judge": "llm"},
+        ):
+            self.assertEqual(self.rules_of(tagged(mark)), [], mark)
+
+    def test_empty_marks_count_as_none(self):
+        for mark in ({}, {"checks": []}):
+            self.assertEqual(self.rules_of(tagged(mark)), ["step-checks"], mark)
+
+    def test_an_unknown_lens_fails(self):
+        mark = {"checks": [{"lens": "sparkle", "target": "判定の板"}]}
+        problems = problems_of(*BASE_ROWS, human(steps=with_then(tagged(mark))))
+        self.assertEqual(rules(problems), ["step-checks"])
+        self.assertIn("sparkle", problems[0].detail)
+
+    def test_lens_names_come_from_the_lens_file(self):
+        mark = {"checks": [{"lens": "contrast", "target": "板"}]}
+        step = with_then(tagged(mark))
+        lens = "export const LENSES = { legible: a, contrast: b } as const;\n"
+        read = files({TEST_FILE: TEST_TEXT, LENS_FILE: lens})
+        self.assertEqual(problems_of(*BASE_ROWS, human(steps=step), read=read), [])
+
+    def test_a_check_needs_a_target(self):
+        mark = {"checks": [{"lens": "legible", "target": ""}]}
+        self.assertEqual(self.rules_of(tagged(mark)), ["step-checks"])
+
+    def test_an_empty_judge_is_a_bad_judge_not_a_missing_one(self):
+        problems = problems_of(
+            *BASE_ROWS, human(steps=with_then(tagged({"judge": ""})))
+        )
+        self.assertEqual(rules(problems), ["step-checks"])
+        self.assertIn("judge は", problems[0].detail)
+
+    def test_a_doc_comment_naming_lenses_is_not_the_list(self):
+        lens = "/** export const LENSES = { old: x } */\n" + LENS_TEXT
+        self.assertEqual(lens_names(files({LENS_FILE: lens})), {"legible"})
+
+    def test_the_judge_is_llm_or_human(self):
+        self.assertEqual(self.rules_of(tagged({"judge": "robot"})), ["step-checks"])
+
+    def test_the_mark_is_an_object_of_checks_and_judge_only(self):
+        for bad in ("human", {"judgee": "human"}, {"checks": [{"lens": "legible"}]}):
+            sot, problems = load(
+                text_of(*BASE_ROWS, human(steps=with_then(tagged(bad))))
+            )
+            self.assertEqual([p.rule for p in problems], ["shape"], bad)
+            self.assertEqual(sot.scenarios, ())
+
+    def test_untagged_steps_need_no_mark(self):
+        self.assertEqual(self.rules_of(tagged(text="数が合う")), [])
+
+    def test_auto_rows_are_held_to_it_too(self):
+        self.assertEqual(self.rules_of(tagged(), row=auto), ["step-checks"])
+        self.assertEqual(self.rules_of(tagged(LEGIBLE), row=auto), [])
+
+    def test_retired_rows_are_not_held_to_it(self):
+        retired = human(
+            status="retired",
+            steps=with_then(tagged()),
+            retired={
+                "on": "2026-10-01",
+                "reason": "畳んだ",
+                "replaced_by": ["TUR-002"],
+            },
+        )
+        later = human("TUR-002")
+        self.assertEqual(rules(problems_of(*BASE_ROWS, retired, later)), [])
+
+    def test_a_missing_lens_file_fails_a_row_that_names_a_lens(self):
+        read = files({TEST_FILE: TEST_TEXT})
+        problems = problems_of(
+            *BASE_ROWS, human(steps=with_then(tagged(LEGIBLE))), read=read
+        )
+        self.assertEqual(rules(problems), ["step-checks"])
 
 
 class CoverageTest(unittest.TestCase):
@@ -375,6 +480,61 @@ class PageTest(unittest.TestCase):
         )
         self.assertEqual(item["judge"], "見た目だけ")
 
+    def test_the_page_lists_each_items_checks_and_judge_by_step(self):
+        rows = (
+            *BASE_ROWS,
+            human(
+                steps=[
+                    ["前提", "開いている"],
+                    ["もし", "進める"],
+                    [
+                        "ならば",
+                        "【読みやすさ】板の文が読める",
+                        {**LEGIBLE, "judge": "llm"},
+                    ],
+                    ["かつ", "数が合う"],
+                    ["かつ", "【手触り】押せる", {"judge": "human"}],
+                ]
+            ),
+        )
+        sot, problems = load(text_of(*rows))
+        self.assertEqual(problems, [])
+        page = page_of(
+            sot, when="round", base="b", round_label="r", results={}, shots={}
+        )
+        [item] = page["groups"][0]["items"]
+        self.assertEqual(
+            item["marks"],
+            [
+                {
+                    "step": "ならば 【読みやすさ】板の文が読める",
+                    "checks": [{"lens": "legible", "target": "判定の板"}],
+                    "judge": "llm",
+                },
+                {"step": "かつ 【手触り】押せる", "checks": [], "judge": "human"},
+            ],
+        )
+        self.assertEqual(item["steps"][3], "かつ 数が合う")
+
+    def test_an_auto_rows_marks_show_under_delegated(self):
+        row = auto(steps=with_then(tagged(LEGIBLE)))
+        sot, problems = load(text_of(*BASE_ROWS, row))
+        self.assertEqual(problems, [])
+        page = page_of(
+            sot, when="round", base="b", round_label="r", results={}, shots={}
+        )
+        [entry] = page["delegated"]
+        self.assertEqual(
+            entry["marks"],
+            [
+                {
+                    "step": "ならば 【読みやすさ】板の文が読める",
+                    "checks": [{"lens": "legible", "target": "判定の板"}],
+                    "judge": None,
+                }
+            ],
+        )
+
     def test_old_verdicts_show_under_the_new_item_and_results_are_only_read(self):
         old = {
             "verdict": "pass",
@@ -397,6 +557,7 @@ class PageTest(unittest.TestCase):
                     "id": "HBR-001",
                     "title": "出港して訪れる",
                     "tests": [f"{TEST_FILE} — M19-09: 出港"],
+                    "marks": [],
                 }
             ],
         )
@@ -547,6 +708,26 @@ class FeatureTest(unittest.TestCase):
 class RepoSotTest(unittest.TestCase):
     def test_the_repo_sot_is_valid(self):
         self.assertEqual(check_repo(REPO), [])
+
+    def test_every_tagged_step_of_the_repo_sot_has_checks_or_a_judge(self):
+        sot, _ = load(
+            (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
+        )
+        tagged_steps = [
+            (s.id, text)
+            for s in sot.scenarios
+            if s.status == "active"
+            for (_, text), mark in zip(s.steps, s.marks, strict=True)
+            if text.startswith("【")
+            and (mark is None or not (mark.checks or mark.judge))
+        ]
+        self.assertEqual(tagged_steps, [])
+
+    def test_the_lens_names_are_read_from_the_lens_file(self):
+        def read(rel):
+            return (REPO / rel).read_text(encoding="utf-8")
+
+        self.assertEqual(lens_names(read), {"legible"})
 
     def test_every_legacy_procedure_is_claimed(self):
         sot, _ = load(
