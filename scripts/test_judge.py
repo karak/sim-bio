@@ -1,0 +1,738 @@
+import contextlib
+import io
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from typing import ClassVar
+from unittest import mock
+
+from acceptance import check_results, load
+from judge import (
+    Question,
+    StepRef,
+    StepResult,
+    Vote,
+    apply_results,
+    has_pixel_baseline,
+    image_result,
+    images_of,
+    main,
+    parse_output,
+    prompt_of,
+    questions_of,
+    run,
+    run_claude,
+    select_steps,
+    shot_numbers,
+    tally,
+    writes_pass,
+)
+
+Q = [Question("Q1", "ピンが見える"), Question("Q2", "文が読める")]
+
+
+def answer(a1="yes", a2="yes", ev="左上に見える"):
+    return json.dumps(
+        {
+            "total_cost_usd": 0.02,
+            "duration_ms": 9000,
+            "modelUsage": {"claude-sonnet-x": {}},
+            "structured_output": {
+                "image": "x.png",
+                "answers": [
+                    {"id": "Q1", "answer": a1, "evidence": ev},
+                    {"id": "Q2", "answer": a2, "evidence": ev},
+                ],
+            },
+        }
+    )
+
+
+def vote(a1="yes", a2="yes"):
+    return parse_output(answer(a1, a2), Q)
+
+
+def scenario(id_="SEL-003", mode="auto", steps=None, **over):
+    row = {
+        "kind": "scenario",
+        "id": id_,
+        "status": "active",
+        "mode": mode,
+        "title": "t",
+        "tickets": ["M19-09"],
+        "from": [],
+        "steps": steps
+        or [
+            ["前提", "開いている"],
+            ["もし", "選ぶ"],
+            [
+                "ならば",
+                "【見た目】画 1: 琥珀のピンで、どこを選んだか分かる",
+                {"judge": "llm"},
+            ],
+            ["かつ", "【見た目】画 2: 縁の帯が地形に沿う", {"judge": "human"}],
+        ],
+        "covered_by": [{"file": "a", "title": "b"}],
+    }
+    row.update(over)
+    return row
+
+
+CODE = {"kind": "code", "code": "SEL", "name": "選ぶ", "background": []}
+
+
+def sot_of(*rows):
+    sot, problems = load(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
+    )
+    assert not problems
+    return sot
+
+
+class ParseTest(unittest.TestCase):
+    def test_reads_answers_cost_time_and_model(self):
+        v = parse_output(answer("yes", "no", "中央に文"), Q)
+        self.assertEqual(
+            v.answers, {"Q1": ("yes", "中央に文"), "Q2": ("no", "中央に文")}
+        )
+        self.assertEqual(
+            (v.cost_usd, v.duration_ms, v.model), (0.02, 9000, "claude-sonnet-x")
+        )
+
+    def test_a_broken_reply_is_a_vote_with_an_error_not_an_exception(self):
+        for bad in [
+            "not json",
+            "[]",
+            json.dumps({"is_error": True, "result": "x"}),
+            json.dumps({}),
+        ]:
+            v = parse_output(bad, Q)
+            self.assertIsNone(v.answers, bad)
+            self.assertTrue(v.error, bad)
+
+    def test_a_question_left_unanswered_fails_the_vote(self):
+        doc = json.loads(answer())
+        del doc["structured_output"]["answers"][1]
+        v = parse_output(json.dumps(doc), Q)
+        self.assertIsNone(v.answers)
+        self.assertIn("Q2", v.error)
+
+    def test_an_answer_other_than_yes_or_no_is_not_an_answer(self):
+        self.assertIsNone(parse_output(answer("maybe", "yes"), Q).answers)
+
+
+class TallyTest(unittest.TestCase):
+    def outcomes(self, votes):
+        return {r.question.id: r.outcome for r in tally(Q, votes)}
+
+    def test_three_yes_is_yes_and_three_no_is_no(self):
+        self.assertEqual(
+            self.outcomes([vote("yes", "no")] * 3), {"Q1": "yes", "Q2": "no"}
+        )
+
+    def test_a_2_1_vote_is_split_either_way(self):
+        self.assertEqual(
+            self.outcomes([vote("no"), vote("no"), vote("yes")])["Q1"], "split"
+        )
+        self.assertEqual(
+            self.outcomes([vote("yes"), vote("yes"), vote("no")])["Q1"], "split"
+        )
+
+    def test_a_failed_call_never_counts_as_yes(self):
+        failed = Vote(None, error="timeout")
+        res = tally(Q, [vote(), vote(), failed])
+        self.assertEqual({r.outcome for r in res}, {"split"})
+        self.assertEqual(res[0].votes, ("yes", "yes", "error"))
+        self.assertEqual(res[0].evidence[2], "timeout")
+
+    def test_all_calls_failing_is_split_not_no(self):
+        res = tally(Q, [Vote(None, error="x")] * 3)
+        self.assertEqual({r.outcome for r in res}, {"split"})
+
+
+class StepVerdictTest(unittest.TestCase):
+    def step(self, votes, baseline=False):
+        img = image_result(Q, Path("SEL-003-1.png"), votes, pixel_baseline=baseline)
+        return StepResult(StepRef("SEL-003", 3, "t"), (img,))
+
+    def test_no_beats_split_beats_yes(self):
+        self.assertEqual(self.step([vote("no")] * 3).verdict, "fail")
+        self.assertEqual(self.step([vote(), vote(), vote("no")]).verdict, "undecided")
+        self.assertEqual(self.step([vote()] * 3).verdict, "yes")
+        self.assertEqual(
+            self.step([vote("yes", "no"), vote("yes", "no"), vote("no", "no")]).verdict,
+            "fail",
+        )
+
+    def test_an_image_with_a_pixel_baseline_is_never_passed_by_the_llm(self):
+        self.assertTrue(writes_pass(self.step([vote()] * 3)))
+        self.assertFalse(writes_pass(self.step([vote()] * 3, baseline=True)))
+        self.assertFalse(writes_pass(self.step([vote("no")] * 3)))
+
+
+class SelectionTest(unittest.TestCase):
+    sot = sot_of(CODE, scenario())
+
+    def test_default_is_the_steps_the_sot_marks_llm(self):
+        got = select_steps(self.sot, [])
+        self.assertEqual([s.key for s in got], ["SEL-003/3"])
+
+    def test_no_llm_step_means_nothing_to_judge(self):
+        none = sot_of(
+            CODE,
+            scenario(
+                steps=[["前提", "a"], ["ならば", "【見た目】b", {"judge": "human"}]]
+            ),
+        )
+        self.assertEqual(select_steps(none, []), [])
+
+    def test_step_spec_reaches_any_step_even_a_human_one(self):
+        got = select_steps(self.sot, ["SEL-003/4"])
+        self.assertEqual(
+            (got[0].key, got[0].text),
+            ("SEL-003/4", "【見た目】画 2: 縁の帯が地形に沿う"),
+        )
+
+    def test_bad_specs_are_refused(self):
+        for bad in ["SEL-003", "SEL-003/9", "SEL-003/0", "XXX-001/1", "sel/1"]:
+            with self.assertRaises(ValueError, msg=bad):
+                select_steps(self.sot, [bad])
+
+
+class ImagesTest(unittest.TestCase):
+    shots: ClassVar = {
+        "SEL-003": ("shots/SEL-003-1.png", "shots/SEL-003-2.png", "shots/SEL-003-3.png")
+    }
+
+    def test_shot_numbers_read_single_ranges_and_lists(self):
+        self.assertEqual(shot_numbers("画 1: a"), {1})
+        self.assertEqual(shot_numbers("画 1〜3: a"), {1, 2, 3})
+        self.assertEqual(shot_numbers("画 1 (新しい島)・画 3 (離れる): a"), {1, 3})
+        self.assertEqual(shot_numbers("島が見える"), frozenset())
+
+    def test_a_step_takes_the_shots_it_names_else_all_of_the_row(self):
+        root = Path("/acc/shots")
+        named = images_of(StepRef("SEL-003", 3, "画 2: x"), self.shots, root)
+        self.assertEqual([p.name for p in named], ["SEL-003-2.png"])
+        every = images_of(StepRef("SEL-003", 3, "x"), self.shots, root)
+        self.assertEqual(len(every), 3)
+        self.assertEqual(every[0], Path("/acc/shots/SEL-003-1.png"))
+
+    def test_pixel_baseline_is_the_elements_of_that_shot(self):
+        with tempfile.TemporaryDirectory() as t:
+            base = Path(t)
+            (base / "SEL-003-1-セルの詳細.png").write_bytes(b"x")
+            self.assertTrue(has_pixel_baseline(Path("a/SEL-003-1.png"), base))
+            self.assertFalse(has_pixel_baseline(Path("a/SEL-003-2.png"), base))
+            self.assertFalse(has_pixel_baseline(Path("a/SEL-003-1.png"), base / "none"))
+
+
+class QuestionsTest(unittest.TestCase):
+    def test_default_is_one_yes_no_question_made_of_the_step_sentence(self):
+        qs = questions_of(
+            StepRef("SEL-003", 3, "【見た目】画 1: 琥珀のピンで分かる"), {}
+        )
+        self.assertEqual(len(qs), 1)
+        self.assertIn("琥珀のピンで分かる", qs[0].text)
+        self.assertNotIn("【見た目】", qs[0].text)
+        self.assertNotIn("画 1:", qs[0].text)
+
+    def test_rubrics_json_replaces_the_default(self):
+        qs = questions_of(StepRef("A-001", 2, "x"), {})
+        rubric = {"SEL-003/3": [{"id": "Q1", "q": "ピンが見える"}]}
+        got = questions_of(StepRef("SEL-003", 3, "x"), rubric)
+        self.assertEqual(got, [Question("Q1", "ピンが見える")])
+        self.assertEqual(len(qs), 1)
+
+    def test_the_prompt_fixes_language_and_names_the_image(self):
+        p = prompt_of(Q, Path("/a/b.png"))
+        self.assertIn("日本語", p)
+        self.assertIn("- Q1: ピンが見える", p)
+        self.assertTrue(p.endswith("画像ファイル: /a/b.png"))
+
+
+def results_of(votes, key_n=3, scenario_id="SEL-003"):
+    img = image_result(Q, Path("SEL-003-1.png"), votes, pixel_baseline=False)
+    return StepResult(StepRef(scenario_id, key_n, "t"), (img,))
+
+
+NOW = {"at": "2026-10-01T00:00:00Z", "cli": "2.1.285", "model": "m"}
+
+
+class WriteTest(unittest.TestCase):
+    def test_fail_and_undecided_are_written_in_the_results_shape(self):
+        out, skipped = apply_results({}, [results_of([vote("no")] * 3)], **NOW)
+        e = out["SEL-003"]
+        self.assertEqual((e["verdict"], e["by"], e["at"]), ("fail", "llm", NOW["at"]))
+        self.assertIn("3 票とも no", e["note"])
+        self.assertIn("SEL-003/3", e["note"])
+        self.assertEqual(
+            e["llm"]["steps"]["SEL-003/3"]["images"][0]["questions"][0]["votes"],
+            ["no"] * 3,
+        )
+        self.assertEqual(skipped, [])
+        und, _ = apply_results({}, [results_of([vote(), vote(), vote("no")])], **NOW)
+        self.assertEqual(und["SEL-003"]["verdict"], "undecided")
+
+    def test_the_entry_carries_the_cost_of_its_own_steps_only(self):
+        out, _ = apply_results({}, [results_of([vote("no")] * 3)], **NOW)
+        self.assertAlmostEqual(out["SEL-003"]["llm"]["cost_usd"], 0.06)
+        self.assertEqual(out["SEL-003"]["llm"]["cli"], "2.1.285")
+
+    def test_a_pass_writes_nothing(self):
+        out, _ = apply_results({}, [results_of([vote()] * 3)], **NOW)
+        self.assertEqual(out, {})
+
+    def test_a_human_verdict_is_never_overwritten(self):
+        human = {"SEL-003": {"verdict": "pass", "note": "", "at": "x"}}
+        out, skipped = apply_results(human, [results_of([vote("no")] * 3)], **NOW)
+        self.assertEqual(out, human)
+        self.assertEqual(skipped, ["SEL-003"])
+
+    def test_a_rerun_replaces_the_step_and_a_pass_clears_an_old_llm_entry(self):
+        first, _ = apply_results({}, [results_of([vote("no")] * 3)], **NOW)
+        again, _ = apply_results(first, [results_of([vote("no")] * 3)], **NOW)
+        self.assertEqual(list(again["SEL-003"]["llm"]["steps"]), ["SEL-003/3"])
+        cleared, _ = apply_results(first, [results_of([vote()] * 3)], **NOW)
+        self.assertNotIn("SEL-003", cleared)
+
+    def test_a_rerun_of_another_step_keeps_the_earlier_failed_step(self):
+        first, _ = apply_results({}, [results_of([vote("no")] * 3, 3)], **NOW)
+        both, _ = apply_results(
+            first, [results_of([vote(), vote(), vote("no")], 4)], **NOW
+        )
+        self.assertEqual(
+            sorted(both["SEL-003"]["llm"]["steps"]), ["SEL-003/3", "SEL-003/4"]
+        )
+        self.assertEqual(both["SEL-003"]["verdict"], "fail")
+
+    def test_input_is_not_mutated(self):
+        cur = {"X-1": {"verdict": "pass"}}
+        apply_results(cur, [results_of([vote("no")] * 3)], **NOW)
+        self.assertEqual(cur, {"X-1": {"verdict": "pass"}})
+
+    def test_the_written_entry_passes_check_results_and_the_review_pages_verdict_values(
+        self,
+    ):
+        out, _ = apply_results({}, [results_of([vote("no")] * 3)], **NOW)
+        sot = sot_of(CODE, scenario())
+        self.assertEqual(check_results(sot, out), [])
+        self.assertIn(out["SEL-003"]["verdict"], ("fail", "undecided"))
+        json.dumps(out, ensure_ascii=False)
+
+
+class FakeClaude:
+    """prompt から画と問いを読み、画ごとに決めた答えを返す。呼ばれた数を数える"""
+
+    def __init__(self, replies):
+        self.replies = replies
+        self.calls = []
+
+    def __call__(self, prompt, image, model):
+        self.calls.append((image.name, model))
+        return self.replies[image.name]
+
+
+def reply(q_id, a, ev="見える"):
+    return json.dumps(
+        {
+            "total_cost_usd": 0.02,
+            "duration_ms": 10,
+            "modelUsage": {"m": {}},
+            "structured_output": {
+                "image": "",
+                "answers": [{"id": q_id, "answer": a, "evidence": ev}],
+            },
+        }
+    )
+
+
+class RunBase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.acc = self.tmp / "acc"
+        (self.root / "docs/acceptance").mkdir(parents=True)
+        (self.root / "docs/acceptance/scenarios.jsonl").write_text(
+            "".join(
+                json.dumps(r, ensure_ascii=False) + "\n" for r in (CODE, scenario())
+            ),
+            encoding="utf-8",
+        )
+        (self.acc / "shots").mkdir(parents=True)
+        for n in (1, 2, 3):
+            (self.acc / "shots" / f"SEL-003-{n}.png").write_bytes(b"png")
+
+
+class RunTest(RunBase):
+    def test_run_calls_three_times_per_image_writes_fail_only_and_logs_everything(self):
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "no", "ピンが無い")})
+        steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
+        results, _, cost, skipped = run(
+            self.root, self.acc, steps, runner=fake, model="sonnet", votes=3, jobs=2
+        )
+        self.assertEqual(len(fake.calls), 3)
+        self.assertEqual({m for _, m in fake.calls}, {"sonnet"})
+        self.assertEqual(results[0].verdict, "fail")
+        self.assertAlmostEqual(cost, 0.06)
+        saved = json.loads((self.acc / "results.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved["SEL-003"]["by"], "llm")
+        self.assertIn("ピンが無い", saved["SEL-003"]["note"])
+        log = json.loads((self.acc / "judge.json").read_text(encoding="utf-8"))
+        self.assertEqual(log["SEL-003/3"]["verdict"], "fail")
+        self.assertEqual(skipped, [])
+
+    def test_a_passing_step_leaves_results_json_untouched_but_is_in_the_log(self):
+        (self.acc / "results.json").write_text(
+            '{"SEL-003": {"verdict": "hold", "note": "", "at": "x"}}'
+        )
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "yes")})
+        steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
+        _, _, _, skipped = run(
+            self.root, self.acc, steps, runner=fake, model="sonnet", votes=3, jobs=1
+        )
+        self.assertEqual(
+            json.loads((self.acc / "results.json").read_text())["SEL-003"]["verdict"],
+            "hold",
+        )
+        self.assertEqual(skipped, ["SEL-003"])
+        log = json.loads((self.acc / "judge.json").read_text(encoding="utf-8"))
+        self.assertTrue(log["SEL-003/3"]["writes_pass"])
+
+    def test_a_baselined_shot_is_logged_as_not_passing(self):
+        b = self.root / "tests/e2e/baselines"
+        b.mkdir(parents=True)
+        (b / "SEL-003-1-板.png").write_bytes(b"x")
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "yes")})
+        steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
+        run(self.root, self.acc, steps, runner=fake, model="sonnet", votes=3, jobs=1)
+        log = json.loads((self.acc / "judge.json").read_text(encoding="utf-8"))
+        self.assertFalse(log["SEL-003/3"]["writes_pass"])
+
+    def test_a_missing_image_stops_before_any_call(self):
+        fake = FakeClaude({})
+        steps = [StepRef("SEL-003", 3, "t")]
+        (self.acc / "shots" / "SEL-003-1.png").unlink()
+        for n in (2, 3):
+            (self.acc / "shots" / f"SEL-003-{n}.png").unlink()
+        with self.assertRaises(FileNotFoundError):
+            run(
+                self.root, self.acc, steps, runner=fake, model="sonnet", votes=3, jobs=1
+            )
+        self.assertEqual(fake.calls, [])
+
+    def test_an_explicit_image_replaces_the_steps_shots(self):
+        other = self.tmp / "defect.png"
+        other.write_bytes(b"x")
+        fake = FakeClaude({"defect.png": reply("S", "no")})
+        steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
+        results, *_ = run(
+            self.root,
+            self.acc,
+            steps,
+            runner=fake,
+            model="sonnet",
+            votes=3,
+            jobs=1,
+            image_override=[other],
+        )
+        self.assertEqual(results[0].images[0].image, other)
+
+
+class RunGuardsTest(RunBase):
+    """RunTest の置き場を借りて、書いてよいときと書いてはいけないときを見る"""
+
+    steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
+
+    def read(self, name):
+        return json.loads((self.acc / name).read_text(encoding="utf-8"))
+
+    def test_a_replaced_image_writes_neither_results_nor_the_log(self):
+        other = self.tmp / "defect.png"
+        other.write_bytes(b"x")
+        fake = FakeClaude({"defect.png": reply("S", "no")})
+        run(
+            self.root,
+            self.acc,
+            self.steps,
+            runner=fake,
+            model="s",
+            votes=3,
+            jobs=1,
+            image_override=[other],
+        )
+        self.assertFalse((self.acc / "results.json").exists())
+        self.assertFalse((self.acc / "judge.json").exists())
+
+    def test_a_replaced_image_takes_the_pixel_baseline_of_the_steps_own_shot(self):
+        b = self.root / "tests/e2e/baselines"
+        b.mkdir(parents=True)
+        (b / "SEL-003-1-板.png").write_bytes(b"x")
+        other = self.tmp / "defect.png"
+        other.write_bytes(b"x")
+        fake = FakeClaude({"defect.png": reply("S", "yes")})
+        results, *_ = run(
+            self.root,
+            self.acc,
+            self.steps,
+            runner=fake,
+            model="s",
+            votes=3,
+            jobs=1,
+            image_override=[other],
+        )
+        self.assertTrue(results[0].images[0].pixel_baseline)
+
+    def test_a_pass_with_no_results_file_does_not_create_one(self):
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "yes")})
+        run(self.root, self.acc, self.steps, runner=fake, model="s", votes=3, jobs=1)
+        self.assertFalse((self.acc / "results.json").exists())
+        self.assertTrue((self.acc / "judge.json").exists())
+
+    def test_broken_json_stops_before_any_call(self):
+        for name in ("results.json", "judge.json"):
+            (self.acc / name).write_text("{broken")
+            fake = FakeClaude({"SEL-003-1.png": reply("S", "no")})
+            with self.assertRaises(ValueError):
+                run(
+                    self.root,
+                    self.acc,
+                    self.steps,
+                    runner=fake,
+                    model="s",
+                    votes=3,
+                    jobs=1,
+                )
+            self.assertEqual(fake.calls, [], name)
+            (self.acc / name).unlink()
+        (self.acc / "results.json").write_text("[]")
+        with self.assertRaises(ValueError):
+            run(
+                self.root,
+                self.acc,
+                self.steps,
+                runner=FakeClaude({}),
+                model="s",
+                votes=3,
+                jobs=1,
+            )
+
+    def test_when_every_call_fails_the_earlier_failure_stays_and_the_step_is_errored(
+        self,
+    ):
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "no", "ピンが無い")})
+        run(self.root, self.acc, self.steps, runner=fake, model="s", votes=3, jobs=1)
+        before = self.read("results.json")
+        log_before = self.read("judge.json")
+
+        def dead(prompt, image, model):
+            raise subprocess.SubprocessError("claude が終了コード 1: 認証切れ")
+
+        results, *_ = run(
+            self.root, self.acc, self.steps, runner=dead, model="s", votes=3, jobs=1
+        )
+        self.assertTrue(results[0].errored)
+        self.assertEqual(self.read("results.json"), before)
+        self.assertEqual(self.read("judge.json"), log_before)
+
+    def test_one_vote_is_written_as_one_vote_not_as_three(self):
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "no")})
+        run(self.root, self.acc, self.steps, runner=fake, model="s", votes=1, jobs=1)
+        note = self.read("results.json")["SEL-003"]["note"]
+        self.assertIn("1 票とも no", note)
+        self.assertNotIn("3 票", note)
+
+    def test_a_named_shot_that_is_missing_stops_the_run(self):
+        (self.acc / "shots" / "SEL-003-2.png").unlink()
+        steps = [StepRef("SEL-003", 3, "画 1〜2: x")]
+        with self.assertRaises(FileNotFoundError):
+            run(
+                self.root,
+                self.acc,
+                steps,
+                runner=FakeClaude({}),
+                model="s",
+                votes=3,
+                jobs=1,
+            )
+
+    def test_a_non_object_entry_is_not_ours_to_replace(self):
+        out, skipped = apply_results(
+            {"SEL-003": "memo"}, [results_of([vote("no")] * 3)], **NOW
+        )
+        self.assertEqual((out["SEL-003"], skipped), ("memo", ["SEL-003"]))
+
+    def test_the_temp_file_is_not_the_acceptance_servers(self):
+        seen = []
+        real = os.replace
+        with mock.patch(
+            "judge.os.replace",
+            side_effect=lambda a, b: (seen.append(Path(a).name), real(a, b)),
+        ):
+            fake = FakeClaude({"SEL-003-1.png": reply("S", "no")})
+            run(
+                self.root, self.acc, self.steps, runner=fake, model="s", votes=3, jobs=1
+            )
+        self.assertTrue(seen)
+        self.assertNotIn("results.json.tmp", seen)
+
+
+class MainTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        (self.tmp / "docs/acceptance").mkdir(parents=True)
+        (self.tmp / "docs/acceptance/scenarios.jsonl").write_text(
+            "".join(
+                json.dumps(r, ensure_ascii=False) + "\n" for r in (CODE, scenario())
+            ),
+            encoding="utf-8",
+        )
+        self.acc = self.tmp / "acc"
+        (self.acc / "shots").mkdir(parents=True)
+        (self.acc / "shots" / "SEL-003-1.png").write_bytes(b"x")
+        self.env = mock.patch.dict(os.environ, {"ACCEPTANCE_DIR": str(self.acc)})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def call(self, *argv, runner=None):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = main(list(argv), root=self.tmp, runner=runner or FakeClaude({}))
+        return code, out.getvalue()
+
+    def test_dry_run_counts_the_calls_and_makes_none(self):
+        fake = FakeClaude({})
+        code, out = self.call("--step", "SEL-003/3", "--dry-run", runner=fake)
+        self.assertEqual(code, 0)
+        self.assertIn("計 3 回", out)
+        self.assertEqual(fake.calls, [])
+
+    def test_nothing_marked_llm_is_not_an_error(self):
+        (self.tmp / "docs/acceptance/scenarios.jsonl").write_text(
+            "".join(
+                json.dumps(r, ensure_ascii=False) + "\n"
+                for r in (
+                    CODE,
+                    scenario(
+                        steps=[
+                            ["前提", "a"],
+                            ["ならば", "【見た目】b", {"judge": "human"}],
+                        ]
+                    ),
+                )
+            ),
+            encoding="utf-8",
+        )
+        code, out = self.call()
+        self.assertEqual(code, 0)
+        self.assertIn("llm", out)
+
+    def test_a_leading_double_dash_from_pnpm_is_dropped(self):
+        code, out = self.call("--", "--step", "SEL-003/3", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("計 3 回", out)
+
+    def test_when_every_call_fails_main_exits_1(self):
+        def dead(prompt, image, model):
+            raise subprocess.SubprocessError("x")
+
+        self.assertEqual(self.call("--step", "SEL-003/3", runner=dead)[0], 1)
+        self.assertFalse((self.acc / "results.json").exists())
+
+    def test_an_unknown_step_is_a_usage_error(self):
+        self.assertEqual(self.call("--step", "SEL-003/9")[0], 2)
+
+    def test_the_sot_is_not_changed(self):
+        before = (self.tmp / "docs/acceptance/scenarios.jsonl").read_text(
+            encoding="utf-8"
+        )
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "no")})
+        self.call("--step", "SEL-003/3", runner=fake)
+        self.assertEqual(
+            (self.tmp / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8"),
+            before,
+        )
+        self.assertTrue((self.acc / "results.json").is_file())
+
+    def test_image_needs_exactly_one_step(self):
+        with contextlib.suppress(SystemExit):
+            code, _ = self.call("--image", "x.png")
+            self.fail(f"exit {code}")
+
+
+class RunClaudeTest(unittest.TestCase):
+    def test_the_command_isolates_local_config_allows_only_read_and_drops_the_key(self):
+        done = subprocess.CompletedProcess([], 0, stdout="{}")
+        with (
+            mock.patch("judge.subprocess.run", return_value=done) as run_mock,
+            mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "k", "KEEP": "1"}),
+        ):
+            self.assertEqual(run_claude("P", Path("/a/b.png"), "sonnet"), "{}")
+        cmd = run_mock.call_args.args[0]
+        kwargs = run_mock.call_args.kwargs
+        self.assertEqual(cmd[:3], ["claude", "-p", "P"])
+        for flag in (
+            "--strict-mcp-config",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+        ):
+            self.assertIn(flag, cmd)
+        self.assertEqual(cmd[cmd.index("--setting-sources") + 1], "")
+        self.assertEqual(cmd[cmd.index("--tools") + 1], "Read")
+        self.assertEqual(cmd[cmd.index("--model") + 1], "sonnet")
+        self.assertEqual(cmd[cmd.index("--add-dir") + 1], "/a")
+        self.assertNotIn("--bare", cmd)
+        self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+        self.assertNotIn("ANTHROPIC_API_KEY", kwargs["env"])
+        self.assertEqual(kwargs["env"]["KEEP"], "1")
+        schema = json.loads(cmd[cmd.index("--json-schema") + 1])
+        self.assertEqual(
+            schema["properties"]["answers"]["items"]["properties"]["answer"]["enum"],
+            ["yes", "no"],
+        )
+
+    def test_a_nonzero_exit_without_output_carries_stderr_into_the_vote(self):
+        done = subprocess.CompletedProcess([], 1, stdout="", stderr="Please log in")
+        with mock.patch("judge.subprocess.run", return_value=done):
+            from judge import _one_vote
+
+            v = _one_vote(run_claude, Q, Path("/a/b.png"), "sonnet")
+        self.assertIsNone(v.answers)
+        self.assertIn("Please log in", v.error)
+
+    def test_a_timeout_becomes_a_failed_vote_not_a_crash(self):
+        with mock.patch(
+            "judge.subprocess.run", side_effect=subprocess.TimeoutExpired("claude", 1)
+        ):
+            from judge import _one_vote
+
+            v = _one_vote(run_claude, Q, Path("/a/b.png"), "sonnet")
+        self.assertIsNone(v.answers)
+
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+class RepoRubricsTest(unittest.TestCase):
+    def test_every_rubric_names_a_real_step_with_unique_question_ids(self):
+        sot, _ = load(
+            (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
+        )
+        rubrics = json.loads(
+            (REPO / "docs/acceptance/rubrics.json").read_text(encoding="utf-8")
+        )
+        for key, rows in rubrics.items():
+            select_steps(sot, [key])
+            ids = [r["id"] for r in rows]
+            self.assertEqual(len(ids), len(set(ids)), key)
+            self.assertTrue(all(r["q"].strip() for r in rows), key)
+
+
+if __name__ == "__main__":
+    unittest.main()
