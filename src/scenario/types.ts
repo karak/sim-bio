@@ -41,7 +41,15 @@ export type Condition =
  * 予定コマンド。text (M10R-07) があれば発火した年に石板の警告と年表に出す (everyYears の繰り返しでも)。
  * 「狼の群れが北の谷に下りた」のように、星が気づいて動く猶予を知らせる舞台装置の台詞
  */
-export type ScheduledCommand = { atYear: number; everyYears?: number; untilYear?: number; text?: string; command: Command };
+export type ScheduledCommand = {
+  atYear: number;
+  everyYears?: number;
+  untilYear?: number;
+  text?: string;
+  /** text の告知を石板に残す年数 (発火した年を含む)。省略時は 1 (発火した年だけ)。その種のレイヤーを開くと早く消える (M21-02 D5) */
+  noticeYears?: number;
+  command: Command;
+};
 
 export type ScenarioDef = {
   id: string;
