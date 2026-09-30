@@ -54,6 +54,26 @@ pnpm run shots:update -- --apply <回の名前>    # 審査台で「合格」に
 2. 審査台で前・後・差の画を見て、意図した変わりだけ「合格」にする。押さない画は基準画のまま。
 3. `--apply` は審査台の `verdicts.json` を読み、合格の画だけ写す。`git add tests/e2e/baselines` して、直した CSS と同じコミットに入れる (`*.png` は LFS)。
 
+### LLM の採点 (M25-06)
+
+ADR 0001 の段 5。`pnpm run judge` は、手元の `claude -p` で画を採点表に当てる。鍵は持たず、Claude Code の認証を使う (`--bare` は使わない)。CI では回さない。
+
+```sh
+pnpm run judge                                     # 正本の judge が "llm" の手順を、その手順の画に当てる (今は llm の手順が無い)
+pnpm run judge -- --step SEL-003/2                 # 任意の手順 (ID/手順の番号) を当てる。正本は変えない
+pnpm run judge -- --step SEL-003/2 --image x.png   # 画を指す (仕込んだ欠陥の画を当てるとき)
+pnpm run judge -- --dry-run                        # 何を何回呼ぶかだけ出す
+```
+
+- 画は、手順の文が「画 N」「画 N〜M」で指す画 (受入の画面の `shots/<ID>-<N>.png`)。指さなければその行の画すべて。
+- 問いは `docs/acceptance/rubrics.json` の `<ID>/<手順の番号>` に書く (yes / no の問い)。無ければ手順の文を 1 つの問いにする。
+- 1 枚の画に 3 回呼び、問いごとに多数決を取る。3 票とも yes なら yes、3 票とも no なら fail、割れた問い (呼び出しの失敗を含む) は undecided。
+- `results.json` には fail と undecided だけを `{verdict, note, at, by: "llm", llm: {cli, model, cost_usd, steps}}` で書く。合格は書かない。人が判定した項目 (`by` が llm でない) は上書きしない。受入の画面は `undecided` を「未判定」と読み、note に LLM の根拠が出る。
+- 全部の票と根拠は、受入の画面の置き場の `judge.json` に書く。画素の基準 (`tests/e2e/baselines/`) を持つ画は、3 票とも yes でも `writes_pass: false` (LLM の yes だけでは合格にしない)。
+- `--image` で画を替えたとき (仕込んだ欠陥の試し) は、標準出力だけで `results.json` にも `judge.json` にも書かない。呼び出しがすべて失敗した手順 (認証切れ) は記録を書き換えず、終了コード 1 で返る。
+- 受入の画面で人が LLM の項目を押す・メモを直すと、画面のサーバーが `by` と `llm` を落として保存する。以後その項目は人の判定として扱い、judge は書き換えない。
+- モデルは `--model` (既定 sonnet)。呼び出しは 1 回 5〜10 秒、換算 0.014〜0.023 USD (2026-10-01 の実測。ADR の 10〜14 秒・0.015〜0.033 USD より速く安い)。
+
 ## 画面の立て方
 
 | 用途 | コマンド | 港 |
