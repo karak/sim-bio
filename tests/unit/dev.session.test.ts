@@ -35,6 +35,21 @@ describe('開発用の指定 (M19-16)', () => {
     expect(session('acceptance=not a url').acceptanceUrl).toBe('http://localhost:5392');
   });
 
+  it('?clock=<ms> で描きの時計を固定する (M25-02: ピンの上下と観察画面の t が画を撮るたびに違わないように)。指定が無い・数でなければ実時間のまま (undefined)', () => {
+    expect(session('clock=400').clock?.()).toBe(400);
+    expect(session('clock=400').clock?.()).toBe(400);
+    expect(session('clock=0').clock?.()).toBe(0);
+    expect(session('').clock).toBeUndefined();
+    expect(session('clock=abc').clock).toBeUndefined();
+    expect(session('clock=-5').clock).toBeUndefined();
+  });
+
+  it('?paused=1 で止めた島から始める (M25-02: 撮るとき、読み込みの間に進んだ tick が回ごとに違わないように)', () => {
+    expect(session('paused=1').paused).toBe(true);
+    expect(session('paused=0').paused).toBe(false);
+    expect(session('').paused).toBe(false);
+  });
+
   it('?dev=1 のときだけ速さの札に 1000x を足す', () => {
     expect(session('dev=1').speeds).toEqual([0, 1, 10, 100, 1000]);
     expect(session('scenario=sinking').speeds).toBeUndefined();

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { build } from 'vite';
 
 /** 開発用の手段 (M19-16、src/dev) だけが持つ文字列。どれかが bundle にあれば、その手段が入っている */
-const MARKERS = ['biotope-dev-snapshot', 'x-dev-sender', '/api/snapshots', 'shortcut', '__probe'];
+const MARKERS = ['biotope-dev-snapshot', 'x-dev-sender', '/api/snapshots', 'shortcut', '__probe', 'advanceTo'];
 /** 試験の口 (M25-09)。SceneView・観察画面は window に書かず inspect() を返し、window に載せるのは src/dev/probe.ts の __probe だけ。以前の名前が残っていないことも見る */
 const RETIRED = ['__scene', '__observe'];
 

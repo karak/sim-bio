@@ -22,6 +22,10 @@ export type DevSession = {
   dbName: string;
   /** 速さの札の並び。?dev=1 のときだけ 1000x を足す。undefined なら HUD の既定 */
   speeds: readonly Speed[] | undefined;
+  /** 描きの時計 (ms)。?clock=<ms> で固定する。無ければ undefined (実時間 = performance.now())。ピンの上下と観察画面の t に渡す (M25-02) */
+  clock: (() => number) | undefined;
+  /** 止めた島から始めるか (?paused=1)。速さの札の ⏸ を最初のフレームの前に押す (M25-02) */
+  paused: boolean;
   /** 近道の島か。近道の判定は港へ出さない (出港・回避率・積荷のどれも) */
   shortcut: boolean;
   /** 状態の写しを送る受入の画面のサーバー。?acceptance=<loopback の URL> で差し替える (E2E が別のポートで立てる) */
@@ -53,6 +57,13 @@ function acceptanceUrlOf(v: string | null): string {
   return url.protocol === 'http:' && LOOPBACK.has(url.hostname) ? url.origin : ACCEPTANCE_URL;
 }
 
+/** ?clock=<ms>: 0 以上の有限の数だけ受け、その値で止まった時計にする */
+function clockOf(v: string | null): (() => number) | undefined {
+  if (v === null || v.trim() === '') return undefined;
+  const ms = Number(v);
+  return Number.isFinite(ms) && ms >= 0 ? () => ms : undefined;
+}
+
 export function devSessionOf(params: URLSearchParams): DevSession {
   const name = params.get('player');
   const panel = params.get('dev') === '1';
@@ -62,6 +73,8 @@ export function devSessionOf(params: URLSearchParams): DevSession {
     player,
     dbName: player?.dbName ?? DB_NAME,
     speeds: panel ? DEV_SPEEDS : undefined,
+    clock: clockOf(params.get('clock')),
+    paused: params.get('paused') === '1',
     shortcut,
     acceptanceUrl: acceptanceUrlOf(params.get('acceptance')),
     scenarioDef: (def) => (shortcut ? shortcutDef(def) : def),

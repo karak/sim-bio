@@ -5,6 +5,7 @@ import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
 import { renderGraph, type GraphLine, type GraphMarker } from './graph';
+import { describeGraph } from './graphDescription';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
@@ -95,6 +96,8 @@ export type HudHandlers = {
 
 export type Hud = {
   update(s: WorldSnapshot): void;
+  /** 年の境目ちょうどの島を、グラフの点として積む (M25-02)。runner が境目ごとに呼ぶので、点はフレームの間隔で変わらない */
+  recordYear(s: WorldSnapshot): void;
   showCell(cell: number | null, s: WorldSnapshot): void;
   addMarker(x: number, label: string, color: string): void;
   setArmed(kind: DisasterKind | null): void;
@@ -361,7 +364,11 @@ export function createHud(
   const canvas = $<HTMLCanvasElement>('graph');
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2d context unavailable');
-  const redraw = () => renderGraph(canvas, ctx, ts, lines, markers);
+  canvas.setAttribute('role', 'img');
+  const redraw = () => {
+    renderGraph(canvas, ctx, ts, lines, markers);
+    canvas.setAttribute('aria-label', describeGraph(ts.xRange(), ts.length, markers));
+  };
   const localCanvas = $<HTMLCanvasElement>('local-graph');
   const localCtx = localCanvas.getContext('2d');
   if (!localCtx) throw new Error('2d context unavailable');
@@ -426,6 +433,14 @@ export function createHud(
       }
     }
     return land ? v / land : 0;
+  };
+
+  /** 同じ年の点は 1 つだけ。境目で runner が積んだ年を、続く update が重ねて積まない */
+  let pushedYear = -1;
+  const pushYear = (s: WorldSnapshot) => {
+    if (s.year === pushedYear) return;
+    pushedYear = s.year;
+    ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
   };
 
   const update = (s: WorldSnapshot) => {
@@ -496,7 +511,7 @@ export function createHud(
     }
     if (s.year !== lastYear) {
       lastYear = s.year;
-      ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
+      pushYear(s);
       for (const d of s.species) $(`legend-${d.id}`).textContent = (s.totals[d.id] ?? 0).toFixed(0);
       redraw();
       $('stat-temp').textContent = `${s.meanTemperature.toFixed(1)}℃`;
@@ -543,6 +558,7 @@ export function createHud(
 
   return {
     update,
+    recordYear: pushYear,
     showCell,
     addMarker: (x, label, color) => {
       markers.push({ x, label, color });

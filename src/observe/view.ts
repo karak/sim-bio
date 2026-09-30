@@ -217,6 +217,8 @@ export type ObserveHost = {
   names?: Record<string, string>;
   /** 計測の行と寄せ先のボタンを出す (試作のページ)。操作画面から入ったときは年だけを出す (設計 §7「UI は極力消す」) */
   debug?: boolean;
+  /** 描きの時計 (ms)。t・動的な解像度・知らせの帯の時間の元。既定は performance.now()。止めた時計を渡すと t は進まず、撮る画が回ごとに変わらない (M25-02) */
+  now?: () => number;
 };
 
 export type ObservationView = {
@@ -233,6 +235,7 @@ export type ObservationView = {
 export async function createObservationView(host: ObserveHost): Promise<ObservationView> {
   const status = host.status;
   const s = host.snapshot;
+  const nowMs = host.now ?? (() => performance.now());
   // (M19-18) 区域の中心。集落が無ければ島の真ん中の陸セルにし、集落だけの形 (小屋・船台など)・踏み固めた道・切り開き・民を置かない
   const { cell: home, settlement: hasSettlement } = observeCenter(s);
   const field = createTerrainField(s, home, WINDOW);
@@ -817,7 +820,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     return true;
   };
   const fx = (dt: number) => {
-    band.step(performance.now());
+    band.step(nowMs());
     if (lampsTarget === 0 && snap.ship && snap.civ && snap.civ.stage >= 5) lampsTarget = 1;
     lamps += (lampsTarget - lamps) * Math.min(1, dt / 3);
     motes.setLamps(lamps);
@@ -943,7 +946,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const first = params.get('shot');
   if (first && presets[first]) setTimeout(presets[first], 1500);
   const stats = host.stats;
-  let last = performance.now();
+  let last = nowMs();
   let t = 0;
   let frames = 0;
   let acc = 0;
@@ -951,7 +954,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M23-07) 動的な解像度。倍率は renderer のピクセル比に掛ける (ピクセル比 2 の画面は 0.5 = CSS の画素まで、1 の画面は 0.7 まで下げる)
   const dynres = OPT.dynres ? createDynamicResolution({ min: renderer.getPixelRatio() >= 1.5 ? 0.5 : 0.7 }) : null;
   const loop = () => {
-    const now = performance.now();
+    const now = nowMs();
     if (dynres) grade.setPixelRatio(renderer.getPixelRatio() * dynres.update(now - last));
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -1033,7 +1036,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       if (running) return;
       running = true;
       baseline = true;
-      last = performance.now();
+      last = nowMs();
       resize();
       handle = requestAnimationFrame(loop);
     },

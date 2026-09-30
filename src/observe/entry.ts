@@ -26,6 +26,8 @@ export type ObserveEntryOptions = {
   setSpeed(s: 0 | 1 | 10): void;
   /** 入るボタンを置く所 (M19-18: 操作画面では左上の時間の箱の速さの列の端)。省略時は app */
   buttonHost?: HTMLElement;
+  /** 描きの時計 (ms)。開発の ?clock= で固定する (M25-02)。既定は performance.now() */
+  now?: () => number;
 };
 
 const CSS = `
@@ -85,7 +87,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
     const q = (sel: string) => l.querySelector(sel) as HTMLElement;
     q('.o-status').textContent = '観察画面を組んでいます…';
     const { createObservationView } = await import('./view');
-    view = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names, debug: new URLSearchParams(location.search).has('observeDebug') });
+    view = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names, now: opts.now, debug: new URLSearchParams(location.search).has('observeDebug') });
   };
 
   let shown = '';

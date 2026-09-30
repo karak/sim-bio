@@ -10,6 +10,8 @@ export type Runner = {
   stop(): void;
   /** 1 フレーム分の処理。テストから直接呼べる */
   frame(nowMs: number): void;
+  /** 速さと時計に関わらず、ちょうど n tick 進める (M25-02)。年の境目では onYear を呼び、最後に onFrame を 1 回呼ぶ。開発の板 (src/dev/probe.ts) が使う */
+  advance(n: number): void;
 };
 
 type SteppableWorld = { step(n?: number): void; snapshot(): WorldSnapshot };
@@ -20,6 +22,9 @@ export type RunnerOptions = {
   caf?: (id: number) => void;
   /** フレーム落ち時のスパイラル防止。1 フレームで進める tick の上限 */
   maxTicksPerFrame?: number;
+  /** 年 (ticksPerYear tick) の境目ちょうどで呼ぶ。HUD のグラフの点はこの 1 年ごとの拾いで、フレームの間隔に依らない (M25-02)。ticksPerYear とともに指定する */
+  onYear?: (s: WorldSnapshot) => void;
+  ticksPerYear?: number;
 };
 
 /** rAF ループと速度倍率を隠す。速度 s のとき 1 秒に s tick 進める。 */
@@ -33,6 +38,25 @@ export function createRunner(world: SteppableWorld, opts: RunnerOptions): Runner
   let handle: number | null = null;
   let running = false;
 
+  /** n tick 進める。年の境目で切って onYear を呼ぶ。stopOnPause なら、step の中で速度が 0 にされた (判定) 時点でやめる */
+  const advanceTicks = (n: number, stopOnPause: boolean) => {
+    const { onYear, ticksPerYear } = opts;
+    if (!onYear || !ticksPerYear) {
+      world.step(n);
+      return;
+    }
+    let left = n;
+    while (left > 0) {
+      const toBoundary = ticksPerYear - (world.snapshot().tick % ticksPerYear);
+      const k = Math.min(left, toBoundary);
+      world.step(k);
+      left -= k;
+      const after = world.snapshot();
+      if (after.tick % ticksPerYear === 0) onYear(after);
+      if (stopOnPause && speed === 0) return;
+    }
+  };
+
   const frame = (now: number) => {
     if (last !== null && speed > 0) {
       // step の中で速度が 0 にされうる (シナリオの判定の onVerdict、M19-04)。割る速度はこのフレームの速度に固定する
@@ -40,7 +64,7 @@ export function createRunner(world: SteppableWorld, opts: RunnerOptions): Runner
       acc += now - last;
       const ticks = Math.floor((acc * s) / 1000);
       if (ticks > 0) {
-        world.step(Math.min(ticks, cap));
+        advanceTicks(Math.min(ticks, cap), true);
         acc -= (ticks * 1000) / s;
       }
     } else if (speed === 0) {
@@ -73,5 +97,9 @@ export function createRunner(world: SteppableWorld, opts: RunnerOptions): Runner
       handle = null;
     },
     frame,
+    advance(n) {
+      advanceTicks(n, false);
+      opts.onFrame(world.snapshot());
+    },
   };
 }

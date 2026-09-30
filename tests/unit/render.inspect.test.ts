@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { writeCellOutline, outlineVertexCount, type SurfaceGrid } from '../../src/render/cellHighlight';
-import { cellViewOf, outlineBounds, selectionOf } from '../../src/render/inspect';
+import { cellViewOf, outlineBounds, pinMaskOf, PIN_ID_RGB, selectionOf } from '../../src/render/inspect';
 
 const SIZE = 8;
 const HS = 10;
@@ -104,5 +104,34 @@ describe('selectionOf / outlineBounds (強調の今の状態を読む)', () => {
     const copy = Float32Array.from(pos);
     selectionOf(shown);
     expect(pos).toEqual(copy);
+  });
+});
+
+describe('pinMaskOf (M25-02: ピンだけを 1 色で描いた画から、見える画素の面積と外接の四角を読む)', () => {
+  const [r, g, b] = PIN_ID_RGB;
+  /** w x h の RGBA (GL の読み出しの順 = 下の行が先)。下から数えた行 y の x にピンの色を置く */
+  const glImage = (w: number, h: number, pins: [number, number][]) => {
+    const px = new Uint8Array(w * h * 4);
+    for (const [x, y] of pins) px.set([r, g, b, 255], (y * w + x) * 4);
+    return px;
+  };
+
+  it('ピンの色の画素の数と、画面の上から数えた外接の四角を返す', () => {
+    // 4x3。GL の下から 0 行目 (= 画面の 2 行目 = 一番下) に 2 つ、下から 1 行目に 1 つ
+    const m = pinMaskOf(glImage(4, 3, [[1, 0], [2, 0], [2, 1]]), 4, 3);
+    expect(m.area).toBe(3);
+    expect(m.bounds).toEqual({ minX: 1, maxX: 2, minY: 1, maxY: 2 });
+    expect(m.mask[2 * 4 + 1]).toBe(1);
+    expect(m.mask[1 * 4 + 2]).toBe(1);
+    expect(m.mask[0]).toBe(0);
+  });
+
+  it('ピンの色でない画素 (地形の深さで隠れて描かれなかった所・背景) は数えない。全部隠れれば面積 0・bounds は null', () => {
+    const none = pinMaskOf(new Uint8Array(4 * 3 * 4), 4, 3);
+    expect(none.area).toBe(0);
+    expect(none.bounds).toBeNull();
+    const px = glImage(2, 2, [[0, 0]]);
+    px.set([r, g, 0, 255], (1 * 2 + 1) * 4);
+    expect(pinMaskOf(px, 2, 2).area).toBe(1);
   });
 });
