@@ -1,34 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
-import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { routeHarbor } from '../driver/harbor';
+import { shownTick, TICKS_PER_YEAR } from '../driver/island';
 
 /**
  * 石板の中の枠の保存・読込・初めから、と URL の舞台 (M19-17、設計 docs/design/2026-09-27-scenario-save-url.md §7)。
  * 港の API と Turnstile は harbor.spec.ts と同じく、港の写し (tests/fixtures/fakeHarbor.ts) で page.route() に答える
  */
-const TICKS_PER_YEAR = 360;
-const data = (name: string) => JSON.parse(readFileSync(`assets/data/${name}.json`, 'utf8')) as { id: string }[];
-const catalog = catalogFrom({ scenarios: data('scenarios'), species: data('species'), inscriptions: data('inscriptions') });
-const FAKE_TURNSTILE = `window.turnstile = {
-  render(el, o) { setTimeout(() => o.callback(${JSON.stringify(DUMMY_TOKEN)}), 100); return 'w'; },
-  remove() {},
-};`;
-
-async function routeHarbor(page: Page) {
-  const fake = createFakeHarbor(catalog);
-  await page.route('https://challenges.cloudflare.com/turnstile/**', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_TURNSTILE }));
-  await page.route(
-    (url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs',
-    async (route) => {
-      const req = route.request();
-      const url = new URL(req.url());
-      const r = await fake.serve({ method: req.method() as 'GET', path: url.pathname + url.search, headers: req.headers(), body: req.postData() });
-      return route.fulfill({ status: r.status, headers: r.headers, body: r.body ?? '' });
-    },
-  );
-  await page.route('**/api/v1/logs', (route) => route.fulfill({ status: 204 }));
-  return fake;
-}
 
 type Logged = { event: string; level: string; slot?: string; tick: number; scenario?: string };
 function collectLogs(page: Page): Logged[] {
@@ -38,12 +16,6 @@ function collectLogs(page: Page): Logged[] {
     if (t.includes('"event":"persist.')) logs.push(JSON.parse(t) as Logged);
   });
   return logs;
-}
-
-async function shownTick(page: Page): Promise<number> {
-  const year = Number((await page.locator('#hud-year').textContent())?.replace('Year ', ''));
-  const day = Number((await page.locator('#hud-season').textContent())?.split('Day ')[1]);
-  return year * TICKS_PER_YEAR + day;
 }
 
 /** IndexedDB に確定した石板の続き (M19-14) の tick と年代記の命令の数 */
@@ -107,7 +79,7 @@ const answerDialog = (page: Page, accept: boolean) => page.getByRole('alertdialo
 
 test('M19-17: 石板で枠に保存し、介入して進めてから読むと、石板の年・力・年表・年代記が保存の時点に戻る。戻した島を判定まで回して港へ出すと、訪れた側の回し直しで同じ結末になる', async ({ page }) => {
   test.setTimeout(240_000);
-  const harbor = await routeHarbor(page);
+  const { fake: harbor } = await routeHarbor(page, { turnstile: { delayMs: 100 } });
   await page.goto('/?scenario=test-quick');
   await page.click('#speed-0');
   await spawnGrass(page);
@@ -189,7 +161,7 @@ test('M19-17: 自由モードの枠を石板の中で読むと、確かめてか
 
 test('M19-17: 「石板を初めから」は確かめてから Year 0・力の初期値・年表なしに戻し、判定の出た島は港の板に残る', async ({ page }) => {
   test.setTimeout(120_000);
-  await routeHarbor(page);
+  await routeHarbor(page, { turnstile: { delayMs: 100 } });
   await page.goto('/?scenario=test-quick');
   await page.click('#speed-100');
   await expect(page.locator('#verdict')).toBeVisible({ timeout: 90_000 });

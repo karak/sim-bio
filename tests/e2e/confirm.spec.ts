@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { routeHarbor } from '../driver/harbor';
+import { shownTick, TICKS_PER_YEAR } from '../driver/island';
 import { expectUncovered } from './uncovered';
 
 /**
@@ -9,39 +10,10 @@ import { expectUncovered } from './uncovered';
  * 判定の後にも枠へ保存でき、読み戻せる。港の API と Turnstile は scenarioSave.spec.ts と同じく港の写しで答える。
  * CONFIRM_SHOTS に置き場を渡すと、画面の撮影を残す
  */
-const TICKS_PER_YEAR = 360;
-const data = (name: string) => JSON.parse(readFileSync(`assets/data/${name}.json`, 'utf8')) as { id: string }[];
-const catalog = catalogFrom({ scenarios: data('scenarios'), species: data('species'), inscriptions: data('inscriptions') });
-const FAKE_TURNSTILE = `window.turnstile = {
-  render(el, o) { setTimeout(() => o.callback(${JSON.stringify(DUMMY_TOKEN)}), 100); return 'w'; },
-  remove() {},
-};`;
-
-async function routeHarbor(page: Page) {
-  const fake = createFakeHarbor(catalog);
-  await page.route('https://challenges.cloudflare.com/turnstile/**', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_TURNSTILE }));
-  await page.route(
-    (url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs',
-    async (route) => {
-      const req = route.request();
-      const url = new URL(req.url());
-      const r = await fake.serve({ method: req.method() as 'GET', path: url.pathname + url.search, headers: req.headers(), body: req.postData() });
-      return route.fulfill({ status: r.status, headers: r.headers, body: r.body ?? '' });
-    },
-  );
-  await page.route('**/api/v1/logs', (route) => route.fulfill({ status: 204 }));
-  return fake;
-}
 
 async function shot(page: Page, name: string) {
   const dir = process.env.CONFIRM_SHOTS;
   if (dir) await page.screenshot({ path: join(dir, `${name}.png`) });
-}
-
-async function shownTick(page: Page): Promise<number> {
-  const year = Number((await page.locator('#hud-year').textContent())?.replace('Year ', ''));
-  const day = Number((await page.locator('#hud-season').textContent())?.split('Day ')[1]);
-  return year * TICKS_PER_YEAR + day;
 }
 
 const dialog = (page: Page) => page.getByRole('alertdialog');
@@ -255,7 +227,7 @@ test('M21-04: 判定の前の石板から石板を選び直すのは確かめな
 
 test('M21-04: 港から取り下げるのは確かめ、取り消せば港に残り、受ければ一覧から消える。判定の出た島から「この島を訪れる」も離れる確かめを経る', async ({ page }) => {
   test.setTimeout(180_000);
-  const harbor = await routeHarbor(page);
+  const { fake: harbor } = await routeHarbor(page, { turnstile: { delayMs: 100 } });
   await page.goto('/?scenario=test-quick');
   await page.click('#speed-100');
   await expect(page.locator('#verdict-title')).toHaveText('島は滅びた', { timeout: 90_000 });

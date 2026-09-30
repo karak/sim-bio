@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { playScenarioToVerdict } from '../driver/verdict';
 
 /**
  * 判定の板 (M19-15 の 3)。板を上の取っ手で動かし、覆っていた画面 (観察画面の入口「3D で見る」) を押せるようにする。
@@ -13,12 +14,7 @@ async function shot(page: Page, name: string) {
 const box = (page: Page) => page.locator('#verdict .verdict-box');
 const grip = (page: Page) => page.getByRole('button', { name: /^判定の板を動かす/ });
 
-async function toVerdict(page: Page) {
-  await page.goto('/?scenario=test-civ');
-  await expect(page.locator('#hud-year')).toHaveText('Year 0');
-  await page.click('#speed-100');
-  await expect(page.locator('#verdict-title')).toHaveText('島は生き延びた', { timeout: 90_000 });
-}
+const toVerdict = (page: Page) => playScenarioToVerdict(page, 'test-civ', '島は生き延びた');
 
 const at = async (page: Page) => {
   const b = await box(page).boundingBox();
