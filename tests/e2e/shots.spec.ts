@@ -3,7 +3,10 @@ import type { Probe } from '../../src/dev/probe';
 import { join } from 'node:path';
 import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { writeRequest } from '../../src/harbor/wire';
-import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { settle, selection, tilt, type View } from '../driver/camera';
+import { routeHarbor } from '../driver/harbor';
+import { advanceTo, openPaused } from '../driver/island';
+import { playToVerdict as driveToVerdict } from '../driver/verdict';
 import { baselineName, CANVAS_TARGET, optionsFor, shouldCompareBaselines } from './baseline';
 import { expectLegible, installLens } from './lens';
 import { expectUncovered } from './uncovered';
@@ -19,37 +22,7 @@ test.skip(ACCEPTANCE_DIR === undefined, 'ACCEPTANCE_DIR が無い (pnpm run shot
 // 撮る状態を毎回同じにする (M25-02): 動きを減らす設定 (ピンの上下が止まる)、止めた島から始める (?paused=1)、tick で止める (probe.advanceTo)、グラフは年の境目ごとの点
 test.use({ reducedMotion: 'reduce' });
 
-/** 止めた島から始める (?paused=1)。口 (__probe) が付き、速さの札が ⏸ になったら、島は tick 0 のまま動いていない */
-async function openPaused(page: Page, path: string) {
-  await page.goto(path);
-  await page.waitForFunction(() => '__probe' in window && document.querySelector('#speed-0.on') !== null);
-}
-
-/** 島を tick N まで進める。速さの札と待ちでは止まる tick が回ごとに違う */
-const advanceTo = (page: Page, tick: number) => page.evaluate((t) => (window as unknown as { __probe: Probe }).__probe.advanceTo(t), tick);
-
-const data = (name: string) => JSON.parse(readFileSync(`assets/data/${name}.json`, 'utf8')) as { id: string }[];
-const catalog = catalogFrom({ scenarios: data('scenarios'), species: data('species'), inscriptions: data('inscriptions') });
-const FAKE_TURNSTILE = `window.turnstile = { render(el, o) { setTimeout(() => o.callback(${JSON.stringify(DUMMY_TOKEN)}), 50); return 'w'; }, remove() {} };`;
-
 /** 港の API を港の写しで答える。closed の間は網の失敗 */
-async function routeHarbor(page: Page) {
-  const fake = createFakeHarbor(catalog);
-  const state = { closed: false };
-  await page.route('https://challenges.cloudflare.com/turnstile/**', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_TURNSTILE }));
-  await page.route('**/api/v1/logs', (route) => route.fulfill({ status: 204 }));
-  await page.route(
-    (url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs',
-    async (route) => {
-      if (state.closed) return route.abort('failed');
-      const req = route.request();
-      const url = new URL(req.url());
-      const r = await fake.serve({ method: req.method() as 'GET', path: url.pathname + url.search, headers: req.headers(), body: req.postData() });
-      return route.fulfill({ status: r.status, headers: r.headers, body: r.body ?? '' });
-    },
-  );
-  return { fake, state };
-}
 
 /** 開発の板は人の見る画面に無いので、画から外す */
 const HIDE_DEV = '.dev-panel { visibility: hidden !important; }';
@@ -116,12 +89,7 @@ test.afterEach(({}, info) => {
   if (info.status !== info.expectedStatus && info.status !== 'skipped') shotsDirOf(info).clear();
 });
 
-async function playToVerdict(page: Page, path: string, title: string) {
-  await page.goto(path);
-  await expect(page.locator('#hud-year')).toHaveText('Year 0');
-  await page.click('#speed-1000');
-  await expect(page.locator('#verdict-title')).toHaveText(title, { timeout: 60_000 });
-}
+const playToVerdict = (page: Page, path: string, title: string) => driveToVerdict(page, path, { speed: 1000, title, timeoutMs: 60_000 });
 
 const CLOSED_PUBLISH = '港は今日は閉まっている。年代記は手元に預けた。港が開いたら、同じ島として送り直す';
 
@@ -235,51 +203,8 @@ test('CNF-002: 確かめの板 (新しい島・枠の上書き・判定の出た
   await shoot(page, { 確かめの板: dialog(page) });
 });
 
-type View = { sea: boolean; cellHidden: boolean; markerHidden: boolean; markerOnScreen: boolean; screen: { x: number; y: number } };
-type Selection = { cell: number | null; size: number; marker: { scale: number } | null; view: View | null; camera: { x: number; y: number; z: number } };
-
-const selection = (page: Page) =>
-  page.evaluate(() => {
-    const scene = (window as unknown as { __probe?: Probe }).__probe?.scene;
-    return (scene ? scene.selection() : null) as Selection | null;
-  });
-
 /** 見えて選べるかの形 (screen を除く) */
 const seen = (v: View | null | undefined) => v && { sea: v.sea, cellHidden: v.cellHidden, markerHidden: v.markerHidden, markerOnScreen: v.markerOnScreen };
-
-/** カメラが止まるまで待つ (OrbitControls の damping。低い fps では数秒かかる)。3 回続けて動かなければ止まったとみる */
-async function settle(page: Page) {
-  let last = { x: NaN, y: NaN, z: NaN };
-  let still = 0;
-  await expect
-    .poll(
-      async () => {
-        const c = (await selection(page))?.camera ?? last;
-        still = Math.hypot(c.x - last.x, c.y - last.y, c.z - last.z) < 1e-4 ? still + 1 : 0;
-        last = c;
-        return still >= 3;
-      },
-      { timeout: 60_000, intervals: [300] },
-    )
-    .toBe(true);
-}
-
-/**
- * カメラを縦に倒す (度、正で水平へ)。OrbitControls は画面の高さのドラッグで 1 回りする。
- * 角の限り (真上・水平の手前) に当てると余りの回しが後に残るので、限りに当てない角だけを使う。
- * ドラッグを離した所のセルが選ばれる (canvas の click) ので、水平へ倒すときは空 (画面の上の縁) で離し、選んだセルを変えない
- */
-async function tilt(page: Page, box: { x: number; y: number; width: number; height: number }, degrees: number) {
-  const x = box.x + box.width * 0.4;
-  const top = box.y + 5;
-  const d = (box.height * Math.abs(degrees)) / 360;
-  const [from, to] = degrees > 0 ? [top + d, top] : [top, top + d];
-  await page.mouse.move(x, from);
-  await page.mouse.down();
-  await page.mouse.move(x, to, { steps: 10 });
-  await page.mouse.up();
-  await settle(page);
-}
 
 /** 寄ったカメラ (45°) から倒して、選んだセルを手前の丘に隠す角 */
 const LOW = 35;

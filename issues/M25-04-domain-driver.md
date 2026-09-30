@@ -10,6 +10,7 @@ evidence:
   - "AC2: playwright test --list は前も後も 96 tests in 16 files。CI=1 E2E_PORT=5458 の通しは 92 passed・4 skipped (shots の 4 本は ACCEPTANCE_DIR なしで skip。前と同じ)。pnpm run check は vitest 123 files 1221 passed (driver の単体 9 を含む)、worker 66、scripts 91 OK"
   - "AC3: 差分のレビューを読むだけの別のモデル (opus) に頼んだ (codex は認証が切れて動かなかった)。Turnstile の待ち (100・50・300 ms と widget の有無)・abort の種類・判定の待ち (速さ・題・timeout) は前と同じ、待ちや retry の足しは無し。指摘の未使用 import 2 つは直した"
   - "driver の縛り: tests/unit/driver.test.ts (tickFromHud・shownTick・fakeTurnstile・wireOf・routeHarbor の route の当たり方と閉港・分け合い)"
+  - "AC1 (残り、M25-04b): shots.spec.ts の routeHarbor・playToVerdict・openPaused・advanceTo・settle・tilt・selection・View・Selection を driver の呼び出しに替えた。grep 'function routeHarbor|function shownTick' tests → tests/driver/harbor.ts:39 と tests/driver/island.ts:15 の 1 つずつ (routeHarbor 5 → 1、shownTick 4 → 1)。pnpm run shots (CI 無し、基準画と比べる) は 4 passed、tests/e2e/baselines/ の差分なし"
 ---
 
 # E2E のドメインの driver (Island・Harbor・Verdict・Camera) を置き、spec の写しの関数を消す
@@ -41,3 +42,4 @@ ADR 0001 の段 4。`routeHarbor` は 5 つの spec に (confirm.spec.ts:20・de
 - 2026-10-01: tests/driver/{island,harbor,verdict,camera}.ts を置いた。Page を受け取る関数で、待ちは出来事 (toHaveText・toBeVisible・expect.poll) のまま。spec の差は options で渡す (Turnstile の待ちと widget、fake と sent の分け合い、判定の速さ・題・timeout)。clicks.ts の 1 クリック (Command を作るもの) は driver が打つ DOM の押下には無く、src 側のボタンの handler が使うので、driver は使っていない。
 - 2026-10-01: 移したコメント 6 つ (港の写しの分け合い・Turnstile の代わり・港の API を写しで答える・abortWith・石板を 100 倍速で回す・persist の TICKS_PER_YEAR と shownTick) は文を変えずに driver へ。消したコメントは無い。
 - 2026-10-01: shots.spec.ts の openPaused・advanceTo・settle・tilt・selection・型 (View・Selection) は driver (island.ts・camera.ts) に同じ文で置いた。shots.spec.ts は未変更なので、M25-03 の後にそこの写しを消して driver を呼ぶ (routeHarbor と playToVerdict も)。shotState.spec.ts は openPaused と advanceTo を driver に替えた。
+- 2026-10-01: M25-04b。shots.spec.ts の写しを driver の呼び出しに替えた (playToVerdict は speed 1000・timeout 60 s を渡す薄い呼びだけ残す)。routeHarbor 5 → 1 を満たした。基準画 20 枚はそのまま通った
