@@ -17,16 +17,16 @@ export const SCROLLS_X_ALLOWED: Record<string, string> = {
 };
 
 type TextBox = { text: string; x: number; y: number; w: number; h: number; color: string; alpha: number; fontPx: number; pressable: boolean };
-type CanvasFonts = { canvas: string; clientWidth: number; width: number; fonts: string[] };
+type CanvasFonts = { canvas: string; clientWidth: number; width: number; fonts: { font: string; scale: number }[] };
 type Found = { covered: { text: string; by: string }[]; outside: string[]; cut: string[]; boxes: TextBox[]; domFonts: { text: string; px: number }[]; canvases: CanvasFonts[] };
 
-/** canvas の fillText を拾う (canvas の中の字は DOM では読めない)。canvas ごとの font の px を覚える。addInitScript で渡す */
+/** canvas の fillText を拾う (canvas の中の字は DOM では読めない)。canvas ごとに font と、そのとき ctx の変換の拡大 (setTransform) を覚える。addInitScript で渡す */
 function recordCanvasFonts() {
-  const seen: Record<string, Record<string, string>> = {};
+  const seen: Record<string, Record<string, number>> = {};
   (window as unknown as { __lensCanvasFonts: typeof seen }).__lensCanvasFonts = seen;
   const fill = CanvasRenderingContext2D.prototype.fillText;
   CanvasRenderingContext2D.prototype.fillText = function (this: CanvasRenderingContext2D, ...args: Parameters<typeof fill>) {
-    (seen[this.canvas.id] ??= {})[this.font] = args[0];
+    (seen[this.canvas.id] ??= {})[this.font] = this.getTransform().a;
     return fill.apply(this, args);
   };
 }
@@ -93,9 +93,9 @@ function measure(root: Element, allowed: string[]): Found {
     if (cs.overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) out.cut.push(`${sel(el)} が横に ${el.scrollWidth - el.clientWidth}px 溢れる`);
   }
 
-  const fonts = (window as unknown as { __lensCanvasFonts?: Record<string, Record<string, string>> }).__lensCanvasFonts ?? {};
+  const fonts = (window as unknown as { __lensCanvasFonts?: Record<string, Record<string, number>> }).__lensCanvasFonts ?? {};
   for (const c of [root, ...Array.from(root.querySelectorAll('canvas'))].filter((e): e is HTMLCanvasElement => e instanceof HTMLCanvasElement)) {
-    out.canvases.push({ canvas: `#${c.id}`, clientWidth: c.clientWidth, width: c.width, fonts: Object.keys(fonts[c.id] ?? {}) });
+    out.canvases.push({ canvas: `#${c.id}`, clientWidth: c.clientWidth, width: c.width, fonts: Object.entries(fonts[c.id] ?? {}).map(([font, scale]) => ({ font, scale })) });
   }
   return out;
 }
@@ -164,7 +164,7 @@ export async function expectLegible(page: Page, targets: Record<string, Locator>
       return ratio < MIN_CONTRAST ? [`${b.text} ${ratio.toFixed(2)}`] : [];
     });
     if (low.length > 0) why.push(`コントラスト比が ${MIN_CONTRAST} 未満: ${group(low).join('・')}`);
-    const canvasPx = f.canvases.flatMap((c) => c.fonts.map((font) => ({ where: c.canvas, px: onScreenFontPx(parseFontPx(font), c.clientWidth, c.width) })));
+    const canvasPx = f.canvases.flatMap((c) => c.fonts.map(({ font, scale }) => ({ where: c.canvas, px: onScreenFontPx(parseFontPx(font) * scale, c.clientWidth, c.width) })));
     const small = [...f.domFonts.map((d) => ({ where: 'DOM', px: d.px })), ...canvasPx].filter((s) => s.px < MIN_FONT_PX);
     if (small.length > 0) why.push(`画面の上の字が ${MIN_FONT_PX}px 未満 (${group(small.map((s) => s.where)).join('・')}): ${sizes(small.map((s) => s.px))}`);
     if (why.length > 0) got[name] = why;

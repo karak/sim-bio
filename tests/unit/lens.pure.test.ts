@@ -65,6 +65,9 @@ describe('画面の上の字の大きさ (canvas は font × clientWidth / width
     expect(onScreenFontPx(10, 320, 640)).toBe(5);
     expect(onScreenFontPx(18, 320, 640)).toBe(9);
   });
+  it('ctx.setTransform の拡大は font に掛けてから縮める (M25-11 の描き方: 拡大 2、width は clientWidth の 2 倍で、11px は 11px のまま)', () => {
+    expect(onScreenFontPx(11 * 2, 320, 640)).toBe(11);
+  });
   it('等倍なら font のまま、拡大なら大きくなる', () => {
     expect(onScreenFontPx(12, 480, 480)).toBe(12);
     expect(onScreenFontPx(10, 960, 480)).toBe(20);
