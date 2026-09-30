@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import type { Probe } from '../../src/dev/probe';
 import { join } from 'node:path';
 import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { writeRequest } from '../../src/harbor/wire';
@@ -220,8 +221,8 @@ type Selection = { cell: number | null; size: number; marker: { scale: number } 
 
 const selection = (page: Page) =>
   page.evaluate(() => {
-    const f = (window as unknown as { __sceneSelection?: () => unknown }).__sceneSelection;
-    return (f ? f() : null) as Selection | null;
+    const scene = (window as unknown as { __probe?: Probe }).__probe?.scene;
+    return (scene ? scene.selection() : null) as Selection | null;
   });
 
 /** 見えて選べるかの形 (screen を除く) */
@@ -294,10 +295,11 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   // 手前 (画面の下) のセルほど、ピンが大きく写る
   const hidden = await page.evaluate(
     ({ n, box }) => {
-      const probe = (window as unknown as { __sceneCell: (cell: number) => View | null }).__sceneCell;
+      const scene = (window as unknown as { __probe: Probe }).__probe.scene;
+      if (!scene) return [];
       const out: { cell: number; y: number }[] = [];
       for (let cell = 0; cell < n; cell++) {
-        const v = probe(cell);
+        const v = scene.cell(cell);
         if (v && !v.sea && v.cellHidden && !v.markerHidden && v.markerOnScreen && v.screen.x > box.width * 0.3 && v.screen.x < box.width * 0.7) out.push({ cell, y: v.screen.y });
       }
       return out.sort((a, b) => b.y - a.y).map((c) => c.cell);
@@ -308,10 +310,10 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   await tilt(page, box, -LOW);
   const targets = await page.evaluate(
     ({ cells, box }) => {
-      const probe = (window as unknown as { __sceneCell: (cell: number) => View | null }).__sceneCell;
+      const scene = (window as unknown as { __probe: Probe }).__probe.scene;
       const out: { cell: number; x: number; y: number }[] = [];
       for (const cell of cells) {
-        const v = probe(cell);
+        const v = scene?.cell(cell);
         if (!v || v.cellHidden || v.screen.x < box.width * 0.3 || v.screen.x > box.width * 0.7 || v.screen.y < box.height * 0.2 || v.screen.y > box.height * 0.8) continue;
         if (document.elementFromPoint(box.x + v.screen.x, box.y + v.screen.y)?.id === 'scene') out.push({ cell, ...v.screen });
       }

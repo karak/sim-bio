@@ -20,6 +20,8 @@ async function boot(): Promise<void> {
     snapshot: world.snapshot(),
     clock: world,
   });
+  // 試験の口 (M25-09): 開発・受入のビルドだけ。本番のビルドでは動的 import ごと消える
+  if (import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1') (await import('../dev/probe')).installProbe(window, { scene: () => null, observe: () => view.inspect() });
   view.start();
 }
 

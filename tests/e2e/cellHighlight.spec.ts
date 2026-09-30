@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import type { Probe } from '../../src/dev/probe';
 
 /**
  * 選んだセルを操作画面の 3D の島で示す (M22-10、受入 2026-09-27 のユーザーのメモ、示す先はユーザーの判断 2026-09-28)。
@@ -15,8 +16,8 @@ type Selection = {
 
 const selection = (page: Page) =>
   page.evaluate(() => {
-    const f = (window as unknown as { __sceneSelection?: () => unknown }).__sceneSelection;
-    return (f ? f() : null) as Selection | null;
+    const scene = (window as unknown as { __probe?: Probe }).__probe?.scene;
+    return (scene ? scene.selection() : null) as Selection | null;
   });
 
 /** セルの詳細 (#cell-info の「セル (x, y)」) から、押したセルの座標を読む */

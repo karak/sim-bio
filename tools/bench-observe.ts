@@ -25,6 +25,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Browser, type Page } from '@playwright/test';
+import type { Probe } from '../src/dev/probe.ts';
 import { createServer, type ViteDevServer } from 'vite';
 import { summarizeBench, type BenchBreakdownRow, type BenchResult, type BenchShot } from './bench-observe-compare.ts';
 
@@ -113,8 +114,8 @@ function commit(): string {
   }
 }
 
-const readStats = (page: Page) => page.evaluate(() => (window as unknown as { __observeStats?: Stats }).__observeStats ?? null);
-const readBreakdown = (page: Page) => page.evaluate(() => (window as unknown as { __observeBreakdown: () => Record<string, BenchBreakdownRow> }).__observeBreakdown());
+const readStats = (page: Page) => page.evaluate(() => (window as unknown as { __probe?: Probe }).__probe?.observe?.stats() ?? null);
+const readBreakdown = (page: Page) => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.observe!.breakdown() as Record<string, BenchBreakdownRow>);
 const press = (page: Page, name: string) => page.locator('#shots').getByRole('button', { name, exact: true }).click();
 const assetsReady = (st: Stats | null) => !!st && Object.values(st.assets).every(Boolean);
 
@@ -142,7 +143,7 @@ async function measureFixed(browser: Browser, opt: Opt, url: string, errors: str
   // 時計は止めてあるので、待ちの長さに依らず、描き始めからのコマ数は WARMUP_MS で決まる
   const deadline = Date.now() + 180_000;
   // (#status は読み込みの前も空なので、組み上がりの最後に置かれる __observeBreakdown が出たことも見る)
-  while (!(await page.evaluate(() => document.getElementById('status')?.textContent === '' && typeof (window as unknown as { __observeBreakdown?: unknown }).__observeBreakdown === 'function'))) {
+  while (!(await page.evaluate(() => document.getElementById('status')?.textContent === '' && typeof (window as unknown as { __probe?: Probe }).__probe?.observe?.breakdown === 'function'))) {
     if (Date.now() > deadline) throw new Error('観察画面が組み上がらない');
     await page.waitForTimeout(250);
   }
@@ -176,7 +177,7 @@ async function measureFixed(browser: Browser, opt: Opt, url: string, errors: str
 async function measureFps(browser: Browser, opt: Opt, url: string, errors: string[]) {
   const page = await openPage(browser, opt, url, errors, false);
   await page.waitForFunction(() => {
-    const st = (window as unknown as { __observeStats?: Stats }).__observeStats;
+    const st = (window as unknown as { __probe?: Probe }).__probe?.observe?.stats();
     return !!st && Object.values(st.assets).every(Boolean);
   }, undefined, { timeout: 180_000, polling: 250 });
   const out: Record<string, number[]> = {};

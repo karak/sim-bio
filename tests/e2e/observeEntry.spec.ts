@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { Probe } from '../../src/dev/probe';
 import { test, expect, type Page } from '@playwright/test';
 import { topmostAtCenter as topmostOf } from './uncovered';
 
@@ -51,8 +52,8 @@ test('M19-18: 集落の無い石板 (test-quick) でも判定の前から「3D �
   await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^0 年 · [春夏秋冬]$/, { timeout: 90_000 });
   // 集落が無いので、集落だけの形 (小屋・灯り柱・石垣・船台など) を置かず、民もいない
   const inside = await page.evaluate(() => {
-    const w = window as unknown as { __observeProps: () => unknown[]; __observeHuts: () => unknown[]; __observeStats: { folk: number; deer: number } };
-    return { props: w.__observeProps(), huts: w.__observeHuts(), folk: w.__observeStats.folk };
+    const o = (window as unknown as { __probe: Probe }).__probe.observe!;
+    return { props: o.props(), huts: o.huts(), folk: o.stats()!.folk };
   });
   expect(inside).toEqual({ props: [], huts: [], folk: 0 });
   await shot(page, 'm19-18-3d');
