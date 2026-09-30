@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { expectUncovered } from './uncovered';
+import { expectUncovered, expectAllRowsUncoveredAtFivePoints } from './uncovered';
 
 /**
  * 部品が覆われない (M21-05)。部品ごとの「覆われない」試験を uncovered.ts の 1 つの型で並べる。
@@ -71,4 +71,42 @@ test('M21-09: 判定の板が出ているときに開いた確かめのダイア
   await page.keyboard.press('Escape');
   await expect(d).toBeHidden();
   await expect(page.locator('#verdict-title')).toHaveText('島は滅びた');
+});
+
+/** 島を押してセルの詳細を出し、行の札 (生気 / 枯死・輝石・草を含む全部) を 5 点で見る (M25-10。港の札が左の縁からこの行の札に掛かっていた) */
+async function pickCellAndExpectRowsUncovered(page: import('@playwright/test').Page) {
+  const box = (await page.locator('#scene').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#cell-info')).toContainText(/^セル/);
+  await expectAllRowsUncoveredAtFivePoints(page.locator('#cell-info'));
+}
+
+test('M25-10: 自由モード (/) でセルの詳細の行の札は港の札に覆われない', async ({ page }) => {
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-0');
+  await pickCellAndExpectRowsUncovered(page);
+});
+
+test('M25-10: 石板 (?scenario=test-quick) でセルの詳細の行の札は港の札に覆われない', async ({ page }) => {
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-0');
+  await pickCellAndExpectRowsUncovered(page);
+});
+
+test('M25-10: 判定の板が出ているときも、セルの詳細の行の札は港の札に覆われない', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-0');
+  const box = (await page.locator('#scene').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
+  await expect(page.locator('#cell-info')).toContainText(/^セル/);
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict-title')).toHaveText('島は滅びた', { timeout: 90_000 });
+  await expectAllRowsUncoveredAtFivePoints(page.locator('#cell-info'));
 });

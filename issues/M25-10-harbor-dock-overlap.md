@@ -1,11 +1,16 @@
 ---
 id: M25-10
 title: 港の札が #cell-info の行の札 (生気 / 枯死・輝石・草) を覆う
-status: todo
+status: review
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: []
-evidence: []
+evidence:
+  - tests/e2e/uncovered.spec.ts (M25-10 の 3 試験。直す前 3 画面とも赤・直した後緑)
+  - tests/e2e/uncovered.ts (expectAllRowsUncoveredAtFivePoints)
+  - src/ui/hud.css (.hud-bl の left 12px → 44px)
+  - .claude/localreview/m25-10/ (前後の画。git の外)
+  - commit SHA は README の作業ログの直後のコミット (git log feat/m25-10 -1)
 ---
 
 # 港の札が #cell-info の行の札 (生気 / 枯死・輝石・草) を覆う
@@ -27,10 +32,11 @@ ADR 0001 の「この ADR の外で起こす票」。設計に依らない製品
 
 ## Acceptance criteria
 
-- [ ] 直す前に tests/e2e/uncovered.spec.ts に「セルの詳細の行の札は港の札に覆われない」を足し、5 点で見て落ちるのを見る
-- [ ] 直した後に通る。自由モード・石板・判定の板の 3 つの画面で
-- [ ] M25-01 が入っていれば `pnpm run shots` の覆いの赤が消える
+- [x] 直す前に tests/e2e/uncovered.spec.ts に「セルの詳細の行の札は港の札に覆われない」を足し、5 点で見て落ちるのを見る
+- [x] 直した後に通る。自由モード・石板・判定の板の 3 つの画面で
+- [ ] M25-01 (未着手のため未確認)  が入っていれば `pnpm run shots` の覆いの赤が消える
 
 ## 作業ログ
 
 - 2026-10-01: 起票 (ADR 0001 の外の票 外-2)
+- 2026-10-01: 試験を先に足した (行の札を左端・右端・上端・下端・真ん中の 5 点で全行見る。自由モード・石板・判定の板の 3 画面で、直す前は生気 / 枯死・輝石・草が港の札に覆われて赤)。直しは .hud-bl の left を 12px → 44px にして、板を港の札 (幅 36px) の右へ寄せた。レビューは codex が認証切れのため読むだけの別モデルの reviewer で代え、全行を見る・判定の待ちを 90 s にする・注を規則の前に置くを取り込んだ。前後の画は .claude/localreview/m25-10/。check 緑 (vitest 1157)、E2E 90 件 (全件では低 fps で observe 2 件・scenarioSave 1 件が落ちたが、その 2 ファイルの再実行は 12 件緑)
