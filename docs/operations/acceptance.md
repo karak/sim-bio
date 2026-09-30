@@ -20,6 +20,21 @@ uv run scripts/acceptance.py next HBR             # 行を足すときの次の 
 人が判じるのは mode が human の行だけで、1 回 15 分まで (待ちを含む)。複数の見守り手・2 つの島・閉港・成功までの待ち・組み合わせは auto の行で、covered_by の自動の試験が見る。
 行は消さず、要らなくなったら `status: "retired"` にする。設計は docs/design/2026-09-29-acceptance-redesign.md。
 
+### 手順ごとの checks と judge (M25-05)
+
+steps の【見た目】【読みやすさ】【手触り】の札の付いた手順は、何が判じるかを 3 つ目の要素に持つ。
+ADR 0001 の段 4。`uv run scripts/acceptance.py check` は、持たない手順を落とす (active の行はすべて。auto の行も同じ)。
+
+```json
+["ならば", "【読みやすさ】板の文が読める", {"checks": [{"lens": "legible", "target": "判定の板の回避率"}]}]
+["ならば", "【見た目】島が絵として成り立って見える", {"judge": "human"}]
+```
+
+- `checks`: 機械が見る。`lens` は `tests/e2e/lens.ts` の `LENSES` の名前 (今は `legible`)、`target` は shotsOf に渡す要素の名前。知らない lens は check が落とす。lens を足すときは `LENSES` に足す。
+- `judge`: `"llm"` か `"human"`。`llm` は `pnpm run judge` (M25-06) が採点する手順、`human` は人が見る手順。
+- `checks` と `judge` は両方書いてよい。どちらも無い手順は check が落ちる。札の無い手順には要らない。
+- `acceptance:page` の `items.json` は、項目ごとの `marks` (手順・checks・judge) を出す。auto の行の `delegated` にも付く。
+
 ## 画面の立て方
 
 | 用途 | コマンド | 港 |

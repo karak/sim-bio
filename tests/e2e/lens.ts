@@ -198,3 +198,6 @@ export async function expectLegible(page: Page, targets: Record<string, Locator>
   }
   expect(got, '読めない文字がある').toEqual({});
 }
+
+/** 正本 (docs/acceptance/scenarios.jsonl) の手順の checks に書ける lens の名前。scripts/acceptance.py check がこの一覧と照らす (M25-05)。check は正規表現で読むので、`export const LENSES = { 名前: 関数, ... }` の形 (型注釈・短縮・引用符・入れ子の {} を使わない) に保つ */
+export const LENSES = { legible: expectLegible } as const;

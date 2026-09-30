@@ -68,6 +68,16 @@ SCENARIO_KEYS = {
     "steps",
     "covered_by",
 }
+# 手順の札。札の付いた手順は、何が判じるか (checks か judge) を持つ (ADR 0001 段 4)
+TAG_PATTERN = re.compile(r"^【(?:見た目|読みやすさ|手触り)】")
+MARK_KEYS = {"checks", "judge"}
+STEP_JUDGES = ("llm", "human")
+# tests/e2e/lens.ts の `export const LENSES = { 名前: 関数, ... }` の名前が、checks の lens に書ける名前
+LENS_FILE = "tests/e2e/lens.ts"
+LENSES_PATTERN = re.compile(
+    r"^export const LENSES\s*=\s*\{(?P<body>[^}]*)\}", re.MULTILINE
+)
+LENS_NAME_PATTERN = re.compile(r"(?:^|,)\s*(\w+)\s*:", re.MULTILINE)
 HUMAN_KEYS = {"when", "minutes", "links", "judge"}
 OPTIONAL_KEYS = HUMAN_KEYS | {"retired"}
 
@@ -84,6 +94,22 @@ class Link:
     label: str
     # 画面の根からの道 (`/?scenario=…`)。scheme と host は持たない。base は環境から決める
     path: str
+
+
+@dataclass(frozen=True)
+class Check:
+    """機械が見る 1 つ。lens は tests/e2e/lens.ts の LENSES の名前、target は撮る要素の名前 (shotsOf に渡す名)"""
+
+    lens: str
+    target: str
+
+
+@dataclass(frozen=True)
+class Mark:
+    """1 つの手順を何が判じるか。checks は機械、judge は "llm" か "human" """
+
+    checks: tuple[Check, ...]
+    judge: str | None
 
 
 @dataclass(frozen=True)
@@ -113,6 +139,8 @@ class Scenario:
     # 再設計の前の手順書の id (results.json の鍵)。1 つの旧 id を複数の行が引いてよい
     from_: tuple[str, ...]
     steps: tuple[tuple[str, str], ...]
+    # steps と同じ長さ。札のない手順や、何も書かれていない手順は None
+    marks: tuple[Mark | None, ...]
     covered_by: tuple[Cover, ...]
     when: str | None
     minutes: float | None
@@ -151,13 +179,34 @@ def _parse_code(row: Mapping[str, object]) -> Code:
     return Code(str(row["code"]), str(row["name"]), _strs(row.get("background", [])))
 
 
+def _parse_mark(raw: object) -> Mark:
+    if not isinstance(raw, dict) or set(raw) - MARK_KEYS:
+        raise ValueError(f"手順の 3 つ目は {{checks, judge}} の連想配列: {raw!r}")
+    checks = raw.get("checks", [])
+    if not isinstance(checks, list) or not all(
+        isinstance(c, dict)
+        and set(c) == {"lens", "target"}
+        and all(isinstance(v, str) for v in c.values())
+        for c in checks
+    ):
+        raise ValueError("checks は {lens, target} の配列")
+    judge = raw.get("judge")
+    if judge is not None and not isinstance(judge, str):
+        raise ValueError("judge は文字列")
+    return Mark(tuple(Check(c["lens"], c["target"]) for c in checks), judge)
+
+
 def _parse_scenario(row: Mapping[str, object]) -> Scenario:
     steps = row["steps"]
     if not isinstance(steps, list) or not all(
-        isinstance(s, list) and len(s) == 2 and all(isinstance(x, str) for x in s)
+        isinstance(s, list)
+        and len(s) in (2, 3)
+        and all(isinstance(x, str) for x in s[:2])
         for s in steps
     ):
-        raise ValueError("steps は [キーワード, 文] の配列")
+        raise ValueError(
+            "steps は [キーワード, 文] か [キーワード, 文, {checks, judge}] の配列"
+        )
     covers = row["covered_by"]
     if not isinstance(covers, list) or not all(isinstance(c, dict) for c in covers):
         raise ValueError("covered_by は {file, title, planned?} の配列")
@@ -180,6 +229,7 @@ def _parse_scenario(row: Mapping[str, object]) -> Scenario:
         tickets=_strs(row["tickets"]),
         from_=_strs(row["from"]),
         steps=tuple((s[0], s[1]) for s in steps),
+        marks=tuple(_parse_mark(s[2]) if len(s) == 3 else None for s in steps),
         covered_by=tuple(
             Cover(str(c.get("file", "")), str(c.get("title", "")), c.get("planned"))
             for c in covers
@@ -342,6 +392,41 @@ def _check_shape(s: Scenario, ids: set[str]) -> list[Problem]:
     return problems
 
 
+def lens_names(read: Callable[[str], str | None]) -> frozenset[str]:
+    """tests/e2e/lens.ts の LENSES の名前。ファイルか LENSES が無ければ空"""
+    m = LENSES_PATTERN.search(read(LENS_FILE) or "")
+    return frozenset(LENS_NAME_PATTERN.findall(m["body"])) if m else frozenset()
+
+
+def _check_marks(s: Scenario, lenses: frozenset[str]) -> list[Problem]:
+    """札の付いた手順は、checks か judge を持つ。checks の lens は lens.ts の名前、judge は llm か human"""
+    if s.status != "active":
+        return []
+    problems: list[Problem] = []
+
+    def bad(step: str, detail: str) -> None:
+        problems.append(Problem(s.id, "step-checks", f"「{step[:24]}」{detail}"))
+
+    for (kw, text), mark in zip(s.steps, s.marks, strict=True):
+        step = f"{kw} {text}"
+        if mark is None or not (mark.checks or mark.judge is not None):
+            if TAG_PATTERN.match(text):
+                bad(step, "は札が付いているのに checks も judge も無い")
+            continue
+        for c in mark.checks:
+            if c.lens not in lenses:
+                known = "・".join(sorted(lenses)) or "無い"
+                bad(
+                    step,
+                    f"の lens {c.lens!r} が {LENS_FILE} の LENSES に無い (ある: {known})",
+                )
+            if not c.target.strip():
+                bad(step, f"の checks の target が空 (lens {c.lens!r})")
+        if mark.judge is not None and mark.judge not in STEP_JUDGES:
+            bad(step, f"の judge は {' か '.join(STEP_JUDGES)}: {mark.judge!r}")
+    return problems
+
+
 def _check_coverage(
     s: Scenario,
     read: Callable[[str], str | None],
@@ -409,9 +494,11 @@ def check_sot(
     """正本の約束を全部かける。read(file) は repo の中の試験のファイルの中身 (無ければ None)、
     ticket_status(id) は issues/ のチケットの status (無ければ None)"""
     ids = {s.id for s in sot.scenarios}
+    lenses = lens_names(read)
     problems = _check_ids(sot)
     for s in sot.scenarios:
         problems += _check_shape(s, ids)
+        problems += _check_marks(s, lenses)
         problems += _check_coverage(s, read, ticket_status)
     return problems + _check_budget(sot)
 
@@ -469,6 +556,19 @@ def base_of(when: str, wrangler: Mapping[str, object], env: Mapping[str, str]) -
     return f"https://{wrangler['name']}.{subdomain}.workers.dev"
 
 
+def marks_of(s: Scenario) -> list[dict[str, object]]:
+    """手順ごとの checks と judge (持つ手順だけ)。受入の画面が「機械が見た」「LLM が見た」「人が見る」を並べる"""
+    return [
+        {
+            "step": f"{kw} {text}",
+            "checks": [{"lens": c.lens, "target": c.target} for c in mark.checks],
+            "judge": mark.judge,
+        }
+        for (kw, text), mark in zip(s.steps, s.marks, strict=True)
+        if mark is not None
+    ]
+
+
 def page_of(
     sot: Sot,
     *,
@@ -506,6 +606,7 @@ def page_of(
                             {"label": link.label, "path": link.path} for link in s.links
                         ],
                         "steps": [f"{kw} {text}" for kw, text in s.steps],
+                        "marks": marks_of(s),
                         "judge": s.judge,
                         "history": [
                             {"id": f, **results[f]} for f in s.from_ if f in results
@@ -523,6 +624,7 @@ def page_of(
             "tests": [
                 f"{c.file} — {c.title}" for c in s.covered_by if c.planned is None
             ],
+            "marks": marks_of(s),
         }
         for s in sot.scenarios
         if s.status == "active" and s.mode == "auto"
