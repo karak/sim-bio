@@ -14,6 +14,17 @@ import { expectUncovered } from './uncovered';
  */
 const ACCEPTANCE_DIR = process.env.ACCEPTANCE_DIR;
 test.skip(ACCEPTANCE_DIR === undefined, 'ACCEPTANCE_DIR が無い (pnpm run shots で撮る)');
+// 撮る状態を毎回同じにする (M25-02): 動きを減らす設定 (ピンの上下が止まる)、止めた島から始める (?paused=1)、tick で止める (probe.advanceTo)、グラフは年の境目ごとの点
+test.use({ reducedMotion: 'reduce' });
+
+/** 止めた島から始める (?paused=1)。口 (__probe) が付き、速さの札が ⏸ になったら、島は tick 0 のまま動いていない */
+async function openPaused(page: Page, path: string) {
+  await page.goto(path);
+  await page.waitForFunction(() => '__probe' in window && document.querySelector('#speed-0.on') !== null);
+}
+
+/** 島を tick N まで進める。速さの札と待ちでは止まる tick が回ごとに違う */
+const advanceTo = (page: Page, tick: number) => page.evaluate((t) => (window as unknown as { __probe: Probe }).__probe.advanceTo(t), tick);
 
 const data = (name: string) => JSON.parse(readFileSync(`assets/data/${name}.json`, 'utf8')) as { id: string }[];
 const catalog = catalogFrom({ scenarios: data('scenarios'), species: data('species'), inscriptions: data('inscriptions') });
@@ -126,27 +137,15 @@ test('HBR-006: 港の知らせと板の文 (回避率の行・出港のリンク
   await shoot(page, { 閉港の港の口: drawer.locator('#harbor-state'), 判定の出た島: drawer.locator('.harbor-finished') });
 });
 
-/** canvas に書いた文を拾う (HUD のグラフの目印は canvas の中の文で、DOM では読めない)。文ごとに最後に書いた所 */
-function recordCanvasText() {
-  type Drawn = { canvas: string; x: number; align: CanvasTextAlign; width: number; canvasWidth: number };
-  const drawn: Record<string, Drawn> = {};
-  (window as unknown as { __canvasText: () => Record<string, Drawn> }).__canvasText = () => ({ ...drawn });
-  const fill = CanvasRenderingContext2D.prototype.fillText;
-  CanvasRenderingContext2D.prototype.fillText = function (this: CanvasRenderingContext2D, ...args: Parameters<typeof fill>) {
-    const [text, x] = args;
-    drawn[text] = { canvas: this.canvas.id, x, align: this.textAlign, width: this.measureText(text).width, canvasWidth: this.canvas.width };
-    return fill.apply(this, args);
-  };
-}
+/** 放流が効いて狼の密度が 0.3 を越える tick (止めた島から進める) */
+const DRIFT_TICKS = 10;
 
 test('CRG-005: 漂着を受け取った港の口の文、HUD のグラフの漂着の目印、着いた浜のセルの密度', async ({ page }, info) => {
   const shoot = shotsOf(info);
-  await page.addInitScript(recordCanvasText);
   const harbor = await routeHarbor(page);
   await harbor.fake.serve(writeRequest({ kind: 'cast_cargo', cargo: { items: [{ speciesId: 'wolf', amount: 0.411 }, { speciesId: 'deer', amount: 0.254 }] } }));
-  await page.goto('/');
+  await openPaused(page, '/?paused=1');
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
-  await page.click('#speed-0');
   await page.getByRole('button', { name: /^港を開く/ }).click();
   const drift = page.getByRole('region', { name: '浜の漂着' });
   await drift.getByRole('button', { name: '浜を見る' }).click();
@@ -158,18 +157,12 @@ test('CRG-005: 漂着を受け取った港の口の文、HUD のグラフの漂�
 
   // 放流は次の刻みで島に効く (港の板は速さの列に重なるので閉じる)
   await page.getByRole('complementary', { name: '港' }).getByRole('button', { name: '閉じる' }).click();
-  await page.click('#speed-1');
   const density = (name: string) => page.locator('#cell-info > div', { has: page.locator('span', { hasText: new RegExp(`^${name}$`) }) }).locator('.mono');
-  await expect.poll(async () => Number(await density('狼').textContent()), { timeout: 10_000 }).toBeGreaterThan(0.3);
-  await page.click('#speed-0');
+  await advanceTo(page, DRIFT_TICKS);
+  expect(Number(await density('狼').textContent())).toBeGreaterThan(0.3);
   expect(Number(await density('鹿').textContent())).toBeGreaterThan(0.2);
-  const label = '漂着 (狼・鹿)';
-  const marker = await page.evaluate((text) => (window as unknown as { __canvasText: () => Record<string, { canvas: string; x: number; align: string; width: number; canvasWidth: number }> }).__canvasText()[text], label);
-  expect(marker?.canvas).toBe('graph');
-  if (!marker) throw new Error(`${label} が HUD のグラフに書かれていない`);
-  const [left, right] = marker.align === 'right' ? [marker.x - marker.width, marker.x] : [marker.x, marker.x + marker.width];
-  expect(left).toBeGreaterThanOrEqual(0);
-  expect(right).toBeLessThanOrEqual(marker.canvasWidth);
+  // 目印は canvas の中の字なので、DOM では graph の aria-label の文で確かめる (字が canvas に収まるかは ui.graph.test.ts)
+  await expect(page.locator('#graph')).toHaveAttribute('aria-label', /^個体数と気温の推移。Y0 から Y\d+、\d+ 点。目印: 漂着 \(狼・鹿\) Y0$/);
   await shoot(page, { 'HUD のグラフ': page.locator('#graph'), セルの詳細: page.locator('#cell-info') });
 });
 
@@ -187,10 +180,9 @@ test('CNF-002: 確かめの板 (新しい島・枠の上書き・判定の出た
   test.setTimeout(120_000);
   const shoot = shotsOf(info);
   await page.route('**/api/**', (route) => route.abort('failed'));
-  await page.goto('/');
-  await page.click('#speed-100');
-  await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 30_000 });
-  await page.click('#speed-0');
+  await openPaused(page, '/?paused=1');
+  await advanceTo(page, 400);
+  await expect(page.locator('#hud-year')).toHaveText('Year 1');
 
   await page.click('#new-island');
   await expectAsk(page, '新しい島', '今の島を捨てて、新しい島を始めますか (自動の枠は上書きされます)');
@@ -202,9 +194,8 @@ test('CNF-002: 確かめの板 (新しい島・枠の上書き・判定の出た
   await page.click('#slot-save');
   const first = `枠 3 · ${await page.locator('#hud-year').textContent()}`;
   await expect(page.locator('#slot-select option[value="manual-3"]')).toHaveText(first);
-  await page.click('#speed-100');
-  await expect(page.locator('#hud-year')).not.toHaveText(first.replace('枠 3 · ', ''), { timeout: 30_000 });
-  await page.click('#speed-0');
+  await advanceTo(page, 760);
+  await expect(page.locator('#hud-year')).toHaveText('Year 2');
   await page.click('#slot-save');
   await expectAsk(page, '枠を上書きする', `「${first}」を今の島で上書きしますか (前の保存には戻せません)`);
   await shoot(page, { 確かめの板: dialog(page) });
@@ -269,8 +260,7 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   test.setTimeout(240_000);
   const shoot = shotsOf(info);
   await page.route('**/api/**', (route) => route.abort('failed'));
-  await page.goto('/');
-  await page.click('#speed-0');
+  await openPaused(page, '/?paused=1');
   const box = await page.locator('#scene').boundingBox();
   if (!box) throw new Error('canvas not found');
   const cellInfo = page.locator('#cell-info');

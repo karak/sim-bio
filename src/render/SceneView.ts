@@ -19,6 +19,8 @@ import {
   Scene,
   SphereGeometry,
   Vector2,
+  Vector4,
+  WebGLRenderTarget,
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -40,7 +42,7 @@ import {
   writeCellOutline,
   type SurfaceGrid,
 } from './cellHighlight';
-import { cellViewOf, selectionOf, type SceneInspect } from './inspect';
+import { cellViewOf, PIN_ID_RGB, pinMaskOf, selectionOf, type PinMask, type SceneInspect } from './inspect';
 
 /** 集落の箱 1 個の寸法。stage の数だけ縦に積む */
 const SETTLEMENT_BOX = { width: 0.5, height: 0.4, depth: 0.5 };
@@ -91,6 +93,8 @@ export type SceneViewOptions = {
   size: number;
   heightScale?: number;
   maxInstances?: number;
+  /** 印の上下の時計 (ms)。既定は performance.now()。止めた時計を渡すと印は動かず、撮る画が回ごとに変わらない (M25-02) */
+  now?: () => number;
 };
 
 /** Three.js を完全に隠す。World の snapshot を読んで描くだけ。 */
@@ -99,6 +103,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   const hs = opts.heightScale ?? 12;
   const maxInst = opts.maxInstances ?? 20000;
   const n = size * size;
+  const nowMs = opts.now ?? (() => performance.now());
 
   const renderer = new WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -235,7 +240,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       rewritten = true;
     }
     const k = markerScale(dist);
-    const bob = markerBob(performance.now() / 1000, reducedMotion?.matches ?? false);
+    const bob = markerBob(nowMs() / 1000, reducedMotion?.matches ?? false);
     markerMesh.scale.setScalar(k);
     markerMesh.position.set(anchor.x, anchor.y + (CELL_HIGHLIGHT.gap + bob) * k, anchor.z);
     outlineMesh.visible = true;
@@ -249,6 +254,32 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
    */
   const viewOfCell = (cell: number) =>
     cellViewOf(surface, camera, controls.target, { width: canvas.clientWidth, height: canvas.clientHeight }, CELL_HIGHLIGHT.gap + CELL_HIGHLIGHT.pin.height + CELL_HIGHLIGHT.pin.head * 0.6, cell);
+  // M25-02: ピンの ID 描き。地形は深さだけ (色を書かない)、ピンは 1 色。別の scene と描き先 (WebGLRenderTarget) に描くので、canvas と止めた島の描き直しに触れない
+  const idScene = new Scene();
+  idScene.add(new Mesh(geo, new MeshBasicMaterial({ colorWrite: false })));
+  const idPin = new Mesh(markerGeo, new MeshBasicMaterial({ color: new Color(PIN_ID_RGB[0] / 255, PIN_ID_RGB[1] / 255, PIN_ID_RGB[2] / 255) }));
+  idScene.add(idPin);
+  const idTarget = new WebGLRenderTarget(1, 1);
+  const drawPinMask = (): PinMask => {
+    const buf = renderer.getDrawingBufferSize(new Vector2());
+    idTarget.setSize(buf.x, buf.y);
+    idPin.position.copy(markerMesh.position);
+    idPin.scale.copy(markerMesh.scale);
+    idPin.updateMatrixWorld(true);
+    const clear = renderer.getClearColor(new Color());
+    const alpha = renderer.getClearAlpha();
+    const viewport = renderer.getViewport(new Vector4());
+    renderer.setClearColor(0x000000, 1);
+    renderer.setRenderTarget(idTarget);
+    renderer.clear();
+    renderer.render(idScene, camera);
+    const rgba = new Uint8Array(buf.x * buf.y * 4);
+    renderer.readRenderTargetPixels(idTarget, 0, 0, buf.x, buf.y, rgba);
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(clear, alpha);
+    renderer.setViewport(viewport);
+    return pinMaskOf(rgba, buf.x, buf.y);
+  };
   // E2E・調整用: 強調の今の状態を読む (__sceneSelection())。読むだけで何も変えない
   // E2E・調整用 (M21-08): 選んだセルがあるとき、任意のセルの見え方を読む。読むだけで何も変えない
   const inspect: SceneInspect = {
@@ -264,6 +295,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
         view: markerMesh.visible ? viewOfCell(hlCell) : null,
       }),
     cell: (cell) => (markerMesh.visible && cell >= 0 && cell < n ? viewOfCell(cell) : null),
+    pinMask: () => (markerMesh.visible ? drawPinMask() : null),
   };
 
   let layer: LayerKind = 'terrain';
@@ -417,6 +449,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       dreamEaterGeo.dispose();
       outlineGeo.dispose();
       markerGeo.dispose();
+      idTarget.dispose();
     },
   };
 }

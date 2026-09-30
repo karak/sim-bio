@@ -136,7 +136,7 @@ async function boot(): Promise<void> {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const app = document.getElementById('app');
   if (!app) throw new Error('#app missing');
-  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(world.snapshot().species), size: world.snapshot().size });
+  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(world.snapshot().species), size: world.snapshot().size, now: dev?.clock });
   /** やり直しの効かない操作の確かめ (M21-04)。何を確かめるかは askOf が決め、確かめの要らない操作はそのまま通す */
   const confirm = createConfirm(app);
   const confirmed = (r: Risky): Promise<boolean> => {
@@ -181,7 +181,7 @@ async function boot(): Promise<void> {
     // 描き分けの表は種から作るので、大きさか種の並びが変われば作り直す
     if (size !== shown.size || nextSpecies.map((d) => d.id).join() !== shown.species.map((d) => d.id).join()) {
       view.dispose();
-      view = createSceneView(canvas, { assets: buildAssetTable(nextSpecies), size });
+      view = createSceneView(canvas, { assets: buildAssetTable(nextSpecies), size, now: dev?.clock });
     }
     selected = null;
     localSave.replaced(world.serialize());
@@ -329,16 +329,20 @@ async function boot(): Promise<void> {
   const observe = createObserveEntry(app, {
     names: Object.fromEntries(species.map((d) => [d.id, d.name])),
     getSpeed: () => loop.getSpeed(),
+    now: dev?.clock,
     setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
     // (M19-18) 入口は左上の時間の箱の速さの列の端 (上の真ん中の石板に覆われない)
     buttonHost: document.getElementById('speed-row') ?? undefined,
   });
   // 試験の口 (M25-09): 開発・受入のビルドだけ。SceneView は島を作り直すので、読むたびに今の view を引く
-  probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect() });
+  probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect(), tick: () => world.snapshot().tick, advance: (n) => loop.advance(n) });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
     { step: (n) => (runner?.verdict().status === 'running' ? scenarioStep(n) : world.step(n)), snapshot: () => world.snapshot() },
     {
+      // グラフの点は年の境目ごとに積む (M25-02)。フレームで拾うと、境目から何 tick 過ぎた島を写すかが回ごとに違う
+      ticksPerYear: config.ticksPerYear,
+      onYear: (s) => hud.recordYear(s),
       onFrame: (s) => {
         localSave.onTick(s.tick, () => world.serialize());
         scenarioAutosave?.onTick(s.tick);
@@ -498,6 +502,7 @@ async function boot(): Promise<void> {
       return { save, chronicle: recorder?.current() ?? null };
     },
   });
+  if (dev?.paused) document.getElementById('speed-0')?.click();
   loop.start();
 }
 
