@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawGraph } from '../../src/ui/graph';
+import { drawGraph, renderGraph } from '../../src/ui/graph';
 import { TimeSeries } from '../../src/ui/timeSeries';
 
 type Text = { text: string; x: number; align: CanvasTextAlign; font: string };
@@ -19,6 +19,10 @@ function recordingContext() {
     lineTo() {},
     stroke() {},
     setLineDash() {},
+    scale: 1,
+    setTransform(a: number) {
+      ctx.scale = a;
+    },
     fillText(text: string, x: number) {
       texts.push({ text, x, align: ctx.textAlign, font: ctx.font });
     },
@@ -48,9 +52,60 @@ describe('drawGraph の目印 (M19-15: 漂着の目印が見えない)', () => {
     expect(texts.find((t) => t.text === '鹿')).toMatchObject({ align: 'left' });
   });
 
-  it('目印の文は軸の数 (10px) より大きく書く (canvas は表示で半分に縮む)', () => {
+  it('目印の文は軸の数より大きく書く', () => {
     const { ctx, texts } = recordingContext();
     drawGraph(ctx, ts, lines, [{ x: 2, label: '隕石', color: '#E07A55' }], W, 200);
-    expect(pxOf(texts.find((t) => t.text === '隕石')?.font ?? '')).toBeGreaterThanOrEqual(18);
+    expect(pxOf(texts.find((t) => t.text === '隕石')?.font ?? '')).toBeGreaterThan(pxOf(texts.find((t) => t.text === 'Y0')?.font ?? ''));
+  });
+});
+
+describe('renderGraph の字の実寸 (M25-11: 画面の上で軸 5px・目印 9px)', () => {
+  const ts = new TimeSeries(10);
+  for (let y = 0; y <= 4; y++) ts.push(y, { grass: 100 + y, temp: 10 });
+  const lines = [{ key: 'grass', color: '#6FBF7C', label: '草' }];
+  const markers = [{ x: 2, label: '隕石', color: '#E07A55' }];
+  const canvasOf = (clientWidth: number, clientHeight: number) => ({ clientWidth, clientHeight, width: 640, height: 200 }) as HTMLCanvasElement;
+
+  it.each([
+    ['HUD のグラフ (320×100 に描く)', 320, 100, 1],
+    ['同じ、DPR 2', 320, 100, 2],
+    ['同じ、DPR 3', 320, 100, 3],
+    ['同じ、DPR 1.5', 320, 100, 1.5],
+    ['局所のグラフ (240×80)', 240, 80, 1],
+  ])('%s: 軸の字は画面の上で 11px 以上、目印は 12px 以上', (_n, cw, ch, dpr) => {
+    const { ctx, texts } = recordingContext();
+    const canvas = canvasOf(cw, ch);
+    renderGraph(canvas, ctx, ts, lines, markers, dpr);
+    const scale = (ctx as unknown as { scale: number }).scale;
+    const shown = (font: string) => pxOf(font) * scale * (canvas.clientWidth / canvas.width);
+    expect(shown(texts.find((t) => t.text === 'Y0')?.font ?? '')).toBeGreaterThanOrEqual(11);
+    expect(shown(texts.find((t) => t.text === '隕石')?.font ?? '')).toBeGreaterThanOrEqual(12);
+  });
+
+  it.each([
+    [1, 640, 200],
+    [2, 640, 200],
+    [3, 960, 300],
+  ])('描く解像度は画面の大きさ × max(2, DPR) (DPR %s → %s×%s、縮んで潰れない)', (dpr, w, h) => {
+    const { ctx } = recordingContext();
+    const canvas = canvasOf(320, 100);
+    renderGraph(canvas, ctx, ts, lines, markers, dpr);
+    expect([canvas.width, canvas.height]).toEqual([w, h]);
+  });
+
+  it('目印の文は線の内側 (0〜画面の幅) に収まる', () => {
+    const { ctx, texts } = recordingContext();
+    renderGraph(canvasOf(320, 100), ctx, ts, lines, [{ x: 4, label: '漂着 (狼・鹿)', color: '#8FEADF' }], 1);
+    const m = texts.find((t) => t.text.startsWith('漂着'));
+    expect(m?.align).toBe('right');
+    expect(m?.x).toBeLessThanOrEqual(320);
+  });
+
+  it('画面に出ていない (clientWidth 0) ときは描かず、canvas の大きさも変えない', () => {
+    const { ctx, texts } = recordingContext();
+    const canvas = canvasOf(0, 0);
+    renderGraph(canvas, ctx, ts, lines, markers, 3);
+    renderGraph(canvas, ctx, ts, lines, markers, 3);
+    expect([canvas.width, canvas.height, texts.length]).toEqual([640, 200, 0]);
   });
 });

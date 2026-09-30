@@ -1,11 +1,14 @@
 ---
 id: M25-11
 title: HUD のグラフの canvas の字が画面の上で 5px (軸) と 9px (目印) になる
-status: todo
+status: review
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: []
-evidence: []
+evidence:
+  - 'drawGraph の実寸の単体試験 (直す前に 5 < 11 で落ちるのを確認): tests/unit/ui.graph.test.ts (renderGraph の describe)'
+  - 'CRG-005 の目印の確かめ (shownPx >= 12、線の内側): tests/e2e/shots.spec.ts'
+  - 'commit: 本コミット (feat/m25-11)'
 ---
 
 # HUD のグラフの canvas の字が画面の上で 5px (軸) と 9px (目印) になる
@@ -35,3 +38,4 @@ CRG-005 で人が読む「漂着 (狼・鹿)」の目印がこの 9px の字で�
 ## 作業ログ
 
 - 2026-10-01: 起票 (ADR 0001 の外の票 外-3)
+- 2026-10-01: 直した。renderGraph (src/ui/graph.ts) が canvas を clientWidth × max(2, DPR) で描き、CSS px の座標系で字を書く (軸 11px・目印 bold 12px)。余白は左 32・右 44・上 16。Hud.ts の 2 つのグラフが使う。局所グラフは畳んだ板で描くと 0 サイズなので、描かずに戻り、板を開いた後に描き直す (レビューの指摘)。前後の画は .claude/localreview/m25-11/。M25-01 は未取り込みなので shots の赤の確認は無し
