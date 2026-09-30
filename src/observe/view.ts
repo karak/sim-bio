@@ -45,6 +45,7 @@ import { createSurface } from './render/roofs';
 import { MIST_S, mistEnvelope, surgeStep, wetness, type SurgeState } from './fx';
 import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { triangleBreakdown } from './render/breakdown';
+import type { ObserveDebug, ObserveInspect, ObserveStats } from './inspect';
 import { installShadowOnly } from './render/shadowOnly';
 import { bakeImpostor } from './render/impostor';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
@@ -225,6 +226,8 @@ export type ObservationView = {
   stop(): void;
   /** 今のカメラ: 自動 (自然記録調)・自由 (触ったあと、20 秒で自動に戻る)・個体を追う */
   cameraMode(): 'auto' | 'free' | 'follow';
+  /** 試験の口 (M25-09): 描いている物を読む。src/dev/probe.ts が開発・受入のビルドだけ window.__probe に繋ぐ */
+  inspect(): ObserveInspect;
 };
 
 export async function createObservationView(host: ObserveHost): Promise<ObservationView> {
@@ -654,7 +657,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M23-07 で変更: 場面の MSAA の段を渡す)
   const grade = createGrade(renderer, scene, camera, air ? [air] : [], { msaa: OPT.msaa });
   // 調整用 (M22-07): 開発者ツールから空気の層の uniform と時刻を触る
-  (window as unknown as { __observeAir: unknown }).__observeAir = { air, sun, camera, controls, scene, renderer, heightAt: field.heightAt };
+  // 試験の口 (M25-09): window に書かず inspect() で返す。src/dev/probe.ts が開発・受入のビルドだけ window に繋ぐ
+  let lastStats: ObserveStats | null = null;
+  let lastDebug: ObserveDebug | null = null;
+  const airInsp: ObserveInspect['air'] = { air, sun, camera, controls, scene, renderer, heightAt: field.heightAt };
   grade.setEnabled({ grade: OPT.grade, bloom: OPT.bloom });
   const resize = () => {
     const w = canvas.clientWidth;
@@ -792,7 +798,6 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const band = createNoticeBand(canvas.parentElement ?? document.body, () => host.names ?? {});
   const notice = (e: TimelineEvent) => band.push(e);
   // 調整用: 開発者ツールから知らせを出す (__observeNotice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
-  (window as unknown as { __observeNotice: unknown }).__observeNotice = notice;
   // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
   const DEPART_S = 70;
   let departLeft = OPT.depart && OPT.auto ? DEPART_S : 0;
@@ -839,7 +844,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   };
   // 調整用: 開発者ツールから場面を起こす (__observeFx('sprout' | 'mist' | 'rain'))
   // (M22-07 の手直しで変更: 'sinking' は海面を 1.5 m 上げる (本体の沈降の代わり)。上がる間は波立ちと流れが見える)
-  (window as unknown as { __observeFx: unknown }).__observeFx = (kind: 'sprout' | 'mist' | 'rain' | 'sinking') => {
+  const fxInsp: ObserveInspect['fx'] = (kind) => {
     const at = marks.grove ?? marks.center;
     if (kind === 'sprout') playScene({ kind, year: snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
     else if (kind === 'mist') playScene({ kind, year: snap.year, cell: home, at, radius: 4 });
@@ -847,14 +852,14 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     else playScene({ kind, year: snap.year });
   };
   // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__observeLook('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
-  (window as unknown as { __observeLook: unknown }).__observeLook = (at: string | { x: number; z: number }, dist = 6, height = 1.2, yaw = 0) => {
+  const lookInsp: ObserveInspect['look'] = (at, dist = 6, height = 1.2, yaw = 0) => {
     const c = typeof at === 'string' ? centroid(at) : at;
     if (c) lookFrom(c.x, c.z, dist, height, yaw);
   };
   // (M23-09) 調整用: 小屋の置き場所 (遠距離版への切り替えを寄せ引きで確かめる)
-  (window as unknown as { __observeHuts: unknown }).__observeHuts = () => huts.map((h) => ({ x: h.x, y: h.y, z: h.z, ry: h.ry }));
+  const hutsInsp: ObserveInspect['huts'] = () => huts.map((h) => ({ x: h.x, y: h.y, z: h.z, ry: h.ry }));
   // (M23-09 の 3 回目で追加) 調整用: 集落の部品の名前と置き場所
-  (window as unknown as { __observeProps: unknown }).__observeProps = () => [...settlementPlacements].map(([name, ms]) => ({ name, at: ms.map((m) => [m.elements[12], m.elements[13], m.elements[14]]) }));
+  const propsInsp: ObserveInspect['props'] = () => [...settlementPlacements].map(([name, ms]) => ({ name, at: ms.map((m) => [m.elements[12], m.elements[13], m.elements[14]]) }));
   const direct = (dt: number) => {
     const frame = sceneFrame(snap, area);
     const scenes = detectScenes(prevFrame, frame, newEvents, area);
@@ -904,9 +909,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const proj = new Vector3();
   // 試験用 (E2E): 個体の画面上の位置 (canvas の左上から px)。画面の外・カメラの後ろなら null
   // 軽量化の試算用: 区分ごとの三角形の内訳 (render/breakdown.ts)。__observeBreakdown() を開発者ツールから呼ぶ
-  (window as unknown as { __observeBreakdown: unknown }).__observeBreakdown = () =>
+  const breakdownInsp: ObserveInspect['breakdown'] = () =>
     triangleBreakdown(camera, { terrain: [terrain], water: [water.mesh], grass: [grass.mesh], belltree: lods.filter((l) => l !== forestSet).map((l) => l.group), forest: forestSet ? [forestSet.group] : [], settlement: [settlement], ship: [shipView.group], creatures: [creatures.group] }, scene);
-  (window as unknown as { __observeScreen: unknown }).__observeScreen = (id: number) => {
+  const screenInsp: ObserveInspect['screen'] = (id) => {
     const a = agents.agents.find((g) => g.id === id);
     if (!a) return null;
     proj.set(a.x, field.heightAt(a.x, a.z) + 0.8, a.z).project(camera);
@@ -1003,9 +1008,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
-      (window as unknown as { __observeStats: unknown }).__observeStats = st;
-      (window as unknown as { __observeDebug: unknown }).__observeDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
+      const st: ObserveStats = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      lastStats = st;
+      lastDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       if (host.debug === false) stats.textContent = observeYearText(snap);
       else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps${st.res < 1 ? ` (解像度 ×${st.res})` : ''} · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
     }
@@ -1014,6 +1019,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let running = false;
   let handle = 0;
   return {
+    inspect: () => ({ air: airInsp, notice, fx: fxInsp, look: lookInsp, huts: hutsInsp, props: propsInsp, breakdown: breakdownInsp, screen: screenInsp, stats: () => lastStats, debug: () => lastDebug }),
     setSnapshot(next, timeline) {
       if (timeline) {
         if (timeline.length < seenEvents) seenEvents = 0;

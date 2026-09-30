@@ -47,6 +47,7 @@ async function boot(): Promise<void> {
     sendBeacon: (url, data) => navigator.sendBeacon(url, data),
   });
   const dev = DEVTOOLS_BUILT ? (await import('./dev/session')).devSessionOf(new URLSearchParams(location.search)) : null;
+  const probe = DEVTOOLS_BUILT ? await import('./dev/probe') : null;
   const [base, species, scenarios, store] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
@@ -332,6 +333,8 @@ async function boot(): Promise<void> {
     // (M19-18) 入口は左上の時間の箱の速さの列の端 (上の真ん中の石板に覆われない)
     buttonHost: document.getElementById('speed-row') ?? undefined,
   });
+  // 試験の口 (M25-09): 開発・受入のビルドだけ。SceneView は島を作り直すので、読むたびに今の view を引く
+  probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect() });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
     { step: (n) => (runner?.verdict().status === 'running' ? scenarioStep(n) : world.step(n)), snapshot: () => world.snapshot() },

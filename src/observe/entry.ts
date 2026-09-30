@@ -1,6 +1,7 @@
 import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import type { ObservationView } from './view';
+import type { ObserveInspect } from './inspect';
 
 /**
  * 操作画面から観察画面に入る/戻る (M22-08)。操作画面の上に全面の層を重ね、観察画面を描く。
@@ -14,6 +15,8 @@ export type ObserveEntry = {
   active(): boolean;
   enter(): Promise<void>;
   exit(): void;
+  /** 観察画面を組んだあとの試験の口 (M25-09)。まだ入っていなければ null */
+  inspect(): ObserveInspect | null;
 };
 
 export type ObserveEntryOptions = {
@@ -112,6 +115,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
       }
     },
     active: () => isActive,
+    inspect: () => view?.inspect() ?? null,
     async enter() {
       if (isActive || !latest || open.disabled) return;
       isActive = true;
