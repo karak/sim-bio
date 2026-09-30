@@ -35,6 +35,25 @@ ADR 0001 の段 4。`uv run scripts/acceptance.py check` は、持たない手�
 - `checks` と `judge` は両方書いてよい。どちらも無い手順は check が落ちる。札の無い手順には要らない。
 - `acceptance:page` の `items.json` は、項目ごとの `marks` (手順・checks・judge) を出す。auto の行の `delegated` にも付く。
 
+### 基準画と更新の手順 (M25-03)
+
+ADR 0001 の段 3。`tests/e2e/shots.spec.ts` は、shotsOf に渡した要素ごとの画 (3D の面は `#scene` を別の画) を、`tests/e2e/baselines/` の基準画と比べる。
+auto の行 (HBR-006・CRG-005・CNF-002・SEL-003) も同じに比べる。基準画は Playwright の snapshot の置き場 (`playwright.config.ts` の `snapshotPathTemplate`) で、受入の画面の `shots/` とは別なので、`check_shots` には見えない。
+名前は `<ID>-<画の番号>-<要素名>.png`。閾値は `threshold: 0.2`・`maxDiffPixelRatio: 0.02` (`tests/e2e/baseline.ts`)。字だけの細い板は 0.12 (理由はそこのコメント)。
+
+基準画は手元の Mac だけで持つ。CI (`CI` が空でない) と Mac 以外では比べを回さず、lens の検査だけ回す (`shouldCompareBaselines`、`tests/unit/baseline.pure.test.ts`)。
+`tests/e2e/baselines/VERSIONS.json` に、撮った Chromium と macOS の版を添える。
+比べは `pnpm run shots` (`ACCEPTANCE_DIR` のあるときだけ回る) の中で走り、`updateSnapshots: 'none'` なので基準画を黙って書かない。
+
+```sh
+pnpm run shots:update                          # 撮って比べ、前後と差の画を審査台の回 (.claude/localreview/m25-03-<日時>/) に出す。基準画は書き換えない
+pnpm run shots:update -- --apply <回の名前>    # 審査台で「合格」にした画だけ基準画に写し、VERSIONS.json を書く
+```
+
+1. CSS や文を直して `pnpm run shots` が落ちたら、意図した変わりかを `pnpm run shots:update` で確かめる。回の `items.json` は 1 つの group で、共有の `items.json` の `groups` に足すと審査台に並ぶ (共有の `items.json`・`index.html` は書き換えない)。
+2. 審査台で前・後・差の画を見て、意図した変わりだけ「合格」にする。押さない画は基準画のまま。
+3. `--apply` は審査台の `verdicts.json` を読み、合格の画だけ写す。`git add tests/e2e/baselines` して、直した CSS と同じコミットに入れる (`*.png` は LFS)。
+
 ## 画面の立て方
 
 | 用途 | コマンド | 港 |
