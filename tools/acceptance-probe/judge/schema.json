@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"required":["image","answers"],"properties":{"image":{"type":"string"},"answers":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","answer","evidence"],"properties":{"id":{"type":"string"},"answer":{"type":"string","enum":["yes","no"]},"evidence":{"type":"string"}}}}}}
