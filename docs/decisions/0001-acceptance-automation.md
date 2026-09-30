@@ -1,7 +1,7 @@
 ---
-status: proposed
-date: 2026-09-30
-decision-makers: ユーザー (承認で accepted にする)
+status: accepted
+date: 2026-10-01
+decision-makers: ユーザー (2026-10-01 00:31 に判断 1〜6 を推奨どおり承認)
 consulted: 調べと試しの agent (fable)
 informed: M21 以降の票を受ける agent
 ---
@@ -155,13 +155,13 @@ CI で回すのは、段 1 の lens (環境に依らない性質) と今の E2E 
 
 ## 段と票
 
-票の番号は仮 (M25 はこの枝ではまだ使っていない)。
+票は issues/M25-01〜M25-08 に起こした (2026-10-01)。
 人の分は、今の 13 分 (TUR-001 5・TUR-002 4・画の 4 行 各 1) から数える。
 
-| 段 | 票 (仮) | 中身 | 依存 | 完了の条件 | 人の分 |
+| 段 | 票 | 中身 | 依存 | 完了の条件 | 人の分 |
 |---|---|---|---|---|---|
-| 1 | M25-01 | 読みやすさの lens (覆い 5 点・画面の内・切れ・コントラスト・画面の上の字の大きさ) を shotsOf に入れる。コントラストと字の大きさの計算は純粋な関数にして vitest で試す。読みやすさだけを判じる HBR-006 を auto に移す | なし | 今の feat/m19 で `pnpm run shots` が赤になり、差分に「港の札 (button.harbor-dock) が #cell-info の 生気 / 枯死・輝石・草 を覆う」と「#graph の字が 5px・9px」が出る。仕込んだ変異 (hud.css の `.confirm` の z-index を下げる、確かめの文を板の幅より長くする) でも赤になる。外-2・外-3 を直すと緑になる | 12 分 (HBR-006 が機械へ) |
-| 2 | M25-02 | 撮る状態の決定論: `reducedMotion`、tick で止める口、グラフを本体の年ごとに積む、ピンと観察画面の時計、ピンの ID 描き | 外-1 | `pnpm run shots` を 2 回撮り、13 組の画がどれも閾値の内に収まる。今は CNF-002-1/2 が 0.8%、HBR-006-1/2 のグラフが 0.14% ずれる (付録 B の 3) | 12 分 |
+| 1 | M25-01 | 読みやすさの lens (覆い 5 点・画面の内・切れ・コントラスト・画面の上の字の大きさ) を shotsOf に入れる。コントラストと字の大きさの計算は純粋な関数にして vitest で試す。読みやすさだけを判じる HBR-006 を auto に移す | なし | 今の feat/m19 で `pnpm run shots` が赤になり、差分に「港の札 (button.harbor-dock) が #cell-info の 生気 / 枯死・輝石・草 を覆う」と「#graph の字が 5px・9px」が出る。仕込んだ変異 (hud.css の `.confirm` の z-index を下げる、確かめの文を板の幅より長くする) でも赤になる。M25-10・M25-11 を直すと緑になる | 12 分 (HBR-006 が機械へ) |
+| 2 | M25-02 | 撮る状態の決定論: `reducedMotion`、tick で止める口、グラフを本体の年ごとに積む、ピンと観察画面の時計、ピンの ID 描き | M25-09 | `pnpm run shots` を 2 回撮り、13 組の画がどれも閾値の内に収まる。今は CNF-002-1/2 が 0.8%、HBR-006-1/2 のグラフが 0.14% ずれる (付録 B の 3) | 12 分 |
 | 3 | M25-03 | 要素ごとの基準画、閾値、版の記録、審査台で前後を並べる更新の手順。CRG-005・CNF-002・SEL-003 を auto に移し、covered_by を基準画の試験にする | 段 2 | `.confirm-box` を 2px ずらすと落ち、`text-rendering: geometricPrecision` では落ちない。審査台に前後の画が出て、承認すると基準画が書き換わる | TUR 9 分 + 承認 0〜2 分 |
 | 4 | M25-04 | `tests/driver/` (Island・Harbor・Verdict・Camera)。shots.spec.ts から移し、写しの関数を消す | 段 2 | `routeHarbor` が 5 → 1、`shownTick` が 4 → 1。E2E の数は変わらず全部通る | 変わらない |
 | 4 | M25-05 | 正本の手順ごとの `checks` と `judge`。acceptance.py check と test_acceptance.py | 段 1 | 札の付いた手順から checks と judge を消すと check が落ちる (test_acceptance.py) | 変わらない |
@@ -178,22 +178,24 @@ TUR-001 の読みやすさの部分 (回避率の行・積荷の知らせ) も H
 ## この ADR の外で起こす票
 
 次の 3 つは設計に依らない製品の欠陥で、この ADR の決定がどうなっても直す。
-番号はこの ADR の段の票とは別に取る。
+票は issues/M25-09〜M25-11 に起こした (2026-10-01)。
 
 | 票 | 欠陥 | 根拠 | この ADR との関係 |
 |---|---|---|---|
-| 外-1 | 本番の bundle に `__sceneSelection`・`__sceneCell` と `__observe*` の 10 個が入っている | `pnpm run build:cloudflare` と同じ環境で vite build し、出た JS に文字列があった。書く所は src/render/SceneView.ts:246・286 と src/observe/view.ts:657-1008。tests/unit/build.devtools.test.ts:8 の MARKERS はこれを見ていない | 段 2 の前提 (口を probe に移す) |
-| 外-2 | 港の札が #cell-info の「生気 / 枯死」「輝石」「草」の札を覆う | 文字の箱ごとの 5 点の試し (付録 B の 1)。CRG-005-2・SEL-003-3 の画にも写る | 段 1 の lens が緑になる前提 |
-| 外-3 | HUD のグラフの canvas の字が画面の上で 5px (軸) と 9px (目印) | src/ui/Hud.ts:168・src/ui/hud.css:23・src/ui/graph.ts:6-7 | 同上 |
+| M25-09 (外-1) | 本番の bundle に `__sceneSelection`・`__sceneCell` と `__observe*` の 10 個が入っている | `pnpm run build:cloudflare` と同じ環境で vite build し、出た JS に文字列があった。書く所は src/render/SceneView.ts:246・286 と src/observe/view.ts:657-1008。tests/unit/build.devtools.test.ts:8 の MARKERS はこれを見ていない | 段 2 の前提 (口を probe に移す) |
+| M25-10 (外-2) | 港の札が #cell-info の「生気 / 枯死」「輝石」「草」の札を覆う | 文字の箱ごとの 5 点の試し (付録 B の 1)。CRG-005-2・SEL-003-3 の画にも写る | 段 1 の lens が緑になる前提 |
+| M25-11 (外-3) | HUD のグラフの canvas の字が画面の上で 5px (軸) と 9px (目印) | src/ui/Hud.ts:168・src/ui/hud.css:23・src/ui/graph.ts:6-7 | 同上 |
 
-## ユーザーの判断を待つ点
+## ユーザーの判断を待った点 (2026-10-01 に承認)
 
-1. 基準画を手元の Mac だけに置くか、Linux の docker で CI でも持つか。推奨は手元だけ。shots はもう ACCEPTANCE_DIR のあるときだけ回り (shots.spec.ts:14-15)、CI には日本語の字形と GL の差の分の手間が増える。
-2. LLM の判定を手元の `claude -p` で回すか、API の鍵で回すか。推奨は `claude -p`。鍵を持たずに `pnpm run judge` から呼べることを試した (付録 B の 4)。
-3. 外-1〜外-3 をいつ直すか。推奨は、外-1 を段 2 の前に、外-2・外-3 を段 1 と並べて直す。段 1 の完了は検査が赤になることを示すことで、直すと緑になる。
-4. 基準画の閾値を `threshold: 0.2`・`maxDiffPixelRatio: 0.02` にするか、差 0 にするか。推奨は 0.02 (上の「基準画の閾値」)。
-5. Hud・Harbor の部品化 (M21-05 の順の 2・3) を段 3 の後にするか。推奨は段 3 の後。
-6. 手触りの 1 分を人に残すか。推奨は残す。付いてくることと画面の外へ出ないことは試験が見ていて、残るのは気持ちよさだけである。
+どれも推奨どおりに決まった。
+
+1. **決定: 基準画は手元の Mac だけに置く。** 基準画を手元の Mac だけに置くか、Linux の docker で CI でも持つか。推奨は手元だけ。shots はもう ACCEPTANCE_DIR のあるときだけ回り (shots.spec.ts:14-15)、CI には日本語の字形と GL の差の分の手間が増える。
+2. **決定: 手元の `claude -p` で回す。** LLM の判定を手元の `claude -p` で回すか、API の鍵で回すか。推奨は `claude -p`。鍵を持たずに `pnpm run judge` から呼べることを試した (付録 B の 4)。
+3. **決定: M25-09 を段 2 の前に、M25-10・M25-11 を段 1 と並べて直す。** 外の票 3 つをいつ直すか。推奨は、M25-09 を段 2 の前に、M25-10・M25-11 を段 1 と並べて直す。段 1 の完了は検査が赤になることを示すことで、直すと緑になる。
+4. **決定: `threshold: 0.2`・`maxDiffPixelRatio: 0.02`。** 基準画の閾値を `threshold: 0.2`・`maxDiffPixelRatio: 0.02` にするか、差 0 にするか。推奨は 0.02 (上の「基準画の閾値」)。
+5. **決定: 段 3 の後にする。** Hud・Harbor の部品化 (M21-05 の順の 2・3) を段 3 の後にするか。推奨は段 3 の後。
+6. **決定: 人に残す。** 手触りの 1 分を人に残すか。推奨は残す。付いてくることと画面の外へ出ないことは試験が見ていて、残るのは気持ちよさだけである。
 
 ## 確かめていない仮定
 
@@ -231,12 +233,12 @@ O8 は段 1 の lens でも見るが、観察画面の文字は 3D の上に直�
 
 どれも 2026-09-30、feat/m19 の 8723e67 を scratchpad に写し、`/Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/m19/node_modules` を借りて回した。
 道具はセッションの scratchpad (`.../scratchpad/adr-0001/`) にあり、セッションとともに消える。
-段 1〜5 の票で試験として作り直す。
+M25-01 で `tools/acceptance-probe/` に写し、段 1〜5 の票で試験として作り直す。
 
 ### 1. 読みやすさの試し
 
 - 覆い (`src/tests/probe/occlusion.spec.ts`): 自由モードで島を押した後、文字の箱ごとに 5 点を当てると、3 件が覆われていた。どれも港の札 (`BUTTON.harbor-dock`・`SPAN.harbor-dock-glyph`) が #cell-info の「生気 / 枯死」「輝石」「草」を覆う。港の札の箱は x 0〜36・y 336〜384、#cell-info は x 22〜262・y 270〜524。
-- コントラスト (`src/tests/probe/jitter.spec.ts` と `contrast.py`): 文字を透明にして撮った画を背景にし、要素の箱の中の 10 パーセンタイルの比を出した。自由モードと確かめの板の 73 要素のうち 4.5 未満は 1 つ (押せない「枠から読込」、opacity 0.4 で 2.35)。最小の字は 11px。canvas の中の字は数に入らない (外-3 の字はここに出ない)。
+- コントラスト (`src/tests/probe/jitter.spec.ts` と `contrast.py`): 文字を透明にして撮った画を背景にし、要素の箱の中の 10 パーセンタイルの比を出した。自由モードと確かめの板の 73 要素のうち 4.5 未満は 1 つ (押せない「枠から読込」、opacity 0.4 で 2.35)。最小の字は 11px。canvas の中の字は数に入らない (M25-11 の字はここに出ない)。
 
 ### 2. 基準画の閾値の測り (`src/tests/probe/fontdrift.spec.ts`)
 
