@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { writeRequest } from '../../src/harbor/wire';
 import { catalogFrom, createFakeHarbor, DUMMY_TOKEN } from '../fixtures/fakeHarbor';
+import { expectLegible, installLens } from './lens';
 import { expectUncovered } from './uncovered';
 
 /**
@@ -68,9 +69,12 @@ function shotsOf(info: TestInfo) {
     if (targets.length === 0) throw new Error('写すものを 1 つ以上渡す');
     for (const t of targets) await expect(t).toBeInViewport({ ratio: 1 });
     await expectUncovered(shown);
+    await expectLegible(page, shown);
     await page.screenshot({ path: join(dir, `${id}-${++n}.png`), style: HIDE_DEV });
   };
 }
+
+test.beforeEach(({ page }) => installLens(page));
 
 // 途中で落ちた行の画は、steps の「画 n」と数が合わないので残さない
 test.afterEach(({}, info) => {
