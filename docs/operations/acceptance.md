@@ -20,6 +20,13 @@ uv run scripts/acceptance.py next HBR             # 行を足すときの次の 
 人が判じるのは mode が human の行だけで、1 回 15 分まで (待ちを含む)。複数の見守り手・2 つの島・閉港・成功までの待ち・組み合わせは auto の行で、covered_by の自動の試験が見る。
 行は消さず、要らなくなったら `status: "retired"` にする。設計は docs/design/2026-09-29-acceptance-redesign.md。
 
+### 人の 1 周は 1 分 (M25-08)
+
+ADR 0001 の段 6。2026-10-02 から、round の human の行は TUR-001 だけで、1 分である。
+流れ: `pnpm run acceptance:page` → 受入の画面で TUR-001 を開く → `/?scenario=test-ship&dev=1` で 1000x にして判定の板を出し、取っ手でドラッグして付いてくる手触りを見る → 合否を付ける。
+そのほかは機械が見る。3D の絵は OBS-002 (`pnpm run judge`)、読みやすさは HBR-006・CRG-005・CNF-002・SEL-003 (lens と基準画)、順と数と保存は auto の行の自動試験である。
+TUR-002 は retired にした (代わりは SEL-003・CRG-005・CNF-002・CNF-001・CRG-002・DEV-001)。行と `from` の旧 id は残すので、results.json の旧い判定 (r2-cargo など) は TUR-002 の行の `from` から引ける。
+
 ### 手順ごとの checks と judge (M25-05)
 
 steps の【見た目】【読みやすさ】【手触り】の札の付いた手順は、何が判じるかを 3 つ目の要素に持つ。

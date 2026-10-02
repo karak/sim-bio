@@ -738,6 +738,47 @@ class RepoSotTest(unittest.TestCase):
         ]
         self.assertEqual(tagged_steps, [])
 
+    def test_the_round_has_only_the_one_minute_of_touch_in_tur_001(self):
+        sot, _ = load(
+            (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
+        )
+        round_human = [
+            s
+            for s in sot.scenarios
+            if s.status == "active" and s.mode == "human" and s.when == "round"
+        ]
+        self.assertEqual([s.id for s in round_human], ["TUR-001"])
+        self.assertEqual(sum(s.minutes or 0 for s in round_human), 1)
+
+    def test_every_tagged_step_of_tur_001_is_judged_by_a_human_and_nothing_else(self):
+        sot, _ = load(
+            (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
+        )
+        tur = next(s for s in sot.scenarios if s.id == "TUR-001")
+        tagged = [
+            mark
+            for (_, text), mark in zip(tur.steps, tur.marks, strict=True)
+            if text.startswith("【")
+        ]
+        self.assertEqual(len(tagged), 1)
+        self.assertEqual((tagged[0].judge, tagged[0].checks), ("human", ()))
+
+    def test_tur_002_is_retired_into_the_rows_that_absorbed_it(self):
+        sot, _ = load(
+            (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
+        )
+        tur = next(s for s in sot.scenarios if s.id == "TUR-002")
+        self.assertEqual(tur.status, "retired")
+        assert tur.retired is not None
+        self.assertEqual(tur.retired.on, "2026-10-02")
+        self.assertEqual(
+            sorted(tur.retired.replaced_by),
+            ["CNF-001", "CNF-002", "CRG-002", "CRG-005", "DEV-001", "SEL-003"],
+        )
+        self.assertEqual(
+            tur.from_, ("r2-cargo", "r2-cell-highlight", "r2-confirm", "r2-snapshot")
+        )
+
     def test_the_lens_names_are_read_from_the_lens_file(self):
         def read(rel):
             return (REPO / rel).read_text(encoding="utf-8")
