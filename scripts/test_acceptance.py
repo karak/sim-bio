@@ -628,6 +628,21 @@ class ShotsTest(unittest.TestCase):
         )
         self.assertIn("shots/TUR-009-1.png", problems[2].detail)
 
+    def test_an_auto_row_with_an_llm_judged_step_takes_shots_too(self):
+        judged = auto(
+            "HBR-002",
+            steps=[
+                ["前提", "観察画面に入っている"],
+                ["ならば", "【見た目】画 1: 島が見える", {"judge": "llm"}],
+            ],
+        )
+        sot, _ = load(text_of(*BASE_ROWS, auto(), judged))
+        self.assertEqual(check_shots(sot, {"HBR-002": ("shots/HBR-002-1.png",)}), [])
+        self.assertEqual(
+            [p.where for p in check_shots(sot, {"HBR-001": ("shots/HBR-001-1.png",)})],
+            ["HBR-001"],
+        )
+
 
 class MainTest(unittest.TestCase):
     """page と dir を repo の正本で回す。items.json は一時の置き場に書く"""

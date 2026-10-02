@@ -16,6 +16,12 @@
   - 画素の基準 (tests/e2e/baselines/) を持つ画は、3 票とも yes でも LLM では合格にしない (比べが合格にする)。
   - 全部の票と根拠は judge.json (受入の画面の置き場) に書く。results.json と違い、合格も残る。
 CI では回さない (Claude Code の認証も基準画も無い)。鍵は持たず、Claude Code の認証をそのまま使う。
+
+観察画面 (M25-07): 3D の画素の基準を持たない代わりに、人が承認した同じ場面の画を docs/acceptance/observe-approved/<画と同じ名前>.png に置く。
+  - rubrics.json の問いに "ref": true があれば、その画を基準画として並べて渡す (承認済みの画が無ければ呼ぶ前に止まる)。
+  - 承認済みの画を持つ画だけの手順は、3 票とも yes なら results.json に {verdict: "pass", by: "llm", …} で合格を書く
+    (上の「合格は書かない」の例外。ADR 0001 の決定: 観察画面は 3 票そろった yes で合格、人は基準画を替えるときにだけ承認する)。
+    手順のすべてが合格で、かつ正本の judge が llm の手順をすべて当てたときだけ項目の verdict が pass。足りなければ undecided。
 """
 
 from __future__ import annotations
@@ -49,6 +55,7 @@ JOBS = 4
 MODEL = "sonnet"
 RUBRICS = Path("docs/acceptance/rubrics.json")
 BASELINES = Path("tests/e2e/baselines")
+APPROVED = Path("docs/acceptance/observe-approved")
 JUDGE_LOG = "judge.json"
 STEP_SPEC = re.compile(r"^(?P<id>[A-Z]{3}-\d{3})/(?P<n>\d+)$")
 # 手順の文の「画 1」「画 1〜3」「画 1 (…)・画 2」が指す画の番号
@@ -83,6 +90,8 @@ SCHEMA = {
 class Question:
     id: str
     text: str
+    # 承認済みの基準画を並べて渡す問い (画風の比べ)
+    ref: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,8 +105,9 @@ class Vote:
     error: str = ""
 
 
-# 1 枚の画の 1 回の呼び出し。(prompt, image, model) から claude -p の標準出力を返す。試験は偽のものに替える
-Runner = Callable[[str, Path, str], str]
+# 1 枚の画の 1 回の呼び出し。(prompt, image, model, reference) から claude -p の標準出力を返す。試験は偽のものに替える。
+# reference は並べて渡す承認済みの基準画 (無ければ None)
+Runner = Callable[[str, Path, str, Path | None], str]
 
 
 @dataclass(frozen=True)
@@ -116,6 +126,7 @@ class ImageResult:
     duration_ms: int
     models: tuple[str, ...]
     pixel_baseline: bool
+    approved: bool = False
 
 
 @dataclass(frozen=True)
@@ -212,7 +223,7 @@ def questions_of(step: StepRef, rubrics: Mapping[str, Sequence[Mapping[str, str]
     """採点表の問い。rubrics.json に <ID>/<n> があればそれ、無ければ手順の文を 1 つの問いにする"""
     rows = rubrics.get(step.key)
     if rows:
-        return [Question(r["id"], r["q"]) for r in rows]
+        return [Question(r["id"], r["q"], bool(r.get("ref"))) for r in rows]
     claim = TAG_AND_SHOT.sub("", step.text)
     return [
         Question(
@@ -223,13 +234,22 @@ def questions_of(step: StepRef, rubrics: Mapping[str, Sequence[Mapping[str, str]
     ]
 
 
-def prompt_of(questions: Sequence[Question], image: Path) -> str:
+def prompt_of(
+    questions: Sequence[Question], image: Path, reference: Path | None = None
+) -> str:
     lines = "\n".join(f"- {q.id}: {q.text}" for q in questions)
-    return (
+    opening = (
         "あなたは受入の画の採点者。指定の画像ファイルを Read で 1 回だけ開き、次の問いのすべてに yes か no で答える。"
+        if reference is None
+        else "あなたは受入の画の採点者。基準画と採点する画像の 2 つのファイルを、この順に Read で 1 回ずつ開き、次の問いのすべてに yes か no で答える。"
+        "基準画は人が承認した同じ場面の画で、画風の比べにだけ使う (採点の対象は画像ファイルのほう)。"
+    )
+    ref_line = "" if reference is None else f"基準画 (承認済み): {reference}\n"
+    return (
+        f"{opening}"
         "evidence は日本語で、画の中の位置 (左上・中央など) と見えたものを 1 文で書く。"
         "推測で yes にしない。見えないもの・確かめられないものは no。\n"
-        f"{lines}\n\n画像ファイル: {image}"
+        f"{lines}\n\n{ref_line}画像ファイル: {image}"
     )
 
 
@@ -269,7 +289,9 @@ def parse_output(stdout: str, questions: Sequence[Question]) -> Vote:
     return Vote(answers, cost, duration, model)
 
 
-def run_claude(prompt: str, image: Path, model: str) -> str:
+def run_claude(
+    prompt: str, image: Path, model: str, reference: Path | None = None
+) -> str:
     """本物の claude -p。手元の CLAUDE.md・MCP・スキルを読ませず (ADR 付録 B の 4)、Read だけを許す。
     標準入力は閉じる (開けたままだと 3 秒待つ)。鍵の環境変数は渡さず、Claude Code の認証を使う"""
     env = {
@@ -294,8 +316,13 @@ def run_claude(prompt: str, image: Path, model: str) -> str:
             "Read",
             "--allowedTools",
             "Read",
-            "--add-dir",
-            str(image.parent),
+            *[
+                arg
+                for d in dict.fromkeys(
+                    [image.parent, *([reference.parent] if reference else [])]
+                )
+                for arg in ("--add-dir", str(d))
+            ],
             "--max-turns",
             "4",
             "--no-session-persistence",
@@ -319,11 +346,16 @@ def run_claude(prompt: str, image: Path, model: str) -> str:
 
 
 def _one_vote(
-    runner: Runner, questions: Sequence[Question], image: Path, model: str
+    runner: Runner,
+    questions: Sequence[Question],
+    image: Path,
+    model: str,
+    reference: Path | None = None,
 ) -> Vote:
     try:
         return parse_output(
-            runner(prompt_of(questions, image), image, model), questions
+            runner(prompt_of(questions, image, reference), image, model, reference),
+            questions,
         )
     except (OSError, subprocess.SubprocessError) as e:
         return Vote(None, error=f"{type(e).__name__}: {e}")
@@ -360,6 +392,7 @@ def image_result(
     votes: Sequence[Vote],
     *,
     pixel_baseline: bool,
+    approved: bool = False,
 ) -> ImageResult:
     return ImageResult(
         image,
@@ -368,12 +401,23 @@ def image_result(
         sum(v.duration_ms for v in votes),
         tuple(sorted({v.model for v in votes if v.model})),
         pixel_baseline,
+        approved,
     )
 
 
 def writes_pass(result: StepResult) -> bool:
     """LLM の 3 票の yes だけで合格にしてよい手順か。画素の基準を持つ画が 1 枚でもあれば、しない"""
     return result.verdict == "yes" and not any(i.pixel_baseline for i in result.images)
+
+
+def records_pass(result: StepResult) -> bool:
+    """3 票の yes を合格として results.json に書いてよい手順か (M25-07)。
+    writes_pass に加えて、どの画も人が承認した基準画 (APPROVED) を持つ。承認済みの基準画が無い画は、人が決める"""
+    return (
+        writes_pass(result)
+        and bool(result.images)
+        and all(i.approved for i in result.images)
+    )
 
 
 def record_of(result: StepResult) -> dict[str, object]:
@@ -407,6 +451,11 @@ def note_of(steps: Mapping[str, Mapping[str, object]]) -> str:
     """results.json の note。人が読む 1 行ずつ。どの画のどの問いが、どの票で、何を根拠に落ちたか"""
     lines = ["LLM の判定 (手元の claude -p の多数決)。人が見て決める。"]
     for key, rec in steps.items():
+        if rec["verdict"] == "yes":
+            lines.append(
+                f"- {key} 承認済みの基準画と並べて、どの問いも 3 票とも yes (合格)"
+            )
+            continue
         for img in rec["images"]:  # type: ignore[attr-defined]
             for q in img["questions"]:
                 if q["outcome"] == "yes":
@@ -438,6 +487,7 @@ def merge_entry(
     at: str,
     cli: str,
     model: str,
+    expected: frozenset[str] = frozenset(),
 ) -> dict[str, object] | None:
     """results.json の 1 項目。人が書いた項目 (by が llm でない) は None (書かない)。
     LLM が前に書いた手順のうち今回当てなかったものは残し、当てた手順は置き換える。合格 (yes) の手順は残さない。
@@ -453,7 +503,7 @@ def merge_entry(
     for r in results:
         if r.errored:
             continue
-        if r.verdict == "yes":
+        if r.verdict == "yes" and not records_pass(r):
             steps.pop(r.step.key, None)
         else:
             steps[r.step.key] = record_of(r)
@@ -461,10 +511,26 @@ def merge_entry(
         return dict(existing) if existing else {}
     if not steps:
         return {}
+    if expected:
+        # 正本の手順の番号が変わって残った古い記録は、判定に入れない
+        steps = {k: v for k, v in steps.items() if k in expected}
+        if not steps:
+            return {}
     verdicts = {rec["verdict"] for rec in steps.values()}
+    if "fail" in verdicts:
+        verdict = "fail"
+    elif verdicts == {"yes"} and expected <= steps.keys():
+        verdict = "pass"
+    else:
+        verdict = "undecided"
     return {
-        "verdict": "fail" if "fail" in verdicts else "undecided",
-        "note": note_of(steps),
+        "verdict": verdict,
+        "note": note_of(steps)
+        + (
+            f"\n- まだ当てていない手順: {'・'.join(sorted(expected - steps.keys()))}"
+            if verdict == "undecided" and expected - steps.keys()
+            else ""
+        ),
         "at": at,
         "by": "llm",
         "llm": {
@@ -486,6 +552,7 @@ def apply_results(
     at: str,
     cli: str,
     model: str,
+    expected: Mapping[str, frozenset[str]] | None = None,
 ) -> tuple[dict[str, Mapping[str, object]], list[str]]:
     """results.json の新しい中身と、人の判定があって書かなかった id。読むだけで、current は変えない"""
     out = dict(current)
@@ -499,6 +566,7 @@ def apply_results(
             at=at,
             cli=cli,
             model=model,
+            expected=(expected or {}).get(scenario, frozenset()),
         )
         if entry is None:
             skipped.append(scenario)
@@ -544,14 +612,25 @@ def _cli_version() -> str:
         return "unknown"
 
 
+@dataclass(frozen=True)
+class PlanItem:
+    step: StepRef
+    questions: list[Question]
+    image: Path
+    pixel_baseline: bool
+    # 人が承認した同じ場面の画 (APPROVED/<画と同じ名前>)。あれば承認済み
+    approved: Path | None
+
+
 def plan_of(
     root: Path,
     out_dir: Path,
     steps: Sequence[StepRef],
     image_override: Sequence[Path],
-) -> list[tuple[StepRef, list[Question], Path, bool]]:
-    """(手順, 問い, 画, 画素の基準を持つか) の表。画が無ければ FileNotFoundError (黙って飛ばさない)。
-    --image で画を替えたときの基準は、手順が本来指す画のものを見る"""
+) -> list[PlanItem]:
+    """手順ごと・画ごとの計画。画が無ければ FileNotFoundError (黙って飛ばさない)。
+    --image で画を替えたときの基準は、手順が本来指す画のものを見る。
+    問いに ref があるのに承認済みの基準画が無ければ、呼ぶ前に FileNotFoundError"""
     rubrics = _read_json(root / RUBRICS)
     shots_dir = out_dir / SHOTS_DIR
     shots = shots_of(
@@ -572,17 +651,26 @@ def plan_of(
             )
         qs = questions_of(step, rubrics)
         baselined = any(has_pixel_baseline(p, root / BASELINES) for p in nominal)
-        plan += [
-            (
-                step,
-                qs,
-                p,
-                baselined
-                if image_override
-                else has_pixel_baseline(p, root / BASELINES),
+        # --image で替えた画は、手順が本来指す画 (nominal) の承認済みの基準画と並べる
+        own = [q.name for q in nominal] if image_override and nominal else []
+        for i, p in enumerate(images):
+            ref = root / APPROVED / (own[min(i, len(own) - 1)] if own else p.name)
+            approved = ref if ref.is_file() and any(q.ref for q in qs) else None
+            if not ref.is_file() and any(q.ref for q in qs):
+                raise FileNotFoundError(
+                    f"{step.key} の問いが承認済みの基準画を並べるのに、{ref} が無い"
+                )
+            plan.append(
+                PlanItem(
+                    step,
+                    qs,
+                    p,
+                    baselined
+                    if image_override
+                    else has_pixel_baseline(p, root / BASELINES),
+                    approved,
+                )
             )
-            for p in images
-        ]
     return plan
 
 
@@ -597,6 +685,7 @@ def run(
     jobs: int,
     image_override: Sequence[Path] = (),
     cli: str = "unknown",
+    expected: Sequence[StepRef] = (),
     now: Callable[[], datetime.datetime] = lambda: datetime.datetime.now(datetime.UTC),
 ) -> tuple[list[StepResult], float, float, list[str]]:
     """steps を当てる。(結果, かかった秒, 換算額の合計, 人の判定があって書かなかった id)。
@@ -607,15 +696,31 @@ def run(
     started = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [
-            [pool.submit(_one_vote, runner, qs, image, model) for _ in range(votes)]
-            for _, qs, image, _ in plan
+            [
+                pool.submit(
+                    _one_vote,
+                    runner,
+                    item.questions,
+                    item.image,
+                    model,
+                    item.approved if any(q.ref for q in item.questions) else None,
+                )
+                for _ in range(votes)
+            ]
+            for item in plan
         ]
         got = [[f.result() for f in fs] for fs in futures]
     elapsed = time.monotonic() - started
     by_step: dict[StepRef, list[ImageResult]] = {}
-    for (step, qs, image, baselined), vs in zip(plan, got, strict=True):
-        by_step.setdefault(step, []).append(
-            image_result(qs, image, vs, pixel_baseline=baselined)
+    for item, vs in zip(plan, got, strict=True):
+        by_step.setdefault(item.step, []).append(
+            image_result(
+                item.questions,
+                item.image,
+                vs,
+                pixel_baseline=item.pixel_baseline,
+                approved=item.approved is not None,
+            )
         )
     results = [StepResult(step, tuple(imgs)) for step, imgs in by_step.items()]
     cost = sum(i.cost_usd for r in results for i in r.images)
@@ -625,7 +730,17 @@ def run(
     at = now().isoformat(timespec="seconds").replace("+00:00", "Z")
     # 書く直前に読み直す (呼び出しの間に人が画面で保存した判定を失わない)
     current = _read_json(out_dir / "results.json")
-    new, skipped = apply_results(current, results, at=at, cli=cli, model=models)
+    expected_by: dict[str, set[str]] = {}
+    for e in expected:
+        expected_by.setdefault(e.scenario, set()).add(e.key)
+    new, skipped = apply_results(
+        current,
+        results,
+        at=at,
+        cli=cli,
+        model=models,
+        expected={k: frozenset(v) for k, v in expected_by.items()},
+    )
     if new != current:
         _write_json(out_dir / "results.json", new)
     for r in results:
@@ -637,6 +752,7 @@ def run(
             "cli": cli,
             "model": models,
             "writes_pass": writes_pass(r),
+            "records_pass": records_pass(r),
         }
     _write_json(out_dir / JUDGE_LOG, log)
     return results, elapsed, cost, skipped
@@ -653,6 +769,8 @@ def summary_of(
             else (
                 " (画素の基準があるので合格にしない)"
                 if not writes_pass(r)
+                else " (合格として記録する)"
+                if records_pass(r)
                 else " (合格候補)"
             )
         )
@@ -727,8 +845,10 @@ def main(
         print(e, file=sys.stderr)
         return 1
     if args.dry_run:
-        for step, qs, image, _ in plan:
-            print(f"{step.key} {image.name}: 問い {len(qs)} つ x {args.votes} 回")
+        for item in plan:
+            print(
+                f"{item.step.key} {item.image.name}: 問い {len(item.questions)} つ x {args.votes} 回"
+            )
         print(f"計 {len(plan) * args.votes} 回の claude -p ({args.model})")
         return 0
     try:
@@ -742,6 +862,7 @@ def main(
             jobs=args.jobs,
             image_override=args.image,
             cli=_cli_version(),
+            expected=select_steps(sot, []),
         )
     except ValueError as e:
         print(e, file=sys.stderr)
