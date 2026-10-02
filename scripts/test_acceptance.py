@@ -762,6 +762,9 @@ class RepoSotTest(unittest.TestCase):
         ]
         self.assertEqual(len(tagged), 1)
         self.assertEqual((tagged[0].judge, tagged[0].checks), ("human", ()))
+        self.assertEqual(
+            [text for _, text in tur.steps if text.startswith("【")][0][:5], "【手触り】"
+        )
 
     def test_tur_002_is_retired_into_the_rows_that_absorbed_it(self):
         sot, _ = load(

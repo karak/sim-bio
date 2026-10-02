@@ -75,3 +75,4 @@ TUR-002 の retire は M25-03 の後にできる。TUR-001 の書き直しは M2
   - docs/operations/acceptance.md に節「人の 1 周は 1 分」を足し、ADR 0001 の段 6 に 1 行足した。既存の文は変えていない。
   - 検査: acceptance.py check ok (44 行)。ACCEPTANCE_DIR を scratchpad にして page を回すと groups は TUR-001 だけ。
   - **ユーザーの判断**: (a) 訪問の画面の【見た目】【読みやすさ】(島の名前・碑文・年表の結末の文) は、ADR の決定どおり人からも外したが、lens も LLM の問いも無い。足すか。(b) docs/acceptance/scenarios.jsonl の code 行 TUR の background 「見るのは【見た目】【読みやすさ】【手触り】の札の付いた行だけ…」は今は【手触り】だけで古い。既存の文なので書き換えていない。(c) docs/operations/acceptance.md の「合格は書かない」(M25-07 のログが挙げた古い文)。
+- 2026-10-02: レビュー。codex は認証切れ、読むだけの opus で代えた。直した: 試験 2 が残る手順の札が【手触り】であることも見る (3D の手順に差し替える変異が通っていた)、TUR-001 の covered_by にドラッグを見る verdict.spec の M19-15 (3) を足した (既存の項は変えない)、acceptance.md の新しい節の「引ける」を実際の働きに直した。直さない (ユーザーの判断): 残した【手触り】の文は旧文のままで、画面の外へ出ない等は BRD-001 が自動で見ている。ADR の言う「気持ちよさ」だけに文を絞るか。TUR-001 の from (a-publish-visit・r2-publish-visit は出港・訪問の旧い判定で、ドラッグの項目の history に並ぶ) を HBR-001 側へ移すか。旧 3D の「Esc で戻る」は OBS-001 が見る。
