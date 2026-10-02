@@ -12,7 +12,7 @@
 ```sh
 pnpm run dev:acceptance                           # 港つきの受入のビルド (別の端末)
 pnpm run acceptance:page                          # 人の 1 周 (TUR-*) の items.json を書く。書く前に画面の origin を GET する
-pnpm run acceptance:page -- --when deploy         # 配ったあとの本番 (OPS-*)
+pnpm run acceptance:page --when deploy            # 配ったあとの本番 (OPS-*)
 uv run scripts/acceptance.py feature              # Gherkin の文で読む
 uv run scripts/acceptance.py next HBR             # 行を足すときの次の id
 ```
@@ -75,7 +75,7 @@ pnpm run judge -- --dry-run                        # 何を何回呼ぶかだけ
 - 画は、手順の文が「画 N」「画 N〜M」で指す画 (受入の画面の `shots/<ID>-<N>.png`)。指さなければその行の画すべて。
 - 問いは `docs/acceptance/rubrics.json` の `<ID>/<手順の番号>` に書く (yes / no の問い)。無ければ手順の文を 1 つの問いにする。
 - 1 枚の画に 3 回呼び、問いごとに多数決を取る。3 票とも yes なら yes、3 票とも no なら fail、割れた問い (呼び出しの失敗を含む) は undecided。
-- `results.json` には fail と undecided だけを `{verdict, note, at, by: "llm", llm: {cli, model, cost_usd, steps}}` で書く。合格は書かない。人が判定した項目 (`by` が llm でない) は上書きしない。受入の画面は `undecided` を「未判定」と読み、note に LLM の根拠が出る。
+- `results.json` には fail と undecided を `{verdict, note, at, by: "llm", llm: {cli, model, cost_usd, steps}}` で書く。合格は、観察画面の画 (画素の基準を持たず、人が承認した同じ場面の画を `docs/acceptance/observe-approved/` に持つ画。OBS-002) だけの手順で 3 票とも yes のときに、同じ形の `verdict: "pass"`・`by: "llm"` で書く。項目が pass になるのは、正本の llm の手順をすべて当ててどれも合格のときだけ。ほかの手順の合格は書かない。人が判定した項目 (`by` が llm でない) は上書きしない。受入の画面は `undecided` を「未判定」と読み、note に LLM の根拠が出る。
 - 全部の票と根拠は、受入の画面の置き場の `judge.json` に書く。画素の基準 (`tests/e2e/baselines/`) を持つ画は、3 票とも yes でも `writes_pass: false` (LLM の yes だけでは合格にしない)。
 - `--image` で画を替えたとき (仕込んだ欠陥の試し) は、標準出力だけで `results.json` にも `judge.json` にも書かない。呼び出しがすべて失敗した手順 (認証切れ) は記録を書き換えず、終了コード 1 で返る。
 - 受入の画面で人が LLM の項目を押す・メモを直すと、画面のサーバーが `by` と `llm` を落として保存する。以後その項目は人の判定として扱い、judge は書き換えない。

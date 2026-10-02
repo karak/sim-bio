@@ -529,7 +529,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       settlement.add(hutSet.group);
       continue;
     }
-    // (M23-09 の 3 回目で追加) 小屋でない部品は OPT.prop より先を遠距離版で描く (小屋と同じく置き場所ごとに揺らし、高さも入れた距離。影はそれぞれの形で落とす)
+    // (M23-09 の 3 回目で追加) 小屋でない部品は OPT.prop より先を遠距離版で描く (小屋と同じく置き場所ごとに揺らし、高さも入れた距離。影は下の M23-10 のとおり遠距離版で落とす)
     const propFar = name !== 'hut' && OPT.prop > 0 ? findNode(settleGlb, `${name}_lod1`) : null;
     if (propFar) {
       // (M23-10 で変更: 影は近い・遠いに依らず全部の置き場所を shadowNodeOf の形 (遠距離版) で落とす。近い形 (settle1 の格子の丸めた石) で落とすと影が 3〜4 倍になった)
@@ -542,7 +542,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     }
     const g = instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats);
     settlement.add(g);
-    // (M23-04) 小屋 (1 棟 10 千三角形) の影は遠い段 hut_lod1 (766 三角形) で落とす
+    // (M23-04) 遠距離版の組にしなかった小屋・部品も、影は粗い形 (小屋は hut_lod1、ほかは shadowNodeOf の形) で落とす
     // (M23-10 で変更: 小屋でない部品も、遠距離版を切った (prop=0) ときは shadowNodeOf の形で影を落とす。既定の段と影を揃え、いつも近い形の比べの画で影が変わらない)
     const lod1 = name === 'hut' ? findNode(settleGlb, 'hut_lod1') : findNode(settleGlb, shadowNodeOf(name));
     if (!lod1) continue;

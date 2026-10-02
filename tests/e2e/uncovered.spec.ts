@@ -3,7 +3,7 @@ import { expectUncovered, expectAllRowsUncoveredAtFivePoints } from './uncovered
 
 /**
  * 部品が覆われない (M21-05)。部品ごとの「覆われない」試験を uncovered.ts の 1 つの型で並べる。
- * 部品の中の振る舞い (ドラッグ・キー・覚え) は tests/unit/ui.movable.dom.test.ts。港は閉じたまま (網の失敗)
+ * 部品の中の振る舞いは tests/unit/ の ui.movable.dom.test.ts (ドラッグ・キー・覚え)・ui.tablet.dom.test.ts (石板)・ui.confirm.dom.test.ts (確かめのダイアログ)。港は閉じたまま (網の失敗)
  */
 
 test('M21-05: 自由モード (/) の時間の箱・石板・下の行の札は、どれも覆われない', async ({ page }) => {

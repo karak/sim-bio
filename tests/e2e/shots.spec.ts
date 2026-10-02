@@ -14,17 +14,15 @@ import { expectLegible, installLens } from './lens';
 import { expectUncovered } from './uncovered';
 
 /**
- * 人が見る画を撮る (M21-08)。題名の頭の <ID> は正本 docs/acceptance/scenarios.jsonl の human の行で、画はその行の steps の「画 n」になる。
+ * 人が見る画を撮る (M21-08)。題名の頭の <ID> は正本 docs/acceptance/scenarios.jsonl の human か auto の行で、画はその行の steps の「画 n」になる。auto の行も撮って lens と基準画で確かめ、受入の画面に画を書くのは human の行と judge が llm の手順を持つ行 (pnpm run judge が読む) だけ。
  * ACCEPTANCE_DIR があるときだけ回り (pnpm run shots)、$ACCEPTANCE_DIR/shots/<ID>-<n>.png に書く。受入の画面は scripts/acceptance.py page が並べる。
- * 撮る前に、写すものが見えていることを内容で確かめる (文は toHaveText、グラフの目印は canvas に書いた文、3D の印は __probe.scene.selection() の view)。
+ * 撮る前に、写すものが見えていることを内容で確かめる (文は toHaveText、グラフの目印は #graph の aria-label の文、3D の印は __probe.scene.selection() の view)。
  * 港は港の写し (tests/fixtures/fakeHarbor.ts)、判定は 1000x (?dev=1) と近道 (?shortcut=alive) で作る
  */
 const ACCEPTANCE_DIR = process.env.ACCEPTANCE_DIR;
 test.skip(ACCEPTANCE_DIR === undefined, 'ACCEPTANCE_DIR が無い (pnpm run shots で撮る)');
 // 撮る状態を毎回同じにする (M25-02): 動きを減らす設定 (ピンの上下が止まる)、止めた島から始める (?paused=1)、tick で止める (probe.advanceTo)、グラフは年の境目ごとの点
 test.use({ reducedMotion: 'reduce' });
-
-/** 港の API を港の写しで答える。closed の間は網の失敗 */
 
 /** 開発の板は人の見る画面に無いので、画から外す */
 const HIDE_DEV = '.dev-panel { visibility: hidden !important; }';

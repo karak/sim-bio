@@ -26,7 +26,7 @@ ADR 0001 の段 5。2026-10-01 のユーザーの判断 2 (手元の `claude -p`
 作るもの:
 - `scripts/judge.py`: 正本の `judge: "llm"` の手順ごとに、画と採点表 (rubric) と JSON schema で `claude -p` を 3 回呼ぶ。`--system-prompt`・`--setting-sources ""`・`--strict-mcp-config`・`--disable-slash-commands`・`--tools Read` で手元の CLAUDE.md・MCP・スキルを読ませない。標準入力は閉じる。答えの言語を問いに書く
 - 問いごとの多数決。3 票そろわない問いと no の問いだけを人に出す
-- results.json に `judge: "llm"` と、票・根拠・CLI の版・モデル・換算額・時刻を書く
+- results.json に `by: "llm"` と、票・根拠・CLI の版・モデル・換算額・時刻を書く
 - 画素の基準を持つ画は LLM の yes だけでは合格にしない (ADR の「LLM の判定」)
 - `pnpm run judge` を package.json に足す。CI では回さない
 

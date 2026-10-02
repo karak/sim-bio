@@ -250,7 +250,7 @@ async function boot(): Promise<void> {
     onLoad: (raw) => void run({ kind: 'load', data: slotSaveOf(raw), slot: null }),
     onSlotSave: (slot, overwrites) => void run({ kind: 'slot_save', slot, overwrites }),
     onSlotLoad: (slot) => {
-      // (M19-17 で変更: 読めるかどうかは load が舞台で決める)
+      // (M19-17 で変更: 読めるかどうかは planOp (app/place.ts の planLoad) が舞台で決める)
       void localSave.loadSlot(slot, (data) => data).then((data) => {
         if (data) void run({ kind: 'load', data, slot });
       });

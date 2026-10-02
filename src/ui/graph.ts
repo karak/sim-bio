@@ -76,7 +76,7 @@ export function drawGraph(
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = m.color;
-    // M19-15: 今の年の目印は右の縁にあり、中央揃えでは半分切れた。線の内側へ寄せ、表示で半分に縮むので大きく書く
+    // M19-15: 今の年の目印は右の縁にあり、中央揃えでは半分切れた。線の内側へ寄せる
     const right = x > pad.l + iw / 2;
     ctx.textAlign = right ? 'right' : 'left';
     ctx.font = MARKER_FONT;
