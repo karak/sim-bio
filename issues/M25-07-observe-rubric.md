@@ -64,3 +64,4 @@ ADR 0001 の段 5。TUR-001 の「観察画面の島が絵として成り立っ�
   - 費用・時間: 欠陥の 14 回の試し (1 回 3 呼び出し) は 1 回 9〜15 秒、0.03〜0.1 USD。
 - 2026-10-02: レビュー。codex は認証切れ (`Your access token could not be refreshed`)、読むだけの opus で代えた。直した: (a) 承認済みの基準画は ref の問いがある手順でだけ「承認済み」とみなす (問いが無いのに pass になる穴)、(b) 正本に無い古い手順の記録を項目の verdict に入れない。試験を 65 件から 67 件へ。直さない (ユーザーの判断): 画・承認済みの画・問いが変わっても古い pass が残る (内容の hash を記録に足す案)、auto の行の judge の結果が受入の画面に出ない (acceptance.py の items.json は human の行だけ。docs/operations/acceptance.md の「合格は書かない」の文も古い)、`--image` は手順の先頭の画の承認済みの画と並べる、手動 rAF の中で本物の rAF を使った撮影の間の時刻。
 - 2026-10-02: 検査。`pnpm run check` は vitest 1225 件・scripts 67 件を含め exit 0、`uv run scripts/acceptance.py check` ok (44 行)、E2E 全件 97 件 passed (6.3 分、shots の OBS-002 を含む)。
+- 2026-10-02 19:00 ユーザーの承認: docs/acceptance/observe-approved/OBS-002-1〜3.png(集落・群れ・海岸)を承認済みの画として使う。
