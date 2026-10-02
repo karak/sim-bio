@@ -4,8 +4,10 @@ import { join } from 'node:path';
 import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { writeRequest } from '../../src/harbor/wire';
 import { settle, selection, tilt, type View } from '../driver/camera';
+import { withRealFrames } from '../driver/frames';
 import { routeHarbor } from '../driver/harbor';
 import { advanceTo, openPaused } from '../driver/island';
+import { enterObserve, lookFrom, OBSERVE_VIEWS } from '../driver/observe';
 import { playToVerdict as driveToVerdict } from '../driver/verdict';
 import { baselineName, CANVAS_TARGET, optionsFor, shouldCompareBaselines } from './baseline';
 import { expectLegible, installLens } from './lens';
@@ -37,6 +39,16 @@ const autoIds = new Set(
     .map((r) => r.id),
 );
 
+/** 正本で judge が llm の手順を持つ行 (M25-07)。auto の行でも、その手順の画は受入の画面の置き場に書く (pnpm run judge が読む) */
+const judgedIds = new Set(
+  readFileSync('docs/acceptance/scenarios.jsonl', 'utf8')
+    .split('\n')
+    .filter((l) => l.startsWith('{'))
+    .map((l) => JSON.parse(l) as { kind: string; id: string; status?: string; steps?: unknown[][] })
+    .filter((r) => r.kind === 'scenario' && r.status === 'active' && r.steps?.some((s) => (s[2] as { judge?: string } | undefined)?.judge === 'llm'))
+    .map((r) => r.id),
+);
+
 /** 基準画と比べるのは手元の Mac だけ (ADR 0001 決定 1)。CI は lens の検査だけ */
 const COMPARE_BASELINES = shouldCompareBaselines(process.env, process.platform);
 
@@ -61,9 +73,10 @@ function shotsOf(info: TestInfo) {
   const { id, dir, clear } = shotsDirOf(info);
   mkdirSync(dir, { recursive: true });
   clear();
-  const isAuto = autoIds.has(id);
+  const isAuto = autoIds.has(id) && !judgedIds.has(id);
   let n = 0;
-  return async (page: Page, shown: Record<string, Locator>, canvas?: Locator) => {
+  // pixels: false は画素の基準を持たない画 (観察画面の 3D)。ずれの基準ではなく、pnpm run judge の採点表で見る
+  return async (page: Page, shown: Record<string, Locator>, canvas?: Locator, pixels = true) => {
     const targets = Object.values(shown);
     if (targets.length === 0) throw new Error('写すものを 1 つ以上渡す');
     for (const t of targets) await expect(t).toBeInViewport({ ratio: 1 });
@@ -71,7 +84,7 @@ function shotsOf(info: TestInfo) {
     await expectLegible(page, shown);
     n++;
     // 基準画 (M25-03)。auto の行も比べる。置き場は tests/e2e/baselines で、受入の画面の shots/ とは別。soft なので 1 つの画が落ちても残りの差も集まる
-    if (COMPARE_BASELINES) {
+    if (COMPARE_BASELINES && pixels) {
       const targets = { ...shown, ...(canvas ? { [CANVAS_TARGET]: canvas } : {}) };
       for (const [name, target] of Object.entries(targets)) {
         await expect.soft(target).toHaveScreenshot(baselineName(id, n, name), optionsFor(name));
@@ -278,4 +291,18 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   expect(view).toEqual({ sea: false, cellHidden: true, markerHidden: false, markerOnScreen: true });
   await expect(cellInfo).not.toContainText('· 海');
   await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'));
+});
+
+test('OBS-002: 観察画面の 3 枚 (集落・群れ・海岸) を止めた時計で撮る', async ({ page }, info) => {
+  test.setTimeout(420_000);
+  const shoot = shotsOf(info);
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await enterObserve(page);
+  const bar = page.getByRole('toolbar', { name: '観察画面' });
+  await expect(bar.locator('.o-stats')).toHaveText('10 年 · 春');
+  for (const view of OBSERVE_VIEWS) {
+    await lookFrom(page, view);
+    // 撮る間だけ本物の rAF に戻す。3D の画素は基準画を持たず、採点表 O1〜O8 (rubrics.json) が見る
+    await withRealFrames(page, () => shoot(page, { 帯の年と季節: bar.locator('.o-stats') }, undefined, false));
+  }
 });

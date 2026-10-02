@@ -524,9 +524,18 @@ def shots_of(names: Iterable[str]) -> dict[str, tuple[str, ...]]:
 
 def check_shots(sot: Sot, shots: Mapping[str, Sequence[str]]) -> list[Problem]:
     """画はどれも active の human の行のもの (題名の打ち違いや古い画を黙って並べない・落とさない)"""
-    human = {s.id for s in sot.scenarios if s.status == "active" and s.mode == "human"}
+    human = {
+        s.id
+        for s in sot.scenarios
+        if s.status == "active"
+        and (s.mode == "human" or any(m and m.judge == "llm" for m in s.marks))
+    }
     return [
-        Problem(id_, "shots", f"active の human の行が無い: {'・'.join(paths)}")
+        Problem(
+            id_,
+            "shots",
+            f"active の human か、judge が llm の手順を持つ行が無い: {'・'.join(paths)}",
+        )
         for id_, paths in sorted(shots.items())
         if id_ not in human
     ]

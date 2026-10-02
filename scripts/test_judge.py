@@ -24,6 +24,7 @@ from judge import (
     parse_output,
     prompt_of,
     questions_of,
+    records_pass,
     run,
     run_claude,
     select_steps,
@@ -331,9 +332,11 @@ class FakeClaude:
     def __init__(self, replies):
         self.replies = replies
         self.calls = []
+        self.references = []
 
-    def __call__(self, prompt, image, model):
+    def __call__(self, prompt, image, model, reference=None):
         self.calls.append((image.name, model))
+        self.references.append(reference)
         return self.replies[image.name]
 
 
@@ -530,7 +533,7 @@ class RunGuardsTest(RunBase):
         before = self.read("results.json")
         log_before = self.read("judge.json")
 
-        def dead(prompt, image, model):
+        def dead(prompt, image, model, reference=None):
             raise subprocess.SubprocessError("claude が終了コード 1: 認証切れ")
 
         results, *_ = run(
@@ -639,7 +642,7 @@ class MainTest(unittest.TestCase):
         self.assertIn("計 3 回", out)
 
     def test_when_every_call_fails_main_exits_1(self):
-        def dead(prompt, image, model):
+        def dead(prompt, image, model, reference=None):
             raise subprocess.SubprocessError("x")
 
         self.assertEqual(self.call("--step", "SEL-003/3", runner=dead)[0], 1)
@@ -714,6 +717,205 @@ class RunClaudeTest(unittest.TestCase):
 
             v = _one_vote(run_claude, Q, Path("/a/b.png"), "sonnet")
         self.assertIsNone(v.answers)
+
+
+OBS_STEPS = [
+    ["前提", "観察画面に入っている"],
+    ["ならば", "【見た目】画 1 (集落): 島が絵として見える", {"judge": "llm"}],
+    ["かつ", "【見た目】画 2 (群れ): 鹿が見える", {"judge": "llm"}],
+]
+OBS_RUBRICS = {
+    "OBS-002/2": [
+        {"id": "O1", "q": "陸が写る"},
+        {"id": "O7", "q": "基準画と同じ画風", "ref": True},
+    ],
+    "OBS-002/3": [
+        {"id": "O1", "q": "陸が写る"},
+        {"id": "O7", "q": "同じ画風", "ref": True},
+    ],
+}
+
+
+def obs_reply(a="yes"):
+    return json.dumps(
+        {
+            "total_cost_usd": 0.02,
+            "duration_ms": 10,
+            "modelUsage": {"m": {}},
+            "structured_output": {
+                "image": "",
+                "answers": [
+                    {"id": i, "answer": a, "evidence": "中央に見える"}
+                    for i in ("O1", "O7")
+                ],
+            },
+        }
+    )
+
+
+class ObserveTest(RunBase):
+    """承認済みの観察画面の基準画を並べ、3 票の yes を合格として書く (M25-07)"""
+
+    def setUp(self):
+        super().setUp()
+        rows = (CODE, scenario("OBS-002", steps=OBS_STEPS, mode="auto"))
+        (self.root / "docs/acceptance/scenarios.jsonl").write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+            encoding="utf-8",
+        )
+        (self.root / "docs/acceptance/rubrics.json").write_text(
+            json.dumps(OBS_RUBRICS, ensure_ascii=False), encoding="utf-8"
+        )
+        self.approved = self.root / "docs/acceptance/observe-approved"
+        self.approved.mkdir()
+        for n in (1, 2):
+            (self.acc / "shots" / f"OBS-002-{n}.png").write_bytes(b"png")
+            (self.approved / f"OBS-002-{n}.png").write_bytes(b"ok")
+        self.sot = sot_of(CODE, scenario("OBS-002", steps=OBS_STEPS, mode="auto"))
+
+    def judge(self, specs, fake, **kw):
+        steps = select_steps(self.sot, specs)
+        return run(
+            self.root,
+            self.acc,
+            steps,
+            runner=fake,
+            model="s",
+            votes=3,
+            jobs=1,
+            expected=select_steps(self.sot, []),
+            **kw,
+        )
+
+    def results(self):
+        return json.loads((self.acc / "results.json").read_text(encoding="utf-8"))
+
+    def test_the_approved_image_of_the_same_name_is_handed_over_with_the_question(self):
+        fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
+        self.judge([], fake)
+        self.assertEqual(
+            {r.name for r in fake.references if r}, {"OBS-002-1.png", "OBS-002-2.png"}
+        )
+        self.assertTrue(all(r.parent == self.approved for r in fake.references))
+
+    def test_three_yes_on_every_llm_step_is_recorded_as_a_pass(self):
+        fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
+        self.judge([], fake)
+        e = self.results()["OBS-002"]
+        self.assertEqual((e["verdict"], e["by"]), ("pass", "llm"))
+        self.assertEqual(sorted(e["llm"]["steps"]), ["OBS-002/2", "OBS-002/3"])
+        self.assertEqual(check_results(self.sot, self.results()), [])
+        log = json.loads((self.acc / "judge.json").read_text(encoding="utf-8"))
+        self.assertTrue(log["OBS-002/2"]["records_pass"])
+
+    def test_one_step_alone_leaves_the_entry_undecided_and_names_the_missing_one(self):
+        fake = FakeClaude({"OBS-002-1.png": obs_reply()})
+        self.judge(["OBS-002/2"], fake)
+        e = self.results()["OBS-002"]
+        self.assertEqual(e["verdict"], "undecided")
+        self.assertIn("OBS-002/3", e["note"])
+
+    def test_a_no_vote_is_a_fail_even_with_the_approved_image(self):
+        fake = FakeClaude(
+            {"OBS-002-1.png": obs_reply("no"), "OBS-002-2.png": obs_reply()}
+        )
+        self.judge([], fake)
+        self.assertEqual(self.results()["OBS-002"]["verdict"], "fail")
+
+    def test_a_human_verdict_is_not_replaced_by_a_pass(self):
+        (self.acc / "results.json").write_text(
+            '{"OBS-002": {"verdict": "hold", "note": "", "at": "x"}}'
+        )
+        fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
+        _, _, _, skipped = self.judge([], fake)
+        self.assertEqual(self.results()["OBS-002"]["verdict"], "hold")
+        self.assertEqual(skipped, ["OBS-002"])
+
+    def test_a_pixel_baseline_still_blocks_the_pass(self):
+        b = self.root / "tests/e2e/baselines"
+        b.mkdir(parents=True)
+        (b / "OBS-002-1-板.png").write_bytes(b"x")
+        fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
+        self.judge([], fake)
+        e = self.results()["OBS-002"]
+        self.assertNotIn("OBS-002/2", e["llm"]["steps"])
+        self.assertEqual(e["verdict"], "undecided")
+        self.assertIn("OBS-002/2", e["note"])
+
+    def test_a_question_that_needs_the_approved_image_stops_when_it_is_missing(self):
+        (self.approved / "OBS-002-2.png").unlink()
+        fake = FakeClaude({})
+        with self.assertRaises(FileNotFoundError):
+            self.judge([], fake)
+        self.assertEqual(fake.calls, [])
+
+    def test_a_replaced_image_is_paired_with_the_approved_image_of_the_nominal_shot(
+        self,
+    ):
+        fake = FakeClaude({"defect.png": obs_reply("no")})
+        defect = self.tmp / "defect.png"
+        defect.write_bytes(b"d")
+        self.judge(["OBS-002/2"], fake, image_override=[defect])
+        self.assertEqual({r.name for r in fake.references}, {"OBS-002-1.png"})
+
+    def test_a_step_without_a_ref_question_is_not_recorded_as_a_pass_even_with_a_twin(
+        self,
+    ):
+        rub = json.loads((self.root / "docs/acceptance/rubrics.json").read_text())
+        rub["OBS-002/2"] = [{"id": "O1", "q": "陸が写る"}]
+        (self.root / "docs/acceptance/rubrics.json").write_text(json.dumps(rub))
+        fake = FakeClaude({"OBS-002-1.png": obs_reply()})
+        self.judge(["OBS-002/2"], fake)
+        self.assertFalse((self.acc / "results.json").exists())
+
+    def test_a_stale_step_key_outside_the_sot_does_not_decide_the_verdict(self):
+        (self.acc / "results.json").write_text(
+            json.dumps(
+                {
+                    "OBS-002": {
+                        "verdict": "fail",
+                        "note": "",
+                        "at": "x",
+                        "by": "llm",
+                        "llm": {
+                            "steps": {"OBS-002/9": {"verdict": "fail", "images": []}}
+                        },
+                    }
+                }
+            )
+        )
+        fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
+        self.judge([], fake)
+        self.assertEqual(self.results()["OBS-002"]["verdict"], "pass")
+
+    def test_an_image_with_no_approved_twin_is_not_recorded_as_a_pass(self):
+        img = image_result(Q, Path("x.png"), [vote()] * 3, pixel_baseline=False)
+        step = StepResult(StepRef("SEL-003", 3, "t"), (img,))
+        self.assertTrue(writes_pass(step))
+        self.assertFalse(records_pass(step))
+
+
+class ReferencePromptTest(unittest.TestCase):
+    def test_the_prompt_names_the_approved_image_and_says_it_is_for_style_only(self):
+        p = prompt_of(Q, Path("/a/b.png"), Path("/c/b.png"))
+        self.assertIn("基準画 (承認済み): /c/b.png", p)
+        self.assertIn("画風の比べにだけ使う", p)
+        self.assertTrue(p.endswith("画像ファイル: /a/b.png"))
+
+    def test_the_rubric_marks_which_questions_compare_with_the_approved_image(self):
+        rubric = {
+            "X-001/2": [{"id": "O7", "q": "q", "ref": True}, {"id": "O1", "q": "r"}]
+        }
+        got = questions_of(StepRef("X-001", 2, "x"), rubric)
+        self.assertEqual([q.ref for q in got], [True, False])
+
+    def test_the_command_lets_claude_read_the_approved_dir_too(self):
+        done = subprocess.CompletedProcess([], 0, stdout="{}")
+        with mock.patch("judge.subprocess.run", return_value=done) as run_mock:
+            run_claude("P", Path("/a/b.png"), "sonnet", Path("/c/b.png"))
+        cmd = run_mock.call_args.args[0]
+        dirs = [cmd[i + 1] for i, c in enumerate(cmd) if c == "--add-dir"]
+        self.assertEqual(dirs, ["/a", "/c"])
 
 
 REPO = Path(__file__).resolve().parent.parent
