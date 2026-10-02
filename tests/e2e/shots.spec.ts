@@ -16,7 +16,7 @@ import { expectUncovered } from './uncovered';
 /**
  * 人が見る画を撮る (M21-08)。題名の頭の <ID> は正本 docs/acceptance/scenarios.jsonl の human の行で、画はその行の steps の「画 n」になる。
  * ACCEPTANCE_DIR があるときだけ回り (pnpm run shots)、$ACCEPTANCE_DIR/shots/<ID>-<n>.png に書く。受入の画面は scripts/acceptance.py page が並べる。
- * 撮る前に、写すものが見えていることを内容で確かめる (文は toHaveText、グラフの目印は canvas に書いた文、3D の印は __sceneSelection の view)。
+ * 撮る前に、写すものが見えていることを内容で確かめる (文は toHaveText、グラフの目印は canvas に書いた文、3D の印は __probe.scene.selection() の view)。
  * 港は港の写し (tests/fixtures/fakeHarbor.ts)、判定は 1000x (?dev=1) と近道 (?shortcut=alive) で作る
  */
 const ACCEPTANCE_DIR = process.env.ACCEPTANCE_DIR;

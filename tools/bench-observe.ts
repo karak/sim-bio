@@ -2,8 +2,8 @@
 /**
  * 観察画面の計測の台 (M23-01、docs/design/2026-09-24-observe-perf.md)。
  * 試作のページ (observe.html、空の舟 25 年目・朝・時間を止める・舟は肋材の段) を Playwright で開き、
- * 寄せ先の 6 画 (集落・船台・群れ・林・狼・海岸) を順に押して、__observeStats (三角形・draw call・fps) と
- * __observeBreakdown() (区分ごとの内訳) を JSON に書く。軽量化の各チケットの前後の比較に使う (比べるのは tools/bench-observe-compare.ts)。
+ * 寄せ先の 6 画 (集落・船台・群れ・林・狼・海岸) を順に押して、__probe.observe.stats() (三角形・draw call・fps) と
+ * __probe.observe.breakdown() (区分ごとの内訳) を JSON に書く。軽量化の各チケットの前後の比較に使う (比べるのは tools/bench-observe-compare.ts)。
  *
  * 使い方:
  *   npm run bench:observe                                  # .bench/observe-<日時>.json に書く
@@ -39,7 +39,7 @@ const VIEWPORT = { width: 1280, height: 720 };
 const FRAME_MS = 1000 / 60;
 /** 描き始めてから最初の画を押すまでに進める時間 (ms) */
 const WARMUP_MS = 3000;
-/** __observeStats は 0.5 s ごとに更新されるので、それより少し長く間を空けて別の窓を拾う */
+/** __probe.observe.stats() は 0.5 s ごとに更新されるので、それより少し長く間を空けて別の窓を拾う */
 const SAMPLE_GAP_MS = 600;
 
 /**
@@ -142,7 +142,7 @@ async function measureFixed(browser: Browser, opt: Opt, url: string, errors: str
   // 素材が揃って組み上がるまでは実時間で待つ (観察画面は素材を全部読んでから rAF を回し始め、組み上がると #status を空にする)。
   // 時計は止めてあるので、待ちの長さに依らず、描き始めからのコマ数は WARMUP_MS で決まる
   const deadline = Date.now() + 180_000;
-  // (#status は読み込みの前も空なので、組み上がりの最後に置かれる __observeBreakdown が出たことも見る)
+  // (#status は読み込みの前も空なので、組み上がりの最後に置かれる __probe.observe.breakdown が出たことも見る)
   while (!(await page.evaluate(() => document.getElementById('status')?.textContent === '' && typeof (window as unknown as { __probe?: Probe }).__probe?.observe?.breakdown === 'function'))) {
     if (Date.now() > deadline) throw new Error('観察画面が組み上がらない');
     await page.waitForTimeout(250);

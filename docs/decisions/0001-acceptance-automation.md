@@ -184,7 +184,7 @@ TUR-001 の読みやすさの部分 (回避率の行・積荷の知らせ) も H
 
 | 票 | 欠陥 | 根拠 | この ADR との関係 |
 |---|---|---|---|
-| M25-09 (外-1) | 本番の bundle に `__sceneSelection`・`__sceneCell` と `__observe*` の 10 個が入っている | `pnpm run build:cloudflare` と同じ環境で vite build し、出た JS に文字列があった。書く所は src/render/SceneView.ts:246・286 と src/observe/view.ts:657-1008。tests/unit/build.devtools.test.ts:8 の MARKERS はこれを見ていない | 段 2 の前提 (口を probe に移す) |
+| M25-09 (外-1) | 本番の bundle に `__sceneSelection`・`__sceneCell` と `__observe*` の 10 個が入っている (当時の名。今は `__probe.scene.*`・`__probe.observe.*` で、開発のビルドだけ) | `pnpm run build:cloudflare` と同じ環境で vite build し、出た JS に文字列があった。書く所は src/render/SceneView.ts:246・286 と src/observe/view.ts:657-1008。tests/unit/build.devtools.test.ts:8 の MARKERS はこれを見ていない | 段 2 の前提 (口を probe に移す) |
 | M25-10 (外-2) | 港の札が #cell-info の「生気 / 枯死」「輝石」「草」の札を覆う | 文字の箱ごとの 5 点の試し (付録 B の 1)。CRG-005-2・SEL-003-3 の画にも写る | 段 1 の lens が緑になる前提 |
 | M25-11 (外-3) | HUD のグラフの canvas の字が画面の上で 5px (軸) と 9px (目印) | src/ui/Hud.ts:168・src/ui/hud.css:23・src/ui/graph.ts:6-7 | 同上 |
 

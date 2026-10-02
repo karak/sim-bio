@@ -800,7 +800,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-08 の手直しで変更: 帯の DOM・見た目・寿命は notice.ts へ移した。石板の銘板の見た目にし、続けて来た知らせは待たせて順に出す)
   const band = createNoticeBand(canvas.parentElement ?? document.body, () => host.names ?? {});
   const notice = (e: TimelineEvent) => band.push(e);
-  // 調整用: 開発者ツールから知らせを出す (__observeNotice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
+  // 調整用: 開発者ツールから知らせを出す (__probe.observe.notice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
   // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
   const DEPART_S = 70;
   let departLeft = OPT.depart && OPT.auto ? DEPART_S : 0;
@@ -845,7 +845,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     grass.setLevel(sea.level);
     water.setSurge(sea.surge);
   };
-  // 調整用: 開発者ツールから場面を起こす (__observeFx('sprout' | 'mist' | 'rain'))
+  // 調整用: 開発者ツールから場面を起こす (__probe.observe.fx('sprout' | 'mist' | 'rain'))
   // (M22-07 の手直しで変更: 'sinking' は海面を 1.5 m 上げる (本体の沈降の代わり)。上がる間は波立ちと流れが見える)
   const fxInsp: ObserveInspect['fx'] = (kind) => {
     const at = marks.grove ?? marks.center;
@@ -854,7 +854,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     else if (kind === 'sinking') seaExtra += 1.5;
     else playScene({ kind, year: snap.year });
   };
-  // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__observeLook('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
+  // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__probe.observe.look('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
   const lookInsp: ObserveInspect['look'] = (at, dist = 6, height = 1.2, yaw = 0) => {
     const c = typeof at === 'string' ? centroid(at) : at;
     if (c) lookFrom(c.x, c.z, dist, height, yaw);
@@ -911,7 +911,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const down = { x: 0, y: 0 };
   const proj = new Vector3();
   // 試験用 (E2E): 個体の画面上の位置 (canvas の左上から px)。画面の外・カメラの後ろなら null
-  // 軽量化の試算用: 区分ごとの三角形の内訳 (render/breakdown.ts)。__observeBreakdown() を開発者ツールから呼ぶ
+  // 軽量化の試算用: 区分ごとの三角形の内訳 (render/breakdown.ts)。__probe.observe.breakdown() を開発者ツールから呼ぶ
   const breakdownInsp: ObserveInspect['breakdown'] = () =>
     triangleBreakdown(camera, { terrain: [terrain], water: [water.mesh], grass: [grass.mesh], belltree: lods.filter((l) => l !== forestSet).map((l) => l.group), forest: forestSet ? [forestSet.group] : [], settlement: [settlement], ship: [shipView.group], creatures: [creatures.group] }, scene);
   const screenInsp: ObserveInspect['screen'] = (id) => {

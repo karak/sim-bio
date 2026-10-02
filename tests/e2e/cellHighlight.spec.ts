@@ -4,7 +4,7 @@ import type { Probe } from '../../src/dev/probe';
 /**
  * 選んだセルを操作画面の 3D の島で示す (M22-10、受入 2026-09-27 のユーザーのメモ、示す先はユーザーの判断 2026-09-28)。
  * 島を押すと、そのセルの境界の帯と浮かぶ印が出る。別のセルを押すと移り、選びを解く (新しい島) と消える。
- * 描いている物は SceneView の __sceneSelection() で読む (読むだけ)
+ * 描いている物は SceneView の __probe.scene.selection() で読む (読むだけ)
  */
 type Selection = {
   cell: number | null;
