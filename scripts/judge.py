@@ -22,6 +22,11 @@ CI では回さない (Claude Code の認証も基準画も無い)。鍵は持�
   - 承認済みの画を持つ画だけの手順は、3 票とも yes なら results.json に {verdict: "pass", by: "llm", …} で合格を書く
     (上の「合格は書かない」の例外。ADR 0001 の決定: 観察画面は 3 票そろった yes で合格、人は基準画を替えるときにだけ承認する)。
     手順のすべてが合格で、かつ正本の judge が llm の手順をすべて当てたときだけ項目の verdict が pass。足りなければ undecided。
+
+pass の失効 (M25-12): 手順の記録に digest (判じた画・承認済みの画・採点表の問いの内容の sha256) を添える。
+  - 次に pnpm run judge が走るとき、呼ぶ前に、digest が今と合わない (画・承認済みの画・採点表が変わった。digest の無い古い記録も) pass を消す。
+    今回当てない手順 (--step で絞った回) の pass も消す。項目は undecided になり、note に「まだ当てていない手順」が出る。
+  - --image の試しは記録に触らない。人の判定・fail・undecided も消さない。
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -144,6 +150,8 @@ class StepRef:
 class StepResult:
     step: StepRef
     images: tuple[ImageResult, ...] = field(default_factory=tuple)
+    # 判じた画・承認済みの画・採点表の hash (digest_of)。--image の試しでは空
+    digest: str = ""
 
     @property
     def errored(self) -> bool:
@@ -425,6 +433,7 @@ def record_of(result: StepResult) -> dict[str, object]:
     return {
         "step": result.step.text,
         "verdict": result.verdict,
+        **({"digest": result.digest} if result.digest else {}),
         "images": [
             {
                 "image": i.image.name,
@@ -509,6 +518,18 @@ def merge_entry(
             steps[r.step.key] = record_of(r)
     if all(r.errored for r in results):
         return dict(existing) if existing else {}
+    return build_entry(steps, expected, at=at, cli=cli, model=model)
+
+
+def build_entry(
+    steps: Mapping[str, dict[str, object]],
+    expected: frozenset[str],
+    *,
+    at: str,
+    cli: str,
+    model: str,
+) -> dict[str, object]:
+    """手順ごとの記録から results.json の 1 項目を組む。手順が無ければ空 (項目を消す)"""
     if not steps:
         return {}
     if expected:
@@ -540,9 +561,70 @@ def merge_entry(
                 sum(img["cost_usd"] for rec in steps.values() for img in rec["images"]),
                 4,
             ),
-            "steps": steps,
+            "steps": dict(steps),
         },
     }
+
+
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def digest_of(items: Sequence[PlanItem]) -> str:
+    """1 手順の判定の元 (判じた画・承認済みの画・採点表の問い) の hash。どれかが変わると変わる。
+    画は名前と中身、問いは id・文・ref の有無、承認済みの画は中身。手順の文は入れない (採点表の問いが判定の元)"""
+    doc = [
+        {
+            "image": [item.image.name, _file_hash(item.image)],
+            "approved": [item.approved.name, _file_hash(item.approved)]
+            if item.approved
+            else None,
+            "questions": [[q.id, q.text, q.ref] for q in item.questions],
+        }
+        for item in items
+    ]
+    blob = json.dumps(doc, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
+def prune_stale(
+    current: Mapping[str, Mapping[str, object]],
+    digests: Mapping[str, str | None],
+    expected: Mapping[str, frozenset[str]],
+) -> tuple[dict[str, Mapping[str, object]], list[str]]:
+    """LLM の pass (verdict が yes の手順) のうち、記録の digest が今の digest と合わないものを消す。
+    digest が無い古い記録・今の元が揃わない (digests が None) 記録も失効とみなす。
+    人の判定 (by が llm でない項目)・fail・undecided は触らない。(新しい中身, 消した手順の key)"""
+    out = dict(current)
+    dropped: list[str] = []
+    for scenario, entry in current.items():
+        old = entry.get("llm") if isinstance(entry, Mapping) else None
+        if not isinstance(entry, Mapping) or entry.get("by") != "llm":
+            continue
+        steps = dict(old.get("steps", {})) if isinstance(old, dict) else {}
+        stale = [
+            k
+            for k, rec in steps.items()
+            if rec.get("verdict") == "yes"
+            and (not rec.get("digest") or rec.get("digest") != digests.get(k))
+        ]
+        if not stale:
+            continue
+        dropped += stale
+        for k in stale:
+            del steps[k]
+        rebuilt = build_entry(
+            steps,
+            expected.get(scenario, frozenset()),
+            at=str(entry.get("at", "")),
+            cli=str(old.get("cli", "")) if isinstance(old, dict) else "",
+            model=str(old.get("model", "")) if isinstance(old, dict) else "",
+        )
+        if rebuilt:
+            out[scenario] = rebuilt
+        else:
+            out.pop(scenario, None)
+    return out, dropped
 
 
 def apply_results(
@@ -687,12 +769,29 @@ def run(
     cli: str = "unknown",
     expected: Sequence[StepRef] = (),
     now: Callable[[], datetime.datetime] = lambda: datetime.datetime.now(datetime.UTC),
-) -> tuple[list[StepResult], float, float, list[str]]:
-    """steps を当てる。(結果, かかった秒, 換算額の合計, 人の判定があって書かなかった id)。
-    results.json と judge.json を書く。ただし --image で画を替えたとき (仕込んだ欠陥の試し) は書かない"""
+) -> tuple[list[StepResult], float, float, list[str], list[str]]:
+    """steps を当てる。(結果, かかった秒, 換算額の合計, 人の判定があって書かなかった id, 失効して消した pass の手順)。
+    results.json と judge.json を書く。ただし --image で画を替えたとき (仕込んだ欠陥の試し) は書かない。
+    呼ぶ前に、判定の元 (画・承認済みの画・採点表) が変わった LLM の pass を results.json から消す (今回当てない手順も)"""
     plan = plan_of(root, out_dir, steps, image_override)
     current = _read_json(out_dir / "results.json")
     log = _read_json(out_dir / JUDGE_LOG)
+    expected_by: dict[str, set[str]] = {}
+    for e in expected:
+        expected_by.setdefault(e.scenario, set()).add(e.key)
+    stale: list[str] = []
+    if not image_override:
+        digests: dict[str, str | None] = {}
+        for step in dict.fromkeys([*expected, *steps]):
+            try:
+                digests[step.key] = digest_of(plan_of(root, out_dir, [step], ()))
+            except (FileNotFoundError, ValueError):
+                digests[step.key] = None
+        pruned, stale = prune_stale(
+            current, digests, {k: frozenset(v) for k, v in expected_by.items()}
+        )
+        if pruned != current:
+            _write_json(out_dir / "results.json", pruned)
     started = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [
@@ -722,17 +821,24 @@ def run(
                 approved=item.approved is not None,
             )
         )
-    results = [StepResult(step, tuple(imgs)) for step, imgs in by_step.items()]
+    items_of: dict[StepRef, list[PlanItem]] = {}
+    for item in plan:
+        items_of.setdefault(item.step, []).append(item)
+    results = [
+        StepResult(
+            step,
+            tuple(imgs),
+            "" if image_override else digest_of(items_of[step]),
+        )
+        for step, imgs in by_step.items()
+    ]
     cost = sum(i.cost_usd for r in results for i in r.images)
     if image_override:
-        return results, elapsed, cost, []
+        return results, elapsed, cost, [], []
     models = ",".join(sorted({m for r in results for i in r.images for m in i.models}))
     at = now().isoformat(timespec="seconds").replace("+00:00", "Z")
     # 書く直前に読み直す (呼び出しの間に人が画面で保存した判定を失わない)
     current = _read_json(out_dir / "results.json")
-    expected_by: dict[str, set[str]] = {}
-    for e in expected:
-        expected_by.setdefault(e.scenario, set()).add(e.key)
     new, skipped = apply_results(
         current,
         results,
@@ -755,11 +861,15 @@ def run(
             "records_pass": records_pass(r),
         }
     _write_json(out_dir / JUDGE_LOG, log)
-    return results, elapsed, cost, skipped
+    return results, elapsed, cost, skipped, stale
 
 
 def summary_of(
-    results: Sequence[StepResult], elapsed: float, cost: float, skipped: Sequence[str]
+    results: Sequence[StepResult],
+    elapsed: float,
+    cost: float,
+    skipped: Sequence[str],
+    stale: Sequence[str] = (),
 ) -> str:
     lines = []
     for r in results:
@@ -785,6 +895,10 @@ def summary_of(
     )
     lines.append(f"{n_calls} 回の呼び出し、{elapsed:.0f} 秒、換算 {cost:.3f} USD")
     lines += [f"{s}: 人の判定があるので書かない" for s in skipped]
+    lines += [
+        f"{k}: 画・承認済みの画・採点表が変わったので、前の pass を消した"
+        for k in stale
+    ]
     return "\n".join(lines)
 
 
@@ -852,7 +966,7 @@ def main(
         print(f"計 {len(plan) * args.votes} 回の claude -p ({args.model})")
         return 0
     try:
-        results, elapsed, cost, skipped = run(
+        results, elapsed, cost, skipped, stale = run(
             root,
             out_dir,
             steps,
@@ -867,7 +981,7 @@ def main(
     except ValueError as e:
         print(e, file=sys.stderr)
         return 1
-    print(summary_of(results, elapsed, cost, skipped))
+    print(summary_of(results, elapsed, cost, skipped, stale))
     if args.image:
         print("--image で画を替えたので、results.json と judge.json には書かない")
     failed = [r.step.key for r in results if r.errored]
