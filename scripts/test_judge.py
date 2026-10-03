@@ -978,7 +978,19 @@ class StaleTest(ObserveBase):
         self.assertEqual(stale, ["OBS-002/2"])
         self.assertEqual(self.results()["OBS-002"]["verdict"], "undecided")
 
-    def test_the_only_pass_being_stale_removes_the_entry(self):
+    def test_a_recorded_fail_is_kept_when_the_shot_changes(self):
+        self.judged()
+        doc = self.results()
+        doc["OBS-002"]["verdict"] = "fail"
+        doc["OBS-002"]["llm"]["steps"]["OBS-002/3"]["verdict"] = "fail"
+        (self.acc / "results.json").write_text(json.dumps(doc))
+        (self.acc / "shots" / "OBS-002-2.png").write_bytes(b"changed")
+        fake = FakeClaude({"OBS-002-1.png": obs_reply()})
+        self.judge(["OBS-002/2"], fake)
+        steps = self.results()["OBS-002"]["llm"]["steps"]
+        self.assertEqual(steps["OBS-002/3"]["verdict"], "fail")
+
+    def test_a_stale_pass_is_dropped_and_only_the_rejudged_fail_remains(self):
         self.judged()
         doc = self.results()
         doc["OBS-002"]["llm"]["steps"].pop("OBS-002/3")
@@ -993,11 +1005,22 @@ class StaleTest(ObserveBase):
 
     def test_a_human_verdict_is_never_pruned(self):
         (self.acc / "results.json").write_text(
-            json.dumps({"OBS-002": {"verdict": "pass", "note": "", "at": "x"}})
+            json.dumps(
+                {
+                    "OBS-002": {
+                        "verdict": "pass",
+                        "note": "",
+                        "at": "x",
+                        "llm": {"steps": {"OBS-002/2": {"verdict": "yes"}}},
+                    }
+                }
+            )
         )
         fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
         self.judge([], fake)
-        self.assertEqual(self.results()["OBS-002"]["at"], "x")
+        e = self.results()["OBS-002"]
+        self.assertEqual(e["at"], "x")
+        self.assertIn("OBS-002/2", e["llm"]["steps"])
 
     def test_a_trial_with_an_explicit_image_does_not_touch_the_records(self):
         self.judged()
