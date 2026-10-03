@@ -529,7 +529,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       settlement.add(hutSet.group);
       continue;
     }
-    // (M23-09 の 3 回目で追加) 小屋でない部品は OPT.prop より先を遠距離版で描く (小屋と同じく置き場所ごとに揺らし、高さも入れた距離。影はそれぞれの形で落とす)
+    // (M23-09 の 3 回目で追加) 小屋でない部品は OPT.prop より先を遠距離版で描く (小屋と同じく置き場所ごとに揺らし、高さも入れた距離。影は下の M23-10 のとおり遠距離版で落とす)
     const propFar = name !== 'hut' && OPT.prop > 0 ? findNode(settleGlb, `${name}_lod1`) : null;
     if (propFar) {
       // (M23-10 で変更: 影は近い・遠いに依らず全部の置き場所を shadowNodeOf の形 (遠距離版) で落とす。近い形 (settle1 の格子の丸めた石) で落とすと影が 3〜4 倍になった)
@@ -542,7 +542,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     }
     const g = instanceProps(instanceOf(settleGlb, name, () => placeholderSettlement(name)), mats);
     settlement.add(g);
-    // (M23-04) 小屋 (1 棟 10 千三角形) の影は遠い段 hut_lod1 (766 三角形) で落とす
+    // (M23-04) 遠距離版の組にしなかった小屋・部品も、影は粗い形 (小屋は hut_lod1、ほかは shadowNodeOf の形) で落とす
     // (M23-10 で変更: 小屋でない部品も、遠距離版を切った (prop=0) ときは shadowNodeOf の形で影を落とす。既定の段と影を揃え、いつも近い形の比べの画で影が変わらない)
     const lod1 = name === 'hut' ? findNode(settleGlb, 'hut_lod1') : findNode(settleGlb, shadowNodeOf(name));
     if (!lod1) continue;
@@ -800,7 +800,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-08 の手直しで変更: 帯の DOM・見た目・寿命は notice.ts へ移した。石板の銘板の見た目にし、続けて来た知らせは待たせて順に出す)
   const band = createNoticeBand(canvas.parentElement ?? document.body, () => host.names ?? {});
   const notice = (e: TimelineEvent) => band.push(e);
-  // 調整用: 開発者ツールから知らせを出す (__observeNotice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
+  // 調整用: 開発者ツールから知らせを出す (__probe.observe.notice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
   // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
   const DEPART_S = 70;
   let departLeft = OPT.depart && OPT.auto ? DEPART_S : 0;
@@ -845,7 +845,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     grass.setLevel(sea.level);
     water.setSurge(sea.surge);
   };
-  // 調整用: 開発者ツールから場面を起こす (__observeFx('sprout' | 'mist' | 'rain'))
+  // 調整用: 開発者ツールから場面を起こす (__probe.observe.fx('sprout' | 'mist' | 'rain'))
   // (M22-07 の手直しで変更: 'sinking' は海面を 1.5 m 上げる (本体の沈降の代わり)。上がる間は波立ちと流れが見える)
   const fxInsp: ObserveInspect['fx'] = (kind) => {
     const at = marks.grove ?? marks.center;
@@ -854,7 +854,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     else if (kind === 'sinking') seaExtra += 1.5;
     else playScene({ kind, year: snap.year });
   };
-  // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__observeLook('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
+  // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__probe.observe.look('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
   const lookInsp: ObserveInspect['look'] = (at, dist = 6, height = 1.2, yaw = 0) => {
     const c = typeof at === 'string' ? centroid(at) : at;
     if (c) lookFrom(c.x, c.z, dist, height, yaw);
@@ -911,7 +911,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const down = { x: 0, y: 0 };
   const proj = new Vector3();
   // 試験用 (E2E): 個体の画面上の位置 (canvas の左上から px)。画面の外・カメラの後ろなら null
-  // 軽量化の試算用: 区分ごとの三角形の内訳 (render/breakdown.ts)。__observeBreakdown() を開発者ツールから呼ぶ
+  // 軽量化の試算用: 区分ごとの三角形の内訳 (render/breakdown.ts)。__probe.observe.breakdown() を開発者ツールから呼ぶ
   const breakdownInsp: ObserveInspect['breakdown'] = () =>
     triangleBreakdown(camera, { terrain: [terrain], water: [water.mesh], grass: [grass.mesh], belltree: lods.filter((l) => l !== forestSet).map((l) => l.group), forest: forestSet ? [forestSet.group] : [], settlement: [settlement], ship: [shipView.group], creatures: [creatures.group] }, scene);
   const screenInsp: ObserveInspect['screen'] = (id) => {

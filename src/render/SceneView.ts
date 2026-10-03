@@ -280,7 +280,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     renderer.setViewport(viewport);
     return pinMaskOf(rgba, buf.x, buf.y);
   };
-  // E2E・調整用: 強調の今の状態を読む (__sceneSelection())。読むだけで何も変えない
+  // E2E・調整用: 強調の今の状態を読む (__probe.scene.selection())。読むだけで何も変えない
   // E2E・調整用 (M21-08): 選んだセルがあるとき、任意のセルの見え方を読む。読むだけで何も変えない
   const inspect: SceneInspect = {
     selection: () =>

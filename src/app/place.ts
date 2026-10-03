@@ -86,7 +86,7 @@ const leaving = (at: At): Ask | null => askOf({ kind: 'leave', finished: at.stag
  * 移った先へは読む枠の名前を sessionStorage で渡す。ファイルは枠の一覧に出さない置き場 (import) に置いてから移る
  */
 function planLoad(op: Extract<Op, { kind: 'load' }>, at: Exclude<At, { stage: 'visit' }>, titleOf: (scenarioId: string) => string): Plan {
-  // (M19-17 で変更: 石板の中でも、同じ石板の枠は runner の状態・年代記と一緒に戻すので読める。別の島の差し込みは openSlot の舞台の確かめで弾く。無効は訪問だけ)
+  // (M19-17 で変更: 石板の中でも、同じ石板の枠は runner の状態・年代記と一緒に戻すので読める。別の島の差し込みは下の checkSlot (checkedSlot) の舞台の確かめで弾く。無効は訪問だけ)
   const here: Here = at.stage === 'scenario' ? { stage: 'scenario', head: at.head } : { stage: 'free' };
   const plan = planSlotLoad(op.data, here, titleOf);
   const ask = askOf({ kind: 'load', plan });

@@ -11,13 +11,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** __observeBreakdown() の 1 行 (src/observe/render/breakdown.ts の BreakdownRow と同じ形) */
+/** __probe.observe.breakdown() の 1 行 (src/observe/render/breakdown.ts の BreakdownRow と同じ形) */
 export type BenchBreakdownRow = { drawn: number; inView: number; shadow: number; beyond30: number; beyond60: number; instances: number };
 
 /** 1 つの画の測り */
 export type BenchShot = {
   name: string;
-  /** 測りの間の __observeStats の値 (0.5 s ごとに更新される)。三角形と draw call は台の時計で測った最後の値、fps は実時間で測った平均 */
+  /** 測りの間の __probe.observe.stats() の値 (0.5 s ごとに更新される)。三角形と draw call は台の時計で測った最後の値、fps は実時間で測った平均 */
   calls: number;
   triangles: number;
   fps: number;
