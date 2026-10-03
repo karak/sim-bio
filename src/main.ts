@@ -20,6 +20,7 @@ import type { DrawnCargo } from './harbor/contract';
 import { createObserveEntry } from './observe/entry';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
+import { AUTOSAVE_TICKS } from './persist/autosave';
 import { createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
 import { checkSlot, putPendingSlot, slotSaveOf, takePendingSlot, type Here, type SlotSave } from './persist/slotSave';
 import type { Chronicle } from './harbor/chronicle';
@@ -33,8 +34,6 @@ import { createConfirm } from './ui/confirm';
 import { askOf, type Risky } from './ui/confirmAsk';
 import { atOf, bootPlanOf, planOp, runPlan, searchFor, type Effect, type Op, type Restore } from './app/place';
 
-/** 自動保存の周期 (M19-05)。1 季節。1 倍速で 90 秒、100 倍速で 1 秒ほど。serialize と書き込みは 90 tick の計算の 2% に満たない */
-const AUTOSAVE_TICKS = 90;
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
 const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
 

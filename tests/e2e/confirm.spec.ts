@@ -19,7 +19,7 @@ async function shot(page: Page, name: string) {
 const dialog = (page: Page) => page.getByRole('alertdialog');
 
 /** 自動の枠を書く周期 (src/main.ts の AUTOSAVE_TICKS) */
-const AUTOSAVE_TICKS = 90;
+import { AUTOSAVE_TICKS } from '../../src/persist/autosave';
 /** 自動の枠に書き終えた島の tick (persist.saved の記録) を順に集める */
 function collectAutoSaves(page: Page): number[] {
   const ticks: number[] = [];
