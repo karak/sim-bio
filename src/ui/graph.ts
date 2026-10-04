@@ -6,6 +6,17 @@ export type GraphMarker = { x: number; label: string; color: string };
 const AXIS_FONT = '11px ui-monospace, monospace';
 const MARKER_FONT = 'bold 12px system-ui, sans-serif';
 
+/** 余白 (CSS px)。plot は板の高さからこの上下を引いた残り */
+const PAD = { l: 32, r: 44, t: 16, b: 16 };
+/** 板の高さ (CSS px)。hud.css の `.hud-r canvas` と `#local-graph` が同じ値を書く (単体試験が突き合わせる)。plot は 120 px (M26-01) */
+export const GRAPH_PANEL_H = 152;
+export const LOCAL_GRAPH_PANEL_H = 152;
+
+/** 板の大きさ (CSS px) から plot の大きさを出す */
+export function graphLayout(w: number, h: number): { plotW: number; plotH: number } {
+  return { plotW: w - PAD.l - PAD.r, plotH: h - PAD.t - PAD.b };
+}
+
 /** Canvas 2D に折れ線グラフを描く。左軸は個体数、右軸は気温 (破線)。 */
 export function drawGraph(
   ctx: CanvasRenderingContext2D,
@@ -16,9 +27,8 @@ export function drawGraph(
   h: number,
 ): void {
   ctx.clearRect(0, 0, w, h);
-  const pad = { l: 32, r: 44, t: 16, b: 16 };
-  const iw = w - pad.l - pad.r;
-  const ih = h - pad.t - pad.b;
+  const pad = PAD;
+  const { plotW: iw, plotH: ih } = graphLayout(w, h);
   const [x0, x1] = ts.xRange();
   const xs = (x: number) => pad.l + (x1 === x0 ? 0 : ((x - x0) / (x1 - x0)) * iw);
 
