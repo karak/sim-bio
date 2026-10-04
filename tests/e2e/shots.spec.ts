@@ -167,10 +167,11 @@ test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯
     .poll(async () => {
       await stepFrames(visitor, 1);
       return visitor.locator('#observe-layer').isVisible();
-    })
+    }, { timeout: 60_000 })
     .toBe(true);
   await expect(plaque.locator('#harbor-visit-ending')).toHaveText('文明の試し読みを 5 年、生き延びた');
-  await expect(plaque).toContainText('「雨は来た」');
+  await expect(plaque.getByRole('heading')).toHaveText(/^[ァ-ヶー]+の(島|環|洲)$/);
+  await expect(plaque.locator('.harbor-inscription')).toHaveText('「雨は来た」');
   await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('まだ誰もたどっていない');
   // 帯は素材を読み終えて 0.5 秒 (30 コマ) 進んでから書かれる。年と季節は素材の読み込みの速さで回ごとに前後するので、形だけ確かめ、帯の画素は基準にしない
   await expect
@@ -179,13 +180,14 @@ test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯
       return bar.textContent();
     }, { timeout: 60_000 })
     .toMatch(/^\d+ 年 · [春夏秋冬]$/);
-  // 板の画素は 3D の動きに依らない (面は不透明)。帯は 3D の上なので、撮る間だけ本物の rAF に戻し、画素の基準は持たない (OBS-002 と同じ)
+  // 板の面は不透明で、画素は 3D の動きに依らない (四隅の面取りだけは 3D が透けるが、板の 0.3% ほどで閾値の内)。島の名前は年代記の hash から決まるので、年代記か版が変わると基準画も変わる。帯は 3D の上なので、撮る間だけ本物の rAF に戻し、画素の基準は持たない (OBS-002 と同じ)
   await withRealFrames(visitor, () => shoot(visitor, { 島の名前: plaque.getByRole('heading'), 訪問の板: plaque }));
   await withRealFrames(visitor, () => shoot(visitor, { 観察画面の帯: bar }, undefined, false));
 
   await plaque.getByRole('button', { name: '年表を読む' }).click();
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
   await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた');
+  await expect(plaque.getByRole('progressbar', { name: '年表を読む進み' })).toHaveAttribute('aria-valuenow', '5');
   await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }));
 });
 
