@@ -12,10 +12,10 @@ from unittest import mock
 
 from acceptance import check_results, load
 from judge import (
+    PlanItem,
     Question,
     StepRef,
     StepResult,
-    PlanItem,
     Vote,
     apply_results,
     digest_of,
@@ -1121,7 +1121,7 @@ class RepoLlmStepsTest(unittest.TestCase):
         keys = {s.key for s in select_steps(repo_sot(), [])}
         self.assertTrue(set(LLM_STEPS) <= keys, set(LLM_STEPS) - keys)
 
-    def test_each_step_loads_its_own_rubric_with_visual_yes_no_questions(self):
+    def test_each_step_loads_its_own_rubric_not_the_fallback(self):
         rubrics = repo_rubrics()
         for key in LLM_STEPS:
             step = select_steps(repo_sot(), [key])[0]
@@ -1136,7 +1136,7 @@ class RepoLlmStepsTest(unittest.TestCase):
         self.assertIn("focus", cancel)
         self.assertIn("輪や光が無いなら no", cancel)
         band = " ".join(r["q"] for r in rubrics["SEL-003/3"])
-        self.assertIn("細い線にしか見えないなら no", band)
+        self.assertIn("途中で消えて見えない辺があるなら no", band)
 
     def test_each_step_points_at_the_shots_the_text_names(self):
         shots = {
@@ -1233,11 +1233,33 @@ class RepoBaselinedStepsRunTest(unittest.TestCase):
         self.assertIn("CNF-002/2", entry["llm"]["steps"])
         self.assertIn("CNF-002-1.png", entry["note"])
 
-    def test_a_judged_pass_after_a_fail_clears_that_step_but_not_the_item_verdict(self):
+    def test_a_later_pass_on_one_step_keeps_the_item_failing_while_another_step_fails(self):
+        self.judge("SEL-003/3", {"SEL-003-2.png": "no"})
+        self.judge("SEL-003/4", {"SEL-003-3.png": "no"})
+        self.judge("SEL-003/3", {})
+        entry = self.saved()["SEL-003"]
+        self.assertEqual(entry["verdict"], "fail")
+        self.assertNotIn("SEL-003/3", entry["llm"]["steps"])
+        self.assertIn("SEL-003/4", entry["llm"]["steps"])
+
+    def test_a_pass_after_the_only_fail_removes_the_item(self):
         self.judge("SEL-003/3", {"SEL-003-2.png": "no"})
         self.assertEqual(self.saved()["SEL-003"]["verdict"], "fail")
         self.judge("SEL-003/3", {})
         self.assertNotIn("SEL-003", self.saved())
+
+    def test_every_image_of_the_five_steps_has_a_real_pixel_baseline(self):
+        for key, names in LLM_STEPS.items():
+            for n in names:
+                self.assertTrue(
+                    has_pixel_baseline(Path(n), REPO / "tests/e2e/baselines"), (key, n)
+                )
+
+    def test_without_baselines_the_same_yes_votes_would_be_a_pass(self):
+        shutil.rmtree(self.root / "tests/e2e/baselines")
+        (self.root / "tests/e2e/baselines").mkdir()
+        _, (results, *_) = self.judge("SEL-003/3", {})
+        self.assertTrue(writes_pass(results[0]))
 
 
 if __name__ == "__main__":
