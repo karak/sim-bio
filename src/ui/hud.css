@@ -9,7 +9,7 @@
 .hud-b { bottom: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: calc(100% - 24px); }
 /* 左 44px: 港の札 (.harbor-dock、x 0〜36) の右に取る (M25-10)。12px だと札がセルの詳細の行の札を覆った */
 .hud-bl { bottom: 80px; left: calc(var(--harbor-dock-w) + 8px); min-width: 240px; }
-#local-graph { width: 240px; height: 80px; display: block; margin-top: 4px; }
+#local-graph { width: 240px; height: 152px; display: block; margin-top: 4px; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
 .dim { color: #9fb3c2; font-size: 12px; }
@@ -21,7 +21,7 @@
 /* 星の力が足りないチップ・スライダー。押せるが runner が弾くので、見た目だけ薄くする */
 .unaffordable { opacity: 0.4; }
 .chip:disabled, label.chip:has(input:disabled) { opacity: 0.4; cursor: default; }
-.hud-r canvas { width: 320px; height: 100px; display: block; margin: 4px 0; }
+.hud-r canvas { width: 320px; height: 152px; display: block; margin: 4px 0; }
 #legend span { margin-right: 10px; font-size: 11px; color: #9fb3c2; }
 #legend i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
 .stats { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 8px; align-items: baseline; margin-top: 4px; }
