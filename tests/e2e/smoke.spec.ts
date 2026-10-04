@@ -327,18 +327,35 @@ test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チッ�
   const t0 = new Date('2026-01-01T00:00:00Z').getTime();
   await page.clock.install({ time: t0 });
   await page.clock.pauseAt(t0 + 60_000);
+  const logs: string[] = [];
+  page.on('console', (m) => logs.push(m.text()));
+  const viewed = () => logs.filter((l) => l.includes('"event":"scenario.viewed_species"')).map((l) => (JSON.parse(l) as { id: string | null }).id);
   await page.goto('/?scenario=test-event');
   await page.click('#speed-100');
   // fastForward は溜まったフレームを 1 回だけ回す。1 回目は runner が時刻を覚えるだけ、2 回目からは 1 回 1 秒 = 100 倍速で 100 tick
   // (1 フレームの上限 200 tick の内)。1 年 = 360 tick より小さい刻みで送るので、1 年目に着いたところで必ず止まる
-  for (let i = 0; i < 10 && (await page.locator('#tablet-year').textContent()) !== '1 / 3 年'; i++) await page.clock.fastForward(1000);
-  await expect(page.locator('#tablet-year')).toHaveText('1 / 3 年');
+  for (let i = 0; i < 10 && (await page.locator('#tablet-year').textContent()) !== '1 / 30 年'; i++) await page.clock.fastForward(1000);
+  await expect(page.locator('#tablet-year')).toHaveText('1 / 30 年');
   await expect(page.locator('#tablet-warnings')).toContainText('狼の群れが北の谷に下りた', { timeout: 20_000 });
   await expect(page.locator('#layer-species-wolf')).not.toHaveClass(/on/);
-  // 100x のままだと警告の一覧が描き直され続け、遅い CI ではチップが押す前に DOM から外れる。止めてから押す
+  // 遅い CI ではこの click が効くまでに数年進むことがある。test-event の告知は noticeYears (30 年) のあいだ残るので年をまたいでも押せるが、
+  // 終わる年の判定の幕はチップを覆う。止まったことを確かめてから押す。毎フレーム進む日 (#hud-season の Day N) を、待ち直しの無い
+  // 比較で見る (toHaveText は一致するまで待ち直すので、3.6 s で一周する表示では止まっていなくても通る)。1.5 s は 100x の 1 年より短く、
+  // 1 フレーム ~1 s の遅い CI でも少なくとも 1 フレームは入る
   await page.click('#speed-0');
+  const day = await page.locator('#hud-season').textContent();
+  await page.waitForTimeout(1_500);
+  expect(await page.locator('#hud-season').textContent()).toBe(day);
   const chip = page.getByRole('button', { name: '狼を見る' });
   await expect(chip).toBeVisible();
   await chip.click();
   await expect(page.locator('#layer-species-wolf')).toHaveClass(/on/);
+  // 種のレイヤーを開いたら告知は読まれたものとして消える (チップ → 狼レイヤー → onSpeciesLayer → setViewedSpecies の経路)
+  // 石板はフレームで描き直すので、止めた時計を 1 フレームぶん送る (速さ 0 なので年は進まない)
+  await page.clock.fastForward(1000);
+  await expect(page.locator('#tablet-warnings')).not.toContainText('狼の群れが北の谷に下りた');
+  await expect.poll(viewed).toEqual(['wolf']);
+  // 種以外のレイヤーに切り替えたら「見ていない」に戻る (これが抜けると、その種の告知が以後ずっと出なくなる)
+  await page.click('#layer-terrain');
+  await expect.poll(viewed).toEqual(['wolf', null]);
 });
