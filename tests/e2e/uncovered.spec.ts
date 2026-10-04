@@ -110,3 +110,40 @@ test('M25-10: 判定の板が出ているときも、セルの詳細の行の札
   await expect(page.locator('#verdict-title')).toHaveText('島は滅びた', { timeout: 90_000 });
   await expectAllRowsUncoveredAtFivePoints(page.locator('#cell-info'));
 });
+
+/** 1 つの部品を 5 点 (左端・右端・上端・下端・真ん中) で見て、一番上の要素が部品自身 (かその中) か (M26-04) */
+const expectUncoveredAtFivePoints = (target: import('@playwright/test').Locator) =>
+  target.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const points = [
+      [r.left + 1, r.top + r.height / 2],
+      [r.right - 1, r.top + r.height / 2],
+      [r.left + r.width / 2, r.top + 1],
+      [r.left + r.width / 2, r.bottom - 1],
+      [r.left + r.width / 2, r.top + r.height / 2],
+    ];
+    return points.map(([x, y]) => {
+      const hit = document.elementFromPoint(x, y);
+      return hit && el.contains(hit) ? 'self' : hit ? `${hit.tagName.toLowerCase()}#${hit.id}.${hit.getAttribute('class') ?? ''}` : 'nothing';
+    });
+  });
+
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1024, height: 640 },
+]) {
+  test(`M26-04: 開発の板 (?dev=1) は『新しい島』を覆わない (${size.width}x${size.height})`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await page.route('**/api/**', (route) => route.abort('failed'));
+    await page.goto('/?dev=1');
+    await expect(page.locator('#hud-year')).toHaveText('Year 0');
+    const panel = page.getByRole('region', { name: '開発' });
+    await expect(panel).toBeVisible();
+    const button = page.getByRole('button', { name: '新しい島' });
+    await expect(button).toBeVisible();
+    expect(await expectUncoveredAtFivePoints(button)).toEqual(Array(5).fill('self'));
+    const [b, p] = await Promise.all([button.boundingBox(), panel.boundingBox()]);
+    const overlap = b!.x < p!.x + p!.width && p!.x < b!.x + b!.width && b!.y < p!.y + p!.height && p!.y < b!.y + b!.height;
+    expect(overlap, `板 ${JSON.stringify(p)} がボタン ${JSON.stringify(b)} と重なる`).toBe(false);
+  });
+}
