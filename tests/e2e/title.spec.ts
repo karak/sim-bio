@@ -160,4 +160,30 @@ test('M24-04: 判定の出た石板の「タイトルへ」は離れる確かめ
   await d.getByRole('button', { name: '離れる' }).click();
   await expect(page.getByRole('region', { name: 'タイトル' })).toBeVisible();
   expect(new URL(page.url()).search).toBe('');
+  // (M24-05) 判定の出た石板は「続きから」にしない (開き直すと初めから)。自動の枠も無いので 4 行
+  await expect(menu(page).getByRole('menuitem')).toHaveText(['新規ゲーム', 'ロード', '港', 'コンフィグ']);
+});
+
+test('M24-05: 石板を少し進めてタイトルへ戻ると、「続きから」が石板の題と年を言い、Enter で同じ年から続く', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/?scenario=test-quick');
+  await expect(page.locator('#tablet-year')).toHaveText('0 / 5 年');
+  await page.click('#speed-10');
+  await expect(page.locator('#tablet-year')).toHaveText('1 / 5 年', { timeout: 60_000 });
+  await page.click('#speed-0');
+  const left = await shownTick(page);
+
+  // 走っている石板は確かめない。flush が石板の続きを書き切ってからタイトルへ
+  await toTitle(page).click();
+  await expect(page.getByRole('region', { name: 'タイトル' })).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(menu(page).getByRole('menuitem')).toHaveText([/^続きから石板『試し読み』 · 1 年 · \d\d\/\d\d \d\d:\d\d$/, '新規ゲーム', 'ロード', '港', 'コンフィグ']);
+  await expect(item(page, '続きから')).toBeFocused();
+
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#tablet-year')).toHaveText('1 / 5 年');
+  expect(new URL(page.url()).searchParams.get('scenario')).toBe('test-quick');
+  expect(await shownTick(page)).toBeGreaterThanOrEqual(left);
+  await expect(page.locator('#hud-year')).toBeVisible();
 });

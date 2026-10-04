@@ -22,7 +22,8 @@ import { createObserveEntry } from './observe/entry';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
-import { createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
+import { checkScenarioSave, createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
+import { continueTargetOf, readLastStage, scenarioProgressOf, writeLastStage, type ScenarioProgress } from './persist/lastStage';
 import { checkSlot, putPendingSlot, slotSaveOf, takePendingSlot, type Here, type SlotSave } from './persist/slotSave';
 import type { Chronicle } from './harbor/chronicle';
 import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
@@ -67,17 +68,34 @@ async function boot(): Promise<void> {
   // 起動の行き先 (M24-01): 素の / で、このタブでまだ舞台に入っていなければタイトル。選ばれてから舞台を組む
   const route = bootRouteOf(location.search, scenarios, pending, takeTabMarks(sessionStorage), devTools ? devTools.skipsTitle(localStorage) : false);
   const titleLog = (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level, event, ...extra });
+  /** 印の石板の続きの要約 (M24-05)。知らない石板・続きが無い・この版の石板の島でない (開くと初めからになる) なら null */
+  const scenarioProgressFor = async (scenarioId: string): Promise<ScenarioProgress | null> => {
+    const def = scenarios.find((d) => d.id === scenarioId);
+    if (!store || !def) return null;
+    const loaded = await store.loadScenario(scenarioId).catch((e: unknown) => (titleLog('warn', 'persist.scenario.load.failed', { error: String(e) }), null));
+    if (!loaded) return null;
+    const checked = checkScenarioSave(loaded, { simVersion: SIM_VERSION, scenarioId, seed: def.start?.seed ?? base.seed });
+    return checked.ok ? scenarioProgressOf(scenarioId, checked.value) : null;
+  };
   const enterFromTitle = async () => {
     // 置き場が答えなくてもタイトルは出す (続きからを出さないだけ)
     const listed = store ? store.list().catch((e: unknown) => (titleLog('warn', 'persist.list.failed', { error: String(e) }), [])) : Promise.resolve([]);
+    // (M24-05) 最後に遊んだ舞台の印が石板なら、その石板の続きも同じ打ち切りの内で読む
+    const mark = readLastStage(localStorage);
+    const progressed = mark?.stage === 'scenario' ? scenarioProgressFor(mark.scenarioId) : Promise.resolve(null);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<[]>((resolve) => (timer = setTimeout(() => (titleLog('warn', 'persist.list.timeout', { ms: TITLE_LIST_TIMEOUT_MS }), resolve([])), TITLE_LIST_TIMEOUT_MS)));
-    const slots = await Promise.race([listed, timeout]);
+    const timeout = new Promise<[[], null]>(
+      (resolve) => (timer = setTimeout(() => (titleLog('warn', 'persist.list.timeout', { ms: TITLE_LIST_TIMEOUT_MS }), resolve([[], null])), TITLE_LIST_TIMEOUT_MS)),
+    );
+    const [slots, progress] = await Promise.race([Promise.all([listed, progressed]), timeout]);
     clearTimeout(timer);
-    const continuation = slots.find((s) => s.slot === 'auto' && s.stage === 'free') ?? null;
+    const auto = slots.find((s) => s.slot === 'auto' && s.stage === 'free') ?? null;
+    const continuation = continueTargetOf(mark, auto, progress, (id) => scenarios.find((d) => d.id === id)?.title ?? null);
     const root = document.getElementById('app');
     if (!root) throw new Error('#app missing');
-    await showTitle(root, { continuation, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches, log: (event, extra) => titleLog('info', event, extra) });
+    const choice = await showTitle(root, { continuation, freeSaved: auto !== null, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches, log: (event, extra) => titleLog('info', event, extra) });
+    // 石板の続きは ?scenario=<id> の道 (bootPlanOf の restore scenario → resumeScenario)。読み込み直さずに検索語だけ差し替える
+    if (choice.kind === 'scenario') history.replaceState(null, '', `${location.pathname}?${searchFor(location.search, choice.scenarioId)}${location.hash}`);
     return bootPlanOf(location.search, scenarios, null);
   };
   const booted = route.kind === 'stage' ? route.plan : await enterFromTitle();
@@ -108,6 +126,11 @@ async function boot(): Promise<void> {
   }
   // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
   const visitId = booted.visitId;
+  /** 最後に遊んだ舞台の印 (M24-05)。舞台に入った時と自動保存の時に書く。訪問 (他人の島) では書かない */
+  const markStage = () => {
+    if (!visitId) writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now());
+  };
+  markStage();
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
     log.write({ ts: new Date().toISOString(), tick, year: Math.floor(tick / config.ticksPerYear), level, event, ...extra });
   const localSave = createLocalSave({
@@ -115,7 +138,10 @@ async function boot(): Promise<void> {
     mode: scenario ? 'scenario' : 'free',
     every: AUTOSAVE_TICKS,
     log: persistLog,
-    onSaved: (s) => hud.setSlot(s),
+    onSaved: (s) => {
+      hud.setSlot(s);
+      markStage();
+    },
   });
   const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
@@ -476,6 +502,7 @@ async function boot(): Promise<void> {
         log: persistLog,
         from: world.snapshot().tick,
         capture: () => ({ save: world.serialize(), runner: scenarioRunner.save(), chronicle: scenarioRecorder.current() }),
+        onSaved: markStage,
       });
     }
     // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る

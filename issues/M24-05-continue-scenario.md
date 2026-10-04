@@ -1,11 +1,15 @@
 ---
 id: M24-05
 title: タイトルの「続きから」に石板の続きも出す (最後に遊んだ舞台の印)
-status: open
+status: review
 milestone: M24
 plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-01]
-evidence: []
+evidence:
+  - tests/unit/persist.lastStage.test.ts (印の読み書きと壊れた印 9 行、scenarioProgressOf、continueTargetOf の表 12 行)
+  - tests/unit/ui.titleMenu.test.ts (石板の続きの「続きから」(M24-05): 要約の文、titleChoiceOf の表 5 行)
+  - tests/e2e/title.spec.ts (M24-05: 石板を進めてタイトルへ → 続きから、M24-04 の判定の出た石板の試験の末尾で続きにしないこと)
+  - src/persist/lastStage.ts、src/ui/titleMenu.ts (titleChoiceOf)、src/ui/Title.ts、src/main.ts (enterFromTitle・markStage)、src/persist/scenarioSave.ts (onSaved)
 ---
 
 # 「続きから」に石板の続きも出す
@@ -24,10 +28,30 @@ M24-01 の「続きから」は自由モードの自動の枠だけを見る。�
 
 ## Acceptance criteria
 
-- [ ] 印の読み書きと「続きから」の行き先を純粋な関数にし、表の単体試験 (自由だけ・石板だけ・両方で新しい方・判定の出た石板・壊れた印)。先に赤
-- [ ] E2E: 石板を少し進めてタイトルへ → 「続きから」が石板の題を言い、Enter で同じ年から続く
+- [x] 印の読み書きと「続きから」の行き先を純粋な関数にし、表の単体試験 (自由だけ・石板だけ・両方で新しい方・判定の出た石板・壊れた印)。先に赤
+- [x] E2E: 石板を少し進めてタイトルへ → 「続きから」が石板の題を言い、Enter で同じ年から続く
 - [ ] `pnpm run check`・通しの E2E
 
 ## 作業ログ
 
 - 2026-10-05: 起票 (M24-01 の報告。ユーザーの決定「作る」)。
+
+### 2026-10-05 (M24-05 の実装。ユーザーの審査待ち)
+
+- 作業の場: worktree `.claude/worktrees/m24` (feat/m24、M24-04 の 0ace5a8 の上)
+- 単体試験を先に書いて赤を見た: tests/unit/persist.lastStage.test.ts は `Cannot find module '../../src/persist/lastStage'`、tests/unit/ui.titleMenu.test.ts の M24-05 の 6 件は `expected 'test-quick · 3 年 · 10/04 18:40' to be '石板『試し読み』 · 3 年 · 10/04 18:40'` と `titleChoiceOf is not a function`
+- 印: src/persist/lastStage.ts。localStorage の `biotope.last-stage` に `{ stage: 'free' | 'scenario', scenarioId?, at }` の JSON。置き場は引数。壊れた値 (JSON でない・知らない舞台・時刻が有限の数でない・石板の id が無い/空) と投げる置き場は null、書けない置き場は何もしない
+- 書く時: 舞台に入った時 (起動の後、訪問では書かない) と、自動保存を書き終えた時 (自由モードは localSave の onSaved、石板は createScenarioAutosave に足した onSaved)。「タイトルへ」の flush の書き終わりでも書く
+- 「続きから」の行き先 `continueTargetOf` (純粋な関数): 候補は自動の枠 (自由モード、時刻は保存の時刻) と、印の指す石板の続き (同じ石板・判定がまだ・題の分かる石板、時刻は印の時刻)。両方あれば新しい方、同じ時刻なら石板。印は書いた順に最後の舞台を指すので普段は印の舞台になるが、2 つのタブが交互に書く場合に備えて時刻で比べる。印が無い・壊れていれば自動の枠だけ (M24-01 と同じ)
+- 判定の出た石板は続きにしない (開き直すと初めから、M19-14)。読めない石板の続き (この版・この石板・この seed の島でない、`checkScenarioSave`) も、開くと脇へ退けて初めからになるので出さない (main.ts の scenarioProgressFor)
+- 石板の年は石板の初めの tick から数える (石板の板の「N / 5 年」と同じ)。要約は「石板『試し読み』 · 1 年 · 10/05 08:50」
+- 石板の続きを選ぶと、読み込み直さずに検索語を `?scenario=<id>` に差し替え (`searchFor`、修飾は残す)、`bootPlanOf` の restore scenario → `resumeScenario` の道で開く (起動の道は 1 つのまま)
+- 石板の続きの読みは、置き場の一覧と同じ 2 s の打ち切りの内 (答えなければ続きからを出さない)
+- 新規ゲームの決め方を `titleChoiceOf` に出した。M24-01 は「続きが無ければ自由モードの最初の島」だったが、続きが石板だけのとき新規ゲームが準備中の板になって自由モードへ入れなくなるので、「自動の枠が無ければ」にした (石板の続きは自動の枠を上書きしない)。TitleDeps に `freeSaved` を足した
+- E2E (tests/e2e/title.spec.ts): test-quick を 10x で「1 / 5 年」まで進めて止め、「タイトルへ」(確かめ無し) → メニューの先頭が「続きから石板『試し読み』 · 1 年 · …」で既定 → Enter で `?scenario=test-quick` の「1 / 5 年」、離れた tick 以後。判定の出た石板を離れた後のタイトルは 4 行 (続きからが出ない) を M24-04 の試験の末尾で確かめる
+- 基準画: `pnpm run shots` の 6 本は通った。更新はしていない
+
+### 開いた問い (M24-05)
+
+- 印は見守り手ごと (開発の `?player=`、置き場の DB を分ける) に分けていない。「タイトルへ」が素の `/` へ移るので、タイトルはいつも既定の見守り手の置き場と印を読む (M24-04 の開いた問いと一緒に決める)
+- 「続きから」が石板を指すとき、自動の枠 (自由モード) の続きはタイトルからは開けない (ロードの板は M24-02)。操作画面の石板の選択の「自由モード」からは開ける

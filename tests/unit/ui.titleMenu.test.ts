@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { continueNoteOf, menuKeyOf, titleMenuOf } from '../../src/ui/titleMenu';
+import { continueNoteOf, menuKeyOf, titleChoiceOf, titleMenuOf } from '../../src/ui/titleMenu';
 import type { SlotSummary } from '../../src/persist/slots';
 
 const savedAt = new Date(2026, 9, 4, 18, 40).getTime();
@@ -39,5 +39,25 @@ describe('メニューのキー menuKeyOf (M24-01、矢印・Enter・Esc)', () =
   ];
   it.each(rows)('%s (at %i of %i)', (key, at, count, out) => {
     expect(menuKeyOf(key, at, count)).toEqual(out);
+  });
+});
+
+describe('石板の続きの「続きから」(M24-05)', () => {
+  const scenario = { stage: 'scenario', scenarioId: 'test-quick', title: '試し読み', year: 3, savedAt } as const;
+
+  it('要約は「石板『題』 · N 年 · 月/日 時:分」', () => {
+    expect(continueNoteOf(scenario)).toBe('石板『試し読み』 · 3 年 · 10/04 18:40');
+    expect(titleMenuOf(scenario).items[0]).toEqual({ id: 'continue', label: '続きから', note: '石板『試し読み』 · 3 年 · 10/04 18:40' });
+  });
+
+  const rows: [why: string, id: Parameters<typeof titleChoiceOf>[0], continuation: Parameters<typeof titleChoiceOf>[1], freeSaved: boolean, to: ReturnType<typeof titleChoiceOf>][] = [
+    ['続きから (自由モード) は自由モード', 'continue', { stage: 'free', year: 12, savedAt }, true, { kind: 'free' }],
+    ['続きから (石板) はその石板', 'continue', scenario, false, { kind: 'scenario', scenarioId: 'test-quick' }],
+    ['新規ゲームは自動の枠が無ければ自由モードの最初の島 (石板の続きがあっても)', 'new', scenario, false, { kind: 'free' }],
+    ['新規ゲームは自動の枠があれば準備中の板 (確かめと新しい seed は M24-02)', 'new', scenario, true, { kind: 'panel' }],
+    ['ロードは準備中の板', 'load', null, false, { kind: 'panel' }],
+  ];
+  it.each(rows)('titleChoiceOf: %s', (_why, id, continuation, freeSaved, to) => {
+    expect(titleChoiceOf(id, continuation, freeSaved)).toEqual(to);
   });
 });

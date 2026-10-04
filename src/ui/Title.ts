@@ -1,7 +1,7 @@
 import { el } from './el';
 import { startTitleDemo, type DemoStats } from './titleDemo';
-import { menuKeyOf, titleMenuOf, type TitleItem, type TitleItemId } from './titleMenu';
-import type { SlotSummary } from '../persist/slots';
+import { menuKeyOf, titleChoiceOf, titleMenuOf, type TitleChoice, type TitleItem, type TitleItemId } from './titleMenu';
+import type { Continuation } from '../persist/lastStage';
 import './title.css';
 
 /**
@@ -9,11 +9,14 @@ import './title.css';
  * 舞台の起動より前に出し、選ばれたら背景のデモを止めて資源を返し、画面を外してから舞台を組む。
  * メニューは role="menu" と menuitem。矢印・Home・End で選び、Enter (と空白、button の既定) で決める。板は Esc と「戻る」でメニューへ返る
  */
-export type TitleChoice = { kind: 'free' };
+export type { TitleChoice };
 
 export type TitleDeps = {
   /** 自動の枠の続き。あれば「続きから」を先頭に出して既定にする */
-  continuation: SlotSummary | null;
+  // (M24-05) 石板の続きのこともある。どちらを出すかは persist/lastStage.ts の continueTargetOf が決める
+  continuation: Continuation | null;
+  /** 自動の枠 (自由モード) に続きがあるか (M24-05)。無ければ新規ゲームは自由モードの最初の島 */
+  freeSaved: boolean;
   reducedMotion: boolean;
   log: (event: string, extra: Record<string, unknown>) => void;
 };
@@ -74,8 +77,9 @@ export function showTitle(root: HTMLElement, deps: TitleDeps): Promise<TitleChoi
     };
     const choose = (i: number) => {
       const id = menu.items[i].id;
-      if (id === 'continue' || (id === 'new' && !deps.continuation)) finish({ kind: 'free' });
-      else {
+      const to = titleChoiceOf(id, deps.continuation, deps.freeSaved);
+      if (to.kind !== 'panel') finish(to);
+      else if (id !== 'continue') {
         // 板の間はメニューを inert にする (aria-modal の板の外を押せない・focus が出ない)
         list.inert = true;
         openPanel(screen, menu.items[i].label, PENDING_TEXT[id], () => {
