@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { drawGraph, renderGraph } from '../../src/ui/graph';
+import { readFileSync } from 'node:fs';
+import { drawGraph, graphLayout, GRAPH_PANEL_H, LOCAL_GRAPH_PANEL_H, renderGraph } from '../../src/ui/graph';
 import { TimeSeries } from '../../src/ui/timeSeries';
 
 type Text = { text: string; x: number; align: CanvasTextAlign; font: string };
@@ -107,5 +108,37 @@ describe('renderGraph の字の実寸 (M25-11: 画面の上で軸 5px・目印 9
     renderGraph(canvas, ctx, ts, lines, markers, 3);
     renderGraph(canvas, ctx, ts, lines, markers, 3);
     expect([canvas.width, canvas.height, texts.length]).toEqual([640, 200, 0]);
+  });
+});
+
+describe('graphLayout の描く高さ (M26-01: plot を 68 → 120 px に)', () => {
+  it('plot の高さは板の高さ − 上 16 − 下 16', () => {
+    expect(graphLayout(320, 100).plotH).toBe(68);
+    expect(graphLayout(320, 152).plotH).toBe(120);
+  });
+
+  it('HUD のグラフ (#graph) と局所のグラフ (#local-graph) の板の高さで plot は 110〜130 px', () => {
+    for (const h of [GRAPH_PANEL_H, LOCAL_GRAPH_PANEL_H]) {
+      const { plotH } = graphLayout(320, h);
+      expect(plotH).toBeGreaterThanOrEqual(110);
+      expect(plotH).toBeLessThanOrEqual(130);
+    }
+  });
+
+  it('drawGraph の目盛り線は plot の上端と下端に引く (線の間隔 = plotH)', () => {
+    const ys: number[] = [];
+    const { ctx } = recordingContext();
+    (ctx as unknown as { moveTo: (x: number, y: number) => void }).moveTo = (_x, y) => ys.push(y);
+    const ts = new TimeSeries(10);
+    ts.push(0, { grass: 1, temp: 10 });
+    ts.push(1, { grass: 2, temp: 10 });
+    drawGraph(ctx, ts, [{ key: 'grass', color: '#fff', label: '草' }], [], 320, 152);
+    expect(ys[2] - ys[0]).toBe(120);
+  });
+
+  it('hud.css の板の高さが定数と同じ (CSS だけ変わって plot が戻らない)', () => {
+    const css = readFileSync(new URL('../../src/ui/hud.css', import.meta.url), 'utf8');
+    expect(css).toMatch(new RegExp(`#local-graph \\{[^}]*height: ${LOCAL_GRAPH_PANEL_H}px`));
+    expect(css).toMatch(new RegExp(`\\.hud-r canvas \\{[^}]*height: ${GRAPH_PANEL_H}px`));
   });
 });

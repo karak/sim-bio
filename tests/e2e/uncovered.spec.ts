@@ -111,6 +111,52 @@ test('M25-10: 判定の板が出ているときも、セルの詳細の行の札
   await expectAllRowsUncoveredAtFivePoints(page.locator('#cell-info'));
 });
 
+for (const [w, h] of [
+  [1280, 720],
+  [1024, 640],
+] as const) {
+  test(`M26-01: ${w}×${h} でグラフの plot は 110〜130 px で、セルの詳細の板・グラフの板は他の HUD と重ならない`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: h });
+    await page.route('**/api/**', (route) => route.abort('failed'));
+    await page.goto('/');
+    await expect(page.locator('#hud-year')).toHaveText('Year 0');
+    await page.click('#speed-0');
+    await pickCellAndExpectRowsUncovered(page);
+    const got = await page.evaluate(() => {
+      const rect = (el: Element) => el.getBoundingClientRect();
+      const plot = (id: string) => (document.getElementById(id) as HTMLCanvasElement).clientHeight - 32;
+      const panels: Record<string, Element> = {
+        セルの詳細: document.querySelector('.hud-bl')!,
+        右のグラフ: document.querySelector('.hud-r')!,
+        レイヤーの列: document.querySelector('.hud-tr')!,
+        時間の箱: document.querySelector('.hud-tl')!,
+        下の行: document.querySelector('.hud-b')!,
+        種を放つ: document.querySelector('.hud-palette')!,
+        港の札: document.querySelector('.harbor-dock')!,
+      };
+      const names = Object.keys(panels);
+      const overlaps: string[] = [];
+      for (let i = 0; i < names.length; i++)
+        for (let j = i + 1; j < names.length; j++) {
+          const a = rect(panels[names[i]]);
+          const b = rect(panels[names[j]]);
+          // 下の行×種を放つは 1024 幅で元から重なる (グラフの高さと無関係)。グラフの板 2 つが絡む組だけ見る
+          if (!['セルの詳細', '右のグラフ'].some((n) => names[i] === n || names[j] === n)) continue;
+          if (a.width && b.width && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) overlaps.push(`${names[i]}×${names[j]}`);
+        }
+      const bl = rect(panels['セルの詳細']);
+      return { graphPlot: plot('graph'), localPlot: plot('local-graph'), overlaps, blTop: bl.top, blBottom: bl.bottom, vh: window.innerHeight };
+    });
+    expect(got.graphPlot).toBeGreaterThanOrEqual(110);
+    expect(got.graphPlot).toBeLessThanOrEqual(130);
+    expect(got.localPlot).toBeGreaterThanOrEqual(110);
+    expect(got.localPlot).toBeLessThanOrEqual(130);
+    expect(got.overlaps).toEqual([]);
+    expect(got.blTop).toBeGreaterThanOrEqual(0);
+    expect(got.blBottom).toBeLessThanOrEqual(got.vh);
+  });
+}
+
 /** 1 つの部品を 5 点 (左端・右端・上端・下端・真ん中) で見て、一番上の要素が部品自身 (かその中) か (M26-04) */
 const expectUncoveredAtFivePoints = (target: import('@playwright/test').Locator) =>
   target.evaluate((el) => {
@@ -132,7 +178,7 @@ for (const size of [
   { width: 1280, height: 720 },
   { width: 1024, height: 640 },
 ]) for (const query of ['/?dev=1', '/?scenario=test-quick&dev=1']) {
-  test(`M26-04: 開発の板 (${query}) は『新しい島』・時間の箱・種を放つ札を覆わない (${size.width}x${size.height})`, async ({ page }) => {
+  test(`M26-04: 開発の板 (${query}) は『新しい島』・時間の箱・種を放つ札・グラフ (右の板・セルの詳細) を覆わない (${size.width}x${size.height})`, async ({ page }) => {
     await page.setViewportSize(size);
     await page.route('**/api/**', (route) => route.abort('failed'));
     await page.goto(query);
@@ -144,6 +190,14 @@ for (const size of [
     for (const t of [button, page.locator('#speed-0'), page.getByRole('button', { name: '3D で見る' }), page.locator('#spawn-row button').first()]) {
       expect(await expectUncoveredAtFivePoints(t)).toEqual(Array(5).fill('self'));
     }
+    // グラフの高さを変えたとき (M26-01) に板が右のグラフの板の行 (平均気温・植生率) を覆った。右の板の全行とセルの詳細のグラフを 5 点で見る
+    await page.click('#speed-0');
+    await expectAllRowsUncoveredAtFivePoints(page.locator('.hud-r'));
+    await pickCellAndExpectRowsUncovered(page);
+    expect(await expectUncoveredAtFivePoints(page.locator('#local-graph'))).toEqual(Array(5).fill('self'));
+    // 種を放つ札は右寄せなので先頭の札だけでは板の下を見逃す。板がずり下がっても札の全部が覆われないことを見る
+    const chips = page.locator('#spawn-row button');
+    for (let i = 0; i < (await chips.count()); i++) expect(await expectUncoveredAtFivePoints(chips.nth(i)), `種の札 ${i}`).toEqual(Array(5).fill('self'));
     const [b, p] = await Promise.all([button.boundingBox(), panel.boundingBox()]);
     const overlap = b!.x < p!.x + p!.width && p!.x < b!.x + b!.width && b!.y < p!.y + p!.height && p!.y < b!.y + b!.height;
     expect(overlap, `板 ${JSON.stringify(p)} がボタン ${JSON.stringify(b)} と重なる`).toBe(false);
