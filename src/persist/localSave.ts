@@ -11,7 +11,8 @@ export type LocalSave = {
    * 閉じる前の続きから。自由モードで自動の枠があれば、その島を restore して返す。シナリオは自動保存から戻さない (シナリオ中の読込は予言と矛盾する)。
    * 読めない自動の枠は脇へ退け、新しい島を普段どおり自動保存する (版を上げた日に島を黙って上書きしない)
    */
-  resume<W>(restore: (save: SaveData) => W): Promise<W | null>;
+  /** accept (M26-10) が false を返す続きは戻さず、触らずに残す (null を返す) */
+  resume<W>(restore: (save: SaveData) => W, accept?: (save: SaveData) => boolean): Promise<W | null>;
   /**
    * 毎フレーム。自動保存の周期: 前に書いた tick から every tick 進んだら 1 回書く。
    * 1 フレームで何 tick 飛んでも 1 回にし、書き込み中は次を書かない (1 回で 1.6 MB ほどの SaveData を作って渡す。size 128)
@@ -71,10 +72,11 @@ export function createLocalSave(deps: {
     });
 
   return {
-    async resume(restore) {
+    async resume(restore, accept) {
       if (!autosaves || !store) return null;
       const save = (await read('load', null, store.load('auto')))?.save;
       if (!save) return null;
+      if (accept && !accept(save)) return null;
       try {
         const w = restore(save);
         last = save.tick;

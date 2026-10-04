@@ -116,6 +116,8 @@ export function searchFor(search: string, scenarioId: string | null): string {
   const q = new URLSearchParams(search);
   if (scenarioId) q.set('scenario', scenarioId);
   else q.delete('scenario');
+  // 石板の島は seed 42 (M26-10)。自由モードの seed= を石板へ持ち込まない
+  if (scenarioId) q.delete('seed');
   // 石板を選ぶのは訪問を離れる操作。visit を残すと、選んだ石板がその島の訪問として開き直る (M26-02)
   q.delete('visit');
   return q.toString();
@@ -163,4 +165,54 @@ export type SlotControls = { save: boolean; load: boolean; file: boolean; newIsl
 export function slotControlsOf(at: { visiting: boolean; slot: SlotId; filled: boolean }): SlotControls {
   const own = !at.visiting;
   return { save: own && at.slot !== 'auto', load: own && at.filled, file: own, newIsland: own, why: own ? '' : '訪れている島は差し替えられない (他人の島)' };
+}
+
+/** 自由モードの最初の島の seed (assets/data/world.default.json と同じ)。基準画・E2E・採点表はこの島の画を前提にする (M26-10) */
+export const DEFAULT_SEED = 42;
+
+const SEED_MAX = 0xffffffff;
+
+function seedParam(raw: string | null): number | null {
+  if (raw === null || !/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return n <= SEED_MAX ? n : null;
+}
+
+/**
+ * 起動時の URL の seed= (M26-10)。自由モードだけが読む: 整数 (0 以上 2^32-1) ならその seed、無い・壊れていれば null (戻す枠も無ければ 42)。
+ * 石板・訪問 (scenario) は seed= を無視し、URL から落とした検索語 (? から。空もある) を search に返す。落とすものが無ければ null
+ */
+export function bootSeedOf(search: string, scenario: boolean): { seed: number | null; search: string | null } {
+  const params = new URLSearchParams(search);
+  if (scenario) {
+    if (!params.has('seed')) return { seed: null, search: null };
+    params.delete('seed');
+    return { seed: null, search: params.size ? `?${params.toString()}` : '' };
+  }
+  return { seed: seedParam(params.get('seed')), search: null };
+}
+
+/** 新しい島の seed。draw は 0 以上 2^32-1 の整数を返す乱数 (差し替え口)。今と同じ値は引き直す */
+export function freshSeed(current: number, draw: () => number): number {
+  let next = draw();
+  while (next === current) next = draw();
+  return next;
+}
+
+/** 新しい島の seed。自由モードだけ引き、石板 (初めから) は石板の seed (base) のまま */
+export function newWorldSeed(at: At, base: number, current: number, draw: () => number): number {
+  return at.stage === 'free' ? freshSeed(current, draw) : base;
+}
+
+/** 検索語 (? から) の seed= を今の seed に揃える。null なら落とす。ほかの検索語は残す。無ければ空 */
+export function seedSearchFor(search: string, seed: number | null): string {
+  const q = new URLSearchParams(search);
+  if (seed === null) q.delete('seed');
+  else q.set('seed', String(seed));
+  return q.size ? `?${q.toString()}` : '';
+}
+
+/** 自動の続きを戻してよいか。URL に seed= があれば、その seed の島の続きだけ (違えば、その seed の新しい島で開く) */
+export function seedMatches(urlSeed: number | null, savedSeed: number): boolean {
+  return urlSeed === null || urlSeed === savedSeed;
 }
