@@ -111,7 +111,7 @@ describe('renderGraph の字の実寸 (M25-11: 画面の上で軸 5px・目印 9
   });
 });
 
-describe('graphLayout の描く高さ (M26-01: 100 px の板に plot 68 px)', () => {
+describe('graphLayout の描く高さ (M26-01: plot を 68 → 120 px に)', () => {
   it('plot の高さは板の高さ − 上 16 − 下 16', () => {
     expect(graphLayout(320, 100).plotH).toBe(68);
     expect(graphLayout(320, 152).plotH).toBe(120);
@@ -137,7 +137,7 @@ describe('graphLayout の描く高さ (M26-01: 100 px の板に plot 68 px)', ()
   });
 
   it('hud.css の板の高さが定数と同じ (CSS だけ変わって plot が戻らない)', () => {
-    const css = readFileSync('src/ui/hud.css', 'utf8');
+    const css = readFileSync(new URL('../../src/ui/hud.css', import.meta.url), 'utf8');
     expect(css).toMatch(new RegExp(`#local-graph \\{[^}]*height: ${LOCAL_GRAPH_PANEL_H}px`));
     expect(css).toMatch(new RegExp(`\\.hud-r canvas \\{[^}]*height: ${GRAPH_PANEL_H}px`));
   });

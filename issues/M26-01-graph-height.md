@@ -32,7 +32,7 @@ M25-11 で字は読める大きさになったが、描く領域が低い (2026-
 ## Acceptance criteria
 
 - [x] plot の高さが 110〜130 px (作業ログに前後の数字)
-- [x] `tests/e2e/uncovered.spec.ts`・shots を含む E2E・`pnpm run check` が通る
+- [ ] `tests/e2e/uncovered.spec.ts`・shots を含む E2E・`pnpm run check` が通る (uncovered と check は通る。shots は基準画 3 枚のユーザーの承認と --apply の後)
 - [x] 前後の画が `.claude/localreview/` の回に出ている
 
 ## 作業ログ
