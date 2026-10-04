@@ -347,7 +347,7 @@ test('OBS-002: 観察画面の 3 枚 (集落・群れ・海岸) を止めた時�
   await expect(bar.locator('.o-stats')).toHaveText('10 年 · 春');
   for (const view of OBSERVE_VIEWS) {
     await lookFrom(page, view);
-    // 撮る間だけ本物の rAF に戻す。3D の画素は基準画を持たず、採点表 O1〜O8 (rubrics.json) が見る
+    // 撮る間だけ本物の rAF に戻す。3D の画素は基準画を持たず、採点表 O1〜O9 (rubrics.json) が見る
     await withRealFrames(page, () => shoot(page, { 帯の年と季節: bar.locator('.o-stats') }, undefined, false));
   }
 });
