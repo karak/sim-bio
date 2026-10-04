@@ -110,3 +110,49 @@ test('M25-10: 判定の板が出ているときも、セルの詳細の行の札
   await expect(page.locator('#verdict-title')).toHaveText('島は滅びた', { timeout: 90_000 });
   await expectAllRowsUncoveredAtFivePoints(page.locator('#cell-info'));
 });
+
+for (const [w, h] of [
+  [1280, 720],
+  [1024, 640],
+] as const) {
+  test(`M26-01: ${w}×${h} でグラフの plot は 110〜130 px で、セルの詳細の板・グラフの板は他の HUD と重ならない`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: h });
+    await page.route('**/api/**', (route) => route.abort('failed'));
+    await page.goto('/');
+    await expect(page.locator('#hud-year')).toHaveText('Year 0');
+    await page.click('#speed-0');
+    await pickCellAndExpectRowsUncovered(page);
+    const got = await page.evaluate(() => {
+      const rect = (el: Element) => el.getBoundingClientRect();
+      const plot = (id: string) => (document.getElementById(id) as HTMLCanvasElement).clientHeight - 32;
+      const panels: Record<string, Element> = {
+        セルの詳細: document.querySelector('.hud-bl')!,
+        右のグラフ: document.querySelector('.hud-r')!,
+        レイヤーの列: document.querySelector('.hud-tr')!,
+        時間の箱: document.querySelector('.hud-tl')!,
+        下の行: document.querySelector('.hud-b')!,
+        種を放つ: document.querySelector('.hud-palette')!,
+        港の札: document.querySelector('.harbor-dock')!,
+      };
+      const names = Object.keys(panels);
+      const overlaps: string[] = [];
+      for (let i = 0; i < names.length; i++)
+        for (let j = i + 1; j < names.length; j++) {
+          const a = rect(panels[names[i]]);
+          const b = rect(panels[names[j]]);
+          // 下の行×種を放つは 1024 幅で元から重なる (グラフの高さと無関係)。グラフの板 2 つが絡む組だけ見る
+          if (!['セルの詳細', '右のグラフ'].some((n) => names[i] === n || names[j] === n)) continue;
+          if (a.width && b.width && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) overlaps.push(`${names[i]}×${names[j]}`);
+        }
+      const bl = rect(panels['セルの詳細']);
+      return { graphPlot: plot('graph'), localPlot: plot('local-graph'), overlaps, blTop: bl.top, blBottom: bl.bottom, vh: window.innerHeight };
+    });
+    expect(got.graphPlot).toBeGreaterThanOrEqual(110);
+    expect(got.graphPlot).toBeLessThanOrEqual(130);
+    expect(got.localPlot).toBeGreaterThanOrEqual(110);
+    expect(got.localPlot).toBeLessThanOrEqual(130);
+    expect(got.overlaps).toEqual([]);
+    expect(got.blTop).toBeGreaterThanOrEqual(0);
+    expect(got.blBottom).toBeLessThanOrEqual(got.vh);
+  });
+}
