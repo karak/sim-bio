@@ -85,4 +85,4 @@
 .confirm-actions { justify-content: center; gap: 12px; }
 .confirm-actions .chip { font-size: 13px; padding: 4px 14px; }
 .confirm-ok { background: #b5502f; color: #fff; }
-.confirm-actions .chip:focus-visible { outline: 2px solid #8feadf; outline-offset: 2px; }
+.confirm-actions .chip:focus { outline: 2px solid #8feadf; outline-offset: 2px; }

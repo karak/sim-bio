@@ -272,3 +272,15 @@ test('M26-02: 訪問中に石板を選ぶと、確かめは出ず、URL から v
   await expect(page.locator('#slot-save')).toBeEnabled();
   await expect(page.locator('#new-island')).toBeEnabled();
 });
+
+test('M25-15: マウスで開いた確かめの板でも、focus のある「やめる」には輪が見えて、「上書きする」側には無い (:focus-visible だけでは出ない)', async ({ page }) => {
+  await runFree(page);
+  await page.click('#new-island');
+  const d = dialog(page);
+  await expect(d.getByRole('button', { name: 'やめる' })).toBeFocused();
+  const ring = (name: string) => d.getByRole('button', { name }).evaluate((b) => ({ style: getComputedStyle(b).outlineStyle, width: parseFloat(getComputedStyle(b).outlineWidth) }));
+  const cancel = await ring('やめる');
+  expect(cancel.style).not.toBe('none');
+  expect(cancel.width).toBeGreaterThanOrEqual(2);
+  expect((await ring('新しい島を始める')).style).toBe('none');
+});
