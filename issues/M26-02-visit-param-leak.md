@@ -1,11 +1,15 @@
 ---
 id: M26-02
 title: 訪問中に石板を選ぶと visit= が URL に残り、石板がその訪問として開く
-status: open
+status: review
 milestone: M26
 plan: null
 depends_on: []
-evidence: []
+evidence:
+  - "ae43b31 fix(app): searchFor が visit を落とす (src/app/place.ts)"
+  - "tests/unit/app.place.test.ts 'searchFor (M26-02): 訪問中に石板を選ぶと visit を落とし…' (修正前に赤を確認)"
+  - "188f8dd tests/e2e/confirm.spec.ts 'M26-02: 訪問中に石板を選ぶと、確かめは出ず…' (修正前に赤を確認)"
+  - "pnpm run check 通過 (unit 1226・worker 66)。E2E confirm・persist・harbor・scenarioSave 36 本通過 (scenarioSave:80 は通し実行で 1 回落ち、単独で通過)"
 ---
 
 # 訪問中に石板を選ぶと visit= が URL に残る
@@ -30,10 +34,11 @@ evidence: []
 
 ## Acceptance criteria
 
-- [ ] `tests/unit/app.place.test.ts` の todo が本物の試験になり通る
-- [ ] E2E で、訪問中に石板を選ぶと URL から `visit=` が消え、石板の島が開く
-- [ ] `pnpm run check` と関係する E2E (confirm・persist・harbor) が通る
+- [x] `tests/unit/app.place.test.ts` の todo が本物の試験になり通る
+- [x] E2E で、訪問中に石板を選ぶと URL から `visit=` が消え、石板の島が開く
+- [x] `pnpm run check` と関係する E2E (confirm・persist・harbor) が通る
 
 ## 作業ログ
 
 - 2026-10-04: 起票 (2026-10-02 の一覧の 4)。
+- 2026-10-04: 実装。`searchFor` が visit を落とす。訪問から石板を選ぶのは M21-04 の「離れる」確かめを経ない (訪問は finished でなく askOf の leave が null。flush は訪問では何も書かない)。E2E はそれを確かめ、ダイアログが出ないことも見る。未決: 訪問中に判定の板の「もう一度」を押すと select 経由で visit が落ち、自分の石板の島 (自動の枠の続きがあればそれ) が開く。以前は同じ訪問を開き直した。扱いはユーザーの判断待ち。
