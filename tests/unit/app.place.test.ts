@@ -212,6 +212,22 @@ describe('石板を選んだ先の検索語 searchFor (M21-07)', () => {
     expect(bootPlanOf(`?${next}`, scenarios, null)).toMatchObject({ scenario: { id: 'sinking' }, visitId: null, restore: [{ from: 'scenario' }] });
     expect(searchFor(`?scenario=test-quick&visit=${visitId}`, null)).toBe('');
   });
+  it('searchFor (M26-08): 「もう一度」は visit を残し、同じ訪問を開き直す。訪問が無ければ何も足さない', () => {
+    const next = searchFor(`?scenario=test-quick&visit=${visitId}&dev=1`, 'test-quick', { keepVisit: true });
+    expect(next).toBe(`scenario=test-quick&visit=${visitId}&dev=1`);
+    expect(bootPlanOf(`?${next}`, scenarios, null)).toMatchObject({ scenario: { id: 'test-quick' }, visitId, restore: [] });
+    expect(searchFor('?scenario=test-quick&dev=1', 'test-quick', { keepVisit: true })).toBe('scenario=test-quick&dev=1');
+  });
+});
+
+describe('訪問中の「もう一度」 planOp retry (M26-08)', () => {
+  it('planOp (M26-08): もう一度は visit を残す行き先 (keepVisit)、石板を選ぶは残さない。確かめは石板を選ぶと同じ', () => {
+    const retry: Op = { kind: 'retry', scenarioId: 'test-quick' };
+    expect(planOp(retry, visit, titleOf)).toEqual({ ask: null, effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: 'test-quick', keepVisit: true }] });
+    expect(planOp({ kind: 'select', scenarioId: 'test-quick' }, visit, titleOf)).toEqual({ ask: null, effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: 'test-quick' }] });
+    expect(planOp(retry, finished, titleOf).ask).toEqual(planOp({ kind: 'select', scenarioId: 'test-quick' }, finished, titleOf).ask);
+    expect(planOp(retry, finished, titleOf).ask).not.toBeNull();
+  });
 });
 
 describe('枠の札 slotControlsOf (M21-07)', () => {

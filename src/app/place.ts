@@ -24,6 +24,7 @@ export type Op =
   | { kind: 'load'; data: SlotSave; slot: SlotId | null }
   | { kind: 'slot_save'; slot: ManualSlot; overwrites: string | null }
   | { kind: 'select'; scenarioId: string | null }
+  | { kind: 'retry'; scenarioId: string }
   | { kind: 'visit'; href: string };
 
 /** 確かめを受けた後に順に行うこと。replace が島を戻せなければ、残りを行わない */
@@ -36,7 +37,7 @@ export type Effect =
   | { kind: 'put_pending'; slot: PendingSlot }
   | { kind: 'save_slot'; slot: ManualSlot }
   | { kind: 'flush' }
-  | { kind: 'go'; scenarioId: string | null }
+  | { kind: 'go'; scenarioId: string | null; keepVisit?: true }
   | { kind: 'assign'; href: string };
 
 export type Plan = { ask: Ask | null; effects: readonly Effect[] };
@@ -70,6 +71,9 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
       return at.stage === 'visit' ? NOTHING : { ask: askOf({ kind: 'slot_save', overwrites: op.overwrites }), effects: [{ kind: 'save_slot', slot: op.slot }] };
     case 'select':
       return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: op.scenarioId }] };
+    case 'retry':
+      // 判定の板の「もう一度」(M26-08)。石板を選ぶのと違い visit を残す。訪問中は同じ訪問を初めから開き直す
+      return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: op.scenarioId, keepVisit: true }] };
     case 'visit':
       return { ask: leaving(at), effects: [{ kind: 'assign', href: op.href }] };
   }
@@ -112,12 +116,12 @@ function checkedSlot(data: SlotSave, here: Here): { ok: true; value: SlotSave } 
 }
 
 /** 石板を選んだ先の検索語 (? は付けない)。scenario だけを差し替え、ほかの検索語はそのまま残す */
-export function searchFor(search: string, scenarioId: string | null): string {
+export function searchFor(search: string, scenarioId: string | null, opts: { keepVisit?: boolean } = {}): string {
   const q = new URLSearchParams(search);
   if (scenarioId) q.set('scenario', scenarioId);
   else q.delete('scenario');
   // 石板を選ぶのは訪問を離れる操作。visit を残すと、選んだ石板がその島の訪問として開き直る (M26-02)
-  q.delete('visit');
+  if (!opts.keepVisit) q.delete('visit');
   return q.toString();
 }
 

@@ -232,7 +232,7 @@ async function boot(): Promise<void> {
         await Promise.all([localSave.flush(() => world.serialize()), saveChronicle()]);
         return true;
       case 'go':
-        location.search = searchFor(location.search, e.scenarioId);
+        location.search = searchFor(location.search, e.scenarioId, { keepVisit: e.keepVisit });
         return true;
       case 'assign':
         location.assign(e.href);
@@ -275,6 +275,10 @@ async function boot(): Promise<void> {
     (id) => void run({ kind: 'select', scenarioId: id }),
     Object.fromEntries(species.map((d) => [d.id, d.name])),
     (id) => hud.showSpeciesLayer(id),
+    undefined,
+    () => {
+      if (scenario) void run({ kind: 'retry', scenarioId: scenario.id });
+    },
   );
   hud.setReplaceable(!visitId);
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));

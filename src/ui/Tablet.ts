@@ -203,6 +203,8 @@ export function createTablet(
   /** 警告の「〜を見る」チップ (M21-02 D5) を押したときに呼ぶ。省略時はチップを出しても押しても何もしない */
   onShowSpecies?: (id: string) => void,
   env: TabletEnv = browserEnv,
+  /** 判定の板の「もう一度」(M26-08)。省略時は石板を選ぶ (onSelect) と同じ */
+  onRetry: () => void = () => onSelect(def?.id ?? null),
 ): Tablet {
   const options = [`<option value="">自由モード</option>`]
     .concat(defs.filter((d) => !d.hidden).map((d) => `<option value="${d.id}"${def?.id === d.id ? ' selected' : ''}>${d.title}</option>`))
@@ -247,7 +249,7 @@ export function createTablet(
     select.value = shown;
     onSelect(v || null);
   });
-  $('verdict-retry').addEventListener('click', () => onSelect(def?.id ?? null));
+  $('verdict-retry').addEventListener('click', () => onRetry());
   $('verdict-free').addEventListener('click', () => onSelect(null));
   const verdictBoard = makeMovable($('verdict-box'), $('verdict-grip'), 'biotope.verdict-offset');
   // 警告から種レイヤーを開ける (M21-02 D5): update() のたびに innerHTML ごと差し替わるチップに直接つけず、

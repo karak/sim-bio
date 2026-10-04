@@ -139,6 +139,30 @@ test('M19-09: 照合は「やめる」で止まり、もう一度読める', asy
   expect(harbor.sent.filter((w) => w.path.endsWith('/confirm'))).toEqual([]);
 });
 
+test('M26-08: 訪問が判定まで進んだあとの「もう一度」は、URL の visit を残して同じ訪問を初めから開き直す', async ({ page }) => {
+  test.setTimeout(240_000);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-civ');
+  await publishFrom(page).getByRole('button', { name: '出港する' }).click();
+  await expect(publishFrom(page).getByRole('textbox', { name: '訪問のリンク' })).toBeVisible();
+  const [id] = [...harbor.fake.ledger.keys()];
+
+  await page.goto(`/?scenario=test-civ&visit=${id}`);
+  await expect(page.getByRole('region', { name: '訪れている島' })).toBeVisible();
+  // 訪問は年代記が届くと 10 倍速で再生される。判定まで急ぐため、観察画面を閉じて 100 倍速にする
+  await expect(page.locator('#observe-layer')).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#observe-layer')).toBeHidden();
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict')).toBeVisible({ timeout: 90_000 });
+  await page.locator('#verdict-retry').click();
+  // 訪問を離れる操作ではないので、visit は残り、訪問として開く (自分の石板の島ではない)
+  await expect(page).toHaveURL((u) => u.search === `?scenario=test-civ&visit=${id}`);
+  await expect(page.locator('#verdict')).toBeHidden();
+  await expect(page.getByRole('region', { name: '訪れている島' })).toBeVisible();
+  await expect(page.locator('#slot-save')).toBeDisabled();
+});
+
 test('M19-09: 港を全部閉じても 1 シナリオ遊べ、出港は outbox に入る。港が開いてから開き直すと、同じ id・同じ鍵で送り直す', async ({ page }) => {
   test.setTimeout(180_000);
   const harbor = await routeHarbor(page, WITH_WIDGET);
