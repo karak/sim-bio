@@ -13,7 +13,7 @@ export type DevPanelDeps = {
 };
 
 const STYLE = `
-.dev-panel { position: absolute; left: 12px; top: 72px; z-index: 40; display: flex; flex-direction: column; gap: 6px; width: 250px;
+.dev-panel { position: absolute; right: 12px; top: 388px; z-index: 40; display: flex; flex-direction: column; gap: 6px; width: 250px;
   padding: 10px 12px; font: 12px/1.5 system-ui, sans-serif; color: #f5e9c8; background: rgba(40, 30, 12, 0.92); border: 1px dashed #d9a441; border-radius: 6px; }
 .dev-panel h2 { margin: 0; font-size: 12px; letter-spacing: 0.1em; color: #d9a441; }
 .dev-panel button { font: inherit; padding: 4px 8px; border-radius: 4px; border: 1px solid #d9a441; background: #2a1f0a; color: inherit; cursor: pointer; }
