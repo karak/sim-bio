@@ -40,7 +40,7 @@ test('M26-05: 年 0 で別の島を読み、新しい島を押しても、枠を
   await page.click('#slot-save');
   await expect(page.locator('#slot-select option[value="manual-1"]')).toHaveText('枠 1 · Year 0');
 
-  // 年 0 で新しい島 (同じ tick 0) を押すと、元の島の地形に戻る
+  // 年 0 で新しい島 (同じ tick 0) を押すと、新しい seed の別の地形になる (M26-10)
   await page.click('#new-island');
   await answer(page);
   // M26-10: 自由モードの新しい島は新しい seed を引くので、元の島 (seed 42) には戻らず、読んだ別の島とも違う島になる

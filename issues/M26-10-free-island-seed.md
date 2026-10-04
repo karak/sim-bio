@@ -47,3 +47,4 @@ evidence:
 - 2026-10-04: 起票 (ユーザーの決定「いったん 1」。案は ① 押すたびに乱数・② 日替わり・③ 回数で進む・④ 石板も変える)。
 - 2026-10-04: 実装。pure な決め方は src/app/place.ts (bootSeedOf・freshSeed・newWorldSeed・seedSearchFor・seedMatches・DEFAULT_SEED)、main.ts に配線、HUD は #hud-seed (dim mono、年の行の後ろ)、World.seed の getter、localSave.resume の accept。決めたこと: URL の seed= があれば自動の続きはその seed の島のときだけ戻す (違えば seed= の新しい島。自動の枠は次の書きで上書き)。枠・ファイルを読んだ後は URL の seed= を読んだ島の seed に揃える。最初の島 (42・seed= 無し) は URL を変えない。基準画は要素単位で HUD の seed は写らず、変わらなかった (回なし)。
 - 2026-10-04: opus の読むだけのレビューを受けて直した: (1) seed= が違って断った自動の続きは、黙って上書きされないよう脇へ退けて persist.resume.skipped を記録 (localSave.resume の accept)。(2) 壊れた seed= は URL から落とす。試験を足した (localSave 単体・bootSeedOf・同じ seed= で続きに戻る E2E)。
+- 2026-10-04: ユーザーの決定「URL 優先」。?seed= と自動の枠の seed が違えば、その seed の新しい島で開き、自動の枠は unreadable:auto へ退ける (今の実装のまま)。

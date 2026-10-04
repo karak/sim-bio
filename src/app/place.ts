@@ -18,7 +18,7 @@ export type At =
   | { stage: 'scenario'; head: ChronicleHead; finished: boolean }
   | { stage: 'visit' };
 
-/** やり直しの効かない操作。select は石板を選ぶ・もう一度・自由モードへ (null)、visit は港の訪れる札。load の slot が null ならファイル */
+/** やり直しの効かない操作。select は石板を選ぶ・自由モードへ (null)、retry は判定の板のもう一度 (訪問中は visit を残す、M26-08)、visit は港の訪れる札。load の slot が null ならファイル */
 export type Op =
   | { kind: 'new_island' }
   | { kind: 'load'; data: SlotSave; slot: SlotId | null }
@@ -115,7 +115,7 @@ function checkedSlot(data: SlotSave, here: Here): { ok: true; value: SlotSave } 
   }
 }
 
-/** 石板を選んだ先の検索語 (? は付けない)。scenario だけを差し替え、ほかの検索語はそのまま残す */
+/** 石板を選んだ先の検索語 (? は付けない)。scenario を差し替え、石板へ移る時は seed= を落とし、visit は keepVisit (もう一度) の時だけ残し、ほかの検索語はそのまま残す */
 export function searchFor(search: string, scenarioId: string | null, opts: { keepVisit?: boolean } = {}): string {
   const q = new URLSearchParams(search);
   if (scenarioId) q.set('scenario', scenarioId);

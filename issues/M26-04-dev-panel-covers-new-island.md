@@ -7,7 +7,7 @@ plan: null
 depends_on: []
 evidence:
   - "tests/e2e/uncovered.spec.ts M26-04 (4 通り: 自由/石板 × 1280x720/1024x640) 通る。直す前は 1280x720 で落ちた (コミット e8c6f6e)"
-  - "src/dev/panel.ts: 板を右の列の下 (right 12px / top 388px) へ"
+  - "src/dev/panel.ts: 板を右の列の下 (right 12px / top 388px) へ。M26-01 で右の列 (.hud-right) の末尾へ積む形に変えた (top の固定値は無い)"
   - "pnpm run check exit 0。shots.spec.ts 6 件通る (ACCEPTANCE_DIR 付き、E2E_PORT=5445)。基準画の差なし"
 ---
 
