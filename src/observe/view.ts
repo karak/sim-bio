@@ -45,6 +45,7 @@ import { createSurface } from './render/roofs';
 import { MIST_S, mistEnvelope, surgeStep, wetness, type SurgeState } from './fx';
 import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { triangleBreakdown } from './render/breakdown';
+import { terrainDigest } from '../render/inspect';
 import type { ObserveDebug, ObserveInspect, ObserveStats } from './inspect';
 import { installShadowOnly } from './render/shadowOnly';
 import { bakeImpostor } from './render/impostor';
@@ -1022,7 +1023,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let running = false;
   let handle = 0;
   return {
-    inspect: () => ({ air: airInsp, notice, fx: fxInsp, look: lookInsp, huts: hutsInsp, props: propsInsp, breakdown: breakdownInsp, screen: screenInsp, stats: () => lastStats, debug: () => lastDebug }),
+    inspect: () => ({ air: airInsp, notice, fx: fxInsp, look: lookInsp, huts: hutsInsp, props: propsInsp, breakdown: breakdownInsp, screen: screenInsp, stats: () => lastStats, debug: () => lastDebug, terrainDigest: () => terrainDigest(terrain.geometry.getAttribute('position').array as Float32Array) }),
     setSnapshot(next, timeline) {
       if (timeline) {
         if (timeline.length < seenEvents) seenEvents = 0;
