@@ -110,6 +110,7 @@ describe('操作の確かめと行き先 planOp (M21-07)', () => {
     枠へ保存: { kind: 'slot_save', slot: 'manual-1', overwrites: '枠 1 · 自由 · 3 年' },
     石板を選ぶ: { kind: 'select', scenarioId: 'test-quick' },
     訪れる: { kind: 'visit', href: '/?scenario=test-quick&visit=abc' },
+    タイトルへ: { kind: 'title' },
   };
   const ats: Record<string, At> = { 自由: free, 走っている石板: running, 判定の出た石板: finished, 訪問: visit };
   const table: { op: string; at: string; ask: string | null; to: Effect['kind'][] }[] = [
@@ -133,6 +134,11 @@ describe('操作の確かめと行き先 planOp (M21-07)', () => {
     { op: '訪れる', at: '走っている石板', ask: null, to: ['assign'] },
     { op: '訪れる', at: '判定の出た石板', ask: '判定の出た島を離れる', to: ['assign'] },
     { op: '訪れる', at: '訪問', ask: null, to: ['assign'] },
+    // タイトルへ (M24-04): 舞台を離れる操作なので石板を選ぶと同じ確かめ。書き切ってからタイトルへ (訪問では flush が何も書かない)
+    { op: 'タイトルへ', at: '自由', ask: null, to: ['flush', 'to_title'] },
+    { op: 'タイトルへ', at: '走っている石板', ask: null, to: ['flush', 'to_title'] },
+    { op: 'タイトルへ', at: '判定の出た石板', ask: '判定の出た島を離れる', to: ['flush', 'to_title'] },
+    { op: 'タイトルへ', at: '訪問', ask: null, to: ['flush', 'to_title'] },
   ];
   it.each(table)('planOp (M21-07): 操作 × 舞台 (自由・走っている石板・判定の出た石板・訪問) の表で、確かめの有無と行き先が決まる: $op × $at', ({ op, at, ask, to }) => {
     const plan = planOp(ops[op], ats[at], titleOf);
@@ -143,6 +149,14 @@ describe('操作の確かめと行き先 planOp (M21-07)', () => {
     expect(planOp({ kind: 'slot_save', slot: 'manual-3', overwrites: null }, running, titleOf)).toEqual({ ask: null, effects: [{ kind: 'save_slot', slot: 'manual-3' }] });
     expect(planOp({ kind: 'select', scenarioId: null }, finished, titleOf).effects).toEqual([{ kind: 'flush' }, { kind: 'go', scenarioId: null }]);
     expect(planOp({ kind: 'visit', href: '/?scenario=sinking&visit=abc' }, free, titleOf).effects).toEqual([{ kind: 'assign', href: '/?scenario=sinking&visit=abc' }]);
+  });
+});
+
+describe('タイトルへ戻る planOp title (M24-04)', () => {
+  it('planOp (M24-04): タイトルへは、書き切ってからタイトルへ移る。確かめは石板を選ぶ (自由モードへ) と同じ文', () => {
+    expect(planOp({ kind: 'title' }, running, titleOf)).toEqual({ ask: null, effects: [{ kind: 'flush' }, { kind: 'to_title' }] });
+    expect(planOp({ kind: 'title' }, finished, titleOf)).toEqual({ ...planOp({ kind: 'select', scenarioId: null }, finished, titleOf), effects: [{ kind: 'flush' }, { kind: 'to_title' }] });
+    expect(planOp({ kind: 'title' }, finished, titleOf).ask?.ok).toBe('離れる');
   });
 });
 

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { shownTick, TICKS_PER_YEAR } from '../driver/island';
+import { expectUncovered } from './uncovered';
 
 /**
  * タイトル画面 (M24-01)。ほかの spec は playwright.config.ts の storageState (開発の印) でタイトルを飛ばすので、ここだけ印を外して素の / を開く
@@ -107,4 +108,56 @@ test('M24-01: 動きを減らす設定では背景は止めた 1 枚。板の間
   await page.getByRole('button', { name: '戻る' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(item(page, '港')).toBeFocused();
+});
+
+const toTitle = (page: Page) => page.getByRole('button', { name: 'タイトルへ' });
+
+test('M24-04: 自由モードの「タイトルへ」(キーボードで押せる) は、書き切ってからタイトルを出し、「続きから」で同じ島の同じ年へ戻る', async ({ page }) => {
+  await page.goto('/?seed=42');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-100');
+  await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 30_000 });
+  await page.click('#speed-0');
+  const left = await shownTick(page);
+
+  // 走っている島は確かめない。focus して Enter で押せる
+  await toTitle(page).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('region', { name: 'タイトル' })).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect(new URL(page.url()).search).toBe('');
+  await expect(item(page, '続きから')).toBeFocused();
+  await expect(item(page, '続きから').locator('.title-item-note')).toHaveText(new RegExp(`^自由モード · ${Math.floor(left / TICKS_PER_YEAR)} 年 · `));
+
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#hud-year')).toBeVisible();
+  await expect(page.locator('#hud-seed')).toHaveText('seed 42');
+  expect(await shownTick(page)).toBeGreaterThanOrEqual(left);
+  // 戻った後の再読み込みはタイトルへ戻さない (舞台に入った印を置き直す)
+  await page.reload();
+  await expect(page.locator('#hud-year')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'タイトル' })).toHaveCount(0);
+});
+
+test('M24-04: 判定の出た石板の「タイトルへ」は離れる確かめを経る (判定の板に覆われない)。取り消せば判定の島のまま、受ければタイトル', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/?scenario=test-quick&shortcut=alive');
+  await page.click('#speed-100');
+  await expect(page.locator('#verdict-title')).toHaveText('島は生き延びた', { timeout: 60_000 });
+  const url = page.url();
+  await expectUncovered({ タイトルへ: toTitle(page) });
+
+  await toTitle(page).click();
+  const d = page.getByRole('alertdialog');
+  await expect(d.getByRole('heading')).toHaveText('判定の出た島を離れる');
+  await d.getByRole('button', { name: 'やめる' }).click();
+  await expect(d).toBeHidden();
+  expect(page.url()).toBe(url);
+  await expect(page.locator('#verdict')).toBeVisible();
+
+  await toTitle(page).click();
+  await d.getByRole('button', { name: '離れる' }).click();
+  await expect(page.getByRole('region', { name: 'タイトル' })).toBeVisible();
+  expect(new URL(page.url()).search).toBe('');
 });

@@ -33,7 +33,7 @@ import { createPlayback } from './chronicle/playback';
 import { mountHarbor } from './ui/Harbor';
 import { createConfirm } from './ui/confirm';
 import { showTitle } from './ui/Title';
-import { markEntered, takeTabMarks } from './persist/tabMarks';
+import { markEntered, putOpenTitle, takeTabMarks } from './persist/tabMarks';
 import { askOf, type Risky } from './ui/confirmAsk';
 import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, type Effect, type Op, type Restore } from './app/place';
 
@@ -274,6 +274,11 @@ async function boot(): Promise<void> {
       case 'assign':
         location.assign(e.href);
         return true;
+      case 'to_title':
+        // タイトルへ (M24-04): 移った先の起動 (bootRouteOf) がタイトルを選ぶよう、舞台に入った印を消して合図を置き、素の / へ
+        putOpenTitle(sessionStorage);
+        location.assign('/');
+        return true;
     }
   };
   /** やり直しの効かない操作 (M21-04)。確かめと行き先は planOp が決め、ここは確かめてから effects を順に行うだけ */
@@ -293,6 +298,7 @@ async function boot(): Promise<void> {
       });
     },
     onNewIsland: () => void run({ kind: 'new_island' }),
+    onTitle: () => void run({ kind: 'title' }),
     onDisasterArm: (k) => {
       armed = k;
       view.setVolcanoHint(k === 'volcano');

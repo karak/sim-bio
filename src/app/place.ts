@@ -26,7 +26,9 @@ export type Op =
   | { kind: 'slot_save'; slot: ManualSlot; overwrites: string | null }
   | { kind: 'select'; scenarioId: string | null }
   | { kind: 'retry'; scenarioId: string }
-  | { kind: 'visit'; href: string };
+  | { kind: 'visit'; href: string }
+  /** (M24-04) title は操作画面の「タイトルへ」。舞台を離れる操作で、確かめは select と同じ */
+  | { kind: 'title' };
 
 /** 確かめを受けた後に順に行うこと。replace が島を戻せなければ、残りを行わない */
 export type Effect =
@@ -39,7 +41,9 @@ export type Effect =
   | { kind: 'save_slot'; slot: ManualSlot }
   | { kind: 'flush' }
   | { kind: 'go'; scenarioId: string | null; keepVisit?: true }
-  | { kind: 'assign'; href: string };
+  | { kind: 'assign'; href: string }
+  /** (M24-04) タイトルへ移る: このタブの舞台に入った印を消し、タイトルを開く合図を置いてから素の / へ */
+  | { kind: 'to_title' };
 
 export type Plan = { ask: Ask | null; effects: readonly Effect[] };
 
@@ -77,6 +81,9 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
       return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: op.scenarioId, keepVisit: true }] };
     case 'visit':
       return { ask: leaving(at), effects: [{ kind: 'assign', href: op.href }] };
+    case 'title':
+      // タイトルへ (M24-04、docs/uiux/2026-10-04-title-flow.md の「タイトルへ戻るときの約束」)。書き切ってから移る。訪問では flush が何も書かない
+      return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'to_title' }] };
   }
 }
 
@@ -84,6 +91,7 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
  * 舞台を移る操作 (石板を選ぶ・自由モードへ・もう一度・訪れる) の確かめ (M21-04)。走っている島は書き切ってから移るので確かめない。
  * 判定の出た自分の石板の島は、開き直すと初めからになる (M19-14) ので確かめる
  */
+// (M24-04) タイトルへ (title) も舞台を離れる操作なので、同じ確かめを通す
 const leaving = (at: At): Ask | null => askOf({ kind: 'leave', finished: at.stage === 'scenario' && at.finished });
 
 /**

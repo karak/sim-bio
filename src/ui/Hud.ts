@@ -86,6 +86,8 @@ export type HudHandlers = {
   onSlotLoad(slot: SlotId): void;
   // (M19-17 で変更: 石板の中では「石板を初めから」。今の続きを捨てて Year 0 から)
   onNewIsland(): void;
+  /** 「タイトルへ」(M24-04)。確かめと行き先は main.ts の planOp (title) が決める。訪問でも押せる */
+  onTitle(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
@@ -190,6 +192,8 @@ export function createHud(
     <button id="slot-save" class="chip">枠へ保存</button>
     <button id="slot-load" class="chip">枠から読込</button>
     <button id="new-island" class="chip">${inScenario ? '石板を初めから' : '新しい島'}</button>
+    <span class="sep"></span>
+    <button id="to-title" class="chip">タイトルへ</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>
@@ -361,6 +365,7 @@ export function createHud(
     // (M21-04 で変更: 確かめは main.ts の onNewIsland が確かめのダイアログ (confirm.ts) で。文は confirmAsk.ts)
     h.onNewIsland();
   });
+  $('to-title').addEventListener('click', () => h.onTitle());
   renderSlots();
 
   const canvas = $<HTMLCanvasElement>('graph');
