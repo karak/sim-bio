@@ -186,6 +186,10 @@ class RoundPrefixTest(unittest.TestCase):
         self.assertEqual(round_name_of("m25-14-", now), "m25-14-20261004-1230")
         self.assertEqual(round_name_of("shots-", now), "shots-20261004-1230")
 
+    def test_a_prefix_without_a_trailing_hyphen_gets_one(self) -> None:
+        now = datetime.datetime(2026, 10, 4, 12, 30)
+        self.assertEqual(round_name_of("m25-14", now), "m25-14-20261004-1230")
+
 
 class BrowserVersionTest(unittest.TestCase):
     def test_reads_the_build_number_from_the_executable_path(self) -> None:

@@ -191,7 +191,7 @@ test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
   await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた');
   await expect(plaque.getByRole('progressbar', { name: '年表を読む進み' })).toHaveAttribute('aria-valuenow', '5');
-  await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }));
+  await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }, undefined, true, { masks: { 読み終えた訪問の板: [plaque.getByRole('heading')] } }));
 });
 
 /** 放流が効いて狼の密度が 0.3 を越える tick (止めた島から進める) */

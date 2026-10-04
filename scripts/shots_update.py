@@ -234,7 +234,7 @@ def review_dir(root: Path) -> Path:
 
 def round_name_of(prefix: str, now: datetime.datetime) -> str:
     """審査台の回の名前。接頭辞 + 日時 (m25-14-20261004-1230 の形)"""
-    return prefix + now.strftime("%Y%m%d-%H%M")
+    return prefix.removesuffix("-") + "-" + now.strftime("%Y%m%d-%H%M")
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
