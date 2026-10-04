@@ -48,6 +48,10 @@ describe('押しとドラッグの判別 (M26-03)', () => {
     expect(run([down(1), down(2), { type: 'up', pointerId: 2 }, { type: 'up', pointerId: 1 }]).actions.at(-1)).toBe('drag');
   });
 
+  it('同じ指の down が重なったら、up の取りこぼしとみて押し直す', () => {
+    expect(run([down(1), move(1, 300, 300), down(1), { type: 'up', pointerId: 1 }]).actions.at(-1)).toBe('press');
+  });
+
   it('離したあとの次の押しは新しく始まる', () => {
     expect(run([down(1), move(1, 300, 300), { type: 'up', pointerId: 1 }, down(1), { type: 'up', pointerId: 1 }]).actions.at(-1)).toBe('press');
   });

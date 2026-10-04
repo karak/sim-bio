@@ -21,8 +21,8 @@ export function pressStep(s: PressState, e: PressInput): PressStep {
   const none = { state: s, action: 'none' as const };
   switch (e.type) {
     case 'down':
-      // 2 本目の指はつまみ操作 (カメラ)。押しにはしない
-      return s ? { state: { ...s, moved: true }, action: 'none' } : { state: { pointer: e.pointerId, from: { x: e.x, y: e.y }, moved: false }, action: 'none' };
+      // 2 本目の指はつまみ操作 (カメラ)。押しにはしない。同じ指の down が重なるのは up の取りこぼしなので押し直す
+      return s && s.pointer !== e.pointerId ? { state: { ...s, moved: true }, action: 'none' } : { state: { pointer: e.pointerId, from: { x: e.x, y: e.y }, moved: false }, action: 'none' };
     case 'move':
       if (s?.pointer !== e.pointerId || s.moved) return none;
       return Math.hypot(e.x - s.from.x, e.y - s.from.y) > DRAG_THRESHOLD_PX ? { state: { ...s, moved: true }, action: 'none' } : none;
