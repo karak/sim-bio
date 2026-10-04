@@ -33,7 +33,7 @@ import { createPlayback } from './chronicle/playback';
 import { mountHarbor } from './ui/Harbor';
 import { createConfirm } from './ui/confirm';
 import { askOf, type Risky } from './ui/confirmAsk';
-import { atOf, bootPlanOf, planOp, runPlan, searchFor, type Effect, type Op, type Restore } from './app/place';
+import { atOf, bootPlanOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, type Effect, type Op, type Restore } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
 const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
@@ -64,6 +64,9 @@ async function boot(): Promise<void> {
     history.replaceState(null, '', `${location.pathname}${booted.unknown.search}${location.hash}`);
     log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.url.unknown_scenario', scenario: booted.unknown.scenarioId });
   }
+  // 自由モードの seed (M26-10): URL の seed= (石板・訪問は無視して URL から落とす)。無ければ既定 (world.default.json の 42)
+  const seeded = bootSeedOf(location.search, scenario !== null);
+  if (seeded.search !== null) history.replaceState(null, '', `${location.pathname}${seeded.search}${location.hash}`);
   const config: WorldConfig = { ...base, species: species.map((d) => ({ ...d, ...(scenario?.start?.species?.[d.id] ?? {}) })) };
   if (scenario?.start) {
     if (scenario.start.seed !== undefined) config.seed = scenario.start.seed;
@@ -91,6 +94,7 @@ async function boot(): Promise<void> {
     log: persistLog,
     onSaved: (s) => hud.setSlot(s),
   });
+  const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
   const here: Here = head ? { stage: 'scenario', head } : { stage: 'free' };
   /** 枠とファイルの包みを、今の舞台の島 (石板なら runner の状態と年代記も) に戻す (M19-17)。違う舞台・読めない包みは投げる */
@@ -118,7 +122,10 @@ async function boot(): Promise<void> {
           : null;
       case 'auto':
         // 閉じる前の続きから (M19-05)
-        return localSave.resume((save) => ({ world: World.restore(save, { log }) }));
+        return localSave.resume(
+          (save) => ({ world: World.restore(save, { log }) }),
+          (save) => seedMatches(seeded.seed, save.config.seed),
+        );
     }
   };
   let resumed: Restored | null = null;
@@ -129,7 +136,7 @@ async function boot(): Promise<void> {
     if (resumed) break;
   }
   if (pending && !fromSlot) persistLog('warn', 'persist.slot.load.failed', 0, { slot: pending });
-  let world = resumed?.world ?? World.create(config, { log });
+  let world = resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log });
   // 枠から開いた自由モードの島は、読込と同じくその場で自動の枠に書く
   if (fromSlot) localSave.replaced(world.serialize());
 
@@ -174,6 +181,12 @@ async function boot(): Promise<void> {
     return result.ok;
   };
 
+  /** 今の島の seed を HUD に出し、自由モードなら URL の seed= も揃える (M26-10)。初めて開いた 42 の島だけは URL を変えない */
+  const showSeed = (always: boolean) => {
+    hud.setSeed(world.seed);
+    if (scenario) return;
+    if (always || seeded.seed !== null || world.seed !== DEFAULT_SEED) history.replaceState(null, '', `${location.pathname}${seedSearchFor(location.search, world.seed)}${location.hash}`);
+  };
   const replaceWorld = (next: World) => {
     const shown = world.snapshot();
     world = next;
@@ -185,6 +198,7 @@ async function boot(): Promise<void> {
     }
     selected = null;
     localSave.replaced(world.serialize());
+    showSeed(true);
   };
   /** 枠とファイルの包み (M19-17)。石板の中では島・runner の状態・年代記の 3 つ */
   const slotSave = (): SlotSave =>
@@ -199,7 +213,7 @@ async function boot(): Promise<void> {
   const perform = async (e: Effect): Promise<boolean> => {
     switch (e.kind) {
       case 'new_world':
-        replaceWorld(World.create(config, { log }));
+        replaceWorld(World.create({ ...config, seed: newWorldSeed(at(), config.seed, world.seed, drawSeed) }, { log }));
         return true;
       case 'restart':
         restartScenario(e.from);
@@ -281,6 +295,7 @@ async function boot(): Promise<void> {
     },
   );
   hud.setReplaceable(!visitId);
+  showSeed(false);
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
   /** 受け取った漂着 (M19-10) を浜のセルに放つ。石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
   const landCargo = (d: DrawnCargo): LandResult => {

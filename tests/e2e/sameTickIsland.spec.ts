@@ -43,7 +43,8 @@ test('M26-05: 年 0 で別の島を読み、新しい島を押しても、枠を
   // 年 0 で新しい島 (同じ tick 0) を押すと、元の島の地形に戻る
   await page.click('#new-island');
   await answer(page);
-  await expect.poll(() => digest(page), { timeout: 15_000 }).toBe(original);
+  // M26-10: 自由モードの新しい島は新しい seed を引くので、元の島 (seed 42) には戻らず、読んだ別の島とも違う島になる
+  await expect.poll(() => digest(page), { timeout: 15_000 }).not.toBe(other);
   expect(await shownTick(page)).toBe(0);
 
   // 同じ tick の枠を読むと、別の島の地形になる

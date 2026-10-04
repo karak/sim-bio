@@ -7,7 +7,7 @@ import { recordChronicle } from '../../src/chronicle/recorder';
 import { SIM_VERSION } from '../../src/simulation/version';
 import type { SlotSave } from '../../src/persist/slotSave';
 import type { ChronicleId } from '../../src/harbor/contract';
-import { atOf, bootPlanOf, planOp, runPlan, searchFor, slotControlsOf, type At, type Effect, type Op, type Plan } from '../../src/app/place';
+import { atOf, bootPlanOf, bootSeedOf, freshSeed, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, slotControlsOf, type At, type Effect, type Op, type Plan } from '../../src/app/place';
 import { resumeIsland } from '../fixtures/resumeIsland';
 
 const island = resumeIsland('test-quick', 5);
@@ -238,5 +238,53 @@ describe('枠の札 slotControlsOf (M21-07)', () => {
     expect(slotControlsOf({ visiting: false, slot: 'auto', filled: true })).toEqual({ save: false, load: true, file: true, newIsland: true, why: '' });
     expect(slotControlsOf({ visiting: false, slot: 'manual-1', filled: false })).toEqual({ save: true, load: false, file: true, newIsland: true, why: '' });
     expect(slotControlsOf({ visiting: false, slot: 'manual-1', filled: true })).toEqual({ save: true, load: true, file: true, newIsland: true, why: '' });
+  });
+});
+
+describe('自由モードの島の seed (M26-10)', () => {
+  const draw = (...values: number[]) => {
+    const queue = [...values];
+    return () => queue.shift() ?? 0;
+  };
+
+  it('bootSeedOf (M26-10): 自由モードは URL の seed= (整数) で開く。無い・壊れていれば null (初回は 42 のまま)。石板・訪問は seed= を無視して URL から落とす', () => {
+    expect(bootSeedOf('', false)).toEqual({ seed: null, search: null });
+    expect(bootSeedOf('?seed=1234&player=a', false)).toEqual({ seed: 1234, search: null });
+    expect(bootSeedOf('?seed=abc&player=a', false)).toEqual({ seed: null, search: '?player=a' });
+    expect(bootSeedOf('?seed=', false)).toEqual({ seed: null, search: '' });
+    for (const bad of ['?seed=', '?seed=abc', '?seed=1.5', '?seed=-3', '?seed=99999999999', '?seed=0x10']) expect(bootSeedOf(bad, false)).toMatchObject({ seed: null, search: '' });
+    expect(bootSeedOf('?scenario=sinking&seed=1234&player=a', true)).toEqual({ seed: null, search: '?scenario=sinking&player=a' });
+    expect(bootSeedOf('?scenario=sinking&seed=1234', true).search).toBe('?scenario=sinking');
+    expect(bootSeedOf('?seed=1234', true)).toEqual({ seed: null, search: '' });
+    expect(bootSeedOf('?scenario=sinking', true).search).toBeNull();
+  });
+
+  it('freshSeed (M26-10): 引いた値を整数で返し、今と同じ値なら引き直す (押しても島が変わらない、を避ける)', () => {
+    expect(freshSeed(42, draw(7))).toBe(7);
+    expect(freshSeed(42, draw(42, 42, 9))).toBe(9);
+  });
+
+  it('newWorldSeed (M26-10): 新しい島は自由モードだけ引き、石板 (初めから) は石板の seed のまま', () => {
+    expect(newWorldSeed({ stage: 'free' }, 42, 42, draw(555))).toBe(555);
+    expect(newWorldSeed({ stage: 'scenario', head, finished: false }, head.seed, head.seed, draw(555))).toBe(head.seed);
+    expect(newWorldSeed({ stage: 'scenario', head, finished: true }, head.seed, head.seed, draw(555))).toBe(head.seed);
+  });
+
+  it('seedSearchFor (M26-10): 検索語の seed= を今の seed に揃える (ほかの検索語は残す)。null なら落とす', () => {
+    expect(seedSearchFor('', 77)).toBe('?seed=77');
+    expect(seedSearchFor('?seed=1&dev=1', 77)).toBe('?seed=77&dev=1');
+    expect(seedSearchFor('?seed=1&dev=1', null)).toBe('?dev=1');
+    expect(seedSearchFor('?seed=1', null)).toBe('');
+  });
+
+  it('searchFor (M26-10): 石板へ移るとき seed= を落とす (石板は seed 42)。自由モードへ戻るときは残す', () => {
+    expect(searchFor('?seed=9&player=a', 'sinking')).toBe('player=a&scenario=sinking');
+    expect(searchFor('?scenario=sinking&seed=9', null)).toBe('seed=9');
+  });
+
+  it('seedMatches (M26-10): 自動の続きは、URL に seed= が無いか、保存の seed と同じときだけ戻す', () => {
+    expect(seedMatches(null, 5)).toBe(true);
+    expect(seedMatches(5, 5)).toBe(true);
+    expect(seedMatches(6, 5)).toBe(false);
   });
 });

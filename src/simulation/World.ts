@@ -214,6 +214,11 @@ export class World {
     }
   }
 
+  /** この島の seed (M26-10)。HUD と URL の seed= に出す */
+  get seed(): number {
+    return this.config.seed;
+  }
+
   static create(config: WorldConfig, deps: WorldDeps): World {
     const w = new World(structuredClone(config), deps, generateTerrain(config.seed, config.size));
     for (const d of w.config.species) {

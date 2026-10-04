@@ -112,6 +112,8 @@ export type Hud = {
   setNextMeteor(year: number | null): void;
   /** 警告の種レイヤーチップ (M21-02 D5) を押したのと同じ動作。layer-species-${id} のクリックハンドラと処理を共有する */
   showSpeciesLayer(id: string): void;
+  /** 今の島の seed を小さく出す (M26-10) */
+  setSeed(seed: number): void;
   /** 枠の一覧の 1 行を出す (書いたら上書き) */
   setSlot(s: SlotSummary): void;
   // (M19-17 で変更: 石板の中も受け付ける。false は訪問 (他人の島) だけで、枠への保存も止める)
@@ -157,7 +159,7 @@ export function createHud(
     'beforeend',
     `
   <div class="hud hud-tl">
-    <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
+    <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span> <span id="hud-seed" class="dim mono"></span></div>
     <div id="hud-civ" class="mono" hidden></div>
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
     <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span id="intercept-next" class="dim"></span><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span><span id="intercept-reason" class="dim"></span></div>
@@ -582,6 +584,9 @@ export function createHud(
       nextMeteor = year;
     },
     showSpeciesLayer: showSpeciesLayerInner,
+    setSeed: (seed) => {
+      $('hud-seed').textContent = `seed ${seed}`;
+    },
     setSlot: (s) => {
       slots.set(s.slot, s);
       renderSlots();
