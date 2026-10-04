@@ -30,10 +30,11 @@ describe('needsRebuild (M26-05: 描き直しの判定は、島の同一性と ti
 });
 
 describe('terrainDigest (地形の頂点の高さを 1 つの数にする)', () => {
-  it('同じ高さなら同じ数、1 つでも違えば違う数', () => {
-    const y = (...v: number[]) => Float32Array.from(v);
-    expect(terrainDigest(y(1, 2, 3))).toBe(terrainDigest(y(1, 2, 3)));
-    expect(terrainDigest(y(1, 2, 3))).not.toBe(terrainDigest(y(1, 2, 3.5)));
-    expect(terrainDigest(y(1, 2, 3))).not.toBe(terrainDigest(y(3, 2, 1)));
+  /** 頂点 2 つ分の座標。x, z は固定で、高さだけ変える */
+  const verts = (y0: number, y1: number) => Float32Array.from([0, y0, 0, 1, y1, 0]);
+  it('同じ高さなら同じ数、1 つでも違えば違う数、並びが違っても違う数', () => {
+    expect(terrainDigest(verts(1, 2))).toBe(terrainDigest(verts(1, 2)));
+    expect(terrainDigest(verts(1, 2))).not.toBe(terrainDigest(verts(1, 2.5)));
+    expect(terrainDigest(verts(1, 2))).not.toBe(terrainDigest(verts(2, 1)));
   });
 });
