@@ -32,8 +32,10 @@ import { digestOf } from './chronicle/digest';
 import { createPlayback } from './chronicle/playback';
 import { mountHarbor } from './ui/Harbor';
 import { createConfirm } from './ui/confirm';
+import { showTitle } from './ui/Title';
+import { markEntered, takeTabMarks } from './persist/tabMarks';
 import { askOf, type Risky } from './ui/confirmAsk';
-import { atOf, bootPlanOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, type Effect, type Op, type Restore } from './app/place';
+import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, type Effect, type Op, type Restore } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
 const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
@@ -46,7 +48,8 @@ async function boot(): Promise<void> {
     url: import.meta.env.VITE_LOG_URL,
     sendBeacon: (url, data) => navigator.sendBeacon(url, data),
   });
-  const dev = DEVTOOLS_BUILT ? (await import('./dev/session')).devSessionOf(new URLSearchParams(location.search)) : null;
+  const devTools = DEVTOOLS_BUILT ? await import('./dev/session') : null;
+  const dev = devTools ? devTools.devSessionOf(new URLSearchParams(location.search)) : null;
   const probe = DEVTOOLS_BUILT ? await import('./dev/probe') : null;
   const [base, species, scenarios, store] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
@@ -58,7 +61,19 @@ async function boot(): Promise<void> {
     }),
   ]);
   const pending = takePendingSlot(sessionStorage);
-  const booted = bootPlanOf(location.search, scenarios, pending);
+  // 起動の行き先 (M24-01): 素の / で、このタブでまだ舞台に入っていなければタイトル。選ばれてから舞台を組む
+  const route = bootRouteOf(location.search, scenarios, pending, takeTabMarks(sessionStorage), devTools ? devTools.skipsTitle(localStorage) : false);
+  const titleLog = (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level, event, ...extra });
+  const enterFromTitle = async () => {
+    const slots = store ? await store.list().catch((e: unknown) => (titleLog('warn', 'persist.list.failed', { error: String(e) }), [])) : [];
+    const continuation = slots.find((s) => s.slot === 'auto' && s.stage === 'free') ?? null;
+    const root = document.getElementById('app');
+    if (!root) throw new Error('#app missing');
+    await showTitle(root, { continuation, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches, log: (event, extra) => titleLog('info', event, extra) });
+    return bootPlanOf(location.search, scenarios, null);
+  };
+  const booted = route.kind === 'stage' ? route.plan : await enterFromTitle();
+  markEntered(sessionStorage);
   const scenario = booted.scenario;
   if (booted.unknown) {
     history.replaceState(null, '', `${location.pathname}${booted.unknown.search}${location.hash}`);
