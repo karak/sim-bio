@@ -21,7 +21,10 @@ export function confirmKeyOf(key: string, focus: 'cancel' | 'ok' | null): Confir
 /** script で focus を置く。:focus-visible はマウスで開いた板では当たらないので、輪の class を付け、focus が離れたら外す (M26-09) */
 function focusWithRing(button: HTMLElement) {
   button.classList.add('confirm-ring');
-  button.addEventListener('blur', () => button.classList.remove('confirm-ring'), { once: true });
+  // 窓が focus を失った時も blur は来るが、activeElement は札のまま。その間は輪を残す
+  button.addEventListener('blur', () => {
+    if (document.activeElement !== button) button.classList.remove('confirm-ring');
+  });
   button.focus();
 }
 
