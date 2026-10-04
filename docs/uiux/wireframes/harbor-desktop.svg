@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" font-family="Hiragino Sans, Noto Sans JP, system-ui, sans-serif">
+<title>港 (タイトルから、デスクトップ)</title>
+<rect width="1280" height="720" fill="#f2f2f2"/>
+<rect x="0" y="0" width="1280" height="720" rx="0" fill="#ddd" stroke="#bbb" stroke-width="1.5"/>
+<path d="M0 0L1280 720M1280 0L0 720" stroke="#bbb" stroke-width="1"/>
+<text x="640.0" y="360.0" font-size="14" fill="#888" text-anchor="middle" font-weight="normal"></text>
+<rect x="0" y="0" width="1280" height="720" fill="#222" fill-opacity="0.55"/>
+<rect x="200" y="40" width="880" height="640" rx="8" fill="#fff" stroke="#222" stroke-width="2"/>
+<text x="224" y="84" font-size="22" fill="#222" text-anchor="start" font-weight="bold">港</text>
+<text x="264" y="84" font-size="13" fill="#888" text-anchor="start" font-weight="normal">流れ着いた島の年代記</text>
+<rect x="952" y="60" width="104" height="36" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="968" y="82.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">閉じる</text>
+<rect x="224" y="112" width="832" height="84" rx="6" fill="#f2f2f2" stroke="#888" stroke-width="1.5"/>
+<text x="240" y="140" font-size="14" fill="#222" text-anchor="start" font-weight="bold">『沈む欠片』で最後に判定の出た島</text>
+<text x="240" y="164" font-size="12" fill="#888" text-anchor="start" font-weight="normal">まだ港へ出していない</text>
+<rect x="880" y="130" width="160" height="44" rx="6" fill="#555" stroke="#222" stroke-width="2"/>
+<text x="896" y="156.9" font-size="14" fill="#fff" text-anchor="start" font-weight="bold">港へ出す…</text>
+<text x="224" y="226" font-size="12" fill="#888" text-anchor="start" font-weight="normal">港は開いている</text>
+<rect x="224" y="240" width="832" height="88" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="240" y="268" font-size="16" fill="#222" text-anchor="start" font-weight="bold">灯る入り江の島</text>
+<text x="240" y="292" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「星を見上げた」</text>
+<text x="240" y="314" font-size="12" fill="#888" text-anchor="start" font-weight="normal">『沈む欠片』を越えた · 確かめた人 3</text>
+<rect x="900" y="262" width="140" height="44" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="916" y="288.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">訪れる</text>
+<rect x="224" y="340" width="832" height="88" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="240" y="368" font-size="16" fill="#222" text-anchor="start" font-weight="bold">白い砂の島</text>
+<text x="240" y="392" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「ここで終わる」</text>
+<text x="240" y="414" font-size="12" fill="#888" text-anchor="start" font-weight="normal">『空の舟』で次の島へ逃れた</text>
+<rect x="900" y="362" width="140" height="44" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="916" y="388.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">訪れる</text>
+<rect x="224" y="440" width="832" height="88" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="240" y="468" font-size="16" fill="#222" text-anchor="start" font-weight="bold">霧の岬の島</text>
+<text x="240" y="492" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「また来る」</text>
+<text x="240" y="514" font-size="12" fill="#888" text-anchor="start" font-weight="normal">『火の山の目覚め』で滅んだ</text>
+<rect x="900" y="462" width="140" height="44" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="916" y="488.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">訪れる</text>
+<rect x="224" y="548" width="160" height="40" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="240" y="572.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">もっと見る</text>
+<rect x="224" y="606" width="380" height="24" rx="2" fill="#fff" stroke="#555" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="232" y="621" font-size="12" fill="#555" text-anchor="start" font-weight="normal">浜の漂着 (受け取る) は島が要るので出さない:「浜は島の中で」</text>
+<rect x="224" y="640" width="631" height="24" rx="2" fill="#fff" stroke="#555" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="232" y="655" font-size="12" fill="#555" text-anchor="start" font-weight="normal">閉港: HARBOR_CLOSED_TEXT / 空: HARBOR_EMPTY_TEXT +「石板を選ぶ」</text>
+<text x="1268" y="710" font-size="11" fill="#888" text-anchor="end" font-weight="normal">harbor-desktop 1280x720</text>
+</svg>
