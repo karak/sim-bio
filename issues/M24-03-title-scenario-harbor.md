@@ -3,7 +3,7 @@ id: M24-03
 title: タイトルからシナリオ選択と港への導線
 status: todo
 milestone: M24
-plan: docs/uiux/2026-09-29-title-flow.md
+plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-01]
 evidence: []
 ---

@@ -3,7 +3,7 @@ id: M24-01
 title: タイトル画面 (ロゴ・背景のデモ・メニューの枠)
 status: todo
 milestone: M24
-plan: docs/uiux/2026-09-29-title-flow.md
+plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-00]
 evidence: []
 ---
