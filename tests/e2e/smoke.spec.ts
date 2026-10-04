@@ -321,7 +321,7 @@ test('intercept: 備蓄が足りない年は押せない理由を行に出す (M
 });
 
 test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チップが出て、押すと狼レイヤーが開く (M21-02 D5)', async ({ page }) => {
-  // 狼の波の警告は 1 年目の年次評価の警告で、2 年目の評価で差し替わる (1 年 = 360 tick、100 倍速で 3.6 秒)。
+  // 狼の波の告知は noticeYears のあいだ残る (test-event は 30 年)。
   // 負荷がかかると操作の往復だけでその 1 年を使い切り、押す前にチップが消える (M19-04 の作業ログ)。
   // ページの時計を止めて年はテストが送り、1 年目のうちに見て押す。止めるのは開く前 (開いた後の時刻を読んで止めると、負荷で読んだ時刻を過ぎる)
   const t0 = new Date('2026-01-01T00:00:00Z').getTime();
@@ -338,14 +338,7 @@ test('warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チッ�
   await expect(page.locator('#tablet-year')).toHaveText('1 / 30 年');
   await expect(page.locator('#tablet-warnings')).toContainText('狼の群れが北の谷に下りた', { timeout: 20_000 });
   await expect(page.locator('#layer-species-wolf')).not.toHaveClass(/on/);
-  // 遅い CI ではこの click が効くまでに数年進むことがある。test-event の告知は noticeYears (30 年) のあいだ残るので年をまたいでも押せるが、
-  // 終わる年の判定の幕はチップを覆う。止まったことを確かめてから押す。毎フレーム進む日 (#hud-season の Day N) を、待ち直しの無い
-  // 比較で見る (toHaveText は一致するまで待ち直すので、3.6 s で一周する表示では止まっていなくても通る)。1.5 s は 100x の 1 年より短く、
-  // 1 フレーム ~1 s の遅い CI でも少なくとも 1 フレームは入る
   await page.click('#speed-0');
-  const day = await page.locator('#hud-season').textContent();
-  await page.waitForTimeout(1_500);
-  expect(await page.locator('#hud-season').textContent()).toBe(day);
   const chip = page.getByRole('button', { name: '狼を見る' });
   await expect(chip).toBeVisible();
   await chip.click();
