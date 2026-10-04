@@ -58,6 +58,8 @@ test('M26-07: 3D を一度見たあと、同じ tick の別の島を読んでも
   await leave3d(page);
 
   // 島を替えていなければ、3D を出入りしても組み直さない (同じ島の地形のまま)
+  await page.evaluate(() => document.querySelector('#observe-layer canvas')!.setAttribute('data-built', 'yes'));
   await enter3d(page);
   expect(await digest(page)).toBe(fresh);
+  await expect(page.locator('#observe-layer canvas[data-built="yes"]')).toHaveCount(1);
 });

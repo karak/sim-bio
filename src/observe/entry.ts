@@ -66,7 +66,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
   (opts.buttonHost ?? app).appendChild(open);
 
   /** 島ごとに組む観察画面 (M26-07)。dead は捨てたことの印で、組み終わりを待っている間に捨てられたら、組み終わった view を捨てる */
-  type Built = { island: object; layer: HTMLDivElement; view: ObservationView | null; ready: Promise<void>; dead: boolean };
+  type Built = { island: object; layer: HTMLDivElement; view: ObservationView | null; ready: Promise<void>; dead: boolean; failed: boolean };
   let cur: Built | null = null;
   let isActive = false;
   let latest: WorldSnapshot | null = null;
@@ -86,13 +86,16 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
     for (const b of l.querySelectorAll<HTMLButtonElement>('.o-speed button')) b.addEventListener('click', () => opts.setSpeed(Number(b.dataset.s) as 0 | 1 | 10));
     const q = (sel: string) => l.querySelector(sel) as HTMLElement;
     q('.o-status').textContent = '観察画面を組んでいます…';
-    const built: Built = { island: observeIslandOf(s), layer: l, view: null, dead: false, ready: Promise.resolve() };
+    const built: Built = { island: observeIslandOf(s), layer: l, view: null, dead: false, failed: false, ready: Promise.resolve() };
     built.ready = (async () => {
       const { createObservationView } = await import('./view');
       const v = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names, now: opts.now, debug: new URLSearchParams(location.search).has('observeDebug') });
       if (built.dead) v.dispose();
       else built.view = v;
-    })();
+    })().catch(() => {
+      built.failed = true;
+      q('.o-status').textContent = '観察画面を組めませんでした。入り直してください';
+    });
     return built;
   };
 
@@ -108,7 +111,7 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
 
   /** 今の島の観察画面を返す。島が替わっていれば、前の物を捨てて組み直す */
   const ensure = (s: WorldSnapshot): Built => {
-    if (cur && !observeNeedsRebuild(cur.island, observeIslandOf(s))) return cur;
+    if (cur && !cur.failed && !observeNeedsRebuild(cur.island, observeIslandOf(s))) return cur;
     if (cur) discard(cur);
     cur = build(s);
     return cur;

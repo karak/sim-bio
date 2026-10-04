@@ -948,7 +948,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     touched = true;
   });
   const first = params.get('shot');
-  if (first && presets[first]) setTimeout(presets[first], 1500);
+  const presetTimer = first && presets[first] ? setTimeout(presets[first], 1500) : 0;
   const stats = host.stats;
   let last = nowMs();
   let t = 0;
@@ -1049,6 +1049,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       cancelAnimationFrame(handle);
     },
     dispose() {
+      clearTimeout(presetTimer);
       running = false;
       cancelAnimationFrame(handle);
       window.removeEventListener('resize', resize);
