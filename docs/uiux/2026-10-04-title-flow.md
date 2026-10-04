@@ -2,7 +2,7 @@
 
 - 票: `issues/M24-00-title-ux-design.md`。この図の上に M24-01 (タイトル画面)・M24-02 (メニュー)・M24-03 (石板の選択と港) が立つ
 - 元にした作り: feat/m24 a23bb27 (feat/m19 fc409cc を取り込んだもの)。feat/m19 はまだ main に入っていない
-- 状態: 案。ユーザーの承認の前。下の「決めること」は案と推しを並べただけで、まだ決まっていない
+- 状態: 承認済み (2026-10-04 19:20、ユーザー)。「決めること」は全部推しの案に決まった (末尾の「決まったこと」)
 - W/F: `wireframes/*.svg` (灰の濃淡だけのロー・フィデリティ)。読み方は `README.md`
 
 ## いまの起動 (2026-10-04 の作り)
@@ -11,7 +11,7 @@
 
 | URL (検索語) | 開く舞台 | 決める所 |
 |---|---|---|
-| 無し (`/`) | 自由モード。自動の枠に続きがあれば続きから、無ければ seed 42 の島 | `bootPlanOf` の restore `auto`、`DEFAULT_SEED` |
+| 無し (`/`) | 自由モード。自動の枠に続きがあれば続きから、無ければ seed 42 の島 (M24-01 からはタイトルを出す。この表は M24-01 の前の起動) | `bootPlanOf` の restore `auto`、`DEFAULT_SEED` |
 | `seed=<n>` | 自由モード。その seed の島の続きだけを戻し、無ければその seed の新しい島 (M26-10) | `bootSeedOf`・`seedMatches` |
 | `scenario=<id>` | その石板。途中の島があれば続きから (M19-14)、判定の出た石板は初めから。`seed=` は落とす | `bootPlanOf`・`resumeScenario` |
 | `scenario=<id>&visit=<id>` | 他人の島の訪問。手元に何も書かない | `bootPlanOf` の `visitIdOf` |
@@ -139,7 +139,7 @@ stateDiagram-v2
 - 「このタブで舞台に入った」印 (sessionStorage) は、石板の中の「自由モードへ」で素の `/` へ移るときと、操作画面で再読み込みしたときにタイトルへ戻されないためのもの。タブを閉じれば消えるので、次に開いたときはタイトルから
 - 修飾でない検索語 (観察画面の画質の鍵 `shadow=` など) も、付いていればタイトルを飛ばす。規則を「検索語が 1 つでもあれば」の 1 行に保つため
 - `pending` は `takePendingSlot` が取り出して消した後の値を渡す。`bootRouteOf` は 2 度取り出さない
-- E2E (tests/e2e、2026-10-04) は素の `/` を開く所が 37 ある (`goto('/')` が 36、harbor.spec.ts の起動の不変条件の試験が `for (const path of ['/', …])` で 1)。spec は変えず、`playwright.config.ts` の `use.storageState` で、E2E の dev サーバーの origin (`E2E_PORT` から組む) の localStorage に `devSkip` の印を置く (1 か所の変更)。タイトルの E2E だけ `test.use({ storageState: { cookies: [], origins: [] } })` で印を外す。`browser.newContext()` で作る文脈 (freeIslandSeed.spec.ts・devtools.spec.ts) は、どれも検索語付きの URL を開く。config の storageState が手で作った文脈にも効くかは、M24-01 で 1 度確かめる
+- E2E (tests/e2e、2026-10-04) は素の `/` を開く所が 37 ある (`goto('/')` が 36、harbor.spec.ts の起動の不変条件の試験が `for (const path of ['/', …])` で 1)。spec は変えず、`playwright.config.ts` の `use.storageState` で、E2E の dev サーバーの origin (`E2E_PORT` から組む) の localStorage に `devSkip` の印を置く (1 か所の変更)。タイトルの E2E だけ `test.use({ storageState: { cookies: [], origins: [] } })` で印を外す。`browser.newContext()` で作る文脈 (freeIslandSeed.spec.ts・devtools.spec.ts) は、どれも検索語付きの URL を開く。config の storageState は手で作った文脈 (browser.newContext()) にも効く (M24-01 で確かめた)
 - 港の E2E (tests/e2e-cloudflare/harbor.spec.ts、別の config) は本番のビルド (`build:cloudflare`) に当てるので、`devSkip` は効かない。素の `goto('/')` が 5 つあり、検索語付きの URL (例 `/?seed=42`、自由モードの最初の島と同じ島) に書き換える (spec の 5 行)。案 C で spec を変えるのはここだけ
 - 受入の正本 (docs/acceptance/scenarios.jsonl) で人が開く URL は、どれも検索語付き (TUR-001 の `/?scenario=test-ship&dev=1`・本番の OPS-001 の `/?scenario=test-quick`。TUR-002 は退役)。人の手順は変わらない
 - 素の `/` を開き直す auto の項目のうち、STG-001・STG-004 は `pending` で今のまま。SAV-001 (同じ URL を開き直すと続きから) と HBR-005 (`/` で開き直すと港の口に並ぶ) は、E2E では印で今のまま通るが、本番では「タイトル → 続きから」の 1 手が挟まる。この 2 項目の文を「タイトルの続きからで」に直し、印を外したタイトルの E2E で「素の `/` → タイトル → 続きから → 閉じた年から」を 1 本確かめる (M24-02)
