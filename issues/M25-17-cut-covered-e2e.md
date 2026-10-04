@@ -6,7 +6,7 @@ milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M21-07]
 evidence:
-  - "tests/e2e/confirm.spec.ts: confirm.spec:219 を消した (コミット『test(e2e): 表が覆う「M21-04: 判定の前の石板から石板を選び直すのは確かめない」を消す』)"
+  - "tests/e2e/confirm.spec.ts: 7ef5e90 の confirm.spec:219 を消した (コミット『test(e2e): 表が覆う「M21-04: 判定の前の石板から石板を選び直すのは確かめない」を消す』)"
   - "tests/e2e/harbor.spec.ts:267 は残した (下の作業ログの対応表)"
   - "docs/acceptance/scenarios.jsonl: CNF-001 の covered_by から消した E2E の題を外した (uv run scripts/acceptance.py check が ok: 45 scenarios)"
 ---
@@ -45,7 +45,7 @@ evidence:
   **confirm.spec「M21-04: 判定の前の石板から石板を選び直すのは確かめない」 → 消す**
   - 本体は test-quick を止めて (speed-0) tablet-select で sinking を選ぶだけ。断言は 3 つ
     1. 確かめが出ない (`dialog` が 0 件): tests/unit/app.place.test.ts:129 「planOp (M21-07): … : 石板を選ぶ × 走っている石板」(ask null・effects は flush → go)
-    2. URL が `?scenario=sinking` になる: 同 :205 「searchFor (M21-07): scenario だけを差し替え…」(と、go の effect が表の :129 の行)
+    2. URL が `?scenario=sinking` になる: 同 :204 「searchFor (M21-07): scenario だけを差し替え…」(と、go の effect が表の :129 の行)
     3. 石板の題に「沈む」が出る (選んだ石板が開く): 表の試験は見ない (Hud の select → main.ts → 石板の読み込みの配線)。ただし同じ配線を同じ 3 つの断言で confirm.spec「M26-02: 訪問中に石板を選ぶと、確かめは出ず、URL から visit が消え、石板の島が自分のものとして開く」が見ている (起点が訪問か走っている石板かの違いだけ。表の :129 と :131 は同じ ask null・flush → go)。判定の出た島からの選び直し (やめる側) はconfirm.spec:171「M21-04: 判定の後に枠へ保存でき…石板を選ぶは確かめ、取り消せば判定の島のまま…」が残る (やめる側、と受ける側)
   - 試験の名前の「書き切ってから移り、戻れば続きから」は本体の断言に無い (書き切る = flush は表の :129 の effects が縛る。戻れば続きからは persist.spec M19-05 が閉じて開き直しで見る。M21-07 の作業ログの「ここで見ている」は名前だけで、本体は見ていなかった)
   - 全部が覆われるので消した。配線の E2E (操作 1 つ × 受ける/やめる 1 組) は M26-02 と、confirm.spec:171 (判定の出た島からの選び直し) が残る
@@ -58,3 +58,5 @@ evidence:
     4. 保存した命令が無い (`storedCommands` が null): harbor.cargo.test.ts:144 の命令無しが部分的。保存の副作用 (dispatch の門・年代記) は覆われない
   - 表の試験は gate (`finished`・`budget.power`・`spawnCost`) を手で渡す。本番で runner.budget() の力と scenario の costs.spawn から gate を組む配線 (main.ts:285-288) は、この E2E だけが通す (4 種 × 3 = 12 > 10 になる実際の石板と)
   - 4 つとも「この操作 1 つ × 受けられない」の配線の観察で、表が覆うのは判断の部分だけなので残した。縮める余地は断言 1 つ (文) だけだが、1 つ減らしても試験の実行は変わらないので縮めない
+  - 読むだけのレビュー (opus) の結果: 消した 3 つの断言はどれも覆われている。残す判断も妥当。残す理由に足すもの: 「走っている石板」の舞台を atOf へ渡す配線 (main.ts:197) は、表も M26-02 (訪問の枝) も confirm.spec:171 (判定の出た島だけ) も通さず、harbor.spec の M19-10 が gate の `finished` を通して見る。指摘の引用ずれ (:205 → :204) は直した
+  - 検証 (feat/m19 は 7ef5e90 のまま、merge は Already up to date): `pnpm run check` は vitest 1236 件 (todo を除く) が通った。worker の vitest は 1 回目に cloudflare-pool の起動で EPIPE (環境の都合) で止まり、回し直して 66 件が通った。scripts 31 件通った。E2E (CI=1・1 worker・E2E_PORT=5447) の confirm.spec + harbor.spec は 21 件が通った (消す前は 22 件)。`uv run scripts/acceptance.py check` は ok: 45 scenarios
