@@ -58,7 +58,8 @@ export function mountDevPanel(app: HTMLElement, deps: DevPanelDeps): void {
     });
   }
   // 右の列 (.hud-right) の末尾に積む。グラフの板の高さが変わっても、板はその下から始まり覆わない (M26-04)
-  const column = app.querySelector('.hud-right') ?? app;
+  const column = app.querySelector('.hud-right');
+  if (!column) throw new Error('開発の板: 右の列 (.hud-right) が無い');
   app.append(el('style', {}, STYLE));
   column.append(
     el(

@@ -195,6 +195,9 @@ for (const size of [
     await expectAllRowsUncoveredAtFivePoints(page.locator('.hud-r'));
     await pickCellAndExpectRowsUncovered(page);
     expect(await expectUncoveredAtFivePoints(page.locator('#local-graph'))).toEqual(Array(5).fill('self'));
+    // 種を放つ札は右寄せなので先頭の札だけでは板の下を見逃す。板がずり下がっても札の全部が覆われないことを見る
+    const chips = page.locator('#spawn-row button');
+    for (let i = 0; i < (await chips.count()); i++) expect(await expectUncoveredAtFivePoints(chips.nth(i)), `種の札 ${i}`).toEqual(Array(5).fill('self'));
     const [b, p] = await Promise.all([button.boundingBox(), panel.boundingBox()]);
     const overlap = b!.x < p!.x + p!.width && p!.x < b!.x + b!.width && b!.y < p!.y + p!.height && p!.y < b!.y + b!.height;
     expect(overlap, `板 ${JSON.stringify(p)} がボタン ${JSON.stringify(b)} と重なる`).toBe(false);
