@@ -53,7 +53,7 @@ auto の行 (HBR-006・CRG-005・CNF-002・SEL-003) も同じに比べる。基�
 比べは `pnpm run shots` (`ACCEPTANCE_DIR` のあるときだけ回る) の中で走り、`updateSnapshots: 'none'` なので基準画を黙って書かない。
 
 ```sh
-pnpm run shots:update                          # 撮って比べ、前後と差の画を審査台の回 (.claude/localreview/m25-03-<日時>/) に出す。基準画は書き換えない
+pnpm run shots:update                          # 撮って比べ、前後と差の画を審査台の回 (.claude/localreview/<接頭辞>-<日時>/。接頭辞は `--round <接頭辞>`、既定は `shots-`) に出す。基準画は書き換えない
 pnpm run shots:update -- --apply <回の名前>    # 審査台で「合格」にした画だけ基準画に写し、VERSIONS.json を書く
 ```
 

@@ -10,6 +10,7 @@
 
     pnpm run shots:update                          # 撮って比べ、前後と差を審査台の回に出す (基準画は書き換えない)
     pnpm run shots:update -- --apply <回の名前>    # 審査台で合格にした画だけ基準画へ写す (コミットは人がする)
+    pnpm run shots:update -- --round m25-14-       # 回の名前の接頭辞を票の名前にする (既定は shots-)
 
 回の名前は 1 つ目のコマンドが出す (m25-03-20261001-1200 の形)。
 審査台は index.html が読む共有の items.json を書き換えない。回の items.json (1 つの group) を共有の groups に足すと並ぶ。
@@ -231,9 +232,12 @@ def review_dir(root: Path) -> Path:
     return common.parent / ".claude" / "localreview"
 
 
-def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
-    root = root or Path.cwd()
-    os.chdir(root)
+def round_name_of(prefix: str, now: datetime.datetime) -> str:
+    """審査台の回の名前。接頭辞 + 日時 (m25-14-20261004-1230 の形)"""
+    return prefix + now.strftime("%Y%m%d-%H%M")
+
+
+def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--apply", metavar="ROUND", help="審査台で合格にした画だけ基準画へ写す"
@@ -243,10 +247,22 @@ def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
         type=Path,
         help="審査台の判定の写し (既定は審査台の verdicts.json)",
     )
-    argv = list(sys.argv[1:] if argv is None else argv)
-    if argv[:1] == ["--"]:
-        argv = argv[1:]
-    args = parser.parse_args(argv)
+    parser.add_argument(
+        "--round",
+        metavar="PREFIX",
+        default="shots-",
+        help="審査台の回の名前の接頭辞 (既定は shots-。票の名前を付けるなら m25-14- の形)",
+    )
+    args = list(argv)
+    if args[:1] == ["--"]:
+        args = args[1:]
+    return parser.parse_args(args)
+
+
+def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
+    root = root or Path.cwd()
+    os.chdir(root)
+    args = parse_args(sys.argv[1:] if argv is None else argv)
     localreview = review_dir(root)
     chromium, macos = versions()
 
@@ -267,9 +283,7 @@ def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
         )
         return 0
 
-    round_name = "m25-03-" + datetime.datetime.now().astimezone().strftime(
-        "%Y%m%d-%H%M"
-    )
+    round_name = round_name_of(args.round, datetime.datetime.now().astimezone())
     work = Path(tempfile.mkdtemp(prefix="shots-update-"))
     stage = work / "baselines"
     shutil.copytree(BASELINES, stage) if BASELINES.is_dir() else stage.mkdir()
