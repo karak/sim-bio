@@ -2,6 +2,7 @@ import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import type { ObservationView } from './view';
 import type { ObserveInspect } from './inspect';
+import { observeIslandOf, observeNeedsRebuild } from './rebuild';
 
 /**
  * 操作画面から観察画面に入る/戻る (M22-08)。操作画面の上に全面の層を重ね、観察画面を描く。
@@ -64,14 +65,14 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
   open.disabled = true;
   (opts.buttonHost ?? app).appendChild(open);
 
-  let layer: HTMLDivElement | null = null;
-  let view: ObservationView | null = null;
-  let loading: Promise<void> | null = null;
+  /** 島ごとに組む観察画面 (M26-07)。dead は捨てたことの印で、組み終わりを待っている間に捨てられたら、組み終わった view を捨てる */
+  type Built = { island: object; layer: HTMLDivElement; view: ObservationView | null; ready: Promise<void>; dead: boolean; failed: boolean };
+  let cur: Built | null = null;
   let isActive = false;
   let latest: WorldSnapshot | null = null;
   let latestTimeline: readonly TimelineEvent[] | undefined;
 
-  const build = async (s: WorldSnapshot) => {
+  const build = (s: WorldSnapshot): Built => {
     const l = document.createElement('div');
     l.id = 'observe-layer';
     // 下の帯: 時間が流れているか・カメラの今・年・速さ・戻る (観察画面の中で唯一の操作。石板と介入は操作画面へ戻って使う)
@@ -81,19 +82,60 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
       '<span class="o-speed"><button data-s="0" aria-label="一時停止">⏸</button><button data-s="1">1x</button><button data-s="10">10x</button></span>' +
       '<button id="observe-back">操作画面へ戻る<kbd>Esc</kbd></button></div>';
     app.appendChild(l);
-    layer = l;
     l.querySelector('#observe-back')!.addEventListener('click', () => entry.exit());
     for (const b of l.querySelectorAll<HTMLButtonElement>('.o-speed button')) b.addEventListener('click', () => opts.setSpeed(Number(b.dataset.s) as 0 | 1 | 10));
     const q = (sel: string) => l.querySelector(sel) as HTMLElement;
     q('.o-status').textContent = '観察画面を組んでいます…';
-    const { createObservationView } = await import('./view');
-    view = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names, now: opts.now, debug: new URLSearchParams(location.search).has('observeDebug') });
+    const built: Built = { island: observeIslandOf(s), layer: l, view: null, dead: false, failed: false, ready: Promise.resolve() };
+    built.ready = (async () => {
+      const { createObservationView } = await import('./view');
+      const v = await createObservationView({ canvas: q('canvas') as HTMLCanvasElement, status: q('.o-status'), stats: q('.o-stats'), shots: q('.o-shots'), snapshot: s, names: opts.names, now: opts.now, debug: new URLSearchParams(location.search).has('observeDebug') });
+      if (built.dead) v.dispose();
+      else built.view = v;
+    })().catch(() => {
+      built.failed = true;
+      q('.o-status').textContent = '観察画面を組めませんでした。入り直してください';
+    });
+    return built;
+  };
+
+  /** 島が替わった観察画面を捨てる (M26-07)。view の GPU の資源を解放し、層を外す */
+  const discard = (b: Built) => {
+    b.dead = true;
+    b.view?.stop();
+    b.view?.dispose();
+    b.view = null;
+    b.layer.remove();
+    if (cur === b) cur = null;
+  };
+
+  /** 今の島の観察画面を返す。島が替わっていれば、前の物を捨てて組み直す */
+  const ensure = (s: WorldSnapshot): Built => {
+    if (cur && !cur.failed && !observeNeedsRebuild(cur.island, observeIslandOf(s))) return cur;
+    if (cur) discard(cur);
+    cur = build(s);
+    return cur;
+  };
+
+  /** 観察画面を出す。組み終わるまで待ち、待つ間に島が替わった・戻ったなら出さない */
+  const present = async () => {
+    if (!latest) return;
+    const b = ensure(latest);
+    await b.ready;
+    if (!isActive || b.dead || !b.view || !latest) return;
+    b.layer.hidden = false;
+    b.view.start();
+    b.view.setSnapshot(latest, latestTimeline);
+    shown = '';
+    syncBar();
   };
 
   let shown = '';
   const CAMERA_LABEL = { auto: '自動カメラ', free: '自由カメラ(20 秒で自動に戻る)', follow: '個体を追っています' } as const;
   /** 下の帯を今の速さとカメラに合わせる (変わったときだけ書き換える) */
   const syncBar = () => {
+    const layer = cur?.layer;
+    const view = cur?.view;
     if (!layer || !view) return;
     const speed = opts.getSpeed();
     const mode = view.cameraMode();
@@ -111,34 +153,31 @@ export function createObserveEntry(app: HTMLElement, opts: ObserveEntryOptions):
       latest = s;
       latestTimeline = timeline;
       open.disabled = false;
-      if (isActive && view) {
-        view.setSnapshot(s, timeline);
+      // 島が替わった (新しい島・枠や file の読み込み) ら、前の島の観察画面を捨てる。入っていれば組み直して出す
+      if (cur && observeNeedsRebuild(cur.island, observeIslandOf(s))) {
+        discard(cur);
+        if (isActive) void present();
+        return;
+      }
+      if (isActive && cur?.view) {
+        cur.view.setSnapshot(s, timeline);
         syncBar();
       }
     },
     active: () => isActive,
-    inspect: () => view?.inspect() ?? null,
+    inspect: () => cur?.view?.inspect() ?? null,
     async enter() {
       if (isActive || !latest || open.disabled) return;
       isActive = true;
       if (opts.getSpeed() > 10) opts.setSpeed(10);
       open.hidden = true;
-      if (!layer) {
-        loading ??= build(latest);
-        await loading;
-      }
-      if (!isActive || !layer || !view) return;
-      layer.hidden = false;
-      view.start();
-      view.setSnapshot(latest, latestTimeline);
-      shown = '';
-      syncBar();
+      await present();
     },
     exit() {
       if (!isActive) return;
       isActive = false;
-      view?.stop();
-      if (layer) layer.hidden = true;
+      cur?.view?.stop();
+      if (cur) cur.layer.hidden = true;
       open.hidden = false;
     },
   };

@@ -56,4 +56,6 @@ export type ObserveInspect = {
   /** 直近の計測。0.5 秒たつまでは null */
   stats(): ObserveStats | null;
   debug(): ObserveDebug | null;
+  /** いま載せている地形の頂点の高さの要約 (M26-07)。島が替わって観察画面が組み直されたかを、見た目に頼らず読む */
+  terrainDigest(): number;
 };

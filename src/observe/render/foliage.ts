@@ -27,7 +27,7 @@ export function createFoliageMaterial(map: Texture, alphaTest: number, name = 'o
   return m;
 }
 
-const depths = new Map<Texture, MeshDepthMaterial>();
+const depths = new WeakMap<Texture, MeshDepthMaterial>();
 
 /** 葉のカードの日の影の材質 (絵のアルファで切り抜く)。同じ絵には同じ材質を返す */
 export function foliageDepth(map: Texture, alphaTest: number): MeshDepthMaterial {

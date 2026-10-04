@@ -23,7 +23,7 @@ export async function loadGlb(url: string): Promise<GLTF | null> {
   }
 }
 
-const cache = new Map<Material, Material>();
+const cache = new WeakMap<Material, Material>();
 
 function convert(m: Material): Material {
   const hit = cache.get(m);
