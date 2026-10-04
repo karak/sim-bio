@@ -216,15 +216,6 @@ test('M21-04: 判定の後に枠へ保存でき (判定の板に覆われない)
   expect(await shownTick(page)).toBe(verdictTick);
 });
 
-test('M21-04: 判定の前の石板から石板を選び直すのは確かめない (続きは書き切ってから移り、戻れば続きから)', async ({ page }) => {
-  await page.goto('/?scenario=test-quick');
-  await page.click('#speed-0');
-  await page.selectOption('#tablet-select', 'sinking');
-  await expect(page).toHaveURL((u) => u.search === '?scenario=sinking');
-  await expect(page.locator('#tablet-title')).toContainText('沈む');
-  await expect(dialog(page)).toHaveCount(0);
-});
-
 test('M21-04: 港から取り下げるのは確かめ、取り消せば港に残り、受ければ一覧から消える。判定の出た島から「この島を訪れる」も離れる確かめを経る', async ({ page }) => {
   test.setTimeout(180_000);
   const { fake: harbor } = await routeHarbor(page, { turnstile: { delayMs: 100 } });

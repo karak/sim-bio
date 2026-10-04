@@ -12,11 +12,13 @@ from unittest import mock
 
 from acceptance import check_results, load
 from judge import (
+    PlanItem,
     Question,
     StepRef,
     StepResult,
     Vote,
     apply_results,
+    digest_of,
     has_pixel_baseline,
     image_result,
     images_of,
@@ -1072,6 +1074,192 @@ class RepoRubricsTest(unittest.TestCase):
             ids = [r["id"] for r in rows]
             self.assertEqual(len(ids), len(set(ids)), key)
             self.assertTrue(all(r["q"].strip() for r in rows), key)
+
+
+# M25-16: 【見た目】の 5 手順 (SEL-003 の 2〜4・CNF-002 の 2〜3) は正本で judge が llm、画素の基準も持つ
+LLM_STEPS = {
+    "SEL-003/2": ["SEL-003-1.png"],
+    "SEL-003/3": ["SEL-003-2.png"],
+    "SEL-003/4": ["SEL-003-3.png"],
+    "CNF-002/2": ["CNF-002-1.png", "CNF-002-2.png", "CNF-002-3.png"],
+    "CNF-002/3": ["CNF-002-1.png", "CNF-002-2.png", "CNF-002-3.png"],
+}
+
+
+def repo_sot():
+    sot, problems = load(
+        (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
+    )
+    assert not problems
+    return sot
+
+
+def repo_rubrics():
+    return json.loads(
+        (REPO / "docs/acceptance/rubrics.json").read_text(encoding="utf-8")
+    )
+
+
+def reply_all(ids, a):
+    return json.dumps(
+        {
+            "total_cost_usd": 0.02,
+            "duration_ms": 10,
+            "modelUsage": {"m": {}},
+            "structured_output": {
+                "image": "",
+                "answers": [
+                    {"id": i, "answer": a, "evidence": f"{i} は {a}"} for i in ids
+                ],
+            },
+        }
+    )
+
+
+class RepoLlmStepsTest(unittest.TestCase):
+    def test_the_five_steps_are_llm_in_the_source_of_truth(self):
+        keys = {s.key for s in select_steps(repo_sot(), [])}
+        self.assertTrue(set(LLM_STEPS) <= keys, set(LLM_STEPS) - keys)
+
+    def test_each_step_loads_its_own_rubric_not_the_fallback(self):
+        rubrics = repo_rubrics()
+        for key in LLM_STEPS:
+            step = select_steps(repo_sot(), [key])[0]
+            qs = questions_of(step, rubrics)
+            self.assertGreaterEqual(len(qs), 3, key)
+            self.assertNotEqual([q.id for q in qs], ["S"], f"{key} は採点表が無い")
+            self.assertFalse(any(q.ref for q in qs), key)
+
+    def test_the_two_trial_failures_are_tested_by_their_intent(self):
+        rubrics = repo_rubrics()
+        cancel = " ".join(r["q"] for r in rubrics["CNF-002/2"])
+        self.assertIn("focus", cancel)
+        self.assertIn("輪や光が無いなら no", cancel)
+        band = " ".join(r["q"] for r in rubrics["SEL-003/3"])
+        self.assertIn("途中で消えて見えない辺があるなら no", band)
+
+    def test_each_step_points_at_the_shots_the_text_names(self):
+        shots = {
+            "SEL-003": [f"shots/SEL-003-{n}.png" for n in (1, 2, 3)],
+            "CNF-002": [f"shots/CNF-002-{n}.png" for n in (1, 2, 3)],
+        }
+        for key, names in LLM_STEPS.items():
+            step = select_steps(repo_sot(), [key])[0]
+            got = images_of(step, shots, Path("/x/shots"))
+            self.assertEqual([p.name for p in got], names, key)
+
+    def test_the_prompt_carries_every_question_and_the_image_without_a_reference(self):
+        step = select_steps(repo_sot(), ["SEL-003/3"])[0]
+        qs = questions_of(step, repo_rubrics())
+        prompt = prompt_of(qs, Path("/x/SEL-003-2.png"))
+        for q in qs:
+            self.assertIn(f"- {q.id}: {q.text}", prompt)
+        self.assertTrue(prompt.endswith("画像ファイル: /x/SEL-003-2.png"))
+        self.assertNotIn("基準画", prompt)
+
+    def test_the_digest_follows_the_rubric_question(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        img = tmp / "CNF-002-1.png"
+        img.write_bytes(b"png")
+        step = select_steps(repo_sot(), ["CNF-002/2"])[0]
+        qs = questions_of(step, repo_rubrics())
+        before = digest_of([PlanItem(step, qs, img, True, None)])
+        edited = [Question(qs[0].id, qs[0].text + "。", qs[0].ref), *qs[1:]]
+        after = digest_of([PlanItem(step, edited, img, True, None)])
+        self.assertNotEqual(before, after)
+
+
+class RepoBaselinedStepsRunTest(unittest.TestCase):
+    """基準画のある手順は、3 票の yes でも results.json に pass を書かず、no と割れだけを書く (ADR 0001 段 5)"""
+
+    def setUp(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        self.root, self.acc = tmp / "repo", tmp / "acc"
+        (self.root / "docs/acceptance").mkdir(parents=True)
+        for f in ("scenarios.jsonl", "rubrics.json"):
+            shutil.copy(REPO / "docs/acceptance" / f, self.root / "docs/acceptance" / f)
+        (self.root / "tests/e2e/baselines").mkdir(parents=True)
+        (self.acc / "shots").mkdir(parents=True)
+        for sid in ("SEL-003", "CNF-002"):
+            for n in (1, 2, 3):
+                (self.root / f"tests/e2e/baselines/{sid}-{n}-板.png").write_bytes(b"x")
+                (self.acc / "shots" / f"{sid}-{n}.png").write_bytes(b"png")
+        self.sot = repo_sot()
+        self.ids = {k: [r["id"] for r in v] for k, v in repo_rubrics().items()}
+
+    def judge(self, key, answers):
+        ids = self.ids[key]
+        fake = FakeClaude(
+            {
+                n: reply_all(ids, answers.get(n, "yes"))
+                for n in {"SEL-003-1.png", "SEL-003-2.png", "SEL-003-3.png"}
+                | {"CNF-002-1.png", "CNF-002-2.png", "CNF-002-3.png"}
+            }
+        )
+        steps = select_steps(self.sot, [key])
+        out = run(
+            self.root,
+            self.acc,
+            steps,
+            runner=fake,
+            model="s",
+            votes=3,
+            jobs=1,
+            expected=select_steps(self.sot, []),
+        )
+        return fake, out
+
+    def saved(self):
+        f = self.acc / "results.json"
+        return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else {}
+
+    def test_three_yes_votes_are_logged_but_never_written_as_a_pass(self):
+        for key in ("SEL-003/3", "CNF-002/2"):
+            fake, (results, *_) = self.judge(key, {})
+            self.assertEqual(results[0].verdict, "yes")
+            self.assertFalse(writes_pass(results[0]))
+            self.assertFalse(records_pass(results[0]))
+            self.assertEqual(len(fake.calls), 3 * len(results[0].images))
+        self.assertEqual(self.saved(), {})
+        log = json.loads((self.acc / "judge.json").read_text(encoding="utf-8"))
+        self.assertFalse(log["CNF-002/2"]["writes_pass"])
+
+    def test_three_no_votes_are_written_as_a_llm_fail(self):
+        self.judge("CNF-002/2", {"CNF-002-1.png": "no"})
+        entry = self.saved()["CNF-002"]
+        self.assertEqual((entry["verdict"], entry["by"]), ("fail", "llm"))
+        self.assertIn("CNF-002/2", entry["llm"]["steps"])
+        self.assertIn("CNF-002-1.png", entry["note"])
+
+    def test_a_later_pass_keeps_the_item_failing_while_another_step_fails(self):
+        self.judge("SEL-003/3", {"SEL-003-2.png": "no"})
+        self.judge("SEL-003/4", {"SEL-003-3.png": "no"})
+        self.judge("SEL-003/3", {})
+        entry = self.saved()["SEL-003"]
+        self.assertEqual(entry["verdict"], "fail")
+        self.assertNotIn("SEL-003/3", entry["llm"]["steps"])
+        self.assertIn("SEL-003/4", entry["llm"]["steps"])
+
+    def test_a_pass_after_the_only_fail_removes_the_item(self):
+        self.judge("SEL-003/3", {"SEL-003-2.png": "no"})
+        self.assertEqual(self.saved()["SEL-003"]["verdict"], "fail")
+        self.judge("SEL-003/3", {})
+        self.assertNotIn("SEL-003", self.saved())
+
+    def test_every_image_of_the_five_steps_has_a_real_pixel_baseline(self):
+        for key, names in LLM_STEPS.items():
+            for n in names:
+                self.assertTrue(
+                    has_pixel_baseline(Path(n), REPO / "tests/e2e/baselines"), (key, n)
+                )
+
+    def test_without_baselines_the_same_yes_votes_would_be_a_pass(self):
+        shutil.rmtree(self.root / "tests/e2e/baselines")
+        (self.root / "tests/e2e/baselines").mkdir()
+        _, (results, *_) = self.judge("SEL-003/3", {})
+        self.assertTrue(writes_pass(results[0]))
 
 
 if __name__ == "__main__":
