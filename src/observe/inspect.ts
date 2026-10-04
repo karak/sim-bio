@@ -53,7 +53,7 @@ export type ObserveInspect = {
   breakdown(): ReturnType<typeof triangleBreakdown>;
   /** 個体の画面上の位置 (canvas の左上から px)。画面の外・カメラの後ろなら null */
   screen(id: number): { x: number; y: number } | null;
-  /** 直近の計測。0.5 秒たつまでは null */
+  /** 直近の計測。組んでから 0.5 秒たつまでは null (島が替わって組み直した後も、M26-07) */
   stats(): ObserveStats | null;
   debug(): ObserveDebug | null;
   /** いま載せている地形の頂点の高さの要約 (M26-07)。島が替わって観察画面が組み直されたかを、見た目に頼らず読む */
