@@ -1,11 +1,11 @@
 ---
 id: M24-00
 title: タイトル画面の画面遷移図とワイヤーフレーム (UX の設計)
-status: todo
+status: review
 milestone: M24
 plan: docs/uiux/
 depends_on: []
-evidence: []
+evidence: ["9fd3be6 docs/uiux/README.md docs/uiux/2026-10-04-title-flow.md docs/uiux/wireframes/*.svg docs/uiux/wireframes/make_wireframes.py", "審査台 .claude/localreview/m24-00-20261004-1905/index.html"]
 ---
 
 # タイトル画面の画面遷移図とワイヤーフレーム (UX の設計)
@@ -52,3 +52,21 @@ M24 の実装 (M24-01〜03) はこの票の図と W/F の上に立つ。先に�
 - 無し (設計はいまの main と feat/m19 の両方を読んで書く)
 
 ## 作業ログ
+
+### 2026-10-04 (M24-00 の案。ユーザーの承認待ち)
+
+- 作業の場: worktree `.claude/worktrees/m24` (feat/m24、a23bb27。feat/m19 fc409cc を取り込み済み、merge-base を確かめた)
+- 作った物 (9fd3be6 と、レビューの直しの次のコミット)
+  - `docs/uiux/README.md`: フォルダの中身と、図・W/F の読み方
+  - `docs/uiux/2026-10-04-title-flow.md`: 遷移図 (Mermaid の stateDiagram)・画面ごとの目的と入口と出口と戻り道・URL で直に開く場合の起動の判断・UX の根拠 (ux-psychologist・garrett-ux-analysis)・世界観の寄せ方・決めること 5 つの案と推し・M24-01〜03 への申し送り
+  - `docs/uiux/wireframes/`: 6 画面 (title・new-game・load・config・harbor・stage) × 2 幅 (1280×720・390×844) の SVG 12 枚と、書き出す台本 `make_wireframes.py`
+- 文書の名: 票の「作るもの」と M24-01〜03 の `plan:` は `2026-09-29-title-flow.md` を指すが、親の指示で `2026-10-04-title-flow.md` にした。票の参照の書き換えはユーザーの承認を待つ
+- 票を書いた後の事実を入れた: 自由モードの新しい島は新しい seed (M26-10、最初の起動は seed 42、URL の `seed=`)、もう一度は visit を残す (M26-08)、feat/m19 はまだ main に無い
+- 決めること (案と推し。ユーザーに問う)
+  1. 背景のデモ: A 観察画面の 3D / B 操作画面の島を台本で / C 観察画面で撮った止めた絵をゆっくり動かす。推し C (予算を測ってから A)
+  2. コンフィグ: A 画質・動きを減らす・最初の速さ / B A + 板の位置を戻す・手元の島を消す / C B + 音・言語・見守り手の名前。推し A
+  3. 続きから: A 別に出す (最後に遊んだ舞台の印を新しく置く) / B 出さない / C 自由モードの続きだけ。推し A
+  4. 港をタイトルから: A タイトルに港の板 (浜は出さない) / B 自由モードへ移って開く / C 判定の出た島があるときだけ。推し A
+  5. 素の `/` (票に無かった項目): A いつもタイトル / B いまのまま / C タイトル、ただしこのタブで舞台に入った後と開発の印 (E2E の storageState) では飛ばす。推し C
+- レビュー: 別の agent (sonnet、読むだけ) に、図と表を今のコードの道に当ててもらった。直したもの: 本番のビルドに当てる tests/e2e-cloudflare の素の `goto('/')` 5 つ (開発の印が効かない) を案 C の変える物に足した、tests/e2e の素の `/` は 37 (ループの 1 を足した)、SAV-001・HBR-005 は本番ではタイトルを経るので文を直す要がある、移る途中の枠は URL より先には効かない (復元の候補の先頭)、「自由モードへ」は `scenario` と `visit` だけを消す (他の検索語は残る)、`player=` は置き場の DB を分ける、観察画面の画質の鍵も検索語、TUR-002 は退役、港の送り直しは板を組んだときに走る、タイトルからの読込の確かめの文に自動の枠の上書きを添える、W/F の港の文を今の作りの文に揃えた、図の choice の箱の名が消える
+- 審査台: `.claude/localreview/m24-00-20261004-1905/index.html` (図と W/F 12 枚)。ユーザーの承認: 未 (承認の日時をここに書く)

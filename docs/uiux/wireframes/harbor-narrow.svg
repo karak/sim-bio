@@ -14,21 +14,21 @@
 <text x="48" y="196.9" font-size="14" fill="#fff" text-anchor="start" font-weight="bold">石板を選ぶ</text>
 <text x="16" y="254" font-size="12" fill="#888" text-anchor="start" font-weight="normal">開いているとき</text>
 <rect x="16" y="266" width="358" height="120" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
-<text x="32" y="294" font-size="16" fill="#222" text-anchor="start" font-weight="bold">灯る入り江の島</text>
-<text x="32" y="316" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「星を見上げた」</text>
-<text x="32" y="336" font-size="11" fill="#888" text-anchor="start" font-weight="normal">『沈む欠片』を越えた · 確かめた人 3</text>
+<text x="32" y="294" font-size="16" fill="#222" text-anchor="start" font-weight="bold">ムカノラの島</text>
+<text x="32" y="316" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「まだ、ここにいる」</text>
+<text x="32" y="336" font-size="11" fill="#888" text-anchor="start" font-weight="normal">沈む欠片を 100 年、生き延びた · 3 人がたどって確かめた</text>
 <rect x="32" y="344" width="120" height="34" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
 <text x="48" y="365.55" font-size="13" fill="#222" text-anchor="start" font-weight="normal">訪れる</text>
 <rect x="16" y="398" width="358" height="120" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
-<text x="32" y="426" font-size="16" fill="#222" text-anchor="start" font-weight="bold">白い砂の島</text>
-<text x="32" y="448" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「ここで終わる」</text>
-<text x="32" y="468" font-size="11" fill="#888" text-anchor="start" font-weight="normal">『空の舟』で次の島へ逃れた</text>
+<text x="32" y="426" font-size="16" fill="#222" text-anchor="start" font-weight="bold">ハリンの洲</text>
+<text x="32" y="448" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「また始めよう」</text>
+<text x="32" y="468" font-size="11" fill="#888" text-anchor="start" font-weight="normal">空の舟の 182 年目に、次の島へ逃れた</text>
 <rect x="32" y="476" width="120" height="34" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
 <text x="48" y="497.55" font-size="13" fill="#222" text-anchor="start" font-weight="normal">訪れる</text>
 <rect x="16" y="530" width="358" height="120" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
-<text x="32" y="558" font-size="16" fill="#222" text-anchor="start" font-weight="bold">霧の岬の島</text>
-<text x="32" y="580" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「また来る」</text>
-<text x="32" y="600" font-size="11" fill="#888" text-anchor="start" font-weight="normal">『火の山の目覚め』で滅んだ</text>
+<text x="32" y="558" font-size="16" fill="#222" text-anchor="start" font-weight="bold">エタモロの環</text>
+<text x="32" y="580" font-size="13" fill="#555" text-anchor="start" font-weight="normal">「海が勝った」</text>
+<text x="32" y="600" font-size="11" fill="#888" text-anchor="start" font-weight="normal">火の山の目覚めの 80 年目に滅びた</text>
 <rect x="32" y="608" width="120" height="34" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
 <text x="48" y="629.55" font-size="13" fill="#222" text-anchor="start" font-weight="normal">訪れる</text>
 <rect x="16" y="668" width="245" height="23" rx="2" fill="#fff" stroke="#555" stroke-width="1" stroke-dasharray="6 4"/>

@@ -15,12 +15,13 @@
 | `seed=<n>` | 自由モード。その seed の島の続きだけを戻し、無ければその seed の新しい島 (M26-10) | `bootSeedOf`・`seedMatches` |
 | `scenario=<id>` | その石板。途中の島があれば続きから (M19-14)、判定の出た石板は初めから。`seed=` は落とす | `bootPlanOf`・`resumeScenario` |
 | `scenario=<id>&visit=<id>` | 他人の島の訪問。手元に何も書かない | `bootPlanOf` の `visitIdOf` |
-| `visit=` だけ | 自由モード (石板の無い訪問は組めない) | `visitIdOf` |
+| `visit=` だけ | 自由モード (石板の無い訪問は組めない)。`visit=` は URL に残る | `visitIdOf` |
 | `scenario=<知らない id>` | 自由モード。URL から `scenario` と `visit` を消す (M19-17) | `bootPlanOf` の unknown |
-| `player=`・`dev=1`・`paused=1`・`clock=`・`shortcut=alive`・`acceptance=` | 舞台は変えない。開発と受入のビルドだけが読む修飾 (M19-16・M25-02) | `src/dev/session.ts` |
+| `player=`・`dev=1`・`paused=1`・`clock=`・`shortcut=alive`・`acceptance=` | 舞台は変えない。開発と受入のビルドだけが読む修飾 (M19-16・M25-02)。`player=` は置き場の DB も分ける (別の自動の枠・続き) | `src/dev/session.ts` |
+| `shadow=`・`grass=`・`msaa=`・`pr=`・`dynres=`・`auto=`・`observeDebug` など | 舞台は変えない。観察画面の画質と試験の鍵 (どのビルドでも読む) | `src/observe/view.ts`・`src/observe/entry.ts` |
 
-ほかに、違う舞台の枠を読むために移ってきたときは、sessionStorage の「移る途中の枠」(`takePendingSlot`) が URL より先に効く (M19-17 §4)。
-石板の中の「自由モードへ」と判定の板の「自由モードへ」は、検索語の無い `/` へ移る (`searchFor` が `scenario` を消し、自由モードの seed は `/` に乗っていない)。
+ほかに、違う舞台の枠を読むために移ってきたときは、sessionStorage の「移る途中の枠」(`takePendingSlot`) が、復元の候補の先頭に置かれる (M19-17 §4)。舞台を決めるのは URL のまま。訪問では読まれず、取り出して消すだけ。
+石板の選択 (Tablet の `<select>` の「自由モード」) と判定の板の「自由モードへ」は、`searchFor` で `scenario` と `visit` を消した検索語へ移る。ほかの検索語 (`dev=1` など) は残る。石板の URL の `seed=` は起動で落としてあるので、石板の URL が `?scenario=…` だけなら、移る先は素の `/` になる。
 
 ## 遷移図
 
@@ -38,7 +39,6 @@ stateDiagram-v2
     state "判定の板" as Verdict
     state "訪問 (他人の島)" as Visit
     state "観察画面 (3D)" as Observe
-    state Boot <<choice>>
 
     [*] --> Boot
     Boot --> Title: 素の / (検索語なし・移る途中の枠なし・このタブでまだ舞台に入っていない)
@@ -137,19 +137,25 @@ stateDiagram-v2
 - 検索語のある URL は全部いまのまま直に舞台へ行く。訪問のリンク (`visitHref` の `/?scenario=…&visit=…`)・石板のリンク・seed のリンクを人に渡したとき、受け取った人はタイトルを経ない (深いリンクの意味を保つ)
 - 修飾 (`player=`・`dev=1`・`paused=1` など) は舞台を指さないが、付いていればタイトルを飛ばす。開発と受入の手順は全部いずれかの検索語を付けて開くので、手順は変わらない
 - 「このタブで舞台に入った」印 (sessionStorage) は、石板の中の「自由モードへ」で素の `/` へ移るときと、操作画面で再読み込みしたときにタイトルへ戻されないためのもの。タブを閉じれば消えるので、次に開いたときはタイトルから
-- E2E は素の `goto('/')` が 36 か所ある (tests/e2e、2026-10-04)。spec は変えず、`playwright.config.ts` の `use.storageState` で、E2E の dev サーバーの origin の localStorage に `devSkip` の印を置く (1 か所の変更)。タイトルの E2E だけ `test.use({ storageState: { cookies: [], origins: [] } })` で印を外す
-- 受入の正本 (docs/acceptance/scenarios.jsonl) で人が開く URL は、どれも検索語付き (`/?dev=1`・`/?scenario=test-ship&dev=1`・本番の `/?scenario=test-quick`)。素の `/` を開き直す項目 (SAV-001・HBR-005・STG-001) は auto で、E2E の印で今のまま通る
+- 修飾でない検索語 (観察画面の画質の鍵 `shadow=` など) も、付いていればタイトルを飛ばす。規則を「検索語が 1 つでもあれば」の 1 行に保つため
+- `pending` は `takePendingSlot` が取り出して消した後の値を渡す。`bootRouteOf` は 2 度取り出さない
+- E2E (tests/e2e、2026-10-04) は素の `/` を開く所が 37 ある (`goto('/')` が 36、harbor.spec.ts の起動の不変条件の試験が `for (const path of ['/', …])` で 1)。spec は変えず、`playwright.config.ts` の `use.storageState` で、E2E の dev サーバーの origin (`E2E_PORT` から組む) の localStorage に `devSkip` の印を置く (1 か所の変更)。タイトルの E2E だけ `test.use({ storageState: { cookies: [], origins: [] } })` で印を外す。`browser.newContext()` で作る文脈 (freeIslandSeed.spec.ts・devtools.spec.ts) は、どれも検索語付きの URL を開く。config の storageState が手で作った文脈にも効くかは、M24-01 で 1 度確かめる
+- 港の E2E (tests/e2e-cloudflare/harbor.spec.ts、別の config) は本番のビルド (`build:cloudflare`) に当てるので、`devSkip` は効かない。素の `goto('/')` が 5 つあり、検索語付きの URL (例 `/?seed=42`、自由モードの最初の島と同じ島) に書き換える (spec の 5 行)。案 C で spec を変えるのはここだけ
+- 受入の正本 (docs/acceptance/scenarios.jsonl) で人が開く URL は、どれも検索語付き (TUR-001 の `/?scenario=test-ship&dev=1`・本番の OPS-001 の `/?scenario=test-quick`。TUR-002 は退役)。人の手順は変わらない
+- 素の `/` を開き直す auto の項目のうち、STG-001・STG-004 は `pending` で今のまま。SAV-001 (同じ URL を開き直すと続きから) と HBR-005 (`/` で開き直すと港の口に並ぶ) は、E2E では印で今のまま通るが、本番では「タイトル → 続きから」の 1 手が挟まる。この 2 項目の文を「タイトルの続きからで」に直し、印を外したタイトルの E2E で「素の `/` → タイトル → 続きから → 閉じた年から」を 1 本確かめる (M24-02)
 
 ### いまの E2E と受入への響き
 
 | 道 | 推し (案 C) での行き先 | 変える物 |
 |---|---|---|
-| `goto('/')` (36) | 操作画面 (devSkip) | playwright.config.ts に storageState を 1 つ |
+| tests/e2e の素の `/` (37) | 操作画面 (devSkip) | playwright.config.ts に storageState を 1 つ |
+| tests/e2e-cloudflare の `goto('/')` (5、本番のビルド) | タイトル (devSkip が効かない) | 5 行を検索語付きの URL に |
 | `goto('/?scenario=…')`・`/?scenario=…&visit=…` | 石板・訪問 (検索語あり) | 無し |
 | `goto('/?paused=1&seed=…')`・`/?player=…`・`/?dev=1…` | 操作画面 (検索語あり) | 無し |
 | 枠を読んで違う舞台へ移る (STG-001・STG-004) | 枠の舞台 (pending) | 無し |
-| 石板の「自由モードへ」で `/` へ (CNF-001 ほか) | 自由モード (このタブで舞台に入った後) | 無し |
-| 受入の人の手順 (TUR-001・TUR-002・OPS-001) | 検索語ありで直に舞台 | 無し |
+| 石板の選択・判定の板の「自由モードへ」で素の `/` へ (CNF-001 ほか) | 自由モード (このタブで舞台に入った後) | 無し |
+| 受入の人の手順 (TUR-001・OPS-001) | 検索語ありで直に舞台 | 無し |
+| 受入の auto の SAV-001・HBR-005 の文 | E2E は今のまま、本番はタイトルを経る | 文を直す (ユーザーの承認の後) |
 
 ## UX の根拠
 
@@ -247,7 +253,8 @@ ux-psychologist (47 の法則の表) と garrett-ux-analysis (5 層) の観点�
 
 ### 4. 港をタイトルから開いたとき何を見せるか
 
-港は判定の後に意味を持つ。起動では港に問い合わせない (Harbor.ts、M19-09 の不変条件の E2E) ので、タイトルでも「港」を押すまで問い合わせない。
+港は判定の後に意味を持つ。起動では一覧を引かない (Harbor.ts、M19-09 の不変条件の E2E は起動が港に頼らないことを確かめる) ので、タイトルでも「港」を押すまで一覧を引かない。
+ただし、いまは港の板を組んだとき (`mountHarbor`) に、預けた年代記の送り直し (`flushOutbox`、起動の後と 1 時間ごと) が走る。タイトルが舞台より先に出ると、舞台に入るまで送り直しが走らない。タイトルでも送り直しだけは走らせるか、舞台に入るまで待つかを M24-03 で決める (どちらも起動は港に頼らない)。
 
 | 案 | 中身 | 良い所 | 悪い所 |
 |---|---|---|---|
@@ -260,20 +267,20 @@ ux-psychologist (47 の法則の表) と garrett-ux-analysis (5 層) の観点�
 
 ### 5. 起動の判断 (素の `/` をどうするか)
 
-E2E は素の `goto('/')` が 36 か所あり、受入の SAV-001・HBR-005 も `/` を開き直す。票の「URL で直に開く場合」は検索語の付いた URL の話で、素の `/` が残る。
+E2E は素の `/` を開く所が 42 ある (tests/e2e 37・tests/e2e-cloudflare 5)。受入の SAV-001・HBR-005 も `/` を開き直す。票の「URL で直に開く場合」は検索語の付いた URL の話で、素の `/` が残る。
 
 | 案 | 中身 | 良い所 | 悪い所 |
 |---|---|---|---|
-| A. 素の `/` はいつもタイトル | 検索語も移る途中の枠も無ければタイトル。E2E は `goto('/')` を舞台の URL に書き換える | 規則が 1 行。本番と E2E が同じ道を通る | E2E の 36 か所と受入の 3 項目を書き換える (「壊さない側を既定に」に反する)。石板の「自由モードへ」もタイトルに戻されるので、`searchFor` か `go` の効果を変える |
+| A. 素の `/` はいつもタイトル | 検索語も移る途中の枠も無ければタイトル。E2E は素の `/` を舞台の URL に書き換える | 規則が 1 行。本番と E2E が同じ道を通る | E2E の 42 か所 (tests/e2e 37・e2e-cloudflare 5) と受入の 2 項目を書き換える (「壊さない側を既定に」に反する)。石板の「自由モードへ」もタイトルに戻されるので、`searchFor` か `go` の効果を変える |
 | B. 素の `/` はいまのまま、タイトルは別の入口 | `/` は今の操作画面。タイトルは `/?title` などの明示の入口と、HUD の「タイトルへ」から | 何も壊さない | 本番を開いてもタイトルが出ない。依頼 (起動したらタイトル) を満たさない |
-| C. 素の `/` はタイトル、ただしこのタブで舞台に入った後と、開発の印があるときは飛ばす | 上の「起動の判断」の表。E2E は playwright.config.ts の storageState で開発の印を置く | 本番は起動でタイトル。spec と受入の手順は変えない。石板の「自由モードへ」・再読み込みもいまのまま | 規則が 5 行になる (純粋な関数の表で試す)。開発の印は本番のビルドで読まないことを試験で確かめる (DEV-003 と同じ型) |
+| C. 素の `/` はタイトル、ただしこのタブで舞台に入った後と、開発の印があるときは飛ばす | 上の「起動の判断」の表。E2E は playwright.config.ts の storageState で開発の印を置く | 本番は起動でタイトル。tests/e2e の spec と人の受入の手順は変えない。石板の「自由モードへ」・再読み込みもいまのまま | 規則が 5 行になる (純粋な関数の表で試す)。開発の印は本番のビルドで読まないことを試験で確かめる (DEV-003 と同じ型)。本番のビルドに当てる tests/e2e-cloudflare の 5 行と、受入の SAV-001・HBR-005 の文は直す。E2E の素の `/` は本番の起動 (タイトル) を通らないので、タイトルの E2E で補う |
 
 推し: C。
 
 ## M24-01〜03 への申し送り
 
 - M24-01: `bootRouteOf` (上の表) を純粋な関数にし、表の単体試験を先に書く。タイトルは舞台の起動 (`boot()`) より前に出し、選んでから舞台を組む。背景は決めること 1 の案。メニューは `role="menu"`・`menuitem`、矢印・Enter・Esc
-- M24-02: ロードはタイトルに舞台が無いので、いつも「移って読む」の道 (`planSlotLoad` の navigate、`put_pending` → 移る) になる。`planSlotLoad` の `Here` にタイトル (舞台なし) の場合を足すか、包みの舞台へ移る plan を返す薄い包みを置く。ファイルは `stash_import` → 移る途中の枠 `import`。確かめは `askOf({ kind: 'load' })` のまま (自由モードの枠を読むと自動の枠が上書きされるので、確かめは要る)
+- M24-02: ロードはタイトルに舞台が無いので、いつも「移って読む」の道 (`planSlotLoad` の navigate、`put_pending` → 移る) になる。`planSlotLoad` の `Here` にタイトル (舞台なし) の場合を足すか、包みの舞台へ移る plan を返す薄い包みを置く。ファイルは `stash_import` → 移る途中の枠 `import`。確かめは `askOf({ kind: 'load' })` の「舞台を移って読む」を使う。自由モードの枠を読むと移った先で自動の枠が上書きされる (`localSave.replaced`) が、いまの移って読む文 (「自由モードの枠です。自由モードを開いて読みますか」、slotSave.ts) はそれを言わない。タイトルから読むときは「(自動の枠は上書きされます)」を添える文にする
 - M24-02: 新規ゲームの「自由モード」は、自動の枠が無ければ seed 42 の島 (いまの最初の島と同じ、基準画と E2E の前提)、あれば `askOf({ kind: 'new_island' })` で確かめてから `freshSeed` で新しい seed の島 (M26-10)
 - M24-02: コンフィグの値は localStorage の `biotope.*` の 1 つの鍵に JSON で置く。置き場を引数に取り、壊れた値は既定に戻す
 - M24-03: 石板の一覧は Tablet と同じく `hidden` を除き、題・種類 (`防ぐ`・`耐える`・`逃がす`)・予言・年数を出す。選ぶと `searchFor(search, id)` (seed= と visit= を落とす) の行き先へ移る。続きのある石板には「続きあり · N 年」を添える (`loadScenario` を石板ごとに引く)
