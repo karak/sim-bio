@@ -23,6 +23,12 @@ describe('押しとドラッグの判別 (M26-03)', () => {
     expect(run([down(1), move(1, 100 + t + 1, 100), { type: 'up', pointerId: 1 }]).actions.at(-1)).toBe('drag');
   });
 
+  it('しきい値は 10 px (ユーザーの決定 2026-10-04、比較ページ compare-d-20261004-1339)。8 px の揺れは押し、11 px はドラッグ', () => {
+    expect(DRAG_THRESHOLD_PX).toBe(10);
+    expect(run([down(1), move(1, 108, 100), { type: 'up', pointerId: 1 }]).actions.at(-1)).toBe('press');
+    expect(run([down(1), move(1, 111, 100), { type: 'up', pointerId: 1 }]).actions.at(-1)).toBe('drag');
+  });
+
   it('距離は斜めも測り、いったん超えたら戻しても押しに戻らない', () => {
     const far = 100 + DRAG_THRESHOLD_PX;
     expect(run([down(1), move(1, far, far), { type: 'up', pointerId: 1 }]).actions.at(-1)).toBe('drag');

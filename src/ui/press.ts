@@ -3,7 +3,7 @@
  * 動かさずに離したときだけ press (セルを選ぶ)。しきい値を超えて動いた・指が増えた・キャンセルされたときは選ばない。
  * しきい値は押した点からの距離 (px)。マウスの手ぶれと指の揺れは 6 px に収まり、カメラを回すドラッグは数 px で超える
  */
-export const DRAG_THRESHOLD_PX = 6;
+export const DRAG_THRESHOLD_PX = 10;
 
 /** 押している指と、押した点。moved はしきい値を超えた (または指が増えた) 後 true のまま */
 export type PressState = { pointer: number; from: { x: number; y: number }; moved: boolean } | null;
