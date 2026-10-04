@@ -24,6 +24,7 @@ from judge import (
     images_of,
     main,
     parse_output,
+    plan_of,
     prompt_of,
     questions_of,
     records_pass,
@@ -447,6 +448,53 @@ class RunTest(RunBase):
             image_override=[other],
         )
         self.assertEqual(results[0].images[0].image, other)
+
+
+class CropPlanTest(RunBase):
+    """M26-11: crops.json に名のある手順は、全体の画の代わりに切り抜きを当てる。画素の基準・承認済みの画は全体の画のものを見る"""
+
+    steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
+
+    def setUp(self):
+        super().setUp()
+        (self.root / "docs/acceptance/crops.json").write_text(
+            '{"SEL-003/3": "セルの辺り"}', encoding="utf-8"
+        )
+        (self.acc / "shots" / "SEL-003-1-セルの辺り.png").write_bytes(b"crop")
+
+    def test_the_step_in_crops_json_gets_the_crop_not_the_full_image(self):
+        (item,) = plan_of(self.root, self.acc, self.steps, ())
+        self.assertEqual(item.image.name, "SEL-003-1-セルの辺り.png")
+
+    def test_a_step_not_in_crops_json_keeps_the_full_image(self):
+        other = select_steps(sot_of(CODE, scenario()), ["SEL-003/4"])
+        (item,) = plan_of(self.root, self.acc, other, ())
+        self.assertEqual(item.image.name, "SEL-003-2.png")
+
+    def test_a_missing_crop_stops_before_any_call_instead_of_falling_back(self):
+        (self.acc / "shots" / "SEL-003-1-セルの辺り.png").unlink()
+        with self.assertRaises(FileNotFoundError) as cm:
+            plan_of(self.root, self.acc, self.steps, ())
+        self.assertIn("セルの辺り", str(cm.exception))
+
+    def test_the_pixel_baseline_of_the_full_image_still_applies_to_the_crop(self):
+        base = self.root / "tests/e2e/baselines"
+        base.mkdir(parents=True)
+        (base / "SEL-003-1-セルの詳細.png").write_bytes(b"x")
+        (item,) = plan_of(self.root, self.acc, self.steps, ())
+        self.assertTrue(item.pixel_baseline)
+
+    def test_an_explicit_image_wins_over_the_crop(self):
+        other = self.tmp / "defect.png"
+        other.write_bytes(b"x")
+        (item,) = plan_of(self.root, self.acc, self.steps, [other])
+        self.assertEqual(item.image, other)
+
+    def test_the_crop_is_not_counted_as_a_shot(self):
+        from acceptance import shots_of
+
+        got = shots_of(p.name for p in (self.acc / "shots").iterdir())
+        self.assertEqual(len(got["SEL-003"]), 3)
 
 
 class RunGuardsTest(RunBase):
@@ -1170,6 +1218,19 @@ class RepoLlmStepsTest(unittest.TestCase):
         self.assertNotEqual(before, after)
 
 
+class RepoCropTest(unittest.TestCase):
+    """M26-11: SEL-003/3 は全体の画ではなく、選んだセルの辺りの切り抜きに当てる"""
+
+    def test_crops_json_names_only_real_steps(self):
+        crops = json.loads(
+            (REPO / "docs/acceptance/crops.json").read_text(encoding="utf-8")
+        )
+        for key, name in crops.items():
+            select_steps(repo_sot(), [key])
+            self.assertTrue(name.strip(), key)
+        self.assertEqual(crops["SEL-003/3"], "セルの辺り")
+
+
 class RepoBaselinedStepsRunTest(unittest.TestCase):
     """基準画のある手順は、3 票の yes でも results.json に pass を書かず、no と割れだけを書く (ADR 0001 段 5)"""
 
@@ -1178,7 +1239,7 @@ class RepoBaselinedStepsRunTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         self.root, self.acc = tmp / "repo", tmp / "acc"
         (self.root / "docs/acceptance").mkdir(parents=True)
-        for f in ("scenarios.jsonl", "rubrics.json"):
+        for f in ("scenarios.jsonl", "rubrics.json", "crops.json"):
             shutil.copy(REPO / "docs/acceptance" / f, self.root / "docs/acceptance" / f)
         (self.root / "tests/e2e/baselines").mkdir(parents=True)
         (self.acc / "shots").mkdir(parents=True)
@@ -1186,6 +1247,7 @@ class RepoBaselinedStepsRunTest(unittest.TestCase):
             for n in (1, 2, 3):
                 (self.root / f"tests/e2e/baselines/{sid}-{n}-板.png").write_bytes(b"x")
                 (self.acc / "shots" / f"{sid}-{n}.png").write_bytes(b"png")
+        (self.acc / "shots" / "SEL-003-2-セルの辺り.png").write_bytes(b"crop")
         self.sot = repo_sot()
         self.ids = {k: [r["id"] for r in v] for k, v in repo_rubrics().items()}
 
@@ -1194,7 +1256,7 @@ class RepoBaselinedStepsRunTest(unittest.TestCase):
         fake = FakeClaude(
             {
                 n: reply_all(ids, answers.get(n, "yes"))
-                for n in {"SEL-003-1.png", "SEL-003-2.png", "SEL-003-3.png"}
+                for n in {"SEL-003-1.png", "SEL-003-2-セルの辺り.png", "SEL-003-3.png"}
                 | {"CNF-002-1.png", "CNF-002-2.png", "CNF-002-3.png"}
             }
         )
@@ -1234,7 +1296,7 @@ class RepoBaselinedStepsRunTest(unittest.TestCase):
         self.assertIn("CNF-002-1.png", entry["note"])
 
     def test_a_later_pass_keeps_the_item_failing_while_another_step_fails(self):
-        self.judge("SEL-003/3", {"SEL-003-2.png": "no"})
+        self.judge("SEL-003/3", {"SEL-003-2-セルの辺り.png": "no"})
         self.judge("SEL-003/4", {"SEL-003-3.png": "no"})
         self.judge("SEL-003/3", {})
         entry = self.saved()["SEL-003"]
@@ -1243,7 +1305,7 @@ class RepoBaselinedStepsRunTest(unittest.TestCase):
         self.assertIn("SEL-003/4", entry["llm"]["steps"])
 
     def test_a_pass_after_the_only_fail_removes_the_item(self):
-        self.judge("SEL-003/3", {"SEL-003-2.png": "no"})
+        self.judge("SEL-003/3", {"SEL-003-2-セルの辺り.png": "no"})
         self.assertEqual(self.saved()["SEL-003"]["verdict"], "fail")
         self.judge("SEL-003/3", {})
         self.assertNotIn("SEL-003", self.saved())

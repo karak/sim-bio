@@ -23,6 +23,10 @@ CI では回さない (Claude Code の認証も基準画も無い)。鍵は持�
     (上の「合格は書かない」の例外。ADR 0001 の決定: 観察画面は 3 票そろった yes で合格、人は基準画を替えるときにだけ承認する)。
     手順のすべてが合格で、かつ正本の judge が llm の手順をすべて当てたときだけ項目の verdict が pass。足りなければ undecided。
 
+切り抜き (M26-11): docs/acceptance/crops.json に {"<ID>/<n>": "<名前>"} があれば、その手順は全体の画 <ID>-<番号>.png の代わりに <ID>-<番号>-<名前>.png を当てる。
+  - 全体の画では小さすぎて読めない物 (選んだセルの縁の帯) を、shots が撮った切り抜きで見る。切り抜きが無ければ呼ぶ前に止まる。
+  - 画素の基準・承認済みの画は、手順が本来指す全体の画のものを見る (--image と同じ)。
+
 pass の失効 (M25-12): 手順の記録に digest (判じた画・承認済みの画・採点表の問いの内容の sha256) を添える。
   - 次に pnpm run judge が走るとき、呼ぶ前に、digest が今と合わない (画・承認済みの画・採点表が変わった。digest の無い古い記録も) pass を消す。
     今回当てない手順 (--step で絞った回) の pass も消す。項目は undecided になり、note に「まだ当てていない手順」が出る。
@@ -60,6 +64,8 @@ VOTES = 3
 JOBS = 4
 MODEL = "sonnet"
 RUBRICS = Path("docs/acceptance/rubrics.json")
+# 手順の key -> 切り抜きの名前。その手順には、全体の画 <ID>-<n>.png の代わりに <ID>-<n>-<名前>.png を当てる (M26-11)
+CROPS = Path("docs/acceptance/crops.json")
 BASELINES = Path("tests/e2e/baselines")
 APPROVED = Path("docs/acceptance/observe-approved")
 JUDGE_LOG = "judge.json"
@@ -220,6 +226,11 @@ def images_of(
         )
     chosen = [by_n[n] for n in sorted(wanted or by_n)]
     return [shots_root.parent / rel for rel in chosen]
+
+
+def cropped_of(image: Path, name: str) -> Path:
+    """全体の画 <ID>-<n>.png の、<name> の切り抜き (<ID>-<n>-<name>.png。shots_of には数えない名前)"""
+    return image.with_name(f"{image.stem}-{name}.png")
 
 
 def has_pixel_baseline(image: Path, baselines: Path) -> bool:
@@ -714,6 +725,7 @@ def plan_of(
     --image で画を替えたときの基準は、手順が本来指す画のものを見る。
     問いに ref があるのに承認済みの基準画が無ければ、呼ぶ前に FileNotFoundError"""
     rubrics = _read_json(root / RUBRICS)
+    crops = _read_json(root / CROPS)
     shots_dir = out_dir / SHOTS_DIR
     shots = shots_of(
         p.name for p in (shots_dir.iterdir() if shots_dir.is_dir() else ())
@@ -721,7 +733,10 @@ def plan_of(
     plan = []
     for step in steps:
         nominal = images_of(step, shots, shots_dir) if shots.get(step.scenario) else []
-        images = list(image_override) or nominal
+        crop = crops.get(step.key)
+        images = list(image_override) or (
+            [cropped_of(p, crop) for p in nominal] if crop else nominal
+        )
         if not images:
             raise FileNotFoundError(
                 f"{step.key} の画が {shots_dir} に無い ({step.scenario}-*.png)"
@@ -733,8 +748,9 @@ def plan_of(
             )
         qs = questions_of(step, rubrics)
         baselined = any(has_pixel_baseline(p, root / BASELINES) for p in nominal)
-        # --image で替えた画は、手順が本来指す画 (nominal) の承認済みの基準画と並べる
-        own = [q.name for q in nominal] if image_override and nominal else []
+        # --image で替えた画・切り抜いた画は、手順が本来指す画 (nominal) の承認済みの基準画・画素の基準と並べる
+        replaced = bool(image_override or crop)
+        own = [q.name for q in nominal] if replaced and nominal else []
         for i, p in enumerate(images):
             ref = root / APPROVED / (own[min(i, len(own) - 1)] if own else p.name)
             approved = ref if ref.is_file() and any(q.ref for q in qs) else None
@@ -747,9 +763,7 @@ def plan_of(
                     step,
                     qs,
                     p,
-                    baselined
-                    if image_override
-                    else has_pixel_baseline(p, root / BASELINES),
+                    baselined if replaced else has_pixel_baseline(p, root / BASELINES),
                     approved,
                 )
             )
