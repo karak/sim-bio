@@ -20,7 +20,7 @@ export const TEXT_STRIPS: ReadonlySet<string> = new Set(['訪問のリンク', '
  * 画ごとに変わる字 (年代記の hash から決まる島の名前) は、mask に渡した要素の箱を塗りつぶして比べる (M25-14)。
  * 箱の大きさは字の長さに依らない要素 (横いっぱいの見出し) を渡す。字の長さで箱が変わると、覆っても差が出る
  */
-export const optionsFor = (name: string, mask?: readonly Locator[]) => {
+export const optionsFor = (name: string, mask?: readonly Locator[]): { threshold: number; maxDiffPixelRatio: number; animations: 'disabled'; caret: 'hide'; mask?: Locator[] } => {
   const base = TEXT_STRIPS.has(name) ? { ...BASELINE_OPTIONS, maxDiffPixelRatio: TEXT_STRIP_RATIO } : BASELINE_OPTIONS;
   return mask && mask.length > 0 ? { ...base, mask: [...mask] } : base;
 };
