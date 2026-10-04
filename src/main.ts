@@ -14,6 +14,7 @@ import { resolveCivilizationStart } from './simulation/civilization';
 import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
+import { IDLE, pressStep, type PressInput } from './ui/press';
 import { cargoOfHold, planLanding, type LandResult } from './harbor/cargo';
 import { afterVerdictOf } from './harbor/dock';
 import type { DrawnCargo } from './harbor/contract';
@@ -458,7 +459,21 @@ async function boot(): Promise<void> {
 
   // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す
   hud.setShipEnabled(!scenario || !!scenario.escape);
+  // カメラのドラッグの終わりにも click が来る。押しと判別し、ドラッグだったときは次の click を選びにしない (M26-03)
+  let press = IDLE;
+  let dragged = false;
+  const feedPress = (input: PressInput) => {
+    const step = pressStep(press, input);
+    press = step.state;
+    if (input.type === 'down') dragged = false;
+    if (step.action === 'drag') dragged = true;
+  };
+  canvas.addEventListener('pointerdown', (e) => feedPress({ type: 'down', pointerId: e.pointerId, x: e.clientX, y: e.clientY }));
+  canvas.addEventListener('pointermove', (e) => feedPress({ type: 'move', pointerId: e.pointerId, x: e.clientX, y: e.clientY }));
+  canvas.addEventListener('pointerup', (e) => feedPress({ type: 'up', pointerId: e.pointerId }));
+  canvas.addEventListener('pointercancel', (e) => feedPress({ type: 'cancel', pointerId: e.pointerId }));
   canvas.addEventListener('click', (e) => {
+    if (dragged) return;
     const cell = view.pickCell(e.clientX, e.clientY);
     if (cell === null) return;
     if (spawnArmed) {

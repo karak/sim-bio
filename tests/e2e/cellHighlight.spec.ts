@@ -88,3 +88,35 @@ test('M22-10: 操作画面で島を押すと、そのセルに境界の帯と浮
   expect(cleared?.outline).toBeNull();
   expect(cleared?.marker).toBeNull();
 });
+
+test('M26-03: カメラをドラッグして離しても、その下のセルは選ばれず #cell-info は開かない。押すと開く', async ({ page }) => {
+  await page.goto('/');
+  await page.click('#speed-0');
+  await expect.poll(async () => (await selection(page))?.drawCalls ?? 0, { timeout: 15_000 }).toBeGreaterThan(0);
+  const box = await page.locator('#scene').boundingBox();
+  if (!box) throw new Error('canvas not found');
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height * 0.55;
+
+  // ドラッグ (押す → 20 px 以上動かす → 離す)。島の上で離しても選ばない
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 60, cy + 10, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator('#cell-info')).toBeEmpty();
+  expect((await selection(page))?.cell).toBeNull();
+
+  // 動かさない押しは選び、#cell-info が開く
+  await page.mouse.click(cx, cy);
+  await expect(page.locator('#cell-info')).toContainText('セル (');
+  const picked = await pickedCell(page);
+  await expect.poll(async () => (await selection(page))?.cell, { timeout: 15_000 }).toBe(picked.y * 128 + picked.x);
+
+  // 選んだあとのドラッグは、選びを変えない
+  await page.mouse.move(cx - 100, cy - 40);
+  await page.mouse.down();
+  await page.mouse.move(cx + 100, cy + 40, { steps: 8 });
+  await page.mouse.up();
+  expect((await selection(page))?.cell).toBe(picked.y * 128 + picked.x);
+  expect(await pickedCell(page)).toEqual(picked);
+});
