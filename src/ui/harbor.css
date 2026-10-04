@@ -3,6 +3,8 @@
  * 島の名とひとことは刻んだ文字 (明朝)、操作は HUD と同じ小さな札。光らせるのは継ぎ目の線と「出港する」「訪れる」だけにする
  */
 :root {
+  /* 港の札 (.harbor-dock) の幅。HUD の左下の板 (.hud-bl) はこの右に置く (hud.css、M25-10) */
+  --harbor-dock-w: 36px;
   --harbor-face-hi: #33504e;
   --harbor-face: #223736;
   --harbor-face-lo: #182827;
@@ -50,7 +52,7 @@
 .harbor-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 
 /* 港の口: 左の縁に立てた石の札 */
-.harbor-dock { position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 9px 14px 7px; border: 0; cursor: pointer; color: var(--harbor-text); background: linear-gradient(180deg, var(--harbor-face-hi), var(--harbor-face-lo)); clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%); box-shadow: inset -1px 0 0 rgba(126, 145, 139, 0.7), inset 0 1px 0 rgba(220, 255, 248, 0.25); }
+.harbor-dock { position: absolute; left: 0; top: 50%; box-sizing: border-box; width: var(--harbor-dock-w); transform: translateY(-50%); z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 9px 14px 7px; border: 0; cursor: pointer; color: var(--harbor-text); background: linear-gradient(180deg, var(--harbor-face-hi), var(--harbor-face-lo)); clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%); box-shadow: inset -1px 0 0 rgba(126, 145, 139, 0.7), inset 0 1px 0 rgba(220, 255, 248, 0.25); }
 .harbor-dock-glyph { font: 600 20px/1 var(--harbor-carve); text-shadow: 0 0 8px rgba(143, 234, 223, 0.55); }
 .harbor-dock[aria-expanded='true'] .harbor-dock-glyph { color: var(--harbor-glow); }
 .harbor-dock-count { writing-mode: vertical-rl; text-orientation: upright; font-size: 11px; color: #f2d27a; letter-spacing: 0.1em; }

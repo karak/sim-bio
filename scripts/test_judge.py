@@ -376,7 +376,7 @@ class RunTest(RunBase):
     def test_run_calls_three_times_per_image_writes_fail_only_and_logs_everything(self):
         fake = FakeClaude({"SEL-003-1.png": reply("S", "no", "ピンが無い")})
         steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
-        results, _, cost, skipped = run(
+        results, _, cost, skipped, _ = run(
             self.root, self.acc, steps, runner=fake, model="sonnet", votes=3, jobs=2
         )
         self.assertEqual(len(fake.calls), 3)
@@ -396,7 +396,7 @@ class RunTest(RunBase):
         )
         fake = FakeClaude({"SEL-003-1.png": reply("S", "yes")})
         steps = select_steps(sot_of(CODE, scenario()), ["SEL-003/3"])
-        _, _, _, skipped = run(
+        _, _, _, skipped, _ = run(
             self.root, self.acc, steps, runner=fake, model="sonnet", votes=3, jobs=1
         )
         self.assertEqual(
@@ -753,7 +753,7 @@ def obs_reply(a="yes"):
     )
 
 
-class ObserveTest(RunBase):
+class ObserveBase(RunBase):
     """承認済みの観察画面の基準画を並べ、3 票の yes を合格として書く (M25-07)"""
 
     def setUp(self):
@@ -790,6 +790,8 @@ class ObserveTest(RunBase):
     def results(self):
         return json.loads((self.acc / "results.json").read_text(encoding="utf-8"))
 
+
+class ObserveTest(ObserveBase):
     def test_the_approved_image_of_the_same_name_is_handed_over_with_the_question(self):
         fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
         self.judge([], fake)
@@ -827,7 +829,7 @@ class ObserveTest(RunBase):
             '{"OBS-002": {"verdict": "hold", "note": "", "at": "x"}}'
         )
         fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
-        _, _, _, skipped = self.judge([], fake)
+        _, _, _, skipped, _ = self.judge([], fake)
         self.assertEqual(self.results()["OBS-002"]["verdict"], "hold")
         self.assertEqual(skipped, ["OBS-002"])
 
@@ -893,6 +895,142 @@ class ObserveTest(RunBase):
         step = StepResult(StepRef("SEL-003", 3, "t"), (img,))
         self.assertTrue(writes_pass(step))
         self.assertFalse(records_pass(step))
+
+
+class StaleTest(ObserveBase):
+    """LLM の pass は、判じた画・承認済みの画・採点表の hash を持ち、合わなくなれば消える (M25-12)"""
+
+    def judged(self):
+        fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
+        self.judge([], fake)
+        return fake
+
+    def digest(self, key="OBS-002/2"):
+        return self.results()["OBS-002"]["llm"]["steps"][key]["digest"]
+
+    def test_a_recorded_pass_carries_a_digest_and_the_log_has_the_same_one(self):
+        self.judged()
+        d = self.digest()
+        self.assertRegex(d, r"^[0-9a-f]{64}$")
+        log = json.loads((self.acc / "judge.json").read_text(encoding="utf-8"))
+        self.assertEqual(log["OBS-002/2"]["digest"], d)
+        self.assertNotEqual(self.digest("OBS-002/3"), d)
+
+    def test_the_digest_is_the_same_when_nothing_changed(self):
+        self.judged()
+        before = self.digest()
+        self.judged()
+        self.assertEqual(self.digest(), before)
+
+    def test_the_digest_changes_with_the_shot_the_approved_image_or_the_rubric(self):
+        self.judged()
+        base = self.digest()
+        (self.acc / "shots" / "OBS-002-1.png").write_bytes(b"changed")
+        self.judged()
+        shot = self.digest()
+        (self.approved / "OBS-002-1.png").write_bytes(b"changed")
+        self.judged()
+        approved = self.digest()
+        rub = json.loads((self.root / "docs/acceptance/rubrics.json").read_text())
+        rub["OBS-002/2"][0]["q"] = "陸が写り、空も描かれている"
+        (self.root / "docs/acceptance/rubrics.json").write_text(json.dumps(rub))
+        self.judged()
+        rubric = self.digest()
+        self.assertEqual(len({base, shot, approved, rubric}), 4)
+
+    def test_a_changed_shot_drops_its_pass_even_when_the_run_judges_only_the_other_step(
+        self,
+    ):
+        self.judged()
+        (self.acc / "shots" / "OBS-002-1.png").write_bytes(b"changed")
+        fake = FakeClaude({"OBS-002-2.png": obs_reply()})
+        _, _, _, _, stale = self.judge(["OBS-002/3"], fake)
+        e = self.results()["OBS-002"]
+        self.assertEqual(sorted(e["llm"]["steps"]), ["OBS-002/3"])
+        self.assertEqual(e["verdict"], "undecided")
+        self.assertIn("OBS-002/2", e["note"])
+        self.assertEqual(stale, ["OBS-002/2"])
+
+    def test_a_full_run_after_a_change_judges_again_and_passes_again(self):
+        self.judged()
+        (self.acc / "shots" / "OBS-002-1.png").write_bytes(b"changed")
+        fake = self.judged()
+        self.assertEqual(len(fake.calls), 6)
+        self.assertEqual(self.results()["OBS-002"]["verdict"], "pass")
+
+    def test_a_pass_whose_inputs_did_not_change_stays_when_another_step_is_rejudged(
+        self,
+    ):
+        self.judged()
+        fake = FakeClaude({"OBS-002-2.png": obs_reply()})
+        _, _, _, _, stale = self.judge(["OBS-002/3"], fake)
+        e = self.results()["OBS-002"]
+        self.assertEqual(sorted(e["llm"]["steps"]), ["OBS-002/2", "OBS-002/3"])
+        self.assertEqual((e["verdict"], stale), ("pass", []))
+
+    def test_a_pass_without_a_digest_is_stale(self):
+        self.judged()
+        doc = self.results()
+        del doc["OBS-002"]["llm"]["steps"]["OBS-002/2"]["digest"]
+        (self.acc / "results.json").write_text(json.dumps(doc))
+        fake = FakeClaude({"OBS-002-2.png": obs_reply()})
+        _, _, _, _, stale = self.judge(["OBS-002/3"], fake)
+        self.assertEqual(stale, ["OBS-002/2"])
+        self.assertEqual(self.results()["OBS-002"]["verdict"], "undecided")
+
+    def test_a_recorded_fail_is_kept_when_the_shot_changes(self):
+        self.judged()
+        doc = self.results()
+        doc["OBS-002"]["verdict"] = "fail"
+        doc["OBS-002"]["llm"]["steps"]["OBS-002/3"]["verdict"] = "fail"
+        (self.acc / "results.json").write_text(json.dumps(doc))
+        (self.acc / "shots" / "OBS-002-2.png").write_bytes(b"changed")
+        fake = FakeClaude({"OBS-002-1.png": obs_reply()})
+        self.judge(["OBS-002/2"], fake)
+        steps = self.results()["OBS-002"]["llm"]["steps"]
+        self.assertEqual(steps["OBS-002/3"]["verdict"], "fail")
+
+    def test_a_stale_pass_is_dropped_and_only_the_rejudged_fail_remains(self):
+        self.judged()
+        doc = self.results()
+        doc["OBS-002"]["llm"]["steps"].pop("OBS-002/3")
+        (self.acc / "results.json").write_text(json.dumps(doc))
+        (self.acc / "shots" / "OBS-002-1.png").write_bytes(b"changed")
+        fake = FakeClaude({"OBS-002-2.png": obs_reply("no")})
+        self.judge(["OBS-002/3"], fake)
+        # OBS-002/2 は消え、判じ直した OBS-002/3 の fail だけが残る
+        self.assertEqual(
+            sorted(self.results()["OBS-002"]["llm"]["steps"]), ["OBS-002/3"]
+        )
+
+    def test_a_human_verdict_is_never_pruned(self):
+        (self.acc / "results.json").write_text(
+            json.dumps(
+                {
+                    "OBS-002": {
+                        "verdict": "pass",
+                        "note": "",
+                        "at": "x",
+                        "llm": {"steps": {"OBS-002/2": {"verdict": "yes"}}},
+                    }
+                }
+            )
+        )
+        fake = FakeClaude({"OBS-002-1.png": obs_reply(), "OBS-002-2.png": obs_reply()})
+        self.judge([], fake)
+        e = self.results()["OBS-002"]
+        self.assertEqual(e["at"], "x")
+        self.assertIn("OBS-002/2", e["llm"]["steps"])
+
+    def test_a_trial_with_an_explicit_image_does_not_touch_the_records(self):
+        self.judged()
+        (self.acc / "shots" / "OBS-002-1.png").write_bytes(b"changed")
+        before = (self.acc / "results.json").read_text()
+        defect = self.tmp / "defect.png"
+        defect.write_bytes(b"d")
+        fake = FakeClaude({"defect.png": obs_reply("no")})
+        self.judge(["OBS-002/2"], fake, image_override=[defect])
+        self.assertEqual((self.acc / "results.json").read_text(), before)
 
 
 class ReferencePromptTest(unittest.TestCase):
