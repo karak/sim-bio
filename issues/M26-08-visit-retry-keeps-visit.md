@@ -1,11 +1,16 @@
 ---
 id: M26-08
 title: 訪問中に判定の板の「もう一度」を押すと visit を残して同じ訪問を開き直す
-status: open
+status: review
 milestone: M26
 plan: null
 depends_on: [M26-02]
-evidence: []
+evidence:
+  - "1ade935 fix(place): 訪問中の「もう一度」は visit を残して同じ訪問を開き直す (src/app/place.ts の Op retry・Effect go の keepVisit・searchFor の keepVisit、src/ui/Tablet.ts の onRetry、src/main.ts)"
+  - "tests/unit/app.place.test.ts 'searchFor (M26-08): 「もう一度」は visit を残し…'・'planOp (M26-08): もう一度は visit を残す行き先…' (修正前に赤を確認)"
+  - "tests/unit/ui.tablet.dom.test.ts 'M26-08: onRetry を渡すと「もう一度」はそちらを呼び…' (修正前に赤を確認)"
+  - "tests/e2e/harbor.spec.ts 'M26-08: 訪問が判定まで進んだあとの「もう一度」は、URL の visit を残して…' (修正前に赤を確認: URL が ?scenario=test-civ になる)"
+  - "pnpm run check 通過 (unit 1248・worker 66)。E2E harbor・confirm・verdict 25 本通過 (M26-02 の E2E を含む)"
 ---
 
 # 訪問中の「もう一度」は visit を残す
@@ -25,10 +30,11 @@ M26-02 で `searchFor` が visit を落とすようにした。判定の板の�
 
 ## Acceptance criteria
 
-- [ ] 訪問中の「もう一度」で visit が残る試験 (単体・E2E) が通る。直す前に赤
-- [ ] 訪問中に石板を選ぶと visit が落ちる試験 (M26-02) が通るまま
-- [ ] `pnpm run check` と関わる E2E が通る
+- [x] 訪問中の「もう一度」で visit が残る試験 (単体・E2E) が通る。直す前に赤
+- [x] 訪問中に石板を選ぶと visit が落ちる試験 (M26-02) が通るまま
+- [x] `pnpm run check` と関わる E2E が通る
 
 ## 作業ログ
 
 - 2026-10-04: 起票 (ユーザーの決定「visit を残す」)。
+- 2026-10-04: 実装 (1ade935)。判定の板の「もう一度」を Op `retry` に分け、go の effect に keepVisit を付けて searchFor が visit を残す。確かめと flush は select と同じ (訪問では確かめず、何も書かない)。石板を一覧から選ぶ select は visit を落とすまま。Tablet は onRetry を省略すると onSelect と同じ動き (既存の試験はそのまま通る)。
