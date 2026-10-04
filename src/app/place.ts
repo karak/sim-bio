@@ -2,6 +2,7 @@ import type { Chronicle, ChronicleHead } from '../harbor/chronicle';
 import { parseChronicleId, type ChronicleId } from '../harbor/contract';
 import { checkSlot, planSlotLoad, type Here, type SlotSave } from '../persist/slotSave';
 import type { ManualSlot, PendingSlot, SlotId } from '../persist/slots';
+import type { TabMarks } from '../persist/tabMarks';
 import type { RunnerState } from '../scenario/ScenarioRunner';
 import type { ScenarioDef, ScenarioStatus } from '../scenario/types';
 import type { SaveData } from '../simulation/types';
@@ -154,6 +155,20 @@ export function bootPlanOf<S extends { id: string }>(search: string, scenarios: 
   const slot: Restore[] = pending ? [{ from: 'slot', slot: pending }] : [];
   const restore: Restore[] = visitId ? [] : [...slot, scenario ? { from: 'scenario' } : { from: 'auto' }];
   return { scenario, visitId, unknown, restore };
+}
+
+/** 起動の行き先 (M24-01)。タイトルか、bootPlanOf が決める舞台か */
+export type BootRoute<S> = { kind: 'title' } | { kind: 'stage'; plan: BootPlan<S> };
+
+/**
+ * 起動の行き先 (M24-01、docs/uiux/2026-10-04-title-flow.md の「起動の判断」)。上から順に: タイトルの合図ならタイトル、
+ * 移る途中の枠・検索語が 1 つでもある・このタブで舞台に入った後・開発の印 (devSkip、本番のビルドでは常に false) なら舞台、どれでもなければタイトル。
+ * 舞台の中身は bootPlanOf が決める (起動の道を 2 つ持たない)。pending は takePendingSlot が取り出した後の値
+ */
+export function bootRouteOf<S extends { id: string }>(search: string, scenarios: readonly S[], pending: PendingSlot | null, marks: TabMarks, devSkip: boolean): BootRoute<S> {
+  if (marks.openTitle) return { kind: 'title' };
+  const stage = pending !== null || new URLSearchParams(search).size > 0 || marks.entered || devSkip;
+  return stage ? { kind: 'stage', plan: bootPlanOf(search, scenarios, pending) } : { kind: 'title' };
 }
 
 /** 訪問の道。石板の無い道 (自由モード) では訪問しない (その島を組めない) */

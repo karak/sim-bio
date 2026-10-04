@@ -84,3 +84,14 @@ export function devSessionOf(params: URLSearchParams): DevSession {
   };
   return session;
 }
+
+/** E2E と開発の手順でタイトルを飛ばす印 (M24-01)。playwright.config.ts の use.storageState が localStorage に置く。本番のビルドはこの module を読まないので効かない */
+export const SKIP_TITLE_KEY = 'biotope-dev-skip-title';
+
+export function skipsTitle(storage: Pick<Storage, 'getItem'>): boolean {
+  try {
+    return storage.getItem(SKIP_TITLE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}

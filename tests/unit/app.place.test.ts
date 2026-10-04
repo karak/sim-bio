@@ -7,7 +7,7 @@ import { recordChronicle } from '../../src/chronicle/recorder';
 import { SIM_VERSION } from '../../src/simulation/version';
 import type { SlotSave } from '../../src/persist/slotSave';
 import type { ChronicleId } from '../../src/harbor/contract';
-import { atOf, bootPlanOf, bootSeedOf, freshSeed, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, slotControlsOf, type At, type Effect, type Op, type Plan } from '../../src/app/place';
+import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, freshSeed, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, slotControlsOf, type At, type Effect, type Op, type Plan } from '../../src/app/place';
 import { resumeIsland } from '../fixtures/resumeIsland';
 
 const island = resumeIsland('test-quick', 5);
@@ -197,6 +197,40 @@ describe('起動の舞台と戻し方 bootPlanOf (M21-07)', () => {
     // 訪問の道は石板の中だけ (自由モードではその島を組めない)。読めない visit は訪問にしない
     expect(bootPlanOf(`?visit=${visitId}`, scenarios, null)).toMatchObject({ visitId: null, restore: [{ from: 'auto' }] });
     expect(bootPlanOf('?scenario=test-quick&visit=nope', scenarios, null)).toMatchObject({ visitId: null, restore: [{ from: 'scenario' }] });
+  });
+});
+
+describe('起動の行き先 bootRouteOf (M24-01)', () => {
+  const none = { entered: false, openTitle: false };
+  const entered = { entered: true, openTitle: false };
+  const openTitle = { entered: true, openTitle: true };
+  type Row = [why: string, search: string, pending: 'manual-2' | 'import' | null, marks: typeof none, devSkip: boolean, to: 'title' | { scenario: string | null; visitId?: ChronicleId | null; restore: unknown[] }];
+  const rows: Row[] = [
+    ['素の / はタイトル', '', null, none, false, 'title'],
+    ['? だけ (検索語 0 個) もタイトル', '?', null, none, false, 'title'],
+    ['「タイトルへ」の合図はほかの全部より先 (検索語・移る途中の枠・舞台に入った後)', '?seed=7&dev=1', 'manual-2', openTitle, true, 'title'],
+    ['移る途中の枠は、素の / でもその枠から舞台を開く', '', 'manual-2', none, false, { scenario: null, restore: [{ from: 'slot', slot: 'manual-2' }, { from: 'auto' }] }],
+    ['移る途中の枠 (石板へ) は石板を開く', '?scenario=test-quick', 'import', none, false, { scenario: 'test-quick', restore: [{ from: 'slot', slot: 'import' }, { from: 'scenario' }] }],
+    ['seed= は自由モード', '?seed=42', null, none, false, { scenario: null, restore: [{ from: 'auto' }] }],
+    ['scenario= は石板', '?scenario=sinking', null, none, false, { scenario: 'sinking', restore: [{ from: 'scenario' }] }],
+    ['scenario= と visit= は訪問 (何も戻さない)', `?scenario=test-quick&visit=${visitId}`, null, none, false, { scenario: 'test-quick', visitId, restore: [] }],
+    ['修飾だけ (dev=1) でもタイトルを飛ばす', '?dev=1', null, none, false, { scenario: null, restore: [{ from: 'auto' }] }],
+    ['観察画面の画質の鍵 (shadow=) でもタイトルを飛ばす', '?shadow=0', null, none, false, { scenario: null, restore: [{ from: 'auto' }] }],
+    ['知らない石板も検索語なので舞台 (自由モード、unknown は bootPlanOf のまま)', '?scenario=nope', null, none, false, { scenario: null, restore: [{ from: 'auto' }] }],
+    ['このタブで舞台に入った後の素の / は自由モード (「自由モードへ」・再読み込み)', '', null, entered, false, { scenario: null, restore: [{ from: 'auto' }] }],
+    ['開発の印 (E2E の storageState) があれば素の / は自由モード', '', null, none, true, { scenario: null, restore: [{ from: 'auto' }] }],
+  ];
+  it.each(rows)('bootRouteOf (M24-01): %s', (_why, search, pending, marks, devSkip, to) => {
+    const route = bootRouteOf(search, scenarios, pending, marks, devSkip);
+    if (to === 'title') {
+      expect(route).toEqual({ kind: 'title' });
+      return;
+    }
+    expect(route.kind).toBe('stage');
+    if (route.kind !== 'stage') return;
+    // 舞台の側は bootPlanOf と同じもの (起動の道を 2 つ持たない)
+    expect(route.plan).toEqual(bootPlanOf(search, scenarios, pending));
+    expect({ scenario: route.plan.scenario?.id ?? null, visitId: route.plan.visitId, restore: route.plan.restore }).toEqual({ visitId: null, ...to });
   });
 });
 
