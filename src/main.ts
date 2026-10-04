@@ -70,8 +70,10 @@ async function boot(): Promise<void> {
   const enterFromTitle = async () => {
     // 置き場が答えなくてもタイトルは出す (続きからを出さないだけ)
     const listed = store ? store.list().catch((e: unknown) => (titleLog('warn', 'persist.list.failed', { error: String(e) }), [])) : Promise.resolve([]);
-    const timeout = new Promise<[]>((resolve) => setTimeout(() => (titleLog('warn', 'persist.list.timeout', { ms: TITLE_LIST_TIMEOUT_MS }), resolve([])), TITLE_LIST_TIMEOUT_MS));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<[]>((resolve) => (timer = setTimeout(() => (titleLog('warn', 'persist.list.timeout', { ms: TITLE_LIST_TIMEOUT_MS }), resolve([])), TITLE_LIST_TIMEOUT_MS)));
     const slots = await Promise.race([listed, timeout]);
+    clearTimeout(timer);
     const continuation = slots.find((s) => s.slot === 'auto' && s.stage === 'free') ?? null;
     const root = document.getElementById('app');
     if (!root) throw new Error('#app missing');
