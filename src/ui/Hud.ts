@@ -77,6 +77,8 @@ export type HudHandlers = {
   onCommand(cmd: Command): void;
   onSpeed(s: Speed): void;
   onLayer(l: LayerKind): void;
+  /** 選んでいる種のレイヤーが変わった (M21-02 D5)。種のレイヤー以外を選んだら null。密度 / 適地の切り替えでは呼ばない */
+  onSpeciesLayer?(id: string | null): void;
   /** ファイルへの保存と読込 (M19-17 で舞台を名乗る包みにした。読んだ値の確かめは main.ts が持つ) */
   onSave(): SlotSave;
   onLoad(data: unknown): void;
@@ -240,6 +242,7 @@ export function createHud(
     $(`layer-${l.id}`).addEventListener('click', () => {
       activeSpeciesId = null;
       h.onLayer(l.id);
+      h.onSpeciesLayer?.(null);
       setOn('layer-row', `layer-${l.id}`);
       setLayerModeUI();
     });
@@ -258,6 +261,7 @@ export function createHud(
   const showSpeciesLayerInner = (id: string) => {
     activeSpeciesId = id;
     h.onLayer(layerMode === 'suit' ? `suit:${id}` : `species:${id}`);
+    h.onSpeciesLayer?.(id);
     setOn('layer-row', `layer-species-${id}`);
     setLayerModeUI();
   };

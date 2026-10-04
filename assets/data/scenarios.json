@@ -423,6 +423,7 @@
       {
         "atYear": 6,
         "everyYears": 8,
+        "noticeYears": 2,
         "text": "狼の群れが北の谷に下りた。集落へ着くまで三月",
         "command": {
           "type": "spawn_species",
@@ -937,10 +938,11 @@
     "start": {
       "seed": 42
     },
-    "years": 3,
+    "years": 30,
     "schedule": [
       {
         "atYear": 1,
+        "noticeYears": 30,
         "text": "狼の群れが北の谷に下りた",
         "command": {
           "type": "spawn_species",
@@ -953,7 +955,7 @@
     ],
     "alive": {
       "type": "year_reached",
-      "year": 3
+      "year": 30
     }
   }
 ]
