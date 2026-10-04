@@ -4,6 +4,8 @@
  * 置き場は playwright.config.ts の snapshotPathTemplate (tests/e2e/baselines/)。受入の画面の shots/ とは別で、check_shots には見えない
  */
 
+import type { Locator } from '@playwright/test';
+
 export const BASELINE_OPTIONS = { threshold: 0.2, maxDiffPixelRatio: 0.02, animations: 'disabled', caret: 'hide' } as const;
 
 /**
@@ -12,9 +14,16 @@ export const BASELINE_OPTIONS = { threshold: 0.2, maxDiffPixelRatio: 0.02, anima
  * 文は撮る前に toHaveText で確かめているので、この画が見るのは置き場のずれ (字を横に 2px ずらすと訪問のリンク 0.13・受け取りの文 0.21 で落ちる。M25-03 の作業ログ)。要素名で引く
  */
 export const TEXT_STRIP_RATIO = 0.12;
-export const TEXT_STRIPS: ReadonlySet<string> = new Set(['訪問のリンク', '積荷の知らせ', '受け取りの文', 'セルの詳細', '島の名前', '年表の結末']);
+export const TEXT_STRIPS: ReadonlySet<string> = new Set(['訪問のリンク', '積荷の知らせ', '受け取りの文', 'セルの詳細', '年表の結末']);
 
-export const optionsFor = (name: string) => (TEXT_STRIPS.has(name) ? { ...BASELINE_OPTIONS, maxDiffPixelRatio: TEXT_STRIP_RATIO } : BASELINE_OPTIONS);
+/**
+ * 画ごとに変わる字 (年代記の hash から決まる島の名前) は、mask に渡した要素の箱を塗りつぶして比べる (M25-14)。
+ * 箱の大きさは字の長さに依らない要素 (横いっぱいの見出し) を渡す。字の長さで箱が変わると、覆っても差が出る
+ */
+export const optionsFor = (name: string, mask?: readonly Locator[]) => {
+  const base = TEXT_STRIPS.has(name) ? { ...BASELINE_OPTIONS, maxDiffPixelRatio: TEXT_STRIP_RATIO } : BASELINE_OPTIONS;
+  return mask && mask.length > 0 ? { ...base, mask: [...mask] } : base;
+};
 
 export const shouldCompareBaselines = (env: { CI?: string }, platform: string) => !env.CI && platform === 'darwin';
 
