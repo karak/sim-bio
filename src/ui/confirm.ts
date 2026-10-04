@@ -18,6 +18,16 @@ export function confirmKeyOf(key: string, focus: 'cancel' | 'ok' | null): Confir
   return null;
 }
 
+/** script で focus を置く。:focus-visible はマウスで開いた板では当たらないので、輪の class を付け、focus が離れたら外す (M26-09) */
+function focusWithRing(button: HTMLElement) {
+  button.classList.add('confirm-ring');
+  // 窓が focus を失った時も blur は来るが、activeElement は札のまま。その間は輪を残す
+  button.addEventListener('blur', () => {
+    if (document.activeElement !== button) button.classList.remove('confirm-ring');
+  });
+  button.focus();
+}
+
 export function createConfirm(root: HTMLElement): Confirm {
   let open = false;
   return (ask) => {
@@ -50,7 +60,7 @@ export function createConfirm(root: HTMLElement): Confirm {
         e.preventDefault();
         e.stopPropagation();
         if (k.kind === 'cancel') close(false);
-        else (k.to === 'ok' ? ok : cancel).focus();
+        else focusWithRing(k.to === 'ok' ? ok : cancel);
       };
       cancel.addEventListener('click', () => close(false));
       ok.addEventListener('click', () => close(true));
@@ -59,7 +69,7 @@ export function createConfirm(root: HTMLElement): Confirm {
       });
       document.addEventListener('keydown', onKey, true);
       root.append(layer);
-      cancel.focus();
+      focusWithRing(cancel);
     });
   };
 }
