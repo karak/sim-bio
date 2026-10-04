@@ -1233,7 +1233,7 @@ class RepoBaselinedStepsRunTest(unittest.TestCase):
         self.assertIn("CNF-002/2", entry["llm"]["steps"])
         self.assertIn("CNF-002-1.png", entry["note"])
 
-    def test_a_later_pass_on_one_step_keeps_the_item_failing_while_another_step_fails(self):
+    def test_a_later_pass_keeps_the_item_failing_while_another_step_fails(self):
         self.judge("SEL-003/3", {"SEL-003-2.png": "no"})
         self.judge("SEL-003/4", {"SEL-003-3.png": "no"})
         self.judge("SEL-003/3", {})
