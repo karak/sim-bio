@@ -201,15 +201,17 @@ describe('起動の舞台と戻し方 bootPlanOf (M21-07)', () => {
 });
 
 describe('石板を選んだ先の検索語 searchFor (M21-07)', () => {
-  it('searchFor (M21-07): scenario だけを差し替え、ほかの検索語 (player・dev・visit) は残す。訪問中に石板を選ぶと visit が残り、選んだ石板の訪問として開く (いまの振る舞い)', () => {
+  it('searchFor (M21-07): scenario だけを差し替え、ほかの検索語 (player・dev) は残す', () => {
     expect(searchFor('?scenario=test-quick&player=a&dev=1', 'sinking')).toBe('scenario=sinking&player=a&dev=1');
     expect(searchFor('?scenario=test-quick&dev=1', null)).toBe('dev=1');
     expect(searchFor('?player=a', 'sinking')).toBe('player=a&scenario=sinking');
-    const next = searchFor(`?scenario=test-quick&visit=${visitId}`, 'sinking');
-    expect(next).toBe(`scenario=sinking&visit=${visitId}`);
-    expect(bootPlanOf(`?${next}`, scenarios, null)).toMatchObject({ scenario: { id: 'sinking' }, visitId, restore: [] });
   });
-  it.todo('searchFor: 訪問中に石板を選ぶと visit を落とす (直すかはユーザーの判断を待つ)');
+  it('searchFor (M26-02): 訪問中に石板を選ぶと visit を落とし、選んだ石板は自分の島として開く (他の検索語は残す)', () => {
+    const next = searchFor(`?scenario=test-quick&visit=${visitId}&dev=1`, 'sinking');
+    expect(next).toBe('scenario=sinking&dev=1');
+    expect(bootPlanOf(`?${next}`, scenarios, null)).toMatchObject({ scenario: { id: 'sinking' }, visitId: null, restore: [{ from: 'scenario' }] });
+    expect(searchFor(`?scenario=test-quick&visit=${visitId}`, null)).toBe('');
+  });
 });
 
 describe('枠の札 slotControlsOf (M21-07)', () => {

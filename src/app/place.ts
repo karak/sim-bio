@@ -116,6 +116,8 @@ export function searchFor(search: string, scenarioId: string | null): string {
   const q = new URLSearchParams(search);
   if (scenarioId) q.set('scenario', scenarioId);
   else q.delete('scenario');
+  // 石板を選ぶのは訪問を離れる操作。visit を残すと、選んだ石板がその島の訪問として開き直る (M26-02)
+  q.delete('visit');
   return q.toString();
 }
 
