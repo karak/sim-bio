@@ -1,11 +1,14 @@
 ---
 id: M25-16
 title: SEL-003 の 2〜4 と CNF-002 の 2〜3 を judge: "llm" にする
-status: open
+status: review
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-05, M25-06, M25-12]
-evidence: []
+evidence:
+  - scenarios.jsonl の SEL-003 の手順 2〜4・CNF-002 の手順 2〜3 が judge llm (commit e7bb148、uv run scripts/acceptance.py check が ok)
+  - docs/acceptance/rubrics.json の SEL-003/2・3・4、CNF-002/2・3 (commit 38fd06d)、scripts/test_judge.py の RepoLlmStepsTest・RepoBaselinedStepsRunTest
+  - pnpm run judge の結果は作業ログ (2026-10-04)
 ---
 
 # SEL-003 の 2〜4 と CNF-002 の 2〜3 を judge: "llm" にする
@@ -28,11 +31,19 @@ evidence: []
 
 ## Acceptance criteria
 
-- [ ] `uv run scripts/acceptance.py check` が通り、5 手順が judge: "llm" を持つ
-- [ ] rubrics.json に 5 手順の採点表があり、test_judge が通る
-- [ ] `pnpm run judge` が 5 手順を判じ、結果 (票と費用) が作業ログにある
-- [ ] `pnpm run check` が通る
+- [x] `uv run scripts/acceptance.py check` が通り、5 手順が judge: "llm" を持つ
+- [x] rubrics.json に 5 手順の採点表があり、test_judge が通る
+- [x] `pnpm run judge` が 5 手順を判じ、結果 (票と費用) が作業ログにある
+- [x] `pnpm run check` が通る
 
 ## 作業ログ
 
 - 2026-10-04: 起票。
+- 2026-10-04 (実装): 正本の 5 手順に judge llm を足し (SEL-003 の 2〜4 は human から、CNF-002 の 2 は human から、3 は checks を残して足した)、採点表を 5 手順分作った。SEL-003/2 は Q3 (ピンが縁の板に隠れない) を足しただけ。scripts/judge.py は基準画のある手順を既に ADR 段 5 どおりに扱っていた (3 票 yes は writes_pass が偽で results.json に残らず、no・割れだけ by llm で書く) ので変えず、試験を足して固めた。
+- 2026-10-04 (judge の 1 回、27 回の呼び出し、46 秒、換算 0.441 USD、sonnet、3 票): `pnpm run judge -- --step SEL-003/2 … --step CNF-002/3`。
+  - SEL-003/2 (画 1): 3 問とも yes/yes/yes。基準画があるので合格は書かない (results.json に残らない)。
+  - SEL-003/3 (画 2): fail。Q3 (帯が 1 本の細い線でなく幅を持つ) が no/no/no (「細い線で、幅はピンの頭の直径の 4 分の 1 に届かない」)。Q4 (地形に沿う) が no/no/yes で割れ。Q1・Q2・Q5 は yes/yes/yes。M25-06 の試しの「帯が細い線に見える」と同じ。
+  - SEL-003/4 (画 3): undecided。Q2 (ピンが色で見分けられる) が no/yes/no、Q4 (ピン全体が板に隠れない) が yes/no/yes で割れ。Q1・Q3 は yes/yes/yes。
+  - CNF-002/2 (画 1〜3): fail。Q3 (「やめる」にだけ focus の輪・光がある) が 3 枚とも no/no/no (「灰青の塗りだけで、輪・縁取り・光が見えない」)。Q1・Q2・Q4 は 3 枚とも yes/yes/yes。M25-06 の試しと同じ。
+  - CNF-002/3 (画 1〜3): 4 問 x 3 枚とも yes/yes/yes。基準画があるので合格は書かない。
+  - results.json には SEL-003 (fail)・CNF-002 (fail) が by llm で書かれた。fail の 2 手順が製品の欠陥か判じ方の問題かは M25-15 が調べる。
