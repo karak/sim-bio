@@ -141,4 +141,10 @@ describe('graphLayout の描く高さ (M26-01: plot を 68 → 120 px に)', () 
     expect(css).toMatch(new RegExp(`#local-graph \\{[^}]*height: ${LOCAL_GRAPH_PANEL_H}px`));
     expect(css).toMatch(new RegExp(`\\.hud-r canvas \\{[^}]*height: ${GRAPH_PANEL_H}px`));
   });
+
+  it('Hud.ts の canvas の属性は CSS の大きさの 2 倍 (renderGraph の下限の倍率)。初めの描く前の一瞬も同じ縦横比 (C の 17)', () => {
+    const hud = readFileSync(new URL('../../src/ui/Hud.ts', import.meta.url), 'utf8');
+    expect(hud).toContain(`<canvas id="graph" width="640" height="${GRAPH_PANEL_H * 2}">`);
+    expect(hud).toContain(`<canvas id="local-graph" width="480" height="${LOCAL_GRAPH_PANEL_H * 2}">`);
+  });
 });

@@ -170,7 +170,7 @@ export function createHud(
   <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
   <div class="hud hud-r">
     <div class="dim">個体数の推移</div>
-    <canvas id="graph" width="640" height="200"></canvas>
+    <canvas id="graph" width="640" height="304"></canvas>
     <div id="legend" class="row"></div>
     <div class="stats"><span id="stat-temp" class="mono">--℃</span><span class="dim">平均気温</span><span id="stat-veg" class="mono">--%</span><span class="dim">植生率</span></div>
   </div>
@@ -195,7 +195,7 @@ export function createHud(
   <div class="hud hud-bl" id="cell-panel" hidden>
     <div id="cell-info"></div>
     <div class="dim" style="margin-top:6px">周辺 (半径 ${LOCAL_RADIUS}) の密度 · 直近 ${LOCAL_YEARS} 年</div>
-    <canvas id="local-graph" width="480" height="160"></canvas>
+    <canvas id="local-graph" width="480" height="304"></canvas>
   </div>`,
   );
   const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
