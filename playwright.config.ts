@@ -12,7 +12,13 @@ export default defineConfig({
   updateSnapshots: 'none',
   // CI の runner (4 vCPU) は既定で 2 worker になり、観察画面の WebGL (ソフトウェア描画) と操作画面の E2E が CPU を取り合って固まる。CI では 1 つずつ流す
   workers: process.env.CI ? 1 : undefined,
-  use: { baseURL: `http://localhost:${port}`, headless: true },
+  // 素の / はタイトルを出す (M24-01)。spec の素の goto('/') は今の操作画面を開く前提なので、開発の印 (src/dev/session.ts の SKIP_TITLE_KEY) を localStorage に置いて飛ばす。
+  // タイトルの spec だけ test.use({ storageState: { cookies: [], origins: [] } }) で外す。browser.newContext() で手で作る文脈には効かない
+  use: {
+    baseURL: `http://localhost:${port}`,
+    headless: true,
+    storageState: { cookies: [], origins: [{ origin: `http://localhost:${port}`, localStorage: [{ name: 'biotope-dev-skip-title', value: '1' }] }] },
+  },
   webServer: {
     command: `pnpm run dev --port ${port} --strictPort`,
     url: `http://localhost:${port}`,

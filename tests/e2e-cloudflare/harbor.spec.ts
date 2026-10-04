@@ -40,7 +40,7 @@ test.afterAll(() => {
 
 test('ビルドした画面のログが wrangler dev の受け口に 1 バッチ届き、Workers Logs 向けの JSON 1 行になる (M19-02)', async ({ page }) => {
   const delivered = page.waitForResponse((r) => r.url() === `${base}/api/v1/logs` && r.request().method() === 'POST', { timeout: 60_000 });
-  await page.goto('/');
+  await page.goto('/?seed=42');
   await page.click('#speed-100');
   const res = await delivered;
 
@@ -61,7 +61,7 @@ test('タブが隠れたときの sendBeacon も Origin 付きで受け口に届
   page.on('response', (r) => {
     if (r.url() === `${base}/api/v1/logs` && r.request().resourceType() === 'ping') beacons.push({ status: r.status() });
   });
-  await page.goto('/');
+  await page.goto('/?seed=42');
   await page.evaluate(() => Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }));
   await page.click('#speed-100');
 
@@ -153,7 +153,7 @@ test('本物の港と通しで: 判定のあとに出港 → 一覧に並ぶ →
   const id = new URL(url).searchParams.get('visit');
   expect(id).toMatch(/^[0-9a-f]{64}$/);
 
-  await page.goto('/');
+  await page.goto('/?seed=42');
   await page.getByRole('button', { name: /^港を開く/ }).click();
   const card = page.getByRole('list', { name: '流れ着いた年代記' }).locator(`[data-id="${id}"]`);
   await expect(card).toContainText('「また始めよう」');
@@ -188,7 +188,7 @@ test('手元の 3 人の見守り手 (M19-16): wrangler dev では x-dev-sender 
     const context = await browser.newContext({ extraHTTPHeaders: { 'x-dev-sender': name } });
     const watcher = await context.newPage();
     await answerTurnstile(watcher);
-    await watcher.goto('/');
+    await watcher.goto('/?seed=42');
     await watcher.getByRole('button', { name: /^港を開く/ }).click();
     const card = watcher.getByRole('list', { name: '流れ着いた年代記' }).locator(`[data-id="${id}"]`);
     await card.getByRole('button', { name: '通報' }).click();
@@ -225,7 +225,7 @@ test('積荷を流し、別の見守り手が引いて受け取る (本物の D1
   const b = await browser.newContext({ extraHTTPHeaders: { 'x-dev-sender': 'cargo-b' } });
   const shore = await b.newPage();
   await answerTurnstile(shore);
-  await shore.goto('/');
+  await shore.goto('/?seed=42');
   await shore.getByRole('button', { name: /^港を開く/ }).click();
   const drift = shore.getByRole('region', { name: '浜の漂着' });
   const status = drift.locator('#harbor-drift-status');
