@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BASELINE_OPTIONS, baselineName, CANVAS_TARGET, optionsFor, shouldCompareBaselines, TEXT_STRIP_RATIO } from '../e2e/baseline';
+import type { Locator } from '@playwright/test';
+import { BASELINE_OPTIONS, baselineName, CANVAS_TARGET, optionsFor, shouldCompareBaselines, TEXT_STRIP_RATIO, TEXT_STRIPS } from '../e2e/baseline';
 
 describe('基準画の決まり (M25-03)', () => {
   it('閾値は ADR 0001 の値 (threshold 0.2・maxDiffPixelRatio 0.02)', () => {
@@ -26,5 +27,19 @@ describe('字の細い板の閾値', () => {
     expect(optionsFor(CANVAS_TARGET).maxDiffPixelRatio).toBe(0.02);
     expect(optionsFor('セルの詳細').maxDiffPixelRatio).toBe(TEXT_STRIP_RATIO);
     expect(optionsFor('セルの詳細').threshold).toBe(0.2);
+  });
+});
+
+describe('名前の字を覆う比べ (M25-14)', () => {
+  const name = { tag: '島の名前の見出し' } as unknown as Locator;
+
+  it('覆う要素を渡すと toHaveScreenshot の mask に通り、渡さなければ mask の無い今までの設定のまま', () => {
+    expect(optionsFor('訪問の板', [name]).mask).toEqual([name]);
+    expect('mask' in optionsFor('訪問の板')).toBe(false);
+    expect(optionsFor('訪問の板', [name]).maxDiffPixelRatio).toBe(0.02);
+  });
+
+  it('島の名前は年代記の hash から決まるので、1 行の帯の基準画にはしない (訪問の板の中で覆う)', () => {
+    expect(TEXT_STRIPS.has('島の名前')).toBe(false);
   });
 });

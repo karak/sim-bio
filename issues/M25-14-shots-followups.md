@@ -1,11 +1,16 @@
 ---
 id: M25-14
 title: 基準画の回の接頭辞を票から取り、HBR-007 の島の名前を覆って基準画を作り直す
-status: open
+status: review
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-03, M25-13]
-evidence: []
+evidence:
+  - "scripts/test_shots_update.py RoundPrefixTest (4 件)。test:scripts 187 件 OK。bc48041 の前の 1 つ目の commit (feat(scripts) --round)"
+  - "tests/unit/baseline.pure.test.ts「名前の字を覆う比べ (M25-14)」。bc48041・11f15e8"
+  - "mask の確かめ: 名前を 'ヌ…ヌ の洲' に一時変更して E2E HBR-007 が通る (34 s)。mask を外すと 訪問の板 が 7083 px (0.08) で落ちる (どちらも一時変更は戻した)"
+  - "新しい回: .claude/localreview/m25-14-20261004-1131/ (HBR-007-1-訪問の板)・m25-14-20261004-1151/ (HBR-007-3-読み終えた訪問の板)。基準画の commit f992fcb・ab3bd14 (仮の合格で写した。承認はユーザー待ち)"
+  - "uv run scripts/acceptance.py check: ok 45 scenarios。pnpm run check: vitest 1238 + 66 passed。tests/e2e/shots.spec.ts 6 passed (8.0m)。HEAD 87261d0"
 ---
 
 # 基準画の回の接頭辞を票から取り、HBR-007 の島の名前を覆って基準画を作り直す
@@ -28,11 +33,15 @@ evidence: []
 
 ## Acceptance criteria
 
-- [ ] `pnpm run shots:update` の回の名前が `--round` の接頭辞で始まり、test_scripts が通る
-- [ ] HBR-007 画 1 で島の名前の字が覆われ、名前が変わっても基準画の比べが通る (名前を別の値にして確かめる。例: 年代記を 1 つ変えた写しで撮る)
-- [ ] `uv run scripts/acceptance.py check`・`pnpm run check`・shots を含む E2E の HBR-007 が通る
-- [ ] 新しい回が `.claude/localreview/<接頭辞>-<日時>/` に出ている
+- [x] `pnpm run shots:update` の回の名前が `--round` の接頭辞で始まり、test_scripts が通る
+- [x] HBR-007 画 1 で島の名前の字が覆われ、名前が変わっても基準画の比べが通る (名前を別の値にして確かめる。例: 年代記を 1 つ変えた写しで撮る)
+- [x] `uv run scripts/acceptance.py check`・`pnpm run check`・shots を含む E2E の HBR-007 が通る
+- [x] 新しい回が `.claude/localreview/<接頭辞>-<日時>/` に出ている
 
 ## 作業ログ
 
 - 2026-10-04: 起票 (ユーザーの決定 2 と 5)。
+- 2026-10-04: 実装 (feat/m25-14、feat/m19 の 440d701 から。feat/m19 を merge 済み)。
+  - `--round <接頭辞>` (既定 shots-、末尾の - が無ければ足す)。docs/operations/acceptance.md の 56 行の `m25-03-<日時>` を `<接頭辞>-<日時>` に直した (README にこの説明は無い)。
+  - HBR-007 画 1 の島の名前: 基準画 HBR-007-1-島の名前.png を落とし (lens は残す)、TEXT_STRIPS から外し、訪問の板の画は見出しを mask。レビュー (読むだけの opus) の指摘で画 3 の読み終えた訪問の板にも名前があるので同じく mask し、撮り直した。
+  - 審査台の items.json・index.html・verdicts.json・.claude/acceptance は触っていない。

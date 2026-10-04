@@ -74,7 +74,8 @@ function shotsOf(info: TestInfo) {
   const isAuto = autoIds.has(id) && !judgedIds.has(id);
   let n = 0;
   // pixels: false は画素の基準を持たない画 (観察画面の 3D)。ずれの基準ではなく、pnpm run judge の採点表で見る
-  return async (page: Page, shown: Record<string, Locator>, canvas?: Locator, pixels = true) => {
+  // masks は要素名ごとに、基準画の比べで塗りつぶす要素 (画ごとに変わる字)。noBaseline は lens だけ掛けて基準画を持たない要素名 (M25-14)
+  return async (page: Page, shown: Record<string, Locator>, canvas?: Locator, pixels = true, { masks = {}, noBaseline = [] }: { masks?: Record<string, Locator[]>; noBaseline?: string[] } = {}) => {
     const targets = Object.values(shown);
     if (targets.length === 0) throw new Error('写すものを 1 つ以上渡す');
     for (const t of targets) await expect(t).toBeInViewport({ ratio: 1 });
@@ -85,7 +86,8 @@ function shotsOf(info: TestInfo) {
     if (COMPARE_BASELINES && pixels) {
       const targets = { ...shown, ...(canvas ? { [CANVAS_TARGET]: canvas } : {}) };
       for (const [name, target] of Object.entries(targets)) {
-        await expect.soft(target).toHaveScreenshot(baselineName(id, n, name), optionsFor(name));
+        if (noBaseline.includes(name)) continue;
+        await expect.soft(target).toHaveScreenshot(baselineName(id, n, name), optionsFor(name, masks[name]));
       }
     }
     if (isAuto) return;
@@ -181,14 +183,15 @@ test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯
     }, { timeout: 60_000 })
     .toMatch(/^\d+ 年 · [春夏秋冬]$/);
   // 板の面は不透明で、画素は 3D の動きに依らない (四隅の面取りだけは 3D が透けるが、板の 0.3% ほどで閾値の内)。島の名前は年代記の hash から決まるので、年代記か版が変わると基準画も変わる。帯は 3D の上なので、撮る間だけ本物の rAF に戻し、画素の基準は持たない (OBS-002 と同じ)
-  await withRealFrames(visitor, () => shoot(visitor, { 島の名前: plaque.getByRole('heading'), 訪問の板: plaque }));
+  // M25-14: 名前の見出しは訪問の板の画で mask し、名前だけの基準画は持たない (lens は掛ける)。名前が変わっても板の比べは通る
+  await withRealFrames(visitor, () => shoot(visitor, { 島の名前: plaque.getByRole('heading'), 訪問の板: plaque }, undefined, true, { masks: { 訪問の板: [plaque.getByRole('heading')] }, noBaseline: ['島の名前'] }));
   await withRealFrames(visitor, () => shoot(visitor, { 観察画面の帯: bar }, undefined, false));
 
   await plaque.getByRole('button', { name: '年表を読む' }).click();
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
   await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた');
   await expect(plaque.getByRole('progressbar', { name: '年表を読む進み' })).toHaveAttribute('aria-valuenow', '5');
-  await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }));
+  await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }, undefined, true, { masks: { 読み終えた訪問の板: [plaque.getByRole('heading')] } }));
 });
 
 /** 放流が効いて狼の密度が 0.3 を越える tick (止めた島から進める) */

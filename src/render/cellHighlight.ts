@@ -109,7 +109,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 export const markerScale = (cameraDistance: number): number => clamp(cameraDistance * 0.018, 0.35, 3.2);
 
 /** 帯の幅。遠いと細い線は 1 px を切るので太くする。セルが帯で埋まらないよう 0.45 で止める */
-export const outlineWidth = (cameraDistance: number): number => clamp(cameraDistance * 0.003, 0.06, 0.45);
+export const outlineWidth = (cameraDistance: number): number => clamp(cameraDistance * 0.003, 0.2, 0.45);
 
 /** 印のゆっくりした上下 (約 1.6 秒で 1 往復、振れ幅 0.25)。動きを減らす設定 (prefers-reduced-motion) なら止める */
 export const markerBob = (seconds: number, reducedMotion: boolean): number =>

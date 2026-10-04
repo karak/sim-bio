@@ -42,7 +42,8 @@ import {
   writeCellOutline,
   type SurfaceGrid,
 } from './cellHighlight';
-import { cellViewOf, PIN_ID_RGB, pinMaskOf, selectionOf, type PinMask, type SceneInspect } from './inspect';
+import { cellViewOf, PIN_ID_RGB, pinMaskOf, selectionOf, terrainDigest, type PinMask, type SceneInspect } from './inspect';
+import { needsRebuild, type Drawn } from './rebuild';
 
 /** 集落の箱 1 個の寸法。stage の数だけ縦に積む */
 const SETTLEMENT_BOX = { width: 0.5, height: 0.4, depth: 0.5 };
@@ -229,7 +230,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     const dist = camera.position.distanceTo(controls.target);
     const width = outlineWidth(dist);
     // 地形は tick ごとに変わりうるので、tick・セル・カメラの距離 (帯の幅) が変わった時だけ書き直す
-    if (s.tick !== hlTick || cell !== hlCell || Math.abs(width - hlWidth) > 0.005) {
+    if (s.tick !== hlTick || s.layers.elevation !== surface.elevation || cell !== hlCell || Math.abs(width - hlWidth) > 0.005) {
       surface.elevation = s.layers.elevation;
       writeCellOutline(surface, cell, { samplesPerSide: CELL_HIGHLIGHT.samplesPerSide, width, lift: CELL_HIGHLIGHT.lift }, outlinePos);
       (outlineGeo.getAttribute('position') as BufferAttribute).needsUpdate = true;
@@ -296,11 +297,11 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       }),
     cell: (cell) => (markerMesh.visible && cell >= 0 && cell < n ? viewOfCell(cell) : null),
     pinMask: () => (markerMesh.visible ? drawPinMask() : null),
+    terrainDigest: () => terrainDigest((geo.getAttribute('position') as BufferAttribute).array as Float32Array),
   };
 
   let layer: LayerKind = 'terrain';
-  let lastTick = -1;
-  let lastLayer: LayerKind | null = null;
+  let lastDrawn: Drawn | null = null;
   const colorBuf = new Float32Array(n * 3);
   // 見た目が変わるときだけ描く (M21-10)。止めた島を毎フレーム描き直すと、GPU の無い環境 (ソフトウェア描画) では 1 ページで 2 コア余りを使い続ける
   let dirty = true;
@@ -330,7 +331,8 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   };
 
   const update = (s: WorldSnapshot) => {
-    if (s.tick !== lastTick || layer !== lastLayer) {
+    const now: Drawn = { island: s.layers.elevation, tick: s.tick, layer };
+    if (needsRebuild(lastDrawn, now)) {
       const p = geo.getAttribute('position') as BufferAttribute;
       // 海底も実標高で描き、半透明の海面を上に重ねる (平らにすると海面と Z ファイトする)
       for (let i = 0; i < n; i++) p.setY(i, s.layers.elevation[i] * hs);
@@ -394,8 +396,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
         dreamEaterMesh.scale.setScalar(shade.radius);
         dreamEaterMesh.position.set(sx - size / 2 + 0.5, s.layers.elevation[shade.cell] * hs + DREAM_EATER_SHADE.yOffset, sy - size / 2 + 0.5);
       }
-      lastTick = s.tick;
-      lastLayer = layer;
+      lastDrawn = now;
       dirty = true;
     }
     clampTarget();

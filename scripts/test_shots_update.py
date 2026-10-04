@@ -1,3 +1,4 @@
+import datetime
 import json
 import tempfile
 import unittest
@@ -10,7 +11,9 @@ from shots_update import (
     group_of,
     main,
     other_failures,
+    parse_args,
     refresh_versions,
+    round_name_of,
     write_round,
 )
 
@@ -169,6 +172,23 @@ class ArgvTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as e:
             main(["--", "--help"])
         self.assertEqual(e.exception.code, 0)
+
+
+class RoundPrefixTest(unittest.TestCase):
+    def test_the_round_prefix_defaults_to_shots(self) -> None:
+        self.assertEqual(parse_args([]).round, "shots-")
+
+    def test_the_round_prefix_is_taken_from_the_argument(self) -> None:
+        self.assertEqual(parse_args(["--", "--round", "m25-14-"]).round, "m25-14-")
+
+    def test_the_round_name_is_the_prefix_then_the_local_datetime(self) -> None:
+        now = datetime.datetime(2026, 10, 4, 12, 30, tzinfo=datetime.UTC)
+        self.assertEqual(round_name_of("m25-14-", now), "m25-14-20261004-1230")
+        self.assertEqual(round_name_of("shots-", now), "shots-20261004-1230")
+
+    def test_a_prefix_without_a_trailing_hyphen_gets_one(self) -> None:
+        now = datetime.datetime(2026, 10, 4, 12, 30, tzinfo=datetime.UTC)
+        self.assertEqual(round_name_of("m25-14", now), "m25-14-20261004-1230")
 
 
 class BrowserVersionTest(unittest.TestCase):

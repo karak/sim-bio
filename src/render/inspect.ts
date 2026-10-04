@@ -76,7 +76,17 @@ export type SceneInspect = {
    * 選びが無ければ null。ピンの上下は今の時計のまま
    */
   pinMask(): PinMask | null;
+  /** いま地形に載せている頂点の高さの要約 (M26-05)。島が替わって地形が作り直されたかを、見た目に頼らず読む */
+  terrainDigest(): number;
 };
+
+/** 頂点の座標 (x, y, z の並び) から高さ (y) だけを FNV-1a で 1 つの 32 bit の数にする */
+export function terrainDigest(positions: Float32Array): number {
+  const bits = new Uint32Array(positions.buffer, positions.byteOffset, positions.length);
+  let h = 0x811c9dc5;
+  for (let i = 1; i < bits.length; i += 3) h = Math.imul(h ^ bits[i], 0x01000193) >>> 0;
+  return h;
+}
 
 /**
  * M21-08: 画を撮る前に、今のカメラからセルの面と印の頭が地形に隠れていないか、印の頭が画面の内にあるかを確かめる。

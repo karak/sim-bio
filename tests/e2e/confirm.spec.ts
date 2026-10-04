@@ -216,15 +216,6 @@ test('M21-04: 判定の後に枠へ保存でき (判定の板に覆われない)
   expect(await shownTick(page)).toBe(verdictTick);
 });
 
-test('M21-04: 判定の前の石板から石板を選び直すのは確かめない (続きは書き切ってから移り、戻れば続きから)', async ({ page }) => {
-  await page.goto('/?scenario=test-quick');
-  await page.click('#speed-0');
-  await page.selectOption('#tablet-select', 'sinking');
-  await expect(page).toHaveURL((u) => u.search === '?scenario=sinking');
-  await expect(page.locator('#tablet-title')).toContainText('沈む');
-  await expect(dialog(page)).toHaveCount(0);
-});
-
 test('M21-04: 港から取り下げるのは確かめ、取り消せば港に残り、受ければ一覧から消える。判定の出た島から「この島を訪れる」も離れる確かめを経る', async ({ page }) => {
   test.setTimeout(180_000);
   const { fake: harbor } = await routeHarbor(page, { turnstile: { delayMs: 100 } });
@@ -271,4 +262,16 @@ test('M26-02: 訪問中に石板を選ぶと、確かめは出ず、URL から v
   await expect(dialog(page)).toHaveCount(0);
   await expect(page.locator('#slot-save')).toBeEnabled();
   await expect(page.locator('#new-island')).toBeEnabled();
+});
+
+test('M25-15: マウスで開いた確かめの板でも、focus のある「やめる」には輪が見えて、「新しい島を始める」側には無い (:focus-visible だけでは出ない)', async ({ page }) => {
+  await runFree(page);
+  await page.click('#new-island');
+  const d = dialog(page);
+  await expect(d.getByRole('button', { name: 'やめる' })).toBeFocused();
+  const ring = (name: string) => d.getByRole('button', { name }).evaluate((b) => ({ style: getComputedStyle(b).outlineStyle, width: parseFloat(getComputedStyle(b).outlineWidth) }));
+  const cancel = await ring('やめる');
+  expect(cancel.style).not.toBe('none');
+  expect(cancel.width).toBeGreaterThanOrEqual(2);
+  expect((await ring('新しい島を始める')).style).toBe('none');
 });
