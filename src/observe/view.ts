@@ -19,6 +19,7 @@ import {
   Quaternion,
   Scene,
   SRGBColorSpace,
+  Texture,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -229,6 +230,8 @@ export type ObservationView = {
   stop(): void;
   /** 今のカメラ: 自動 (自然記録調)・自由 (触ったあと、20 秒で自動に戻る)・個体を追う */
   cameraMode(): 'auto' | 'free' | 'follow';
+  /** 組んだ物を捨てる (M26-07): 止め、listener を外し、GPU の資源 (地形・素材・描画先・context) を解放する。以後は使わない */
+  dispose(): void;
   /** 試験の口 (M25-09): 描いている物を読む。src/dev/probe.ts が開発・受入のビルドだけ window.__probe に繋ぐ */
   inspect(): ObserveInspect;
 };
@@ -1044,6 +1047,23 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     stop() {
       running = false;
       cancelAnimationFrame(handle);
+    },
+    dispose() {
+      running = false;
+      cancelAnimationFrame(handle);
+      window.removeEventListener('resize', resize);
+      controls.dispose();
+      scene.traverse((o) => {
+        const m = o as Mesh;
+        m.geometry?.dispose();
+        for (const mat of Array.isArray(m.material) ? m.material : m.material ? [m.material] : []) {
+          for (const v of Object.values(mat)) if (v && (v as Texture).isTexture) (v as Texture).dispose();
+          mat.dispose();
+        }
+      });
+      (scene.background as Texture | null)?.dispose?.();
+      renderer.dispose();
+      renderer.forceContextLoss();
     },
     cameraMode() {
       if (director.mode === 'auto') return 'auto';
