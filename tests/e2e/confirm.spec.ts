@@ -273,7 +273,7 @@ test('M26-02: 訪問中に石板を選ぶと、確かめは出ず、URL から v
   await expect(page.locator('#new-island')).toBeEnabled();
 });
 
-test('M25-15: マウスで開いた確かめの板でも、focus のある「やめる」には輪が見えて、「上書きする」側には無い (:focus-visible だけでは出ない)', async ({ page }) => {
+test('M25-15: マウスで開いた確かめの板でも、focus のある「やめる」には輪が見えて、「新しい島を始める」側には無い (:focus-visible だけでは出ない)', async ({ page }) => {
   await runFree(page);
   await page.click('#new-island');
   const d = dialog(page);
