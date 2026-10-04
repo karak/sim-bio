@@ -12,7 +12,7 @@ export const BASELINE_OPTIONS = { threshold: 0.2, maxDiffPixelRatio: 0.02, anima
  * 文は撮る前に toHaveText で確かめているので、この画が見るのは置き場のずれ (字を横に 2px ずらすと訪問のリンク 0.13・受け取りの文 0.21 で落ちる。M25-03 の作業ログ)。要素名で引く
  */
 export const TEXT_STRIP_RATIO = 0.12;
-export const TEXT_STRIPS: ReadonlySet<string> = new Set(['訪問のリンク', '積荷の知らせ', '受け取りの文', 'セルの詳細']);
+export const TEXT_STRIPS: ReadonlySet<string> = new Set(['訪問のリンク', '積荷の知らせ', '受け取りの文', 'セルの詳細', '島の名前', '年表の結末']);
 
 export const optionsFor = (name: string) => (TEXT_STRIPS.has(name) ? { ...BASELINE_OPTIONS, maxDiffPixelRatio: TEXT_STRIP_RATIO } : BASELINE_OPTIONS);
 

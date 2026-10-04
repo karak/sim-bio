@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { writeRequest } from '../../src/harbor/wire';
 import { settle, selection, tilt, type View } from '../driver/camera';
-import { withRealFrames } from '../driver/frames';
+import { installFrames, stepFrames, withRealFrames } from '../driver/frames';
 import { routeHarbor } from '../driver/harbor';
 import { advanceTo, openPaused } from '../driver/island';
 import { enterObserve, lookFrom, OBSERVE_VIEWS } from '../driver/observe';
@@ -142,6 +142,53 @@ test('HBR-006: 港の知らせと板の文 (回避率の行・出港のリンク
   await expect(drawer.locator('#harbor-state')).toHaveText('港は今日は閉まっている。遊ぶ・保存するはそのまま続けられる');
   await expect(drawer.locator('.harbor-finished')).toContainText('この石板で最後に判定の出た島');
   await shoot(page, { 閉港の港の口: drawer.locator('#harbor-state'), 判定の出た島: drawer.locator('.harbor-finished') });
+});
+
+test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯・年表を読んだ後の結末の文)', async ({ page }, info) => {
+  test.setTimeout(240_000);
+  const shoot = shotsOf(info);
+  const harbor = await routeHarbor(page);
+  await playToVerdict(page, '/?scenario=test-civ&dev=1', '島は生き延びた');
+  const panel = page.getByRole('region', { name: '港へ出す' });
+  await panel.getByRole('radio', { name: '雨は来た' }).click();
+  await panel.getByRole('button', { name: '出港する' }).click();
+  await expect(panel.getByRole('status').first()).toHaveText('港へ出した。リンクを渡せば、誰でもこの島をたどれる');
+  const link = await panel.getByRole('textbox', { name: '訪問のリンク' }).inputValue();
+
+  // 別のタブで開く見守り手。港の写しは分け合い、時計は手で進める (観察画面は壁時計で動くので、コマを数えて同じ画にする)。dynres=0 は解像度の自動調整、auto=0 は自動カメラを切る
+  const visitor = await page.context().newPage();
+  await routeHarbor(visitor, { fake: harbor.fake });
+  await installFrames(visitor);
+  await installLens(visitor);
+  await visitor.goto(`${link}&dynres=0&auto=0`);
+  const plaque = visitor.getByRole('region', { name: '訪れている島' });
+  const bar = visitor.locator('#observe-layer .o-stats');
+  await expect
+    .poll(async () => {
+      await stepFrames(visitor, 1);
+      return visitor.locator('#observe-layer').isVisible();
+    }, { timeout: 60_000 })
+    .toBe(true);
+  await expect(plaque.locator('#harbor-visit-ending')).toHaveText('文明の試し読みを 5 年、生き延びた');
+  await expect(plaque.getByRole('heading')).toHaveText(/^[ァ-ヶー]+の(島|環|洲)$/);
+  await expect(plaque.locator('.harbor-inscription')).toHaveText('「雨は来た」');
+  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('まだ誰もたどっていない');
+  // 帯は素材を読み終えて 0.5 秒 (30 コマ) 進んでから書かれる。年と季節は素材の読み込みの速さで回ごとに前後するので、形だけ確かめ、帯の画素は基準にしない
+  await expect
+    .poll(async () => {
+      await stepFrames(visitor, 10);
+      return bar.textContent();
+    }, { timeout: 60_000 })
+    .toMatch(/^\d+ 年 · [春夏秋冬]$/);
+  // 板の面は不透明で、画素は 3D の動きに依らない (四隅の面取りだけは 3D が透けるが、板の 0.3% ほどで閾値の内)。島の名前は年代記の hash から決まるので、年代記か版が変わると基準画も変わる。帯は 3D の上なので、撮る間だけ本物の rAF に戻し、画素の基準は持たない (OBS-002 と同じ)
+  await withRealFrames(visitor, () => shoot(visitor, { 島の名前: plaque.getByRole('heading'), 訪問の板: plaque }));
+  await withRealFrames(visitor, () => shoot(visitor, { 観察画面の帯: bar }, undefined, false));
+
+  await plaque.getByRole('button', { name: '年表を読む' }).click();
+  await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
+  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた');
+  await expect(plaque.getByRole('progressbar', { name: '年表を読む進み' })).toHaveAttribute('aria-valuenow', '5');
+  await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }));
 });
 
 /** 放流が効いて狼の密度が 0.3 を越える tick (止めた島から進める) */
