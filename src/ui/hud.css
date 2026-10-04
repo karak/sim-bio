@@ -85,4 +85,5 @@
 .confirm-actions { justify-content: center; gap: 12px; }
 .confirm-actions .chip { font-size: 13px; padding: 4px 14px; }
 .confirm-ok { background: #b5502f; color: #fff; }
-.confirm-actions .chip:focus { outline: 2px solid #8feadf; outline-offset: 2px; }
+.confirm-actions .chip.confirm-ring, .confirm-actions .chip:focus-visible { outline: 2px solid #8feadf; outline-offset: 2px; }
+/* 輪は script が置いた focus (開いた時の「やめる」、Tab の移り先) とキーボードの focus だけ。マウスで押した札には出さない (M26-09) */

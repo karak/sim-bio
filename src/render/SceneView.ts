@@ -73,7 +73,7 @@ const CELL_HIGHLIGHT = {
 };
 
 export type SceneView = {
-  /** 毎フレーム呼ぶ。tick かレイヤーが変わった時だけ頂点色とインスタンスを更新する */
+  /** 毎フレーム呼ぶ。tick・レイヤー・島 (layers.elevation の参照、M26-05) が変わった時だけ頂点色とインスタンスを更新する */
   update(s: WorldSnapshot): void;
   setLayer(l: LayerKind): void;
   getLayer(): LayerKind;
@@ -229,7 +229,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     let rewritten = false;
     const dist = camera.position.distanceTo(controls.target);
     const width = outlineWidth(dist);
-    // 地形は tick ごとに変わりうるので、tick・セル・カメラの距離 (帯の幅) が変わった時だけ書き直す
+    // 地形は tick ごと・島が入れ替わった時に変わりうるので、tick・島 (layers.elevation)・セル・カメラの距離 (帯の幅) が変わった時だけ書き直す
     if (s.tick !== hlTick || s.layers.elevation !== surface.elevation || cell !== hlCell || Math.abs(width - hlWidth) > 0.005) {
       surface.elevation = s.layers.elevation;
       writeCellOutline(surface, cell, { samplesPerSide: CELL_HIGHLIGHT.samplesPerSide, width, lift: CELL_HIGHLIGHT.lift }, outlinePos);

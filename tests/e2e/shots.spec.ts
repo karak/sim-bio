@@ -182,7 +182,7 @@ test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯
       return bar.textContent();
     }, { timeout: 60_000 })
     .toMatch(/^\d+ 年 · [春夏秋冬]$/);
-  // 板の面は不透明で、画素は 3D の動きに依らない (四隅の面取りだけは 3D が透けるが、板の 0.3% ほどで閾値の内)。島の名前は年代記の hash から決まるので、年代記か版が変わると基準画も変わる。帯は 3D の上なので、撮る間だけ本物の rAF に戻し、画素の基準は持たない (OBS-002 と同じ)
+  // 板の面は不透明で、画素は 3D の動きに依らない (四隅の面取りだけは 3D が透けるが、板の 0.3% ほどで閾値の内)。帯は 3D の上なので、撮る間だけ本物の rAF に戻し、画素の基準は持たない (OBS-002 と同じ)
   // M25-14: 名前の見出しは訪問の板の画で mask し、名前だけの基準画は持たない (lens は掛ける)。名前が変わっても板の比べは通る
   await withRealFrames(visitor, () => shoot(visitor, { 島の名前: plaque.getByRole('heading'), 訪問の板: plaque }, undefined, true, { masks: { 訪問の板: [plaque.getByRole('heading')] }, noBaseline: ['島の名前'] }));
   await withRealFrames(visitor, () => shoot(visitor, { 観察画面の帯: bar }, undefined, false));

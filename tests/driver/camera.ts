@@ -30,7 +30,7 @@ export async function settle(page: Page) {
 /**
  * カメラを縦に倒す (度、正で水平へ)。OrbitControls は画面の高さのドラッグで 1 回りする。
  * 角の限り (真上・水平の手前) に当てると余りの回しが後に残るので、限りに当てない角だけを使う。
- * ドラッグを離した所のセルが選ばれる (canvas の click) ので、水平へ倒すときは空 (画面の上の縁) で離し、選んだセルを変えない
+ * ドラッグ (10 px を超えて動かした押し) ではセルを選ばない (M26-03、src/ui/press.ts)。空 (画面の上の縁) で離すのはその前からの習いで、今は無くても選んだセルは変わらない
  */
 export async function tilt(page: Page, box: { x: number; y: number; width: number; height: number }, degrees: number) {
   const x = box.x + box.width * 0.4;

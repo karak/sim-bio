@@ -12,7 +12,7 @@
     pnpm run shots:update -- --apply <回の名前>    # 審査台で合格にした画だけ基準画へ写す (コミットは人がする)
     pnpm run shots:update -- --round m25-14-       # 回の名前の接頭辞を票の名前にする (既定は shots-)
 
-回の名前は 1 つ目のコマンドが出す (m25-03-20261001-1200 の形)。
+回の名前は 1 つ目のコマンドが出す (<接頭辞>-YYYYMMDD-HHMM の形。既定は shots-20261004-1200、--round m25-14- なら m25-14-20261004-1131)。
 審査台は index.html が読む共有の items.json を書き換えない。回の items.json (1 つの group) を共有の groups に足すと並ぶ。
 """
 

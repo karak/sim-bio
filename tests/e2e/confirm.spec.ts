@@ -275,3 +275,39 @@ test('M25-15: マウスで開いた確かめの板でも、focus のある「や
   expect(cancel.width).toBeGreaterThanOrEqual(2);
   expect((await ring('新しい島を始める')).style).toBe('none');
 });
+
+test('M26-09: マウスで押した OK (押している間・閉じる前) には輪が出ない', async ({ page }) => {
+  await runFree(page);
+  await page.click('#new-island');
+  const d = dialog(page);
+  const cancel = d.getByRole('button', { name: 'やめる' });
+  const ok = d.getByRole('button', { name: '新しい島を始める' });
+  await expect(cancel).toBeFocused();
+  const outline = (b: typeof ok) => b.evaluate((e) => getComputedStyle(e).outlineStyle);
+  expect(await outline(cancel)).not.toBe('none');
+  const box = (await ok.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(ok).toBeFocused();
+  expect(await outline(ok)).toBe('none');
+  expect(await outline(cancel)).toBe('none');
+  await page.mouse.up();
+});
+
+test('M26-09: マウスで開いた確かめの板でも、Tab で移った先には輪が出て、離れた札からは輪が消える', async ({ page }) => {
+  await runFree(page);
+  await page.click('#new-island');
+  const d = dialog(page);
+  const cancel = d.getByRole('button', { name: 'やめる' });
+  const ok = d.getByRole('button', { name: '新しい島を始める' });
+  await expect(cancel).toBeFocused();
+  const outline = (b: typeof ok) => b.evaluate((e) => getComputedStyle(e).outlineStyle);
+  await page.keyboard.press('Tab');
+  await expect(ok).toBeFocused();
+  expect(await outline(ok)).not.toBe('none');
+  expect(await outline(cancel)).toBe('none');
+  await page.keyboard.press('Tab');
+  await expect(cancel).toBeFocused();
+  expect(await outline(cancel)).not.toBe('none');
+  expect(await outline(ok)).toBe('none');
+});
