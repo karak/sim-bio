@@ -11,7 +11,7 @@ export type LocalSave = {
    * 閉じる前の続きから。自由モードで自動の枠があれば、その島を restore して返す。シナリオは自動保存から戻さない (シナリオ中の読込は予言と矛盾する)。
    * 読めない自動の枠は脇へ退け、新しい島を普段どおり自動保存する (版を上げた日に島を黙って上書きしない)
    */
-  /** accept (M26-10) が false を返す続きは戻さず、触らずに残す (null を返す) */
+  /** accept (M26-10) が false を返す続きは戻さず、脇へ退けて残す (null を返す) */
   resume<W>(restore: (save: SaveData) => W, accept?: (save: SaveData) => boolean): Promise<W | null>;
   /**
    * 毎フレーム。自動保存の周期: 前に書いた tick から every tick 進んだら 1 回書く。
@@ -76,7 +76,12 @@ export function createLocalSave(deps: {
       if (!autosaves || !store) return null;
       const save = (await read('load', null, store.load('auto')))?.save;
       if (!save) return null;
-      if (accept && !accept(save)) return null;
+      if (accept && !accept(save)) {
+        // 断った続きは、次の自動の書きで上書きされる。島を黙って失わないよう脇へ退けて残す (読めない続きと同じ)
+        const setAside = await store.setAside('auto').catch((err: unknown) => `failed: ${String(err)}`);
+        log('info', 'persist.resume.skipped', save.tick, { setAside });
+        return null;
+      }
       try {
         const w = restore(save);
         last = save.tick;

@@ -157,6 +157,24 @@ describe('閉じて開き直すと続きから (M19-05)', () => {
     expect(await autoTick()).toBe(190);
   });
 
+  it('M26-10: accept が断った自動の続き (URL の seed= が違う) は restore せず、脇へ退けて残し、記録に残す', async () => {
+    const first = await setup();
+    await play(first.local, world(), 1, 100);
+    const second = await setup({ indexedDB: first.indexedDB });
+    let restored = 0;
+    const counting = (s: SaveData) => {
+      restored++;
+      return restore(s);
+    };
+    expect(await second.local.resume(counting, () => false)).toBeNull();
+    expect(restored).toBe(0);
+    expect(second.logs).toEqual([expect.objectContaining({ level: 'info', event: 'persist.resume.skipped', setAside: 'unreadable:auto' })]);
+    expect(await second.autoTick()).toBeNull();
+    expect((await rawSave(first.indexedDB, 'unreadable:auto'))?.save.tick).toBe(100);
+    const third = await setup({ indexedDB: first.indexedDB });
+    expect(await third.local.resume(counting, () => true)).toBeNull();
+  });
+
   it('読めない自動の枠 (版違いなど) からは再開せず、脇へ退けて残し、新しい島を普段どおり自動保存する', async () => {
     const first = await setup();
     await play(first.local, world(), 1, 100);

@@ -189,7 +189,11 @@ export function bootSeedOf(search: string, scenario: boolean): { seed: number | 
     params.delete('seed');
     return { seed: null, search: params.size ? `?${params.toString()}` : '' };
   }
-  return { seed: seedParam(params.get('seed')), search: null };
+  const seed = seedParam(params.get('seed'));
+  if (seed !== null || !params.has('seed')) return { seed, search: null };
+  // 壊れた seed= は URL に残さない (HUD の seed と食い違う)
+  params.delete('seed');
+  return { seed: null, search: params.size ? `?${params.toString()}` : '' };
 }
 
 /** 新しい島の seed。draw は 0 以上 2^32-1 の整数を返す乱数 (差し替え口)。今と同じ値は引き直す */

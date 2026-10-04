@@ -234,7 +234,9 @@ describe('自由モードの島の seed (M26-10)', () => {
   it('bootSeedOf (M26-10): 自由モードは URL の seed= (整数) で開く。無い・壊れていれば null (初回は 42 のまま)。石板・訪問は seed= を無視して URL から落とす', () => {
     expect(bootSeedOf('', false)).toEqual({ seed: null, search: null });
     expect(bootSeedOf('?seed=1234&player=a', false)).toEqual({ seed: 1234, search: null });
-    for (const bad of ['?seed=', '?seed=abc', '?seed=1.5', '?seed=-3', '?seed=99999999999', '?seed=0x10']) expect(bootSeedOf(bad, false).seed).toBeNull();
+    expect(bootSeedOf('?seed=abc&player=a', false)).toEqual({ seed: null, search: '?player=a' });
+    expect(bootSeedOf('?seed=', false)).toEqual({ seed: null, search: '' });
+    for (const bad of ['?seed=', '?seed=abc', '?seed=1.5', '?seed=-3', '?seed=99999999999', '?seed=0x10']) expect(bootSeedOf(bad, false)).toMatchObject({ seed: null, search: '' });
     expect(bootSeedOf('?scenario=sinking&seed=1234&player=a', true)).toEqual({ seed: null, search: '?scenario=sinking&player=a' });
     expect(bootSeedOf('?scenario=sinking&seed=1234', true).search).toBe('?scenario=sinking');
     expect(bootSeedOf('?seed=1234', true)).toEqual({ seed: null, search: '' });

@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import type { Probe } from '../../src/dev/probe';
-import { openPaused } from '../driver/island';
+import { advanceTo, openPaused, shownTick } from '../driver/island';
 
 /**
  * 自由モードの「新しい島」は押すたびに新しい seed を引き、HUD の seed と URL の seed= に出す (M26-10)。
@@ -71,4 +71,21 @@ test('M26-10: 石板の島は seed 42 のまま。seed= は無視して URL か�
   expect(new URL(seeded.page.url()).search).toBe('?paused=1&scenario=test-quick');
   expect(await digest(seeded.page)).toBe(expected);
   await seeded.context.close();
+});
+
+test('M26-10: 同じ seed= で開き直すと自動の続きから戻り、違う seed= なら新しい島 (続きは脇へ退く)', async ({ browser }) => {
+  const { context, page } = await openFresh(browser, '/?paused=1&seed=777');
+  await advanceTo(page, 400);
+  await expect(page.locator('#slot-select option[value="auto"]')).toHaveText('自動 · Year 1');
+
+  await page.goto('/?paused=1&seed=777');
+  await page.waitForFunction(() => '__probe' in window && document.querySelector('#speed-0.on') !== null);
+  await expect(page.locator('#hud-seed')).toHaveText('seed 777');
+  expect(await shownTick(page)).toBeGreaterThan(0);
+
+  await page.goto('/?paused=1&seed=778');
+  await page.waitForFunction(() => '__probe' in window && document.querySelector('#speed-0.on') !== null);
+  await expect(page.locator('#hud-seed')).toHaveText('seed 778');
+  expect(await shownTick(page)).toBe(0);
+  await context.close();
 });
