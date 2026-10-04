@@ -1,7 +1,7 @@
 ---
 id: M26-09
 title: 確かめのダイアログで押した OK にも focus の輪が一瞬出る
-status: done
+status: review
 milestone: M26
 plan: null
 depends_on: [M25-15]

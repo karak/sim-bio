@@ -1,7 +1,7 @@
 ---
 id: M26-10
 title: 自由モードの「新しい島」は押すたびに新しい seed を引き、HUD と URL の seed= に出す
-status: done
+status: review
 milestone: M26
 plan: null
 depends_on: []
