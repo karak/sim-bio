@@ -40,6 +40,9 @@ import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
 const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
 
+/** タイトルの「続きから」を決めるために置き場の一覧を待つ上限 (ms) */
+const TITLE_LIST_TIMEOUT_MS = 2000;
+
 /** 置き場から戻した島。石板なら runner の状態と年代記も持つ (続きからの復帰 M19-14 と、枠の読込 M19-17) */
 type Restored = { world: World; runner?: RunnerState; chronicle?: Chronicle };
 
@@ -65,7 +68,10 @@ async function boot(): Promise<void> {
   const route = bootRouteOf(location.search, scenarios, pending, takeTabMarks(sessionStorage), devTools ? devTools.skipsTitle(localStorage) : false);
   const titleLog = (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level, event, ...extra });
   const enterFromTitle = async () => {
-    const slots = store ? await store.list().catch((e: unknown) => (titleLog('warn', 'persist.list.failed', { error: String(e) }), [])) : [];
+    // 置き場が答えなくてもタイトルは出す (続きからを出さないだけ)
+    const listed = store ? store.list().catch((e: unknown) => (titleLog('warn', 'persist.list.failed', { error: String(e) }), [])) : Promise.resolve([]);
+    const timeout = new Promise<[]>((resolve) => setTimeout(() => (titleLog('warn', 'persist.list.timeout', { ms: TITLE_LIST_TIMEOUT_MS }), resolve([])), TITLE_LIST_TIMEOUT_MS));
+    const slots = await Promise.race([listed, timeout]);
     const continuation = slots.find((s) => s.slot === 'auto' && s.stage === 'free') ?? null;
     const root = document.getElementById('app');
     if (!root) throw new Error('#app missing');

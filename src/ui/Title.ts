@@ -7,7 +7,7 @@ import './title.css';
 /**
  * タイトル画面 (M24-01、docs/uiux/2026-10-04-title-flow.md、W/F は docs/uiux/wireframes/title-*.svg)。
  * 舞台の起動より前に出し、選ばれたら背景のデモを止めて資源を返し、画面を外してから舞台を組む。
- * メニューは role="menu" と menuitem。矢印・Home・End で選び、Enter (と空白) で決める。板は Esc と「戻る」でメニューへ返る
+ * メニューは role="menu" と menuitem。矢印・Home・End で選び、Enter (と空白、button の既定) で決める。板は Esc と「戻る」でメニューへ返る
  */
 export type TitleChoice = { kind: 'free' };
 
@@ -75,7 +75,14 @@ export function showTitle(root: HTMLElement, deps: TitleDeps): Promise<TitleChoi
     const choose = (i: number) => {
       const id = menu.items[i].id;
       if (id === 'continue' || (id === 'new' && !deps.continuation)) finish({ kind: 'free' });
-      else openPanel(screen, menu.items[i].label, PENDING_TEXT[id], () => focusAt(i));
+      else {
+        // 板の間はメニューを inert にする (aria-modal の板の外を押せない・focus が出ない)
+        list.inert = true;
+        openPanel(screen, menu.items[i].label, PENDING_TEXT[id], () => {
+          list.inert = false;
+          focusAt(i);
+        });
+      }
     };
     list.addEventListener('keydown', (e) => {
       const k = menuKeyOf(e.key, at, items.length);

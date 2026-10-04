@@ -13,7 +13,7 @@ export default defineConfig({
   // CI の runner (4 vCPU) は既定で 2 worker になり、観察画面の WebGL (ソフトウェア描画) と操作画面の E2E が CPU を取り合って固まる。CI では 1 つずつ流す
   workers: process.env.CI ? 1 : undefined,
   // 素の / はタイトルを出す (M24-01)。spec の素の goto('/') は今の操作画面を開く前提なので、開発の印 (src/dev/session.ts の SKIP_TITLE_KEY) を localStorage に置いて飛ばす。
-  // タイトルの spec だけ test.use({ storageState: { cookies: [], origins: [] } }) で外す。browser.newContext() で手で作る文脈には効かない
+  // タイトルの spec だけ test.use({ storageState: { cookies: [], origins: [] } }) で外す。browser.newContext() で手で作る文脈も use の既定を引き継ぐので印が効く (M24-01 で確かめた)
   use: {
     baseURL: `http://localhost:${port}`,
     headless: true,

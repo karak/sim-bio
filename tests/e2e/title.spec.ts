@@ -90,3 +90,21 @@ test('M24-01: 自動の枠に続きがあれば「続きから」を先頭に出
   await expect(page.locator('#hud-year')).toBeVisible();
   expect(await shownTick(page)).toBeGreaterThanOrEqual(savedTick);
 });
+
+test('M24-01: 動きを減らす設定では背景は止めた 1 枚。板の間はメニューを押せない (板は 1 つだけ)', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await expect(menu(page)).toBeVisible();
+  await expect(page.locator('.title-demo')).toHaveClass(/still/);
+  await expect(page.locator('.title-demo img')).toHaveCount(1);
+  await expect(page.locator('.title-demo img')).toHaveAttribute('src', '/textures/title/06-deer.jpg');
+
+  await item(page, '港').click();
+  await expect(page.getByRole('dialog', { name: '港' })).toBeVisible();
+  await expect(menu(page)).toHaveJSProperty('inert', true);
+  await item(page, 'コンフィグ').click({ force: true });
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await page.getByRole('button', { name: '戻る' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(item(page, '港')).toBeFocused();
+});

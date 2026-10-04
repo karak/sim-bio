@@ -33,7 +33,7 @@ describe('メニューのキー menuKeyOf (M24-01、矢印・Enter・Esc)', () =
     ['Home', 3, 4, { kind: 'move', to: 0 }],
     ['End', 0, 5, { kind: 'move', to: 4 }],
     ['Enter', 2, 4, { kind: 'activate', at: 2 }],
-    [' ', 1, 4, { kind: 'activate', at: 1 }],
+    [' ', 1, 4, null],
     ['Escape', 1, 4, { kind: 'back' }],
     ['a', 1, 4, null],
   ];

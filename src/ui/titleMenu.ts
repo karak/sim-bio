@@ -30,7 +30,7 @@ export function titleMenuOf(continuation: SlotSummary | null): TitleMenu {
 
 export type MenuKey = { kind: 'move'; to: number } | { kind: 'activate'; at: number } | { kind: 'back' } | null;
 
-/** メニューのキー。上下は端で回り込み、Home・End は端へ、Enter と空白は決める、Esc は戻る */
+/** メニューのキー。上下は端で回り込み、Home・End は端へ、Enter は決める、Esc は戻る。空白は button の既定の click に任せる (二重に決めない) */
 export function menuKeyOf(key: string, at: number, count: number): MenuKey {
   switch (key) {
     case 'ArrowDown':
@@ -42,7 +42,6 @@ export function menuKeyOf(key: string, at: number, count: number): MenuKey {
     case 'End':
       return { kind: 'move', to: count - 1 };
     case 'Enter':
-    case ' ':
       return { kind: 'activate', at };
     case 'Escape':
       return { kind: 'back' };

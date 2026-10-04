@@ -48,3 +48,12 @@
   .title-tagline { margin: 0 0 10px; font-size: 13px; }
   .title-item { padding: 10px 12px; }
 }
+/* 背の低い画面 (横長の電話など): 帯の中で縦に流せるようにし、上へはみ出させない */
+@media (max-height: 480px) {
+  .title-body { top: 12px; bottom: 12px; overflow-y: auto; gap: 6px; }
+  .title-logo { font-size: 26px; }
+  .title-logo-mark { width: 34px; height: 48px; }
+  .title-tagline { margin: 0 0 6px; }
+  .title-item { padding: 6px 12px; font-size: 16px; }
+  .title-item.default { font-size: 18px; }
+}
