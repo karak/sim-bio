@@ -163,3 +163,18 @@ describe('species_mean (runner)', () => {
     expect(r.verdict().reason).toContain('群れが小さい(3 年平均): deer 4.0 (< 5.0)');
   });
 });
+
+describe('ticksToNextYear (M19-04)', () => {
+  it('開始 tick から数えた次の年の境目までの tick 数を返す。境目ちょうどなら 1 年分', () => {
+    const w = fakeWorld({ deer: 1 });
+    w.step(100);
+    const r = createScenarioRunner(def, w);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(360);
+    w.step(1);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(359);
+    w.step(358);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(1);
+    w.step(1);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(360);
+  });
+});

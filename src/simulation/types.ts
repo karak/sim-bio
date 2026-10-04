@@ -168,4 +168,38 @@ export type SaveData = {
   ship?: ShipState;
   /** M10R-03 で追加。夢喰いの状態。古いセーブには無く、その場合は null (未出現) として復元する */
   dreamEater?: DreamEaterState;
+  /**
+   * M19-14 で追加。layers に出ない本体の数え。これがあれば restore の続きが閉じずに回した島と最後の桁まで同じになる
+   * (シナリオの途中で閉じて開き直すため)。古いセーブには無く、その場合は restore の直後から数え直す (M19-05 までの挙動)
+   */
+  memory?: WorldMemory;
+};
+
+/** 年の中と年をまたいで World が持つ数え (M19-14)。すべて JSON にできる形にする */
+export type WorldMemory = {
+  /** dispatch して、まだ step で適用していない命令 (次の stepOnce の先頭で適用する) */
+  queue: Command[];
+  /** 霊脈の細り。年に 1 回だけ更新するので、年の途中の輝石から求め直すと違う値になる */
+  veinLoss: number[];
+  /** 燃えているセル (1) と、燃え跡の残り tick */
+  fire: number[];
+  burnt: number[];
+  /** 文明の数え。config.civilization が無ければ無い */
+  civ?: CivMemory;
+};
+
+export type CivMemory = {
+  declineStreak: number;
+  history: number[];
+  candidate: number;
+  yearKeys: string[];
+  yearDisasters: number;
+  faithHistory: string[][];
+  yearAnswered: number;
+  yearIgnored: number;
+  yearWithdrawn: number;
+  /** 次の祈りを出してよい最初の年。まだ一度も解決していなければ null (World の中では -Infinity。JSON に -Infinity は書けない) */
+  prayerCooldownUntil: number | null;
+  prayerHistory: { grassMean: number; predatorRatio: number }[];
+  unrestStreak: number;
 };

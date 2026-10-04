@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractArea, cellAt, isLandAt, landmarks, CELL_M } from '../../src/observe/area';
+import { extractArea, cellAt, isLandAt, landmarks, observeCenter, CELL_M } from '../../src/observe/area';
 import { fakeSnapshot, OBS_HOME, OBS_SIZE } from './observeFixtures';
 
 describe('観察画面 (M22-04): extractArea', () => {
@@ -80,5 +80,42 @@ describe('観察画面 (M22-04): landmarks', () => {
     const m = landmarks(extractArea(snap, OBS_HOME, 8));
     expect(m.slipway).toEqual({ x: 0, z: 10 });
     expect(m.slipwayBow).toEqual({ x: 0, z: 1 });
+  });
+});
+
+describe('観察画面 (M19-18): observeCenter', () => {
+  it('集落があれば集落のセルを中心にする (陸の形に依らない)', () => {
+    const snap = fakeSnapshot({ elevation: (col) => (col < 6 ? 0.4 : 0.1), civ: { home: OBS_HOME, stage: 0 } });
+    expect(observeCenter(snap)).toEqual({ cell: OBS_HOME, settlement: true });
+  });
+
+  it('civ が無ければ、陸の重心に最も近い陸セルを中心にし、集落は無い', () => {
+    // 陸は列 2..8・行 20..26 の四角 (重心は列 5・行 23)
+    const snap = fakeSnapshot({ elevation: (col, row) => (col >= 2 && col <= 8 && row >= 20 && row <= 26 ? 0.4 : 0.1), civ: null });
+    expect(observeCenter(snap)).toEqual({ cell: 23 * OBS_SIZE + 5, settlement: false });
+  });
+
+  it('civ があっても home = -1 (集落がまだ無い) なら、集落が無いときと同じ', () => {
+    const elevation = (col: number, row: number) => (col >= 2 && col <= 8 && row >= 20 && row <= 26 ? 0.4 : 0.1);
+    expect(observeCenter(fakeSnapshot({ elevation, civ: { home: -1 } }))).toEqual({ cell: 23 * OBS_SIZE + 5, settlement: false });
+  });
+
+  it('重心が海 (環の島の内海) に落ちるときは、重心に最も近い陸セル。同じ近さなら index の小さい方', () => {
+    // 中心 (16, 16) から半径 5〜7 の環だけが陸。重心は (16, 16) の海で、最も近い陸は距離 5 の 4 つ (上・左・右・下)
+    const snap = fakeSnapshot({ elevation: (col, row) => (Math.hypot(col - 16, row - 16) >= 5 && Math.hypot(col - 16, row - 16) <= 7 ? 0.4 : 0.1), civ: null });
+    const c = observeCenter(snap);
+    expect(c).toEqual({ cell: 11 * OBS_SIZE + 16, settlement: false });
+    expect(snap.layers.elevation[c.cell]).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it('陸が 1 つも無ければ地図の真ん中のセル', () => {
+    expect(observeCenter(fakeSnapshot({ elevation: () => 0.1, civ: null }))).toEqual({ cell: 16 * OBS_SIZE + 16, settlement: false });
+  });
+
+  it('個体の密度は中心に効かない (同じ地形なら同じ中心)', () => {
+    const elevation = (col: number) => (col < 10 ? 0.4 : 0.1);
+    const a = observeCenter(fakeSnapshot({ elevation, civ: null }));
+    const b = observeCenter(fakeSnapshot({ elevation, civ: null, density: { deer: (col) => col / 10, belltree: () => 1 } }));
+    expect(b).toEqual(a);
   });
 });

@@ -1,5 +1,5 @@
 import type { LogLevel, LogSink } from '../core/log/types';
-import type { Command, SaveData, SpeciesDef, WorldConfig, WorldSnapshot } from './types';
+import type { Command, SaveData, SpeciesDef, WorldConfig, WorldMemory, WorldSnapshot } from './types';
 import { generateCrystal, generateTerrain, SEA_LEVEL } from './terrain';
 import { stepClimate } from './climate';
 import { stepVegetation, sumVegetation } from './vegetation';
@@ -214,6 +214,11 @@ export class World {
     }
   }
 
+  /** この島の seed (M26-10)。HUD と URL の seed= に出す */
+  get seed(): number {
+    return this.config.seed;
+  }
+
   static create(config: WorldConfig, deps: WorldDeps): World {
     const w = new World(structuredClone(config), deps, generateTerrain(config.seed, config.size));
     for (const d of w.config.species) {
@@ -267,6 +272,7 @@ export class World {
     w.dreamEater = save.dreamEater ? { ...save.dreamEater } : null;
     w.tick = save.tick;
     for (const d of w.config.species) w.populations[d.id].set(save.populations[d.id] ?? []);
+    if (save.memory) w.recall(save.memory);
     const heat = Float32Array.from(w.heat);
     stepClimate(w, w.config, w.tick % w.config.ticksPerYear);
     w.heat.set(heat);
@@ -370,7 +376,57 @@ export class World {
       towers: this.towers.map((t) => ({ ...t })),
       ...(this.ship ? { ship: { ...this.ship } } : {}),
       ...(this.dreamEater ? { dreamEater: { ...this.dreamEater } } : {}),
+      memory: this.memory(),
     };
+  }
+
+  private memory(): WorldMemory {
+    return {
+      queue: structuredClone(this.queue),
+      veinLoss: Array.from(this.veinLoss),
+      fire: Array.from(this.fire),
+      burnt: Array.from(this.burnt),
+      ...(this.civ
+        ? {
+            civ: {
+              declineStreak: this.civDeclineStreak,
+              history: [...this.civHistory],
+              candidate: this.civCandidate,
+              yearKeys: [...this.civYearKeys],
+              yearDisasters: this.civYearDisasters,
+              faithHistory: this.civFaithHistory.map((keys) => [...keys]),
+              yearAnswered: this.civYearAnswered,
+              yearIgnored: this.civYearIgnored,
+              yearWithdrawn: this.civYearWithdrawn,
+              prayerCooldownUntil: Number.isFinite(this.civPrayerCooldownUntil) ? this.civPrayerCooldownUntil : null,
+              prayerHistory: this.civPrayerHistory.map((h) => ({ ...h })),
+              unrestStreak: this.civUnrestStreak,
+            },
+          }
+        : {}),
+    };
+  }
+
+  /** restore の続き (M19-14): memory の数えを戻す。veinLoss は restore が輝石から求め直した値を、保存した値で上書きする */
+  private recall(m: WorldMemory): void {
+    this.queue = structuredClone(m.queue);
+    this.veinLoss.set(m.veinLoss);
+    this.fire.set(m.fire);
+    this.burnt.set(m.burnt);
+    const civ = m.civ;
+    if (!civ) return;
+    this.civDeclineStreak = civ.declineStreak;
+    this.civHistory = [...civ.history];
+    this.civCandidate = civ.candidate;
+    this.civYearKeys = [...civ.yearKeys];
+    this.civYearDisasters = civ.yearDisasters;
+    this.civFaithHistory = civ.faithHistory.map((keys) => [...keys]);
+    this.civYearAnswered = civ.yearAnswered;
+    this.civYearIgnored = civ.yearIgnored;
+    this.civYearWithdrawn = civ.yearWithdrawn;
+    this.civPrayerCooldownUntil = civ.prayerCooldownUntil ?? -Infinity;
+    this.civPrayerHistory = civ.prayerHistory.map((h) => ({ ...h }));
+    this.civUnrestStreak = civ.unrestStreak;
   }
 
   private stepOnce(): void {

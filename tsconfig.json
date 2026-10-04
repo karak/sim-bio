@@ -12,5 +12,5 @@
     "esModuleInterop": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "tests", "tools/*.ts", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "tests", "tools/*.ts", "vite.config.ts", "playwright.config.ts", "playwright.cloudflare.config.ts"]
 }

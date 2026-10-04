@@ -1,0 +1,121 @@
+import type { SaveData } from '../simulation/types';
+import type { IslandStore } from './islandStore';
+import type { ManualSlot, PendingSlot, SlotId, SlotSummary } from './slots';
+import type { SlotSave } from './slotSave';
+
+export type SaveLog = (level: 'info' | 'warn', event: string, tick: number, extra?: Record<string, unknown>) => void;
+
+/** 手元の保存の方針 (M19-05)。どの島をいつ自動の枠に書き、どこから再開するかをここで決める。書き込みの失敗は記録に残して投げない */
+export type LocalSave = {
+  /**
+   * 閉じる前の続きから。自由モードで自動の枠があれば、その島を restore して返す。シナリオは自動保存から戻さない (シナリオ中の読込は予言と矛盾する)。
+   * 読めない自動の枠は脇へ退け、新しい島を普段どおり自動保存する (版を上げた日に島を黙って上書きしない)
+   */
+  /** accept (M26-10) が false を返す続きは戻さず、脇へ退けて残す (null を返す) */
+  resume<W>(restore: (save: SaveData) => W, accept?: (save: SaveData) => boolean): Promise<W | null>;
+  /**
+   * 毎フレーム。自動保存の周期: 前に書いた tick から every tick 進んだら 1 回書く。
+   * 1 フレームで何 tick 飛んでも 1 回にし、書き込み中は次を書かない (1 回で 1.6 MB ほどの SaveData を作って渡す。size 128)
+   */
+  onTick(tick: number, serialize: () => SaveData): void;
+  /** 読込・新しい島で島を差し替えた直後。自動の枠をその島にし、そこから数え直す */
+  replaced(save: SaveData): void;
+  /** タブが隠れたとき (閉じる直前を含む)。周期を待たずに書く */
+  flush(serialize: () => SaveData): Promise<void>;
+  saveSlot(slot: ManualSlot, data: SlotSave): Promise<void>;
+  // (M19-17 で変更: 枠は舞台を名乗る包み。open が舞台の確かめと restore をし、読めなければ投げる)
+  loadSlot<W>(slot: PendingSlot, open: (data: SlotSave) => W): Promise<W | null>;
+  list(): Promise<readonly SlotSummary[]>;
+};
+
+export function createLocalSave(deps: {
+  /** IndexedDB が開けなければ null。何も書かず、枠は空として振る舞う */
+  store: IslandStore | null;
+  /**
+   * シナリオの島は自動の枠から戻さず、書きもしない (runner の状態は SaveData に無く、シナリオ中の読込は予言と矛盾する)。
+   * シナリオの島は自動の枠に書かない。書くと次に自由モードで開いたとき、シナリオの途中の島が続きとして出てしまう
+   */
+  mode: 'free' | 'scenario';
+  every: number;
+  log: SaveLog;
+  onSaved: (s: SlotSummary) => void;
+}): LocalSave {
+  const { store, log } = deps;
+  const autosaves = deps.mode === 'free';
+  /** 再開した島ではその tick から数える */
+  let last = 0;
+  let writing = false;
+
+  const write = (slot: SlotId, data: SlotSave): Promise<void> => {
+    if (!store) return Promise.resolve();
+    const { save } = data;
+    return store.save(slot, data).then(
+      (summary) => {
+        deps.onSaved(summary);
+        log('info', 'persist.saved', save.tick, { slot });
+      },
+      (e: unknown) => log('warn', 'persist.save.failed', save.tick, { slot, error: String(e) }),
+    );
+  };
+  // replaced と flush は書き込み中でも重ねて書く。IndexedDB は作った順に transaction を確定させるので、最後に作ったものが残る
+  const writeAuto = (save: SaveData): Promise<void> => {
+    last = save.tick;
+    writing = true;
+    return write('auto', { stage: 'free', save }).finally(() => {
+      writing = false;
+    });
+  };
+  const read = <T>(what: string, fallback: T, p: Promise<T> | undefined): Promise<T> =>
+    (p ?? Promise.resolve(fallback)).catch((e: unknown) => {
+      log('warn', `persist.${what}.failed`, 0, { error: String(e) });
+      return fallback;
+    });
+
+  return {
+    async resume(restore, accept) {
+      if (!autosaves || !store) return null;
+      const save = (await read('load', null, store.load('auto')))?.save;
+      if (!save) return null;
+      if (accept && !accept(save)) {
+        // 断った続きは、次の自動の書きで上書きされる。島を黙って失わないよう脇へ退けて残す (読めない続きと同じ)
+        const setAside = await store.setAside('auto').catch((err: unknown) => `failed: ${String(err)}`);
+        log('info', 'persist.resume.skipped', save.tick, { setAside });
+        return null;
+      }
+      try {
+        const w = restore(save);
+        last = save.tick;
+        log('info', 'persist.resumed', save.tick, { slot: 'auto' });
+        return w;
+      } catch (e) {
+        const setAside = await store.setAside('auto').catch((err: unknown) => `failed: ${String(err)}`);
+        log('warn', 'persist.resume.failed', save.tick, { error: String(e), setAside });
+        return null;
+      }
+    },
+    onTick(tick, serialize) {
+      if (!autosaves || writing || tick - last < deps.every) return;
+      void writeAuto(serialize());
+    },
+    replaced(save) {
+      if (!autosaves) return;
+      void writeAuto(save);
+    },
+    flush(serialize) {
+      if (!autosaves) return Promise.resolve();
+      return writeAuto(serialize());
+    },
+    saveSlot: write,
+    async loadSlot(slot, open) {
+      const data = await read('load', null, store?.load(slot));
+      if (!data) return null;
+      try {
+        return open(data);
+      } catch (e) {
+        log('warn', 'persist.load.failed', data.save.tick, { slot, error: String(e) });
+        return null;
+      }
+    },
+    list: () => read('list', [], store?.list()),
+  };
+}

@@ -28,6 +28,10 @@ assets/**/*.blend1
 assets/**/*.psd
 assets/**/*.aseprite
 
+# wrangler dev のローカル状態と、ローカルの secret
+.wrangler/
+.dev.vars*
+
 # Playwright
 playwright-report/
 test-results/
@@ -37,6 +41,9 @@ test-results/
 
 # 他エージェントの worktree
 .claude/worktrees/
+
+# 受入の画面が受け取った状態の写し (M19-16)。手元の取り下げ鍵が入る
+.claude/acceptance/snapshots/
 
 # Python
 __pycache__/

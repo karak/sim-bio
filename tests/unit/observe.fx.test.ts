@@ -157,6 +157,16 @@ describe('雨の水たまりと跳ね返り (M22-07 の手直し)', () => {
     for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) expect(Math.hypot(spots[i].x - spots[j].x, spots[i].z - spots[j].z)).toBeGreaterThanOrEqual(spots[i].r + spots[j].r);
   });
 
+  it('踏み固めた所が無ければ (集落の無い島、M19-18) 水たまりも無く、乱数を引かない', () => {
+    let draws = 0;
+    const rng = () => {
+      draws++;
+      return 0.5;
+    };
+    expect(puddleSpots([], () => 0, rng, 16)).toEqual([]);
+    expect(draws).toBe(0);
+  });
+
   it('跳ね返りを置く面: 小屋の屋根の上は屋根の高さ、外と軒の外は地面。屋根の上の点を返す', () => {
     // 小屋 1 棟 (中心 (10, 0))。高さ 3 m の屋根の箱 4 × 4 m、地面は 1 m
     const box = new Mesh(new BoxGeometry(4, 0.2, 4), new MeshBasicMaterial());

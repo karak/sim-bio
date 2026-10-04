@@ -1,10 +1,11 @@
-import type { Command, DisasterKind, SaveData, WorldSnapshot } from '../simulation/types';
+import type { Command, DisasterKind, WorldSnapshot } from '../simulation/types';
 import type { CivState } from '../simulation/civilization';
 import { STAGE_NAMES, NEED, cellDistance } from '../simulation/civilization';
 import type { Speed } from '../core/runner';
 import type { LayerKind } from '../render/layerToColors';
 import { TimeSeries } from './timeSeries';
-import { drawGraph, type GraphLine, type GraphMarker } from './graph';
+import { renderGraph, type GraphLine, type GraphMarker } from './graph';
+import { describeGraph } from './graphDescription';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { EDICT_FAITH } from '../simulation/edict';
 import { formatFaith } from '../simulation/faith';
@@ -12,6 +13,10 @@ import { canIntercept, INTERCEPT_NEED, WORKS_FAITH } from '../simulation/works';
 import { TOWER_CRYSTAL, TOWER_FAITH } from '../simulation/weatherTower';
 import { canLaunchShip, shipDone, timberAround, SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED, type ShipState, SHIP_STAGE } from '../simulation/ship';
 import { LOAD_RADIUS } from '../simulation/civilizationLoad';
+import { SLOTS, type ManualSlot, type SlotId, type SlotSummary } from '../persist/slots';
+import type { SlotSave } from '../persist/slotSave';
+import { slotControlsOf } from '../app/place';
+import { seasonOf } from '../core/season';
 import './hud.css';
 
 /**
@@ -72,8 +77,15 @@ export type HudHandlers = {
   onCommand(cmd: Command): void;
   onSpeed(s: Speed): void;
   onLayer(l: LayerKind): void;
-  onSave(): SaveData;
-  onLoad(save: SaveData): void;
+  /** ファイルへの保存と読込 (M19-17 で舞台を名乗る包みにした。読んだ値の確かめは main.ts が持つ) */
+  onSave(): SlotSave;
+  onLoad(data: unknown): void;
+  /** 手元の保存の枠 (M19-05)。自動の枠へは自動保存だけが書く */
+  // (M21-04) overwrites は書いてある枠の一覧の 1 行 (空きなら null)。上書きの確かめに使う
+  onSlotSave(slot: ManualSlot, overwrites: string | null): void;
+  onSlotLoad(slot: SlotId): void;
+  // (M19-17 で変更: 石板の中では「石板を初めから」。今の続きを捨てて Year 0 から)
+  onNewIsland(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
@@ -84,6 +96,8 @@ export type HudHandlers = {
 
 export type Hud = {
   update(s: WorldSnapshot): void;
+  /** 年の境目ちょうどの島を、グラフの点として積む (M25-02)。runner が境目ごとに呼ぶので、点はフレームの間隔で変わらない */
+  recordYear(s: WorldSnapshot): void;
   showCell(cell: number | null, s: WorldSnapshot): void;
   addMarker(x: number, label: string, color: string): void;
   setArmed(kind: DisasterKind | null): void;
@@ -98,14 +112,19 @@ export type Hud = {
   setNextMeteor(year: number | null): void;
   /** 警告の種レイヤーチップ (M21-02 D5) を押したのと同じ動作。layer-species-${id} のクリックハンドラと処理を共有する */
   showSpeciesLayer(id: string): void;
+  /** 今の島の seed を小さく出す (M26-10) */
+  setSeed(seed: number): void;
+  /** 枠の一覧の 1 行を出す (書いたら上書き) */
+  setSlot(s: SlotSummary): void;
+  // (M19-17 で変更: 石板の中も受け付ける。false は訪問 (他人の島) だけで、枠への保存も止める)
+  setReplaceable(on: boolean): void;
 };
 
-const SEASONS = ['春', '夏', '秋', '冬'];
 /** セル時系列: サンプリング間隔 (tick)、保持年数、平均を取る半径 */
 const LOCAL_SAMPLE_TICKS = 10;
 const LOCAL_YEARS = 5;
 const LOCAL_RADIUS = 3;
-const SPEEDS: Speed[] = [0, 1, 10, 100];
+const SPEEDS: readonly Speed[] = [0, 1, 10, 100];
 const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] = [
   { id: 'terrain', label: '地形' },
   { id: 'temperature', label: '気温' },
@@ -114,6 +133,7 @@ const LAYERS: { id: Exclude<LayerKind, `species:${string}`>; label: string }[] =
   { id: 'vitality', label: '生気' },
   { id: 'crystal', label: '輝石' },
 ];
+const SLOT_NAMES: Record<SlotId, string> = { auto: '自動', 'manual-1': '枠 1', 'manual-2': '枠 2', 'manual-3': '枠 3' };
 const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'meteor', label: '隕石' },
   { kind: 'volcano', label: '火山' },
@@ -121,24 +141,36 @@ const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'plague', label: '疫病' },
 ];
 
+/** 枠の一覧の 1 行 (M19-17)。石板の枠は石板の名前と石板の年で出す */
+export function slotLabel(slot: SlotId, s: SlotSummary | undefined, titles: Record<string, string>): string {
+  if (!s) return `${SLOT_NAMES[slot]} · 空き`;
+  return s.stage === 'free' ? `${SLOT_NAMES[slot]} · Year ${s.year}` : `${SLOT_NAMES[slot]} · ${titles[s.scenarioId] ?? s.scenarioId} · ${s.year} 年`;
+}
+
 /** DOM・グラフ・ファイル入出力を隠す。World を直接持たず、handlers 経由で main.ts に渡す。 */
-export function createHud(root: HTMLElement, h: HudHandlers): Hud {
+/** speeds は速さの札の並び。開発用 (M19-16) のときだけ 1000x を足して渡す */
+// scenarioTitles は枠の一覧に出す石板の名前、inScenario は石板の中か (新しい島を「石板を初めから」と出す) (M19-17)
+export function createHud(
+  root: HTMLElement,
+  h: HudHandlers,
+  { speeds = SPEEDS, scenarioTitles = {}, inScenario = false }: { speeds?: readonly Speed[]; scenarioTitles?: Record<string, string>; inScenario?: boolean } = {},
+): Hud {
   root.insertAdjacentHTML(
     'beforeend',
     `
   <div class="hud hud-tl">
-    <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span></div>
+    <div><span id="hud-year" class="mono">Year 0</span> <span id="hud-season" class="dim">春 · Day 0</span> <span id="hud-seed" class="dim mono"></span></div>
     <div id="hud-civ" class="mono" hidden></div>
     <div id="hud-edict" class="row" hidden><span class="dim">勅令</span><button id="edict-stop" class="chip">採掘を止めよ</button><button id="edict-resume" class="chip">再開せよ</button><span class="dim">信仰 ${EDICT_FAITH} 以上で民が従う</span></div>
     <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span id="intercept-next" class="dim"></span><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span><span id="intercept-reason" class="dim"></span></div>
     <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span><span id="ship-reason" class="dim"></span></div>
-    <div class="row" id="speed-row">${SPEEDS.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
+    <div class="row" id="speed-row">${speeds.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
   </div>
   <div class="hud-right">
   <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
   <div class="hud hud-r">
     <div class="dim">個体数の推移</div>
-    <canvas id="graph" width="640" height="200"></canvas>
+    <canvas id="graph" width="640" height="304"></canvas>
     <div id="legend" class="row"></div>
     <div class="stats"><span id="stat-temp" class="mono">--℃</span><span class="dim">平均気温</span><span id="stat-veg" class="mono">--%</span><span class="dim">植生率</span></div>
   </div>
@@ -154,12 +186,16 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     <span class="sep"></span>
     <button id="save-btn" class="chip">保存</button>
     <label class="chip">読込<input id="load-input" type="file" accept="application/json" hidden></label>
+    <select id="slot-select" class="chip">${SLOTS.map((s) => `<option value="${s}"${s === 'manual-1' ? ' selected' : ''}></option>`).join('')}</select>
+    <button id="slot-save" class="chip">枠へ保存</button>
+    <button id="slot-load" class="chip">枠から読込</button>
+    <button id="new-island" class="chip">${inScenario ? '石板を初めから' : '新しい島'}</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>
     <div id="cell-info"></div>
     <div class="dim" style="margin-top:6px">周辺 (半径 ${LOCAL_RADIUS}) の密度 · 直近 ${LOCAL_YEARS} 年</div>
-    <canvas id="local-graph" width="480" height="160"></canvas>
+    <canvas id="local-graph" width="480" height="304"></canvas>
   </div>`,
   );
   const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -194,7 +230,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     $('layer-mode-density').classList.toggle('on', layerMode === 'density');
     $('layer-mode-suit').classList.toggle('on', layerMode === 'suit');
   };
-  for (const s of SPEEDS) {
+  for (const s of speeds) {
     $(`speed-${s}`).addEventListener('click', () => {
       h.onSpeed(s);
       setOn('speed-row', `speed-${s}`);
@@ -289,22 +325,57 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const f = input.files?.[0];
     if (!f) return;
     f.text()
-      .then((t) => h.onLoad(JSON.parse(t) as SaveData))
+      .then((t) => h.onLoad(JSON.parse(t)))
       .catch((err: unknown) => console.error('load failed', err))
       .finally(() => {
         input.value = '';
       });
   });
 
+  const slots = new Map<SlotId, SlotSummary>();
+  let replaceable = true;
+  const slotSelect = $<HTMLSelectElement>('slot-select');
+  // option は SLOTS から同じ順に作っている
+  const selectedSlot = (): SlotId => SLOTS[slotSelect.selectedIndex];
+  const renderSlots = () => {
+    SLOTS.forEach((slot, i) => {
+      slotSelect.options[i].textContent = slotLabel(slot, slots.get(slot), scenarioTitles);
+    });
+    const slot = selectedSlot();
+    const controls = slotControlsOf({ visiting: !replaceable, slot, filled: slots.has(slot) });
+    $<HTMLButtonElement>('slot-save').disabled = !controls.save;
+    $<HTMLButtonElement>('slot-load').disabled = !controls.load;
+    const loadInput = $<HTMLInputElement>('load-input');
+    loadInput.disabled = !controls.file;
+    $<HTMLButtonElement>('new-island').disabled = !controls.newIsland;
+    for (const el of [$('slot-save'), $('slot-load'), $('new-island'), loadInput.parentElement]) if (el) el.title = controls.why;
+  };
+  slotSelect.addEventListener('change', renderSlots);
+  $('slot-save').addEventListener('click', () => {
+    const slot = selectedSlot();
+    const saved = slots.get(slot);
+    if (slot !== 'auto') h.onSlotSave(slot, saved ? slotLabel(slot, saved, scenarioTitles) : null);
+  });
+  $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
+  $('new-island').addEventListener('click', () => {
+    // (M21-04 で変更: 確かめは main.ts の onNewIsland が確かめのダイアログ (confirm.ts) で。文は confirmAsk.ts)
+    h.onNewIsland();
+  });
+  renderSlots();
+
   const canvas = $<HTMLCanvasElement>('graph');
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2d context unavailable');
-  const redraw = () => drawGraph(ctx, ts, lines, markers, canvas.width, canvas.height);
+  canvas.setAttribute('role', 'img');
+  const redraw = () => {
+    renderGraph(canvas, ctx, ts, lines, markers);
+    canvas.setAttribute('aria-label', describeGraph(ts.xRange(), ts.length, markers));
+  };
   const localCanvas = $<HTMLCanvasElement>('local-graph');
   const localCtx = localCanvas.getContext('2d');
   if (!localCtx) throw new Error('2d context unavailable');
   const redrawLocal = () =>
-    drawGraph(localCtx, local, lines.filter((l) => l.axis !== 'right'), [], localCanvas.width, localCanvas.height);
+    renderGraph(localCanvas, localCtx, local, lines.filter((l) => l.axis !== 'right'), []);
 
   /** 選択セル周辺の種ごとの平均密度 */
   const localDensities = (cell: number, s: WorldSnapshot): Record<string, number> => {
@@ -366,6 +437,14 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     return land ? v / land : 0;
   };
 
+  /** 同じ年の点は 1 つだけ。境目で runner が積んだ年を、続く update が重ねて積まない */
+  let pushedYear = -1;
+  const pushYear = (s: WorldSnapshot) => {
+    if (s.year === pushedYear) return;
+    pushedYear = s.year;
+    ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
+  };
+
   const update = (s: WorldSnapshot) => {
     ensureSpecies(s);
     if (localCell !== null && s.tick % LOCAL_SAMPLE_TICKS === 0 && s.tick !== localLastTick) {
@@ -386,7 +465,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       tempEl.value = String(s.climate.tempOffset);
       $('temp-offset-v').textContent = (s.climate.tempOffset >= 0 ? '+' : '') + s.climate.tempOffset.toFixed(1);
     }
-    $('hud-season').textContent = `${SEASONS[Math.floor((s.dayOfYear / 360) * 4) % 4]} · Day ${s.dayOfYear}`;
+    $('hud-season').textContent = `${seasonOf(s.dayOfYear)} · Day ${s.dayOfYear}`;
     const civText = formatCiv(s.civ, s.dreamEater != null);
     const civEl = $('hud-civ');
     civEl.hidden = civText === null;
@@ -434,7 +513,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     }
     if (s.year !== lastYear) {
       lastYear = s.year;
-      ts.push(s.year, { ...s.totals, temp: s.meanTemperature });
+      pushYear(s);
       for (const d of s.species) $(`legend-${d.id}`).textContent = (s.totals[d.id] ?? 0).toFixed(0);
       redraw();
       $('stat-temp').textContent = `${s.meanTemperature.toFixed(1)}℃`;
@@ -461,6 +540,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
     const L = s.layers;
     const sea = L.elevation[cell] < SEA_LEVEL;
     p.hidden = false;
+    redrawLocal();
     // 気象塔 (M10-01): このセルが効いている塔の半径内なら「気象塔: 雨 N×」を出す。
     // 複数の塔が重なれば towers 配列の後ろ (= 後で建てたもの) を優先する (World.towerFactors と同じ規約)
     let tower: WorldSnapshot['towers'][number] | null = null;
@@ -480,6 +560,7 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
 
   return {
     update,
+    recordYear: pushYear,
     showCell,
     addMarker: (x, label, color) => {
       markers.push({ x, label, color });
@@ -503,5 +584,16 @@ export function createHud(root: HTMLElement, h: HudHandlers): Hud {
       nextMeteor = year;
     },
     showSpeciesLayer: showSpeciesLayerInner,
+    setSeed: (seed) => {
+      $('hud-seed').textContent = `seed ${seed}`;
+    },
+    setSlot: (s) => {
+      slots.set(s.slot, s);
+      renderSlots();
+    },
+    setReplaceable: (on) => {
+      replaceable = on;
+      renderSlots();
+    },
   };
 }
