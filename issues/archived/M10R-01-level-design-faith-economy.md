@@ -1,6 +1,6 @@
 ---
 id: M10R-01
-title: レベルデザイン: 信仰の経済の立て直し(民の記憶・絶え間ない祈り・夢喰い・舟か塔か)
+title: レベルデザイン: 信仰の経済の立て直し(民の記憶・絶え間ない祈り・夢食い・舟か塔か)
 status: done
 milestone: M10R
 plan: docs/design/2026-09-22-level-design-faith-economy.md
@@ -12,8 +12,8 @@ evidence: ["9f07330 docs/design/2026-09-22-level-design-faith-economy.md"]
 
 ## What to build
 
-シナリオ設計書 §6 の見直しを受けて M11 の前に挟む LD 文書(issues/README の工程 1)。信仰の経済(上限)、
-絶え間ない祈り、夢喰いの前倒し、空の舟の障壁の書き直し、迎撃の塔の緩和を 1 本にまとめ、ユーザーの承認を得る。
+シナリオ設計書 §6 の見直しを受けて M11 の前に挿む LD 文書(issues/README の工程 1)。信仰の経済(上限)、
+絶え間ない祈り、夢食いの前倒し、空の舟の障壁の書き直し、迎撃の塔の緩和を 1 本にまとめ、ユーザーの承認を得る。
 
 ## Blocked by
 

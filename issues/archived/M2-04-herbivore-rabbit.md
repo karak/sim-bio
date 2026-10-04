@@ -1,6 +1,6 @@
 ---
 id: M2-04
-title: 2 種目の草食獣(ウサギ)で棲み分け
+title: 2 種目の草食獣(ウサギ)で栅み分け
 status: done
 milestone: M2
 plan: docs/specs/2026-09-19-ecosystem-sim-design.md#m2-3-階層--種を放つ
@@ -8,7 +8,7 @@ depends_on: [M2-02]
 evidence: ["25aecac", "tests/unit/world.trophic.test.ts"]
 ---
 
-# 2 種目の草食獣(ウサギ)で棲み分け
+# 2 種目の草食獣(ウサギ)で栅み分け
 
 ## What to build
 

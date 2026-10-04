@@ -12,7 +12,7 @@ evidence: ["3dd0718 docs/specs/plans/2026-09-20-m20-public-release-plan.md"]
 
 ## What to build
 
-公開前に、追跡ファイルと全ブランチの履歴から個人を特定できる情報と秘密情報を洗い出し、削除する。2026-09-20 の下見: 全 108 コミットの author が個人メール(156341+karak@users.noreply.github.com)、企画書 HTML に「起案 karak97」、.env は未追跡で履歴にも無し、`.claude/launch.json` が追跡されている、Gemini 生成の概念画 PNG(約 1MB × 9)が履歴に残っている。
+公開前に、追跡ファイルと全ブランチの履歴から個人を特定できる情報と秘密情報を洗い出し、削除する。2026-09-20 の下見: 全 108 コミットの author が個人メール(156341+karak@users.noreply.github.com)、企画書 HTML に「起案 karak97」、.env は未追跡で履歴にも無し、`.claude/launch.json` が追跡されている、Gemini 生成の概念画 PNG(約1MB × 9)が履歴に残っている。
 
 ## Blocked by
 
@@ -23,7 +23,7 @@ None (can start immediately)
 - [ ] 追跡ファイルの全文検索(メールアドレス、氏名・ハンドル、絶対パス /Users/…、API キー形式、社内ドメイン)で該当 0 件。検索コマンドと結果を作業ログに残す
   - 検索コマンドと結果は作業ログに記録済みだが、「該当 0 件」は未達成のため未チェック。残存: (1) `issues/ART-01-merge-concept-art-variants.md:38` の絶対パス `<home>/...`(tools/blender・docs/design/qa の対象範囲外のため今回は未編集、ユーザー判断待ち)、(2) 本チケットと計画書自身が監査結果として `156341+karak@users.noreply.github.com`/`karak97` に言及している(自己言及であり実データの漏洩ではないが、grep 上は 0 件にならない)
 - [x] 企画書 HTML の起案者表記を匿名化または削除(ユーザーが表記を決める)
-- [x] `.claude/launch.json` を追跡から外すか、公開しても差し支えない内容だと確認して残す(判断を作業ログに)
+- [x] `.claude/launch.json` を追跡から外すか、公開しても差しつかえない内容だと確認して残す(判断を作業ログに)
 - [x] 全ブランチ(main、feat/m1〜m8、wip/*、worktree-concept-art-variants)の履歴に対して同じ検索を行い、author メールと生成画像の扱いを M20-02 の判断材料として一覧化する
 - [x] `.env.example` を追加し、必要な環境変数(GEMINI_API_KEY)の説明だけを書く
 - [x] evidence に commit SHA と確認コマンドの出力(または証跡ファイル)を記す
@@ -62,7 +62,7 @@ None (can start immediately)
 
 内容は `npm run dev -- --port 5180 --strictPort` を起動する dev サーバ設定のみで、個人情報・秘密情報・機密性のある値は含まない。**追跡のまま残す**と判断した。
 
-**5. 未対応(ユーザー判断待ち・M20-02 に引き継ぎ)**
+**5. 未対応(ユーザー判断待ち・ M20-02 に引き継ぎ)**
 
 - `issues/ART-01-merge-concept-art-variants.md:38` の絶対パス記述は `tools/blender`/`docs/design/qa` の対象範囲外であり、完了済みタスクの引き継ぎ記録であるため今回は編集しなかった。必要なら別途修正する。
 - Gemini 生成の概念画像・3D モデルを履歴からどう扱うか(圧縮/除去/そのまま公開)は M20-02 の判断事項。

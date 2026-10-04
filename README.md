@@ -12,7 +12,7 @@
 
 ## スクリーンショット
 
-![全体俯瞰のシミュレーション画面](docs/design/screenshots/01-overview.png)
+[![全体俯瞰のシミュレーション画面](docs/design/screenshots/small/01-overview.jpg)](docs/design/screenshots/01-overview.png)
 
 *本体の全体俯瞰。空の舟 25 年目の島(集落・鐘樹・個体の分布)と、気候・介入・個体数の推移のパネル。*
 
@@ -20,13 +20,13 @@
 
 | | |
 |---|---|
-| ![集落の朝](docs/design/screenshots/02-settlement.png)<br>集落の朝。小屋・灯り柱・鐘樹 | ![船台の空の舟](docs/design/screenshots/03-slipway.png)<br>船台で組み上がった空の舟 |
-| ![空の舟の飛び立ち](docs/design/screenshots/04-departure.png)<br>空の舟の飛び立ち。夕暮れの外海へ去る | ![夜の集落](docs/design/screenshots/05-night.png)<br>夜の集落。灯り柱と鐘樹の鐘 |
-| ![鹿の群れ](docs/design/screenshots/06-deer.png)<br>海辺の斜面の鹿の群れ | ![狼](docs/design/screenshots/07-wolf.png)<br>林の縁を歩く狼 |
-| ![兎](docs/design/screenshots/08-rabbit.png)<br>草地の兎と、岩肌の斜面 | ![鐘樹の林](docs/design/screenshots/09-grove.png)<br>鐘樹の林と舟の肋材 |
-| ![海岸](docs/design/screenshots/10-coast.png)<br>入り江の砂浜と浅瀬 | |
+| [![集落の朝](docs/design/screenshots/small/02-settlement.jpg)](docs/design/screenshots/02-settlement.png)<br>集落の朝。小屋・灯り柱・鐘樹 | [![船台の空の舟](docs/design/screenshots/small/03-slipway.jpg)](docs/design/screenshots/03-slipway.png)<br>船台で組み上がった空の舟 |
+| [![空の舟の飛び立ち](docs/design/screenshots/small/04-departure.jpg)](docs/design/screenshots/04-departure.png)<br>空の舟の飛び立ち。夕暮れの外海へ去る | [![夜の集落](docs/design/screenshots/small/05-night.jpg)](docs/design/screenshots/05-night.png)<br>夜の集落。灯り柱と鐘樹の鐘 |
+| [![鹿の群れ](docs/design/screenshots/small/06-deer.jpg)](docs/design/screenshots/06-deer.png)<br>海辺の斜面の鹿の群れ | [![狼](docs/design/screenshots/small/07-wolf.jpg)](docs/design/screenshots/07-wolf.png)<br>林の縁を歩く狼 |
+| [![兎](docs/design/screenshots/small/08-rabbit.jpg)](docs/design/screenshots/08-rabbit.png)<br>草地の兎と、岩肌の斜面 | [![鐘樹の林](docs/design/screenshots/small/09-grove.jpg)](docs/design/screenshots/09-grove.png)<br>鐘樹の林と舟の肋材 |
+| [![海岸](docs/design/screenshots/small/10-coast.jpg)](docs/design/screenshots/10-coast.png)<br>入り江の砂浜と浅瀬 | |
 
-撮り直しは `node tools/readme-shots.ts --url <動いている Vite の URL>`。
+撮り直しの手順は [docs/operations/readme-screenshots.md](docs/operations/readme-screenshots.md)。
 
 ## 動かし方
 
@@ -227,6 +227,7 @@ URL に `?scenario=<id>` を付けると、その石板の予言を背負って�
 | `docs/specs/` | 機能仕様・技術設計（承認済みの設計を置く） |
 | `docs/design/` | ゲームデザイン文書（GDD、コンセプト、バランス表、QA 資料） |
 | `docs/decisions/` | ADR（技術選定などの意思決定記録） |
+| `docs/operations/` | 運用の手順（スクリーンショットの撮り直しなど） |
 | `assets/` | 素材 |
 | `assets/models/` | 3D モデル（glTF/GLB、Git LFS 管理） |
 | `assets/textures/` | テクスチャ、ハイトマップ、AI 生成コンセプト画 |

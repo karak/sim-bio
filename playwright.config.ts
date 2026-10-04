@@ -10,6 +10,8 @@ export default defineConfig({
   // BASELINES_DIR は pnpm run shots:update が、基準画を書き換えずに新旧を比べるための置き換え
   snapshotPathTemplate: `${process.env.BASELINES_DIR ?? 'tests/e2e/baselines'}/{arg}{ext}`,
   updateSnapshots: 'none',
+  // CI の runner (4 vCPU) は既定で 2 worker になり、観察画面の WebGL (ソフトウェア描画) と操作画面の E2E が CPU を取り合って固まる。CI では 1 つずつ流す
+  workers: process.env.CI ? 1 : undefined,
   use: { baseURL: `http://localhost:${port}`, headless: true },
   webServer: {
     command: `pnpm run dev --port ${port} --strictPort`,

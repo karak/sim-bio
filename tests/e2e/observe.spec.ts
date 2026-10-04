@@ -63,7 +63,8 @@ test('observe view: a prayer that comes while watching shows on the notice band,
   await expect(band).toHaveAttribute('data-kind', 'prayer');
   await expect(band).toHaveAccessibleName('祈り: 民が祈った: 狼を減らして');
   // 8 秒で霧のように消える
-  await expect(band).toHaveAttribute('data-state', 'out', { timeout: 12_000 });
+  // (帯は 1 コマに 0.5 秒までしか数えないので、fps が 2 を切る CI (ソフトウェア描画) では 8 秒に実時間でそれ以上かかる。待ちに幅を持たせる)
+  await expect(band).toHaveAttribute('data-state', 'out', { timeout: 30_000 });
   await expect(band).toBeHidden({ timeout: 5_000 });
 });
 
@@ -90,10 +91,14 @@ test('observe view: clicking an animal follows it, and the speed stays in the ga
       return null;
     });
   await expect.poll(onScreen, { timeout: 15_000 }).not.toBeNull();
-  const target = await onScreen();
-  if (!target) throw new Error('no animal on screen');
-  await page.mouse.click(target.x, target.y);
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.observe!.stats()), { timeout: 5_000 })
-    .toMatchObject({ follow: expect.any(Number), camera: 'free' });
+  // 個体は実時間で歩き続けるので、fps の低い CI では位置を読んでから押すまでに拾う半径 (40 px) の外へ出ることがある。
+  // 押すたびに今の位置を読み直し、追い始めるまで繰り返す
+  await expect(async () => {
+    const target = await onScreen();
+    if (!target) throw new Error('no animal on screen');
+    await page.mouse.click(target.x, target.y);
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.observe!.stats()), { timeout: 2_000 })
+      .toMatchObject({ follow: expect.any(Number), camera: 'free' });
+  }).toPass({ timeout: 30_000 });
 });

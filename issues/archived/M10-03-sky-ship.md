@@ -31,4 +31,4 @@ M10-01, M10-05
 ## 作業ログ
 
 - 2026-09-22: 機構の実装(worktree)。`src/simulation/ship.ts` を新設し、launch_ship コマンド、舟の建造(材の伐採・進み)、完成時の信仰判定、崩壊時の破棄、持ち出し JSON (`exportCargo`)、Verdict `escaped`(`escape` 条件を dead より先に評価)、HUD `#hud-ship` 行、石板のオーバーレイ(「次の島へ」・持ち出しのダウンロード)を配線。シナリオ `sky-ship`・`test-ship` を追加。npm run check(437 テスト)・E2E(21 テスト)通過。tests/slow の校正(想定解・放置 dead・急ぎ dead)は未着手で、別セッションで行う。
-- 2026-09-22: 校正。SHIP_NEED 10 → 120(開始時の森だけで飛べてしまうため)。森は鹿に食われて材にならず、鐘樹が唯一の材。tests/slow 5 件(放置 dead・開始時の森で着工 dead・森を放ち続ける dead・鐘樹を植えながら escaped・育ててから escaped)。単体 439、E2E 21 通過(5969f4e)。
+- 2026-09-22: 校正。SHIP_NEED 10 → 120(開始時の森だけで飛べてしまうため)。森は鹿に食われて材にならず、鐘樹が唐一の材。tests/slow 5 件(放置 dead・開始時の森で着工 dead・森を放ち続ける dead・鐘樹を植えながら escaped・育ててから escaped)。単体 439、E2E 21 通過(5969f4e)。
