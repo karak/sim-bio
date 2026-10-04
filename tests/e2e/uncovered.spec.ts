@@ -154,6 +154,8 @@ for (const [w, h] of [
     expect(got.overlaps).toEqual([]);
     expect(got.blTop).toBeGreaterThanOrEqual(0);
     expect(got.blBottom).toBeLessThanOrEqual(got.vh);
+  });
+}
 
 /** 1 つの部品を 5 点 (左端・右端・上端・下端・真ん中) で見て、一番上の要素が部品自身 (かその中) か (M26-04) */
 const expectUncoveredAtFivePoints = (target: import('@playwright/test').Locator) =>
