@@ -257,4 +257,19 @@ describe('石板と確かめのダイアログを組む (M21-09、M21-04 の慎�
     await vi.waitFor(() => expect(done).toEqual([{ kind: 'flush' }, { kind: 'go', scenarioId: 'o' }]));
     expect(queryByRole(root, 'alertdialog')).toBeNull();
   });
+
+  it('M26-08: onRetry を渡すと「もう一度」はそちらを呼び (石板を選ぶ onSelect は呼ばない)、「自由モードへ」は onSelect(null) のまま', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const onSelect = vi.fn<(id: string | null) => void>();
+    const onRetry = vi.fn<() => void>();
+    const tablet = createTablet(root, [def, other], def, onSelect, names, undefined, fakeEnv().env, onRetry);
+    tablet.showVerdict({ status: 'dead', reason: 'r' });
+    const user = userEvent.setup();
+    await user.click(getByRole(root, 'button', { name: 'もう一度' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+    await user.click(getByRole(root, 'button', { name: '自由モードへ' }));
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
 });
