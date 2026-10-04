@@ -45,3 +45,4 @@ evidence:
   - `--round <接頭辞>` (既定 shots-、末尾の - が無ければ足す)。docs/operations/acceptance.md の 56 行の `m25-03-<日時>` を `<接頭辞>-<日時>` に直した (README にこの説明は無い)。
   - HBR-007 画 1 の島の名前: 基準画 HBR-007-1-島の名前.png を落とし (lens は残す)、TEXT_STRIPS から外し、訪問の板の画は見出しを mask。レビュー (読むだけの opus) の指摘で画 3 の読み終えた訪問の板にも名前があるので同じく mask し、撮り直した。
   - 審査台の items.json・index.html・verdicts.json・.claude/acceptance は触っていない。
+- 2026-10-04 18:57: ユーザーが審査台で回を全部合格にした。今の基準画は各画の最新の回と同じ (sha256 で照合)。

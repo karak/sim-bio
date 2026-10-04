@@ -43,3 +43,4 @@ main を feat/m19 に取り込んだ merge (e7b0b88) で、`tools/blender/observ
   - OBS-002 を撮り直して `pnpm run judge`: OBS-002/2・/3・/4 とも全問 3 票 yes で合格 (9 回の claude -p、換算 0.220 USD、26 秒)。
   - 前後の画: `.claude/localreview/m26-06-20261004-1237/` (集落・群れ・海岸、前後)。集落 (OBS-002-1) と群れ (-2) の画は前後で同じ画素 (md5 一致、L 字の石垣が写っていない)。海岸 (-3) だけ変わる。承認はユーザー待ち。
   - feat/m19 を取り込み後: `pnpm run check` 通過 (vitest 1244 通過)、E2E observe.spec.ts + observeEntry.spec.ts 7 通過、shots.spec.ts -g OBS-002 通過。
+- 2026-10-04 18:57: ユーザーが審査台で回を全部合格にした。今の基準画は各画の最新の回と同じ (sha256 で照合)。
