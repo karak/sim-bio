@@ -74,8 +74,14 @@ async function boot(): Promise<void> {
     if (!store || !def) return null;
     const loaded = await store.loadScenario(scenarioId).catch((e: unknown) => (titleLog('warn', 'persist.scenario.load.failed', { error: String(e) }), null));
     if (!loaded) return null;
-    const checked = checkScenarioSave(loaded, { simVersion: SIM_VERSION, scenarioId, seed: def.start?.seed ?? base.seed });
-    return checked.ok ? scenarioProgressOf(scenarioId, checked.value) : null;
+    // 読めない包み (runner の無い古い続きなど) は投げることがある。投げてもタイトルは出す (続きからに出さないだけ)
+    try {
+      const checked = checkScenarioSave(loaded, { simVersion: SIM_VERSION, scenarioId, seed: def.start?.seed ?? base.seed });
+      return checked.ok ? scenarioProgressOf(scenarioId, checked.value) : null;
+    } catch (e) {
+      titleLog('warn', 'persist.scenario.load.failed', { error: String(e) });
+      return null;
+    }
   };
   const enterFromTitle = async () => {
     // 置き場が答えなくてもタイトルは出す (続きからを出さないだけ)

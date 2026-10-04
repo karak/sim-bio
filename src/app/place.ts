@@ -87,11 +87,11 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
   }
 }
 
+// (M24-04) タイトルへ (title) も舞台を離れる操作なので、同じ確かめを通す
 /**
  * 舞台を移る操作 (石板を選ぶ・自由モードへ・もう一度・訪れる) の確かめ (M21-04)。走っている島は書き切ってから移るので確かめない。
  * 判定の出た自分の石板の島は、開き直すと初めからになる (M19-14) ので確かめる
  */
-// (M24-04) タイトルへ (title) も舞台を離れる操作なので、同じ確かめを通す
 const leaving = (at: At): Ask | null => askOf({ kind: 'leave', finished: at.stage === 'scenario' && at.finished });
 
 /**

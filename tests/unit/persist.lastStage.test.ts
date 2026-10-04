@@ -70,6 +70,7 @@ describe('「続きから」の行き先 continueTargetOf (M24-05)', () => {
     ['自由だけ (印も自由モード)', { stage: 'free', at: 2000 }, auto, null, free],
     ['石板だけ', atScenario(2000), null, running, scenario(2000)],
     ['両方で石板が新しい', atScenario(2000), auto, running, scenario(2000)],
+    ['両方で同じ時刻なら石板 (印の舞台)', atScenario(1000), auto, running, scenario(1000)],
     ['両方で自由が新しい (別のタブで後から自由モードを遊んだ)', atScenario(500), auto, running, free],
     ['判定の出た石板は続きにしない (自由があれば自由)', atScenario(2000), auto, { ...running, finished: true }, free],
     ['判定の出た石板だけなら出さない', atScenario(2000), null, { ...running, finished: true }, null],
