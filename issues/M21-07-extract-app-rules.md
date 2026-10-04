@@ -64,7 +64,7 @@ evidence: ["c55034a src/app/place.ts src/harbor/dock.ts src/harbor/cargo.ts src/
 - [x] main.ts・Hud.ts・Harbor.ts から上の判断が消え、関数を呼ぶだけになる。E2E は全部そのまま通る(CI=1・1 worker)
 - [x] 正本の planned を外す(`pnpm run check` の check:acceptance が、試験があるのに planned だと落とす)
 - [x] `tests/e2e-cloudflare/harbor.spec.ts` に「積荷を流し、別の見守り手が引いて受け取る (本物の D1)」を 1 件足す(本番の人の確かめ OPS-001 から外した積荷の、本物の港の道。見守り手を分けるのは試験の中で、人は分けない)
-- [x] (Could) 表の行に移った E2E の組み合わせを間引く候補を作業ログに挙げる。間引くのはユーザーの承認の後。候補: confirm.spec の「判定の前の石板から石板を選び直すのは確かめない」、harbor.spec の「星の力が足りなければ積荷を受け取らず…」。配線の E2E(操作 1 つ × 受ける/やめる 1 組)は残す
+- [x] (Could) 表の行に移った E2E の組み合わせを間引く候補を作業ログに挙げる。間引くのはユーザーの承認の後。候補: confirm.spec の「判定の前の石板から石板を選び直すのは確かめない」、harbor.spec の「星の力が足りなければ積荷を受け取らず…」。配線の E2E(操作 1 つ × 受ける/やめる 1 組)は残す → 2026-10-04 M25-17 で confirm.spec の方を消した。harbor.spec の方は残した
 
 ## この票で移さないもの
 
@@ -100,8 +100,8 @@ evidence: ["c55034a src/app/place.ts src/harbor/dock.ts src/harbor/cargo.ts src/
   - あわせて、訪れる × 判定の出た石板 (同じ leave の確かめ)
   - 「行き先の中身」の試験の、空きの枠へは確かめない行はどちらの答えでも変わらない
 - (Could) 表の行に移った E2E を間引く候補。消していない。間引くのはユーザーの承認の後
-  - tests/e2e/confirm.spec.ts「M21-04: 判定の前の石板から石板を選び直すのは確かめない (続きは書き切ってから移り、戻れば続きから)」。表の「石板を選ぶ × 走っている石板」と同じ。ただし、書き切ってから戻ると続きから開くことは、ここで見ている
-  - tests/e2e/harbor.spec.ts「M19-10: 星の力が足りなければ積荷を受け取らず (1 種も放たない)、控えも残さない」。planLanding の budget と、harbor.client.test の「島が受け取れなかった…控えを残さず」で見ている
+  - tests/e2e/confirm.spec.ts「M21-04: 判定の前の石板から石板を選び直すのは確かめない (続きは書き切ってから移り、戻れば続きから)」。表の「石板を選ぶ × 走っている石板」と同じ。ただし、書き切ってから戻ると続きから開くことは、ここで見ている → M25-17 (2026-10-04) で消した。続きから開くことは M26-02 の E2E と表が見る
+  - tests/e2e/harbor.spec.ts「M19-10: 星の力が足りなければ積荷を受け取らず (1 種も放たない)、控えも残さない」。planLanding の budget と、harbor.client.test の「島が受け取れなかった…控えを残さず」で見ている → M25-17 で残すと決めた (控えを残さないのは保存の副作用で、表が覆わない)
   - 残すもの: scenarioSave.spec の「訪問 (他人の島) では…押せない」(slotControlsOf を Hud が当てる配線)、「知らない石板の URL…」(URL の書き換えと記録の配線)、devtools.spec の近道 (開発の板の配線)
 
 ## 分かっている限り

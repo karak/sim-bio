@@ -33,7 +33,7 @@ steps の【見た目】【読みやすさ】【手触り】の札の付いた�
 ADR 0001 の段 4。`uv run scripts/acceptance.py check` は、持たない手順を落とす (active の行はすべて。auto の行も同じ)。
 
 ```json
-["ならば", "【読みやすさ】板の文が読める", {"checks": [{"lens": "legible", "target": "判定の板の回避率"}]}]
+["ならば", "【見た目】板の文が読める", {"checks": [{"lens": "legible", "target": "判定の板の回避率"}]}]
 ["ならば", "【見た目】島が絵として成り立って見える", {"judge": "human"}]
 ```
 
@@ -66,7 +66,7 @@ pnpm run shots:update -- --apply <回の名前>    # 審査台で「合格」に
 ADR 0001 の段 5。`pnpm run judge` は、手元の `claude -p` で画を採点表に当てる。鍵は持たず、Claude Code の認証を使う (`--bare` は使わない)。CI では回さない。
 
 ```sh
-pnpm run judge                                     # 正本の judge が "llm" の手順を、その手順の画に当てる (今は llm の手順が無い)
+pnpm run judge                                     # 正本の judge が "llm" の手順を、その手順の画に当てる (今は OBS-002 の 2〜4・SEL-003 の 2〜4・CNF-002 の 2〜3)
 pnpm run judge -- --step SEL-003/2                 # 任意の手順 (ID/手順の番号) を当てる。正本は変えない
 pnpm run judge -- --step SEL-003/2 --image x.png   # 画を指す (仕込んだ欠陥の画を当てるとき)
 pnpm run judge -- --dry-run                        # 何を何回呼ぶかだけ出す
