@@ -257,3 +257,18 @@ test('M21-04: 港から取り下げるのは確かめ、取り消せば港に残
   await expect(card).toHaveClass(/harbor-card-gone/);
   expect(harbor.ledger.has(id)).toBe(false);
 });
+
+test('M26-02: 訪問中に石板を選ぶと、確かめは出ず、URL から visit が消え、石板の島が自分のものとして開く', async ({ page }) => {
+  // 港は閉じている (訪問の島は Year 0 で止まる)。訪問の札が付いていれば、保存・読込は押せない
+  await page.route((url) => url.pathname.startsWith('/api/v1/') && url.pathname !== '/api/v1/logs', (route) => route.abort('failed'));
+  await page.goto(`/?scenario=test-quick&visit=${'a'.repeat(64)}`);
+  await expect(page.locator('#slot-save')).toBeDisabled();
+  await page.selectOption('#tablet-select', 'sinking');
+  // 訪問を離れるのは確かめない (走っている島と同じ。判定の出た島だけ確かめる)
+  await expect(page).toHaveURL((u) => u.search === '?scenario=sinking');
+  expect(page.url()).not.toContain('visit=');
+  await expect(page.locator('#tablet-title')).toContainText('沈む');
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(page.locator('#slot-save')).toBeEnabled();
+  await expect(page.locator('#new-island')).toBeEnabled();
+});
