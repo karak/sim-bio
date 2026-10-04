@@ -154,6 +154,9 @@ describe('印の大きさと上下 (M22-10)', () => {
     expect(outlineWidth(10_000)).toBeLessThanOrEqual(0.5);
     expect(outlineWidth(0)).toBeGreaterThan(0);
   });
+  it('寄ったカメラ (最も寄る距離 5 から 40) でも帯は線でなく、セルの 5 分の 1 以上の幅 (M25-15、0.06 では 24 px のセルで 1〜3 px の線に見えた)', () => {
+    for (const d of [5, 10, 20, 40]) expect(outlineWidth(d)).toBeGreaterThanOrEqual(0.2);
+  });
   it('上下はゆっくりした往復で、動きを減らす設定なら 0', () => {
     expect(markerBob(0, false)).toBeCloseTo(0);
     const ys = Array.from({ length: 40 }, (_, i) => markerBob(i * 0.1, false));
