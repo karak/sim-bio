@@ -40,6 +40,7 @@ ALLOWED_KEYS: Mapping[str, str] = {
     "env": "環境ごとの設定。中身も同じ表で見る",
     "workers_dev": "workers.dev の URL で出すか。無料 (2026-09-27、初回の配備の警告を受けて明示)",
     "preview_urls": "版ごとの Preview URL を出すか。無料。この repo は false (2026-09-27)",
+    "account_id": "配るアカウントを留める。無料。別のアカウントの資格情報では大きく落ちる (2026-10-05、docs/operations/deploy-runbook.md)",
 }
 
 # 表に無い key のうち、なぜ落とすかを言える key。言えない key は「表に無い」とだけ言う

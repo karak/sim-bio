@@ -7,6 +7,8 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 
 どのコマンドも、このリポジトリでまだ実際に打ってはいない(配備の許可が出ていないため)。形は wrangler・gh の docs と `--help` に合わせた。コマンドはすべて repo の根(feat/m19 か、それを取り込んだ main の checkout)で打つ。`pnpm install --frozen-lockfile` 済みとする。
 
+2 回目からの配備は、端末の `wrangler login` に依らない手順書 docs/operations/deploy-runbook.md で行う(手元の OAuth が別のアカウントのものになっていて 7403 で止まったため、2026-10-05)。
+
 ## 0. 前提の値
 
 | 名前 | 値 | 決める人 |
