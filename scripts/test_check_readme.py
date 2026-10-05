@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 import unittest
@@ -55,6 +56,30 @@ class HeadingTest(unittest.TestCase):
         self.assertEqual(check(OK_README + "\n#### 小さな見出し\n"), [])
 
 
+class HeadingFormTest(unittest.TestCase):
+    def test_indented_heading_fails(self):
+        self.assertEqual(len(check(OK_README + "\n   ## 配備\n")), 1)
+
+    def test_setext_heading_fails(self):
+        self.assertEqual(len(check(OK_README + "\n配備\n----\n")), 1)
+
+    def test_horizontal_rule_after_blank_line_is_not_a_heading(self):
+        self.assertEqual(check(OK_README + "\n---\n"), [])
+
+    def test_closing_hashes_are_not_part_of_the_title(self):
+        self.assertEqual(check(OK_README + "\n## 概要 ##\n"), [])
+
+    def test_tilde_line_inside_backtick_fence_does_not_close_it(self):
+        text = OK_README + "\n```\n~~~\n## 配備\n```\n"
+        self.assertEqual(check(text), [])
+
+    def test_longer_fence_is_closed_only_by_an_equal_or_longer_one(self):
+        text = OK_README + "\n````\n```\n## 配備\n````\n## 運用\n"
+        errors = check(text)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("運用", errors[0])
+
+
 class MarkerTest(unittest.TestCase):
     def test_marker_in_code_block_fails(self):
         text = OK_README + "\n```sh\nwrangler deploy\n```\n"
@@ -76,6 +101,10 @@ class MarkerTest(unittest.TestCase):
             "`gh api -X POST /x`",
             "`wrangler tail`",
             "`wrangler rollback`",
+            "`wrangler pages deploy dist`",
+            "`wrangler  deploy`",
+            "`pnpm run deploy`",
+            "`uv run scripts/deploy.py`",
         ):
             with self.subTest(line=line):
                 self.assertTrue(check(OK_README + "\n" + line + "\n"))
@@ -83,6 +112,10 @@ class MarkerTest(unittest.TestCase):
     def test_line_linking_into_docs_operations_passes(self):
         line = "運用 (`scripts/mod.py`) は [docs/operations/cloudflare.md](docs/operations/cloudflare.md)。"
         self.assertEqual(check(OK_README + "\n" + line + "\n"), [])
+
+    def test_link_does_not_exempt_a_line_inside_a_code_block(self):
+        text = OK_README + "\n```sh\nwrangler deploy # [x](docs/operations/a.md)\n```\n"
+        self.assertEqual(len(check(text)), 1)
 
     def test_mention_of_docs_operations_without_link_does_not_exempt(self):
         line = "`wrangler deploy` (docs/operations/ を見る)"
@@ -154,6 +187,17 @@ class TicketWarningTest(unittest.TestCase):
         crit = "- [ ] 手順を issues/README に"
         self.assertEqual(warn_tickets({"X-01.md": ticket("todo", crit)}), [])
 
+    def test_lines_pointing_at_docs_operations_do_not_warn(self):
+        crit = "- [ ] 運用の決まりを docs/operations/ に書く (README.md ではなく)"
+        self.assertEqual(warn_tickets({"X-01.md": ticket("todo", crit)}), [])
+
+    def test_readme_path_other_than_issues_readme_warns(self):
+        crit = "- [ ] docs/README.md に手順を書く"
+        self.assertEqual(len(warn_tickets({"X-01.md": ticket("todo", crit)})), 1)
+
+    def test_quoted_status_is_read(self):
+        self.assertEqual(len(warn_tickets({"X-01.md": ticket('"todo"', self.CRIT)})), 1)
+
     def test_only_acceptance_criteria_lines_are_read(self):
         text = "---\nstatus: todo\n---\n\n## 経緯\n\nREADME に配備を書いた\n\n## Acceptance criteria\n\n- [ ] 何か\n"
         self.assertEqual(warn_tickets({"X-01.md": text}), [])
@@ -168,9 +212,14 @@ class RepoTest(unittest.TestCase):
         errors, _ = check_repo(REPO)
         self.assertEqual(errors, [])
 
-    def test_allowed_headings_cover_todays_readme(self):
-        for h in ("概要", "動かし方", "Cloudflare へ配る"):
-            self.assertIn(h, ALLOWED_HEADINGS)
+    def test_allowed_headings_are_exactly_todays_readme_headings(self):
+        text = (REPO / "README.md").read_text(encoding="utf-8")
+        found = {
+            m.group(1)
+            for line in text.splitlines()
+            if (m := re.match(r"^#{2,3}\s+(.+?)\s*$", line))
+        }
+        self.assertEqual(found, set(ALLOWED_HEADINGS))
 
     @unittest.skipUnless(shutil.which("git"), "git が無い")
     def test_readme_before_relocation_fails(self):
@@ -185,9 +234,9 @@ class RepoTest(unittest.TestCase):
             self.skipTest("履歴に 85294e0 が無い (shallow clone)")
         errors = check_readme(shown.stdout)
         joined = "\n".join(errors)
-        self.assertIn("見出し", joined)
-        self.assertIn("行", joined)
-        self.assertIn("wrangler", joined)
+        self.assertTrue(any("263 行" in e for e in errors))
+        self.assertIn("「運用(`scripts/mod.py`)」", joined)
+        self.assertIn("wrangler deploy", joined)
 
 
 if __name__ == "__main__":

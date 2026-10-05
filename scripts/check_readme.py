@@ -47,7 +47,9 @@ MAX_LINES = 200
 OPERATIONAL_MARKERS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p)
     for p in (
-        r"wrangler (deploy|login|secret|d1\b.*--remote|tail|rollback)",
+        r"wrangler\s+(\S+\s+)?(deploy|login|secret|tail|rollback)",
+        r"pnpm (run )?deploy\b",
+        r"scripts/deploy\.py",
         r"gh (secret|variable|workflow run|api -X)",
         r"scripts/mod\.py",
         r"--remote",
@@ -61,15 +63,32 @@ OPERATIONS_LINK = re.compile(r"\]\([^)]*docs/operations/")
 # 票の警告。open の票の受入の基準が、README を運用の置き場にしていないか
 OPEN_STATUSES = frozenset({"todo", "in_progress", "blocked"})
 # issues/README (票の決まりの置き場) は、リポジトリの README ではない
-README_MENTION = re.compile(r"(?<!issues/)README")
+README_MENTION = re.compile(r"(?<!issues/)(?<!\w)README")
 OPERATIONS_WORDS = re.compile(r"配備|運用|手順|課金")
 
 PLACEMENT = "運用の手順は docs/operations/、設計は docs/design/ へ"
 
-_HEADING = re.compile(r"^#{2,3}\s+(.+?)\s*$")
-_FENCE = re.compile(r"^\s*(```|~~~)")
+_HEADING = re.compile(r"^ {0,3}#{2,3}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
+_SETEXT = re.compile(r"^ {0,3}(-{2,}|={2,})[ \t]*$")
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _STATUS = re.compile(r"^status:\s*(\S+)", re.MULTILINE)
 _ACCEPTANCE = re.compile(r"^##\s+Acceptance criteria\s*$", re.IGNORECASE)
+
+
+def _closes(opening: str, candidate: str) -> bool:
+    return candidate[0] == opening[0] and len(candidate) >= len(opening)
+
+
+def _heading_title(line: str, previous: str) -> str | None:
+    atx = _HEADING.match(line)
+    if atx:
+        return atx.group(1)
+    # setext の `---` は、直前が本文の行のときだけ h2 (空行の後の `---` は水平線)
+    if _SETEXT.match(line) and line.lstrip().startswith("-"):
+        text = previous.strip()
+        if text and not text.startswith(("#", "-", "*", ">", "|", "`")):
+            return text
+    return None
 
 
 def check_readme(
@@ -79,19 +98,24 @@ def check_readme(
 ) -> list[str]:
     errors: list[str] = []
     lines = text.splitlines()
-    in_fence = False
+    fence: str | None = None
+    previous = ""
     for number, line in enumerate(lines, start=1):
-        if _FENCE.match(line):
-            in_fence = not in_fence
-        elif not in_fence:
-            heading = _HEADING.match(line)
-            if heading and heading.group(1) not in allowed_headings:
+        opener = _FENCE.match(line)
+        if fence is None and opener:
+            fence = opener.group(1)
+        elif fence and opener and _closes(fence, opener.group(1)):
+            fence = None
+        elif fence is None:
+            title = _heading_title(line, previous)
+            if title is not None and title not in allowed_headings:
                 errors.append(
-                    f"README:{number}: 許可表にない見出し「{heading.group(1)}」。"
+                    f"README:{number}: 許可表にない見出し「{title}」。"
                     f"{PLACEMENT}。README に節を足すなら "
                     "scripts/check_readme.py の ALLOWED_HEADINGS に足す"
                 )
-        if OPERATIONS_LINK.search(line):
+        previous = line
+        if fence is None and OPERATIONS_LINK.search(line):
             continue
         for marker in OPERATIONAL_MARKERS:
             found = marker.search(line)
@@ -114,7 +138,7 @@ def warn_tickets(tickets: Mapping[str, str]) -> list[str]:
     for name, text in sorted(tickets.items()):
         frontmatter = text.split("\n---", 1)[0] if text.startswith("---") else ""
         status = _STATUS.search(frontmatter)
-        if not status or status.group(1) not in OPEN_STATUSES:
+        if not status or status.group(1).strip("\"'") not in OPEN_STATUSES:
             continue
         in_acceptance = False
         for line in text.splitlines():
@@ -124,6 +148,7 @@ def warn_tickets(tickets: Mapping[str, str]) -> list[str]:
                 in_acceptance
                 and README_MENTION.search(line)
                 and OPERATIONS_WORDS.search(line)
+                and "docs/operations/" not in line
             ):
                 warnings.append(
                     f"{name}: 受入の基準が README を運用の置き場にしている「{line.strip()}」。"
