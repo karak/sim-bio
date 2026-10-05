@@ -167,6 +167,7 @@ export function createHud(
     <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span id="intercept-next" class="dim"></span><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span><span id="intercept-reason" class="dim"></span></div>
     <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span><span id="ship-reason" class="dim"></span></div>
     <div class="row" id="speed-row">${speeds.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
+    <div class="row"><button id="to-title" class="chip">タイトルへ</button></div>
   </div>
   <div class="hud-right">
   <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
@@ -192,8 +193,6 @@ export function createHud(
     <button id="slot-save" class="chip">枠へ保存</button>
     <button id="slot-load" class="chip">枠から読込</button>
     <button id="new-island" class="chip">${inScenario ? '石板を初めから' : '新しい島'}</button>
-    <span class="sep"></span>
-    <button id="to-title" class="chip">タイトルへ</button>
   </div>
   <div class="hud hud-palette"><span class="dim">種を放つ</span><span id="spawn-row" class="row"></span></div>
   <div class="hud hud-bl" id="cell-panel" hidden>

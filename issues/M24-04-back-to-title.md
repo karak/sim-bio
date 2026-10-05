@@ -42,10 +42,12 @@ evidence:
 - 単体試験を先に書いて赤を見た: planOp の表 (`tests/unit/app.place.test.ts`) に「タイトルへ」の 4 行と、行き先の中身の 1 本。5 件が `TypeError: Cannot read properties of undefined (reading 'ask')` (planOp が title を知らず undefined を返す) で落ちるのを見てから実装した
 - `Op { kind: 'title' }` と `Effect { kind: 'to_title' }` を src/app/place.ts に。確かめは `leaving(at)` (石板を選ぶ・自由モードへと同じ表): 走っている島は確かめず、判定の出た石板は「判定の出た島を離れる」、訪問は確かめない。効果は `flush` → `to_title` (訪問の flush は何も書かない)。確かめと行き先の道は planOp / runPlan / askOf のまま (別の道を持たない)
 - main.ts の `to_title`: `putOpenTitle(sessionStorage)` (舞台に入った印を消して一回きりの合図) → `location.assign('/')`。起動の判断 `bootRouteOf` は合図を最初に見るので、E2E の開発の印 (storageState) があってもタイトルが出る
-- HUD: 下の帯の「新しい島」の後に区切りと `#to-title`「タイトルへ」(button なのでキーボードで押せ、名はラベルの文)。`slotControlsOf` には入れない (訪問でも押せる)
+- HUD: 左上の時間の箱の速さの列の下の行に `#to-title`「タイトルへ」(button なのでキーボードで押せ、名はラベルの文)。`slotControlsOf` には入れない (訪問でも押せる)
 - 観察画面からは、観察画面を出て操作画面の「タイトルへ」を押す 2 段 (決定 7)。観察画面の中には置いていない
 - E2E (tests/e2e/title.spec.ts): 自由モードを進めて止め、focus + Enter で「タイトルへ」→ 確かめ無しでタイトル (検索語は空) → 「続きから」の要約の年が離れた年 → Enter で seed 42 の島の離れた tick 以後に戻る → 再読み込みはタイトルへ戻さない。判定の出た石板 (`?scenario=test-quick&shortcut=alive`) では「タイトルへ」が判定の板に覆われず、確かめの「やめる」で URL も判定の板もそのまま、「離れる」でタイトル
-- 基準画: `pnpm run shots` の 6 本は通った (下の帯の札が 1 つ増えても基準画の差の内)。更新はしていない
+- 置き場の変更 (2026-10-05、通しの E2E で): 初めは下の帯の「新しい島」の後に置いたが、1280×720 の石板 (「石板を初めから」で帯が長い) で帯が 2 行に折り返し、種を放つ板が「石板を初めから」の上端を覆った (tests/e2e/uncovered.spec.ts の M26-04、`div#.hud hud-palette`)。左上の時間の箱の新しい行へ移し、uncovered.spec は通った
+- 基準画: `pnpm run shots` の 6 本は移した後も通った (基準画の場面に左上の箱が入らないか差の内)。更新はしていない
+- 狭い画面 (390 幅) では左上の時間の箱が右の板に覆われ、「タイトルへ」も速さの列と同じく押せない (前からある重なり、審査台の画)
 - 移る先は票のとおり素の `/`。検索語の修飾 (`dev=1`・`player=` など) は残らない (開いた問いへ)
 
 ### 開いた問い (M24-04)
