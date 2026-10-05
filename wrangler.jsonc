@@ -20,7 +20,7 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
-  // 港の帳簿 (M19-08)。database_id は本番の DB を作るまでの仮の値。作り方は README「配備(人が行う)」
+  // 港の帳簿 (M19-08)。database_id は sim-bio の本番の DB (2026-09-27 に作った)。作り方は docs/operations/cloudflare-deploy.md の A2・A3
   // (2026-09-27 に本番の DB を sim-bio のアカウントで作り、id を書いた。マイグレーション 0001 は当て済み)
   "d1_databases": [
     {

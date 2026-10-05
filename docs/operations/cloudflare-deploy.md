@@ -1,6 +1,6 @@
 # Cloudflare への配備の手順(人の作業と AI の作業)
 
-wrangler を前提にした、初回の配備と配ったあとの確かめの手順。設計は docs/design/2026-09-26-cloudflare-architecture.md、ふだんの運用は README の「Cloudflare へ配る」「課金にしない」「運用」。
+wrangler を前提にした、初回の配備と配ったあとの確かめの手順。設計は docs/design/2026-09-26-cloudflare-architecture.md、ふだんの運用は docs/operations/cloudflare.md の「課金にしない」「運用」、配備は docs/operations/deploy-runbook.md。
 
 - **人(H)**: 本人のアカウント・支払い・秘密の値・ブラウザでのログインが要る作業。AI は代われない。
 - **AI(A)**: 端末で打てる作業。どれもユーザーの許可を得てから行う。リモートに触れる(Cloudflare・GitHub に書く)ものは特に、その都度許可を得る。
