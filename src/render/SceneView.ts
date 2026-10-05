@@ -2,6 +2,7 @@ import {
   AmbientLight,
   BoxGeometry,
   BufferAttribute,
+  BufferGeometry,
   CircleGeometry,
   Color,
   ConeGeometry,
@@ -9,16 +10,21 @@ import {
   DoubleSide,
   InstancedMesh,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   Object3D,
   PerspectiveCamera,
   PlaneGeometry,
   Raycaster,
   Scene,
+  SphereGeometry,
   Vector2,
+  Vector4,
+  WebGLRenderTarget,
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { WorldSnapshot } from '../simulation/types';
 import { SEA_LEVEL } from '../simulation/terrain';
 import { layerToColors, type LayerKind } from './layerToColors';
@@ -26,6 +32,18 @@ import { scatterInstances } from './scatter';
 import { settlementInstances } from './settlement';
 import { dreamEaterShade } from './dreamEaterShade';
 import type { AssetTable } from './assetTable';
+import {
+  cellMarkerAnchor,
+  markerBob,
+  markerScale,
+  outlineIndices,
+  outlineVertexCount,
+  outlineWidth,
+  writeCellOutline,
+  type SurfaceGrid,
+} from './cellHighlight';
+import { cellViewOf, PIN_ID_RGB, pinMaskOf, selectionOf, terrainDigest, type PinMask, type SceneInspect } from './inspect';
+import { needsRebuild, type Drawn } from './rebuild';
 
 /** 集落の箱 1 個の寸法。stage の数だけ縦に積む */
 const SETTLEMENT_BOX = { width: 0.5, height: 0.4, depth: 0.5 };
@@ -39,9 +57,23 @@ const TOWER_MARKER = { radius: 0.3, height: 1.1 };
 const TOWER_MARKER_MAX = 32;
 /** 夢喰いの影 (M10R-03)。集落を覆う暗い半透明の円。地面のすぐ上に薄く浮かせる (Z ファイト防止) */
 const DREAM_EATER_SHADE = { color: '#1A0E22', opacity: 0.55, yOffset: 0.05 };
+/**
+ * 選んだセルの強調 (M22-10)。帯は HUD の注意の色 (祈り・警告の #e0b055) を明るくした色で、光の当たり方に依らず見えるよう照らさない。
+ * 印は同じ系統の色のピン (下向きの円錐と玉)。寸法は大きさ 1 のときで、カメラの距離で markerScale 倍する
+ */
+const CELL_HIGHLIGHT = {
+  outlineColor: '#FFE08A',
+  markerColor: '#E0B055',
+  markerEmissive: '#6A4812',
+  samplesPerSide: 8,
+  lift: 0.06,
+  pin: { radius: 0.34, height: 1.1, head: 0.4 },
+  /** 印の先と地面の間 (大きさ 1 のとき) */
+  gap: 0.35,
+};
 
 export type SceneView = {
-  /** 毎フレーム呼ぶ。tick かレイヤーが変わった時だけ頂点色とインスタンスを更新する */
+  /** 毎フレーム呼ぶ。tick・レイヤー・島 (layers.elevation の参照、M26-05) が変わった時だけ頂点色とインスタンスを更新する */
   update(s: WorldSnapshot): void;
   setLayer(l: LayerKind): void;
   getLayer(): LayerKind;
@@ -49,8 +81,12 @@ export type SceneView = {
   setVolcanoHint(active: boolean): void;
   /** クライアント座標からセル index。地形に当たらなければ null */
   pickCell(clientX: number, clientY: number): number | null;
+  /** 選んだセルを地形の上の帯と浮かぶ印で示す (M22-10)。null で消す。毎フレーム呼んでよい */
+  setSelected(cell: number | null): void;
   resize(): void;
   dispose(): void;
+  /** 試験の口 (M25-09): 描いている物を読む。src/dev/probe.ts が開発・受入のビルドだけ window.__probe に繋ぐ */
+  inspect(): SceneInspect;
 };
 
 export type SceneViewOptions = {
@@ -58,6 +94,8 @@ export type SceneViewOptions = {
   size: number;
   heightScale?: number;
   maxInstances?: number;
+  /** 印の上下の時計 (ms)。既定は performance.now()。止めた時計を渡すと印は動かず、撮る画が回ごとに変わらない (M25-02) */
+  now?: () => number;
 };
 
 /** Three.js を完全に隠す。World の snapshot を読んで描くだけ。 */
@@ -66,6 +104,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   const hs = opts.heightScale ?? 12;
   const maxInst = opts.maxInstances ?? 20000;
   const n = size * size;
+  const nowMs = opts.now ?? (() => performance.now());
 
   const renderer = new WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -140,10 +179,138 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   dreamEaterMesh.visible = false;
   scene.add(dreamEaterMesh);
 
+  // 選んだセルの強調 (M22-10): 境界の帯 1 枚と浮かぶ印 1 つ (draw call 2)。頂点はその場で書き換え、作り直さない
+  const outlinePos = new Float32Array(outlineVertexCount(CELL_HIGHLIGHT.samplesPerSide) * 3);
+  const outlineGeo = new BufferGeometry();
+  outlineGeo.setAttribute('position', new BufferAttribute(outlinePos, 3));
+  outlineGeo.setIndex(new BufferAttribute(outlineIndices(CELL_HIGHLIGHT.samplesPerSide), 1));
+  const outlineMesh = new Mesh(
+    outlineGeo,
+    // 浮かせに加えて polygonOffset で手前に寄せ、地形と z-fighting させない
+    new MeshBasicMaterial({ color: CELL_HIGHLIGHT.outlineColor, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
+  );
+  outlineMesh.frustumCulled = false;
+  outlineMesh.visible = false;
+  outlineMesh.renderOrder = 1;
+  scene.add(outlineMesh);
+  const pinCone = new ConeGeometry(CELL_HIGHLIGHT.pin.radius, CELL_HIGHLIGHT.pin.height, 16);
+  // 先を下に向け、先を原点に置く
+  pinCone.rotateX(Math.PI);
+  pinCone.translate(0, CELL_HIGHLIGHT.pin.height / 2, 0);
+  const pinHead = new SphereGeometry(CELL_HIGHLIGHT.pin.head, 16, 12);
+  pinHead.translate(0, CELL_HIGHLIGHT.pin.height + CELL_HIGHLIGHT.pin.head * 0.6, 0);
+  const markerGeo = mergeGeometries([pinCone, pinHead]);
+  pinCone.dispose();
+  pinHead.dispose();
+  const markerMesh = new Mesh(markerGeo, new MeshLambertMaterial({ color: CELL_HIGHLIGHT.markerColor, emissive: CELL_HIGHLIGHT.markerEmissive }));
+  markerMesh.visible = false;
+  scene.add(markerMesh);
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  /** 面の下限は海面。海のセルでは帯と印を半透明の海の上に出す */
+  const surface: SurfaceGrid = { elevation: new Float32Array(n), size, heightScale: hs, floor: sea.position.y };
+  let selectedCell: number | null = null;
+  let hlTick = -1;
+  let hlCell = -1;
+  let hlWidth = -1;
+  const anchor = { x: 0, y: 0, z: 0 };
+  /** 強調を置き、見た目が変わったか (出た・消えた・動いた) を返す */
+  const placeHighlight = (s: WorldSnapshot): boolean => {
+    const cell = selectedCell;
+    if (cell === null || cell < 0 || cell >= n) {
+      const shown = markerMesh.visible;
+      outlineMesh.visible = false;
+      markerMesh.visible = false;
+      hlCell = -1;
+      return shown;
+    }
+    const shown = markerMesh.visible;
+    const { x: px, y: py, z: pz } = markerMesh.position;
+    const pk = markerMesh.scale.x;
+    let rewritten = false;
+    const dist = camera.position.distanceTo(controls.target);
+    const width = outlineWidth(dist);
+    // 地形は tick ごと・島が入れ替わった時に変わりうるので、tick・島 (layers.elevation)・セル・カメラの距離 (帯の幅) が変わった時だけ書き直す
+    if (s.tick !== hlTick || s.layers.elevation !== surface.elevation || cell !== hlCell || Math.abs(width - hlWidth) > 0.005) {
+      surface.elevation = s.layers.elevation;
+      writeCellOutline(surface, cell, { samplesPerSide: CELL_HIGHLIGHT.samplesPerSide, width, lift: CELL_HIGHLIGHT.lift }, outlinePos);
+      (outlineGeo.getAttribute('position') as BufferAttribute).needsUpdate = true;
+      Object.assign(anchor, cellMarkerAnchor(surface, cell));
+      hlTick = s.tick;
+      hlCell = cell;
+      hlWidth = width;
+      rewritten = true;
+    }
+    const k = markerScale(dist);
+    const bob = markerBob(nowMs() / 1000, reducedMotion?.matches ?? false);
+    markerMesh.scale.setScalar(k);
+    markerMesh.position.set(anchor.x, anchor.y + (CELL_HIGHLIGHT.gap + bob) * k, anchor.z);
+    outlineMesh.visible = true;
+    markerMesh.visible = true;
+    const p = markerMesh.position;
+    return rewritten || !shown || k !== pk || p.x !== px || p.y !== py || p.z !== pz;
+  };
+  /**
+   * M21-08: 画を撮る前に、今のカメラからセルの面と印の頭が地形に隠れていないか、印の頭が画面の内にあるかを確かめる。
+   * screen はセルの面の canvas の上の位置 (CSS px)。地形は選んだセルを置いた時のもの
+   */
+  const viewOfCell = (cell: number) =>
+    cellViewOf(surface, camera, controls.target, { width: canvas.clientWidth, height: canvas.clientHeight }, CELL_HIGHLIGHT.gap + CELL_HIGHLIGHT.pin.height + CELL_HIGHLIGHT.pin.head * 0.6, cell);
+  // M25-02: ピンの ID 描き。地形は深さだけ (色を書かない)、ピンは 1 色。別の scene と描き先 (WebGLRenderTarget) に描くので、canvas と止めた島の描き直しに触れない
+  const idScene = new Scene();
+  idScene.add(new Mesh(geo, new MeshBasicMaterial({ colorWrite: false })));
+  const idPin = new Mesh(markerGeo, new MeshBasicMaterial({ color: new Color(PIN_ID_RGB[0] / 255, PIN_ID_RGB[1] / 255, PIN_ID_RGB[2] / 255) }));
+  idScene.add(idPin);
+  const idTarget = new WebGLRenderTarget(1, 1);
+  const drawPinMask = (): PinMask => {
+    const buf = renderer.getDrawingBufferSize(new Vector2());
+    idTarget.setSize(buf.x, buf.y);
+    idPin.position.copy(markerMesh.position);
+    idPin.scale.copy(markerMesh.scale);
+    idPin.updateMatrixWorld(true);
+    const clear = renderer.getClearColor(new Color());
+    const alpha = renderer.getClearAlpha();
+    const viewport = renderer.getViewport(new Vector4());
+    renderer.setClearColor(0x000000, 1);
+    renderer.setRenderTarget(idTarget);
+    renderer.clear();
+    renderer.render(idScene, camera);
+    const rgba = new Uint8Array(buf.x * buf.y * 4);
+    renderer.readRenderTargetPixels(idTarget, 0, 0, buf.x, buf.y, rgba);
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(clear, alpha);
+    renderer.setViewport(viewport);
+    return pinMaskOf(rgba, buf.x, buf.y);
+  };
+  // E2E・調整用: 強調の今の状態を読む (__probe.scene.selection())。読むだけで何も変えない
+  // E2E・調整用 (M21-08): 選んだセルがあるとき、任意のセルの見え方を読む。読むだけで何も変えない
+  const inspect: SceneInspect = {
+    selection: () =>
+      selectionOf({
+        size,
+        cell: hlCell,
+        outlinePos,
+        shown: outlineMesh.visible,
+        marker: markerMesh.visible ? { x: markerMesh.position.x, y: markerMesh.position.y, z: markerMesh.position.z, scale: markerMesh.scale.x } : null,
+        drawCalls: renderer.info.render.calls,
+        camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+        view: markerMesh.visible ? viewOfCell(hlCell) : null,
+      }),
+    cell: (cell) => (markerMesh.visible && cell >= 0 && cell < n ? viewOfCell(cell) : null),
+    pinMask: () => (markerMesh.visible ? drawPinMask() : null),
+    terrainDigest: () => terrainDigest((geo.getAttribute('position') as BufferAttribute).array as Float32Array),
+  };
+
   let layer: LayerKind = 'terrain';
-  let lastTick = -1;
-  let lastLayer: LayerKind | null = null;
+  let lastDrawn: Drawn | null = null;
   const colorBuf = new Float32Array(n * 3);
+  // 見た目が変わるときだけ描く (M21-10)。止めた島を毎フレーム描き直すと、GPU の無い環境 (ソフトウェア描画) では 1 ページで 2 コア余りを使い続ける
+  let dirty = true;
+  const markDirty = () => {
+    dirty = true;
+  };
+  // カメラの動きは change で知る。ホイールやドラッグは controls が自分の update でカメラを動かすので、毎フレームの update の返り値には出ない
+  controls.addEventListener('change', markDirty);
+  canvas.addEventListener('webglcontextrestored', markDirty);
 
   const resize = () => {
     const w = canvas.clientWidth || 1;
@@ -151,6 +318,7 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    dirty = true;
   };
   resize();
   window.addEventListener('resize', resize);
@@ -163,7 +331,8 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   };
 
   const update = (s: WorldSnapshot) => {
-    if (s.tick !== lastTick || layer !== lastLayer) {
+    const now: Drawn = { island: s.layers.elevation, tick: s.tick, layer };
+    if (needsRebuild(lastDrawn, now)) {
       const p = geo.getAttribute('position') as BufferAttribute;
       // 海底も実標高で描き、半透明の海面を上に重ねる (平らにすると海面と Z ファイトする)
       for (let i = 0; i < n; i++) p.setY(i, s.layers.elevation[i] * hs);
@@ -227,12 +396,15 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
         dreamEaterMesh.scale.setScalar(shade.radius);
         dreamEaterMesh.position.set(sx - size / 2 + 0.5, s.layers.elevation[shade.cell] * hs + DREAM_EATER_SHADE.yOffset, sy - size / 2 + 0.5);
       }
-      lastTick = s.tick;
-      lastLayer = layer;
+      lastDrawn = now;
+      dirty = true;
     }
     clampTarget();
     controls.update();
+    const highlighted = placeHighlight(s);
+    if (!dirty && !highlighted) return;
     renderer.render(scene, camera);
+    dirty = false;
   };
 
   const ray = new Raycaster();
@@ -250,18 +422,25 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
   };
 
   return {
+    inspect: () => inspect,
     update,
     setLayer: (l) => {
       layer = l;
     },
     getLayer: () => layer,
     setVolcanoHint: (active) => {
+      if (volcanoMarker.visible !== active) dirty = true;
       volcanoMarker.visible = active;
     },
     pickCell,
+    setSelected: (cell) => {
+      selectedCell = cell;
+    },
     resize,
     dispose: () => {
       window.removeEventListener('resize', resize);
+      canvas.removeEventListener('webglcontextrestored', markDirty);
+      controls.removeEventListener('change', markDirty);
       controls.dispose();
       renderer.dispose();
       geo.dispose();
@@ -269,6 +448,9 @@ export function createSceneView(canvas: HTMLCanvasElement, opts: SceneViewOption
       volcanoMarkerGeo.dispose();
       towerMarkerGeo.dispose();
       dreamEaterGeo.dispose();
+      outlineGeo.dispose();
+      markerGeo.dispose();
+      idTarget.dispose();
     },
   };
 }

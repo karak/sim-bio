@@ -7,8 +7,9 @@
 .hud-right > .hud { position: static; }
 #layer-row { max-width: 340px; justify-content: flex-end; }
 .hud-b { bottom: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: calc(100% - 24px); }
-.hud-bl { bottom: 80px; left: 12px; min-width: 240px; }
-#local-graph { width: 240px; height: 80px; display: block; margin-top: 4px; }
+/* 左 44px: 港の札 (.harbor-dock、x 0〜36) の右に取る (M25-10)。12px だと札がセルの詳細の行の札を覆った */
+.hud-bl { bottom: 80px; left: calc(var(--harbor-dock-w) + 8px); min-width: 240px; }
+#local-graph { width: 240px; height: 152px; display: block; margin-top: 4px; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
 .dim { color: #9fb3c2; font-size: 12px; }
@@ -19,7 +20,8 @@
 .chip.armed { background: #b5502f; color: #fff; }
 /* 星の力が足りないチップ・スライダー。押せるが runner が弾くので、見た目だけ薄くする */
 .unaffordable { opacity: 0.4; }
-.hud-r canvas { width: 320px; height: 100px; display: block; margin: 4px 0; }
+.chip:disabled, label.chip:has(input:disabled) { opacity: 0.4; cursor: default; }
+.hud-r canvas { width: 320px; height: 152px; display: block; margin: 4px 0; }
 #legend span { margin-right: 10px; font-size: 11px; color: #9fb3c2; }
 #legend i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
 .stats { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 8px; align-items: baseline; margin-top: 4px; }
@@ -32,6 +34,8 @@
 .tablet select { background: #233544; color: #e9eff3; border: 0; border-radius: 6px; padding: 2px 6px; font-size: 12px; font-family: inherit; }
 .tablet-title { font-size: 15px; font-weight: 700; margin-top: 4px; }
 .tablet-prophecy { font-size: 12px; color: #c9d6cd; line-height: 1.6; margin: 4px 0 6px; }
+.tablet-avoidance, .verdict-avoidance { font-size: 12px; margin: -2px 0 6px; }
+.tablet-avoidance[hidden], .verdict-avoidance[hidden] { display: none; }
 .tablet .row { justify-content: center; }
 .tablet-power { margin-top: 2px; }
 /* 祈り (M9-02)。tablet-milestones と同じ書式 */
@@ -63,3 +67,23 @@
 
 /* hidden 属性を .row などの display 指定より優先する (M10-04 のプレイテストで、hidden の勅令・迎撃・舟の行が display:flex で見えたままだった) */
 [hidden] { display: none !important; }
+
+/* 判定の板を動かす取っ手 (M19-15)。板を脇へ寄せれば、下の画面 (観察画面の入口・石板・HUD) を押せる。取っ手は港の板の継ぎ目と同じ青緑の光 */
+.verdict { pointer-events: none; }
+.verdict-box { pointer-events: auto; position: relative; }
+.verdict-grip { display: block; width: 100%; height: 18px; margin: -16px 0 6px; padding: 0; border: 0; background: none; cursor: grab; touch-action: none; }
+.verdict-grip:active { cursor: grabbing; }
+.verdict-grip i { display: block; width: 56px; height: 6px; margin: 0 auto; border-radius: 3px; background: radial-gradient(circle, rgba(143, 234, 223, 0.75) 1.2px, transparent 1.6px) 0 0 / 7px 6px; opacity: 0.7; }
+.verdict-grip:hover i, .verdict-grip:focus-visible i { opacity: 1; box-shadow: 0 0 6px rgba(143, 234, 223, 0.45); }
+.verdict-grip:focus-visible { outline: 2px solid #8feadf; outline-offset: 2px; }
+
+/* 確かめのダイアログ (M21-04)。港の板・観察画面・判定の板・人の確かめ (z 60) より上。背景は押せない (押せば取り消し) */
+.confirm { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(15, 26, 36, 0.55); }
+.confirm-box { background: rgba(15, 26, 36, 0.97); color: #e9eff3; border: 2px solid #b5502f; border-radius: 12px; padding: 18px 24px 16px; max-width: min(420px, calc(100% - 48px)); text-align: center; }
+.confirm-title { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: #e07a55; }
+.confirm-message { font-size: 13px; line-height: 1.6; margin: 0 0 14px; color: #c9d6cd; }
+.confirm-actions { justify-content: center; gap: 12px; }
+.confirm-actions .chip { font-size: 13px; padding: 4px 14px; }
+.confirm-ok { background: #b5502f; color: #fff; }
+.confirm-actions .chip.confirm-ring, .confirm-actions .chip:focus-visible { outline: 2px solid #8feadf; outline-offset: 2px; }
+/* 輪は script が置いた focus (開いた時の「やめる」、Tab の移り先) とキーボードの focus だけ。マウスで押した札には出さない (M26-09) */

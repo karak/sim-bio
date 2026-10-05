@@ -77,7 +77,7 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 | 2 | 静的配信: 今のビルドを Workers Static Assets で配る。`.blend` と `textures/concept/**` は配らない | B1 |
 | 3 | 手元の保存: SaveData と年代記を IndexedDB に置く(自動保存と手動の枠)。サーバーは関わらない | B2 |
 | 4 | 年代記の記録: UI の `dispatch` の外側で、tick 付きの命令を積む。本体は変えない | B4・Q3 |
-| 5 | HTTP LogSink(M19-01)とログの受け口(M19-02)。warn/error と年ごとの要約だけを送る。受けたログは Workers Logs(7 日)に書き、D1 には入れない | B3 |
+| 5 | HTTP LogSink(M19-01)とログの受け口(M19-02)。warn/error と年ごとの要約だけを送る。受けたログは Workers Logs(無料は 3 日保持)に書き、D1 には入れない | B3 |
 | 6 | 港の API: 年代記の出港・一覧・1 件・通報・取り下げ | B4 |
 | 7 | 訪問者の再生の照合: Web Worker で年代記を回し直してダイジェストを比べ、確認と不一致の数を積む | B4・Q2 |
 | 8 | 舟の積荷: 積荷を流す、漂着をランダムに 1 件引く。受け取るかは UI で選ばせ、受け取ったら外来種として `dispatch` する(年代記に載る) | B5 |
@@ -111,12 +111,12 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 |---|---|---|---|
 | クライアント | 今のまま: TypeScript・Vite 8・three.js・simplex-noise。足すのは `src/harbor`(契約と港のクライアント)、`src/chronicle`(記録と再生)、`src/persist`(IndexedDB) | 変えない | — |
 | 再生 | ブラウザの Web Worker で本体を回す | 数百年の再生で画面を止めない。壊れた年代記を渡されても、tick の上限と中断でタブを守れる | メインスレッド |
-| 手元の保存 | IndexedDB(`saves`・`chronicle`・`outbox`・`keys`) | localStorage は 5 MB 前後で、SaveData を複数持てない | localStorage |
+| 手元の保存 | IndexedDB(`saves`・`slots`・`chronicle`・`scenarios`・`outbox`・`keys`)。`slots` は枠の一覧の行だけを持つ(M19-05。一覧のために `saves` を読むと Chromium で 4 枠 130 ms ほど)。`scenarios` は石板ごとに途中の島と runner の状態を持ち、年代記と同じ transaction で書く(M19-14) | localStorage は 5 MB 前後で、SaveData を複数持てない | localStorage |
 | 静的配信 | **Workers Static Assets**(API と同じ Worker に同梱)。SPA の fallback は `assets_navigation_prefers_asset_serving`(2025-04-01 から既定)で Worker を起こさない | 静的アセットへのリクエストは無料・無制限 | Cloudflare Pages(新規は Workers へ寄せる流れ。1 回の deploy で配信と API を出せるほうが手間が少ない)、GitHub Pages(Cloudflare 主軸の指示に反する) |
 | API(港) | **Cloudflare Worker 1 本**、TypeScript、フレームワークなし(ルート表 1 枚)。`/api/*` だけ fetch handler に入る | ルートは 10 本ほど。依存を増やさない今の流儀に合わせる。枠はアカウント単位なので、Worker を分けても枠は分かれない | Hono(8〜10 ルートに対して重い) |
 | データベース | **D1**(SQLite)。港の帳簿(年代記・通報・積荷・回避の集計・日次予算) | 新しい順の一覧・ランダムに 1 件・集計の加算が SQL 1 文で書ける。超えるとクエリが失敗するだけで、課金にならない | KV、Durable Objects SQLite(この規模では D1 1 つで足り、置き場が 2 つになる。リアルタイムの多人数を始めるときの候補) |
 | 契約 | 手書きのパーサー `src/harbor/contract.ts` をクライアントと Worker が同じファイルで import する | 型と検証を 1 か所に置く | zod |
-| ログ | **Workers Logs**(`console.log` に JSON を 1 行) | 無料プランに含まれ、7 日保持。D1 の書き枠を使わない | Analytics Engine(無料での枠を確かめていない)、Logpush(有料) |
+| ログ | **Workers Logs**(`console.log` に JSON を 1 行) | 無料プランに含まれ、3 日保持・1 日 200,000 件(7 日は Paid)。D1 の書き枠を使わない | Analytics Engine(無料での枠を確かめていない)、Logpush(有料) |
 | 人間確認 | **Turnstile**(出港と通報だけ) | 無料。siteverify は Worker から外への subrequest 1 回 | reCAPTCHA(外部依存・個人情報) |
 | 回数制限 | **Rate Limiting binding**(送り手のハッシュごと)。**使えなくても成り立つ**ようにし、最後の砦は D1 の日次予算にする | GA(2025-09-19)。無料プランで使えるかは docs に記載が無い(要確認) | D1 だけで数える(書きが倍になる) |
 | 定期処理 | 同じ Worker の `scheduled`(Cron 1 本、毎日) | 古い積荷・隠した記録・予算行の掃除と、保存量の集計 | — |
@@ -137,7 +137,7 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 | D1 の行の読み | 5,000,000/日 | 約 25 万行(一覧 1 回 約 25 行、索引つき) | 約 20 倍 | [pricing#d1](https://developers.cloudflare.com/workers/platform/pricing/#d1) |
 | D1 の行の書き | 100,000/日 | 約 4,200 行 | 約 24 倍。アプリの日次予算で最悪でも約 4.3 万行に抑える(§6) | 同上 |
 | D1 の保存 | 1 データベース 500 MB、アカウント合計 5 GB、1 行 2 MB、1 呼び出し 50 クエリ | 年代記 1 件 多くても 10 KB。4 万件で約 400 MB | 400 MB で内部の栓(§6) | [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) |
-| Workers Logs | 無料プランに含む、7 日保持 | 1 日 数千件 | — | [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) |
+| Workers Logs | 無料プランに含む、3 日保持・1 日 200,000 件 | 1 日 数千件 | — | [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)、[pricing#workers-logs](https://developers.cloudflare.com/workers/platform/pricing/#workers-logs)(2026-09-26 に M19-02 で確認: 無料は 3 日) |
 | Turnstile | 無料、1 アカウント 20 ウィジェット。トークンは 300 秒・1 回きり、siteverify 必須 | 1 ウィジェット | — | [Turnstile plans](https://developers.cloudflare.com/turnstile/plans/) |
 | Cron | 5 本/アカウント | 1 本 | — | limits |
 
@@ -210,7 +210,7 @@ flowchart TB
       assets["静的配信<br/>[コンテナ: Workers Static Assets]<br/>ビルド成果物を配る。Worker を起こさない(無料・無制限)"]:::container
       api["港<br/>[コンテナ: Cloudflare Worker, TypeScript]<br/>年代記・積荷・回避率・ログの受け口。<br/>形の検証、回数制限、日次予算、閉港の返事。毎日の掃除(Cron)"]:::container
       db[("港の帳簿<br/>[コンテナ: D1 / SQLite]<br/>年代記・通報・積荷・回避の集計・日次予算")]:::container
-      logs[("運用ログ<br/>[コンテナ: Workers Logs]<br/>構造化ログを 7 日保持")]:::container
+      logs[("運用ログ<br/>[コンテナ: Workers Logs]<br/>構造化ログを 3 日保持")]:::container
     end
   end
 
@@ -296,7 +296,7 @@ export type PublishResult =
 
 export type Harbor = {
   publish(c: Chronicle, d: Digest): Promise<PublishResult>;
-  withdraw(id: ChronicleId): Promise<'ok' | 'closed' | 'forbidden'>;   // 手元の取り下げ鍵で
+  withdraw(id: ChronicleId): Promise<'ok' | 'closed' | 'forbidden'>;   // 手元の取り下げ鍵で(鍵は出港の前に手元で作る、M19-08)
   browse(q: { scenarioId?: string; before?: string }): Promise<{ kind: 'ok'; cards: ChronicleCard[] } | { kind: 'closed' }>;
   visit(id: ChronicleId): Promise<{ kind: 'ok'; chronicle: Chronicle; card: ChronicleCard } | { kind: 'closed' | 'missing' }>;
   confirm(id: ChronicleId, d: Digest): Promise<void>;                  // 失敗は握りつぶす(照合は善意の付加物)
@@ -368,7 +368,7 @@ export function replay(c: Chronicle, onYear?: (year: number) => void, signal?: A
 | 壊れた年代記で訪問者のタブを落とす | parse の不変条件で弾く。再生は Web Worker の中で、tick の上限と中断を持つ |
 | 積荷で他人の島を壊す | 1〜5 件、量は (0, 10]、種はカタログのみ。受け取るかは UI で選ばせる。受け取れば本体の `dispatch` の門を通り、年代記に載る |
 | 通報の悪用 | 通報にも人間確認と回数制限をかける。3 件で自動的に隠し、運営が CLI で戻せる |
-| 他人の島の取り下げ | 出港時に返す取り下げ鍵(D1 にはハッシュだけ)を持つ人だけができる |
+| 他人の島の取り下げ | 取り下げ鍵を持つ人だけができる。鍵は手元で作り、出港に `Authorization: Bearer` で添える(D1 にはハッシュだけ)。港が作って返す形だと、応答が失われて outbox から再送したときに鍵が手元に届かないので、M19-08 で手元で作る形に変えた |
 | 回数制限のための送り手の識別 | IP は保存しない。日付ごとに salt を変えた HMAC でハッシュにし、その日の数えにだけ使う |
 
 ---
@@ -408,7 +408,7 @@ fable の案から取り入れたもの:
 - **スナップショットは預けない。** 代わりに、容量は 1/50 で済む。本体の版が上がると、過去の年代記は要約だけになる。
 - **島に名前を付けさせない。** 代わりに、モデレーションを人手にしない。
 - **アカウントを作らない。** 代わりに、取り下げ鍵を失うと自分の島を取り下げられない。通報で隠れるので、実害は「消せない」より「消される」に寄る。
-- **ログは 7 日しか残さない。** 長期に残るのは回避率の集計だけで、再現は年代記で足りる。
+- **ログは 3 日しか残さない(無料の保持期間)。** 長期に残るのは回避率の集計だけで、再現は年代記で足りる。
 
 ### 他の案(落選)
 
@@ -422,7 +422,7 @@ fable の案から取り入れたもの:
 
 1. **決定論の刻み(C6)の直し方**。「1 回の step で年の境目を越えない」で十分か。予言の卒業(#30)などの乱数が、すべて seed から来ているか。golden replay で確かめる。
 2. **版違いの島**。本体の係数を変えるたびに、過去の年代記は「要約だけ」になる。旧版のビルドを `/v/<n>/` に残して、そこで再生する案は Could として保留する。静的アセットは 1 版 20,000 ファイルなので、版ごとのビルドの大きさを見てから決める。
-3. **再生の所要時間**。300 年の再生がブラウザで何秒かかるか(tests/slow から、1 件あたり数十秒と推定)。照合を自動で走らせるか、「年表を読む」の明示操作にするか。
+3. **再生の所要時間**(2026-09-26 に M19-06 で実測、解決): Chromium の Web Worker で size 64 の 300 年が 73.6 秒(1 年 245 ms)、size 128 は本体の step が 4 倍。照合は自動で走らせず、「年表を読む」の明示の操作にして、進みと中断を見せる(M19-09)。シナリオの続きからは年代記の再生ではなく、runner の状態を持ち出す(M19-14)。
 4. **Rate Limiting binding が無料プランで使えるか**。docs に記載が無い。使えなければ D1 の日次予算だけで締める(設計はそれで成り立つ)。
 5. **fail open と fail closed**。fail open は「Worker が無いものとして振る舞う」とあるが、Static Assets 付きの Worker で API のパスがどう返るかは未確認。配備後に確かめる。
 6. **Cloudflare の Git 連携ビルドが LFS を引くか**。引かなければ GitHub Actions で確定。どちらでも設計は変わらない。
@@ -449,3 +449,18 @@ in のスコープは issues/M19-04〜12 に起こした(既存の M19-01・02 �
 | 8 舟の積荷 | M19-10 |
 | B6 回避率 | M19-11 |
 | 10 課金にしない仕組み / 11 運用スクリプト | M19-12 |
+
+## 11. 実装で変えたこと(Implementation reconciliation)
+
+実装の途中で受け入れた設計からのずれ。受け入れた元はチケットの作業ログ。
+
+| 変えたこと | 理由 | 受け入れた元 |
+|---|---|---|
+| 取り下げ鍵は手元で作り、出港に `Authorization: Bearer` で添える(§6.3 に反映済み) | 港が作って返すと、応答が失われて outbox から再送したとき鍵が手元に届かない | M19-08、2026-09-26 に親が受け入れ |
+| 島の名前は年代記の id から作る(seed からではない) | 今の石板はどれも seed 42 で、seed からだと同じ石板の島がみな同じ名前になる | M19-09 |
+| 碑文のカタログは `/data/inscriptions.json` を実行時に読む | Vite は publicDir の JSON を import させない | M19-09 |
+| `PublishResult` の `queued` に id を持たせる。`report` は `not_human`・`slow_down` も返す | outbox の再送で同じ id を示す。通報にも人間確認と回数制限がかかる | M19-09 |
+| 年代記の型は `src/harbor/chronicle.ts`、港の約束は `src/harbor/contract.ts` に分ける | 1 つにすると rename として追えず、既存コメントが削除に見える。記録・保存・再生は港に出さなくても年代記を使う | M19-07 |
+| シナリオの続きからは、SaveData に本体の数え(memory)を足し、runner の状態(RunnerState)を持ち出す | `World.restore` だけでは閉じた年のうちに食い違った。年代記の回し直しは遅すぎる(§8-3) | M19-14 |
+| 照合は「年表を読む」の明示の操作 | 再生は Chromium の Worker で size 64 の 300 年が 73.6 秒 | M19-06 |
+| Workers Logs の無料の保持は 3 日・1 日 200,000 件 | docs で確かめた(7 日は Paid) | M19-02 |

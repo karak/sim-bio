@@ -13,6 +13,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Page } from '@playwright/test';
+import type { Probe } from '../src/dev/probe.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'docs/design/screenshots');
@@ -34,7 +35,7 @@ type Shot = {
 const look = (at: string, dist: number, height: number, yaw: number) => async (page: Page) => {
   await page.waitForTimeout(4000);
   await page.evaluate(
-    ([a, d, h, y]) => (window as unknown as { __observeLook: (at: string, d: number, h: number, y: number) => void }).__observeLook(a as string, d as number, h as number, y as number),
+    ([a, d, h, y]) => (window as unknown as { __probe: Probe }).__probe.observe!.look(a as string, d as number, h as number, y as number),
     [at, dist, height, yaw],
   );
 };

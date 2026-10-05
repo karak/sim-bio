@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
+import type { Probe } from '../../src/dev/probe';
 
-test('observe view: no settlement in free mode, so the entry is disabled', async ({ page }) => {
+test('observe view: no settlement in free mode, but the entry is enabled and centers on the island (M19-18)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#hud-year')).toHaveText('Year 0');
-  await expect(page.getByRole('button', { name: '3D で見る' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '3D で見る' })).toBeEnabled();
 });
 
 test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the game clock, and back returns to the map', async ({ page }) => {
@@ -17,9 +18,9 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
   await expect(page.locator('#speed-10')).toHaveClass(/on/);
   await expect(page.locator('#speed-100')).not.toHaveClass(/on/);
   const stats = page.locator('#observe-layer .o-stats');
-  await expect(stats).toHaveText(/^\d+ 年$/, { timeout: 90_000 });
+  await expect(stats).toHaveText(/^\d+ 年 · [春夏秋冬]$/, { timeout: 90_000 });
   // 観察画面の中でも本体の時間が進む (観察画面は操作画面の runner の snapshot を描く)
-  const tick = () => page.evaluate(() => (window as unknown as { __observeStats: { tick: number } }).__observeStats.tick);
+  const tick = () => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.observe!.stats()!.tick);
   const t0 = await tick();
   await expect.poll(tick, { timeout: 10_000 }).toBeGreaterThan(t0);
   // 下の帯が時間の流れとカメラを示し、帯の速さは操作画面の速さのボタンを押す
@@ -52,7 +53,7 @@ test('observe view: a prayer that comes while watching shows on the notice band,
   await expect(page.locator('#hud-year')).toHaveText('Year 9', { timeout: 60_000 });
   await page.click('#speed-0');
   await page.getByRole('button', { name: '3D で見る' }).click();
-  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^9 年$/, { timeout: 90_000 });
+  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^9 年 · [春夏秋冬]$/, { timeout: 90_000 });
   const band = page.getByRole('status', { name: /^祈り: / });
   await expect(band).toBeHidden();
   await page.getByRole('toolbar', { name: '観察画面' }).getByRole('button', { name: '10x' }).click();
@@ -80,10 +81,11 @@ test('observe view: clicking an animal follows it, and the speed stays in the ga
   await page.locator('#observe-layer .o-shots').getByRole('button', { name: '群れ' }).click();
   const onScreen = () =>
     page.evaluate(() => {
-      const w = window as unknown as { __observeDebug: { agents: { id: number; st: string }[] }; __observeScreen: (id: number) => { x: number; y: number } | null };
-      for (const a of w.__observeDebug.agents) {
+      const o = (window as unknown as { __probe: Probe }).__probe.observe;
+      if (!o) return null;
+      for (const a of o.debug()?.agents ?? []) {
         if (a.st === 'enter' || a.st === 'leave') continue;
-        const p = w.__observeScreen(a.id);
+        const p = o.screen(a.id);
         if (p) return { id: a.id, ...p };
       }
       return null;
@@ -96,7 +98,7 @@ test('observe view: clicking an animal follows it, and the speed stays in the ga
     if (!target) throw new Error('no animal on screen');
     await page.mouse.click(target.x, target.y);
     await expect
-      .poll(() => page.evaluate(() => (window as unknown as { __observeStats: { follow: number | null; camera: string } }).__observeStats), { timeout: 2_000 })
+      .poll(() => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.observe!.stats()), { timeout: 2_000 })
       .toMatchObject({ follow: expect.any(Number), camera: 'free' });
   }).toPass({ timeout: 30_000 });
 });

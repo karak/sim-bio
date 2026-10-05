@@ -140,7 +140,7 @@ bloom はかけていません。並べ図の右端の月鹿(`assets/models/deer
 
 審査台への判断(「草や木をひっとうにまだ磨き上げる余地はある」)のうち、草と地面を直しました。木は別の作業です。
 比較画は左が前、右が後です: `grass-before-after-grove.png`(林)・`grass-before-after-settlement.png`(集落)・`grass-before-after-rabbit.png`(兎に寄った低い目)・`grass-before-after-wolf.png`(狼)。
-撮り方は `observe.html?time=0.12&freeze=1&ship=60&shot=<寄せ先>`、兎は `__observeLook('rabbit', 6, 0.9, 0.5)` です(兎は動くので、前と後で立ち位置は揃いません)。
+撮り方は `observe.html?time=0.12&freeze=1&ship=60&shot=<寄せ先>`、兎は `__probe.observe.look('rabbit', 6, 0.9, 0.5)` です(兎は動くので、前と後で立ち位置は揃いません)。
 
 直したところ:
 
@@ -158,7 +158,7 @@ bloom はかけていません。並べ図の右端の月鹿(`assets/models/deer
 兎: 房の丈は横の広がりと切り離し、最も高い葉の平均を約 0.47 m にしました(単体テストの草地 0.4 での値。前の `grass_tuft` は同じ式からの見積もりで約 0.53 m)。外側の 8 枚は内側の 5〜8 割の高さなので、座高 0.35 m の兎は草の上に頭と背が出ます(`grass-before-after-rabbit.png`)。
 単体テスト `tests/unit/observe.grass.test.ts` で、丈の平均 0.5 m 未満・最大 0.85 m 未満を確かめています。
 
-予算(`__observeStats`、1280×720、`time=0.12&freeze=1&ship=60`):
+予算(`__probe.observe.stats()`、1280×720、`time=0.12&freeze=1&ship=60`):
 
 | 寄せ先 | draw call 前 → 後 | 三角形 前 → 後 | 見えている房 前 → 後 |
 |---|---|---|---|
@@ -184,7 +184,7 @@ fps: 別の作業の観察画面が同じ GPU で動いていた間は、前も�
 
 審査台への判断(「草や木をひっとうにまだ磨き上げる余地はある」)のうち、鐘樹の成木と森の木を直しました。草は別の作業(上の「追記(草の磨き上げ)」)です。
 比較画は上が前、下が後です: `trees-before-after-grove.png`(林の寄せ先)・`trees-before-after-groveTrack.png`(自動カメラの林の横移動、開いてから約 100 秒 / 50 秒の最初の groveTrack の 3 秒目)・`trees-before-after-settlementHigh.png`(自動カメラの集落の俯瞰、最初の settlementHigh の 4 秒目。ゆっくり回るので前と後で向きが少しずれます)。
-撮り方は `observe.html?time=0.12&freeze=1&ship=60&shot=林`、自動カメラは `shot` を付けずに開き、`__observeStats.camera` がそのショットになるのを待ちました。
+撮り方は `observe.html?time=0.12&freeze=1&ship=60&shot=林`、自動カメラは `shot` を付けずに開き、`__probe.observe.stats().camera` がそのショットになるのを待ちました。
 `trees-vs-reference.png` は上から基準画 `sheets/belltree.png`、前の並べ図 `belltree.png`、後の並べ図(芽・若木・成木・株・丸太)、前の `flora2.png`、後の `flora2.png` です。
 
 直したところ:
@@ -210,7 +210,7 @@ fps: 別の作業の観察画面が同じ GPU で動いていた間は、前も�
 
 三角形(1 本): 成木 3,646(前 3,917、予算 4,000)、lod1 1,080(1,112、1,200)、森の木 1,288(1,625、2,000)、lod1 380(575、600)。GLB は belltree 672 KB(210 KB)、flora 519 KB(101 KB)で、どちらにも同じ絵が 1 枚入ります。
 
-予算(1600 × 900、`__observeStats`、6 つの寄せ先 集落/船台/群れ/林/狼/海岸):
+予算(1600 × 900、`__probe.observe.stats()`、6 つの寄せ先 集落/船台/群れ/林/狼/海岸):
 
 | | draw call | 三角形 | fps |
 | --- | --- | --- | --- |
@@ -242,7 +242,7 @@ fps は別の作業の画面と GPU を分け合った測りで、同じ条件�
 比較画:
 
 - `settlement-before-after-high.png`: 上が前、下が後。自動カメラの集落の俯瞰(`observe.html?time=0.3&freeze=1&ship=80`、最初の settlementHigh の 4 秒目)。ゆっくり回るので前と後で向きが少しずれます。
-- `settlement-before-after-close.png`: 西の小屋(集落の中心から (−14, −8))に、南東から 13 m・高さ 4.5 m の斜めの寄り(`__observeAir` でカメラを置いた。前と後で同じカメラ)。
+- `settlement-before-after-close.png`: 西の小屋(集落の中心から (−14, −8))に、南東から 13 m・高さ 4.5 m の斜めの寄り(`__probe.observe.air` でカメラを置いた。前と後で同じカメラ)。
 - `settlement-night.png`: 夜(`time=0.8`)。上から前の引き、後の引き(広場の東から西の小屋へ)、後の寄り(上と同じ 13 m の寄り)。
 - `settlement-vs-reference.png`: 上が基準画 `sheets/settlement.png` の切り出し、下が作り直した部品を同じ並び(小屋・灯り柱・L 字の石垣・衝立)で描いた `settlement-pieces.png`。
 - `settlement-ship.png`: 完成の舟(船台に載せた `ship_sails`)の前に、作り直した部品と月鹿を並べた大きさと作り込みの比べ。左端は遠景用の `hut_lod1`(ゲームでは使っていない)。
@@ -313,7 +313,7 @@ blender -b --factory-startup --python tools/blender/observe_render.py -- hut doc
 
 GLB は 470 KB → 1.07 MB です。ゲームの集落には小屋 3・灯り柱 5・石垣 2・L 字 1・衝立 2・敷石 9 を置くので、影の描画を含めて集落の寄せ先で約 5.8 万三角形増えます。
 
-予算(1600 × 900、`__observeStats`、`observe.html?time=0.12&freeze=1&ship=60&shot=集落` を開き、ページの寄せ先の押しボタンを順に押して 4 秒後から 0.5 秒おきに 8 回):
+予算(1600 × 900、`__probe.observe.stats()`、`observe.html?time=0.12&freeze=1&ship=60&shot=集落` を開き、ページの寄せ先の押しボタンを順に押して 4 秒後から 0.5 秒おきに 8 回):
 
 | 寄せ先 | draw call 前 → 後 | 三角形 前 → 後 |
 | --- | --- | --- |
@@ -370,7 +370,7 @@ fps は、別の作業の観察画面(5299 番のページ)と GPU を分け合�
 - `trees2-stages-game.png`: ゲーム内の株・若木・芽の寄り(前と後で同じ株・若木・芽)。
 - `trees2-grass-shadow.png`: 木の影の中の草。左は参考に草が影を受けない場合、真ん中が前、右が後。
 
-撮り方は `observe.html?time=0.12&freeze=1&ship=60&shot=<寄せ先>` を 1600 × 900 で開き、寄りは `__observeAir` でカメラを置きました(台本は作業の scratchpad にあり、リポジトリには入れていません)。
+撮り方は `observe.html?time=0.12&freeze=1&ship=60&shot=<寄せ先>` を 1600 × 900 で開き、寄りは `__probe.observe.air` でカメラを置きました(台本は作業の scratchpad にあり、リポジトリには入れていません)。
 
 直したところ:
 
@@ -519,7 +519,7 @@ fps は別の作業の画面と GPU を分け合った測りで、前と後を�
 - 切り替わり(`trees3-lod-swap.png`): 羊歯の遠距離版は、前の版(小葉 5 対・軸なし)では小葉の位置がずれ、真ん中の立ち上がる軸の束が消えて見えたので、近い形と同じ位置の小葉を 1 対おきに描き、軸を 3 点の粗い管で足しました。
   小花の遠距離版は、花の芯を黄にすると花が黄色い点に見えて色が跳んだので、芯を花弁の色に寄せ、花を小さくしました。穂の出た月草の遠距離版の穂は、近い形の小穂の列の長さの細い紡錘にしました。
   羊歯のさらに遠い版は、葉 1 枚を付け根から先への弓なりの帯(2 三角形)にしました(付け根と先を結ぶ弦を面にすると、葉の下が塗られたテントに見えた)。
-- 林の寄せ先の `__observeBreakdown()` の `other`(下草・株など): 18bbff2 の後の本体(1a7809b、この段の前)で drawn 91.9 千・60 m より先 70.6 千 → 後 22.2 千・9.3 千。
+- 林の寄せ先の `__probe.observe.breakdown()` の `other`(下草・株など): 18bbff2 の後の本体(1a7809b、この段の前)で drawn 91.9 千・60 m より先 70.6 千 → 後 22.2 千・9.3 千。
   いちばん大きかったのは羊歯の遠距離版(120 三角形が 555 株、6.7 万三角形)でした。
 
 予算(`npm run bench:observe`、1280 × 720、前は 1a7809b):

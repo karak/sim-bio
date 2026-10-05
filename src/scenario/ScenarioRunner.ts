@@ -3,6 +3,7 @@ import { civVitality, judgeScenario, landRatio, startStats, vitalityRatio } from
 import type { ScenarioDef, StartStats, Verdict } from './types';
 import { scenarioWarnings, type CivContext, type Warning } from './warnings';
 import type { PrayerKind } from '../simulation/prayer';
+import type { CivState } from '../simulation/civilization';
 import { canIntercept, INTERCEPT_NEED } from '../simulation/works';
 import { TOWER_COST, TOWER_RAIN_SCALE_DEFAULT, TOWER_TEMP_OFFSET_DEFAULT, TOWER_UPKEEP } from '../simulation/weatherTower';
 
@@ -50,16 +51,19 @@ export type InterveneResult = { ok: true } | { ok: false; reason: 'budget' | 'fi
 export type BudgetInfo = { power: number; max: number; incomeLastYear: number; upkeepLastYear: number };
 
 /** 表示中の予定の告知 (M21-02 D5)。untilYear になった年の評価で消える */
-type Notice = { idx: number; untilYear: number; warning: Warning };
+export type Notice = { idx: number; untilYear: number; warning: Warning };
 
 export type ScenarioRunner = {
   readonly def: ScenarioDef;
+  // M19-04: 年の境目では stepByYear が境目ちょうどの snapshot で update を呼ぶ。同じ年のうちに何度呼んでも、年次評価と予定の発火は 1 回きり
   /** 毎フレーム呼ぶ。予定コマンドの発火と年次判定を行う */
   update(s: WorldSnapshot): Verdict;
   /** プレイヤーの介入。回数を数えて world に流す。budget があれば値段を引き、足りなければ弾く */
   intervene(cmd: Command): InterveneResult;
   /** 開始からの年 */
   yearOf(s: WorldSnapshot): number;
+  /** 次の年の境目までの tick 数 (1〜ticksPerYear)。境目ちょうどなら ticksPerYear。stepByYear が 1 回の step をここで切る (M19-04) */
+  ticksToNextYear(s: WorldSnapshot): number;
   verdict(): Verdict;
   interventions(): number;
   /** 現在の星の力。budget のないシナリオでは常に 0 */
@@ -80,11 +84,137 @@ export type ScenarioRunner = {
   setViewedSpecies(id: string | null, opts?: { acknowledge?: boolean }): void;
   /** 出来事の年表 (介入、予定イベント、力切れ、警告の初回、勝敗)。古い順 */
   timeline(): TimelineEvent[];
+  /** 年の境目ごとの評価で見た種の総数。年 0 から 1 年に 1 件 (年代記の折れ線、M19-06) */
+  totalsByYear(): readonly Readonly<Record<string, number>>[];
   /** 石板に出す予言の節目 (M10-02)。迎撃で取り消した隕石の年の節目は消える */
   milestones(): { atYear: number; text: string }[];
   /** 迎撃で取り消せる次の予定隕石の年 (M10-02)。無ければ null。HUD が迎撃の可否に使う */
   nextMeteorYear(): number | null;
+  /** 今の状態の写し (M19-14)。SaveData と同じ tick で取り、createScenarioRunner の restored に渡せば続きから進む */
+  save(): RunnerState;
 };
+
+/** RunnerState の形の版。形を変えたら上げる (古い版の状態は読まず、石板の初めからにする) */
+export const RUNNER_STATE_VERSION = 1;
+
+/**
+ * runner の状態 (M19-14)。JSON にできるものだけ (Set は配列にする)。
+ * 石板の定義 (def) と島から決まるもの (大きさ・力の上限) は持たず、生成のときに求め直す
+ */
+export type RunnerState = {
+  version: typeof RUNNER_STATE_VERSION;
+  scenarioId: string;
+  startTick: number;
+  start: StartStats;
+  fired: string[];
+  cancelled: number[];
+  lastYear: number;
+  interventions: number;
+  verdict: Verdict;
+  power: number;
+  incomeLastYear: number;
+  upkeepLastYear: number;
+  powerSpent: number;
+  warnings: Warning[];
+  history: Record<string, number>[];
+  civHistory: number[];
+  civVitalityHistory: number[];
+  lastEdictN: number | null;
+  pendingIntercepts: number;
+  lastIntercepted: number;
+  prevShipProgress: number | null;
+  prevCivStage: number | null;
+  warned: string[];
+  timeline: TimelineEvent[];
+  currentYear: number;
+  lastCivStage: number;
+  lastCivFaith: number | null;
+  lastCivFaithCap: number | null;
+  lastDreamEater: boolean;
+  lastPrayerIssuedYear: number | null;
+  lastPrayerKind: PrayerKind | null;
+  lastPrayersAnswered: number;
+  lastPrayersIgnored: number;
+  lastPrayersWithdrawn: number;
+  currentPrayer: CivState['prayer'] | null;
+  /** 表示中の予定の告知 (M21-02 D5)。予定の順 */
+  notices: Notice[];
+};
+
+/** 石板を始めるときの状態。値の意味は createScenarioRunner の中の同じ名前の変数のコメント */
+function freshState(def: ScenarioDef, first: WorldSnapshot): RunnerState {
+  return {
+    version: RUNNER_STATE_VERSION,
+    scenarioId: def.id,
+    startTick: first.tick,
+    start: startStats(first),
+    fired: [],
+    cancelled: [],
+    lastYear: -1,
+    interventions: 0,
+    verdict: { status: 'running', reason: `${def.years} 年` },
+    power: def.budget?.start ?? 0,
+    incomeLastYear: 0,
+    upkeepLastYear: 0,
+    powerSpent: 0,
+    warnings: [],
+    history: [],
+    civHistory: [],
+    civVitalityHistory: [],
+    lastEdictN: first.civ?.edict?.n ?? null,
+    pendingIntercepts: 0,
+    lastIntercepted: first.civ?.intercepted ?? 0,
+    prevShipProgress: null,
+    prevCivStage: null,
+    warned: [],
+    timeline: [],
+    currentYear: 0,
+    lastCivStage: first.civ?.stage ?? 0,
+    lastCivFaith: first.civ?.faith ?? null,
+    lastCivFaithCap: first.civ?.faithCap ?? null,
+    lastDreamEater: first.dreamEater != null,
+    lastPrayerIssuedYear: first.civ?.prayer?.issuedYear ?? null,
+    lastPrayerKind: first.civ?.prayer?.kind ?? null,
+    lastPrayersAnswered: first.civ?.prayersAnswered ?? 0,
+    lastPrayersIgnored: first.civ?.prayersIgnored ?? 0,
+    lastPrayersWithdrawn: first.civ?.prayersWithdrawn ?? 0,
+    currentPrayer: first.civ?.prayer ?? null,
+    notices: [],
+  };
+}
+
+/** 保存した状態がこの版・この石板のものでなければ理由を返す (置き場から読んだ続きの確かめと、restored の門で同じものを使う) */
+export function runnerStateMismatch(saved: Pick<RunnerState, 'version' | 'scenarioId'>, scenarioId: string): string | null {
+  if (saved.version !== RUNNER_STATE_VERSION) return `unsupported runner state version ${String(saved.version)}`;
+  if (saved.scenarioId !== scenarioId) return `runner state of ${saved.scenarioId} for ${scenarioId}`;
+  return null;
+}
+
+/**
+ * notices を持つ前 (M21-02 D5 を取り込む前) に書いた版 1 の状態。予定の告知は年次評価の警告 (warnings) に混ぜて持ち、
+ * 発火してまだ混ぜていない分を announced に持っていた。置き場と枠にはこの形がまだ残っている
+ */
+type LegacyRunnerState = Omit<RunnerState, 'notices'> & { notices?: Notice[]; announced?: Warning[] };
+
+/** 旧い形の告知 (warnings の中の event と announced) を notices に移す。event の key (`event:${idx}@${year}`) から予定と発火の年を読む */
+function withNotices(def: ScenarioDef, saved: LegacyRunnerState): RunnerState {
+  const { announced = [], notices, ...rest } = saved;
+  if (notices) return { ...rest, notices };
+  const moved = new Map<number, Notice>();
+  for (const w of [...rest.warnings, ...announced]) {
+    const m = w.kind === 'event' ? /^event:(\d+)@(\d+)$/.exec(w.key) : null;
+    const sc = m ? def.schedule[Number(m[1])] : undefined;
+    if (m && sc) moved.set(Number(m[1]), { idx: Number(m[1]), untilYear: Number(m[2]) + (sc.noticeYears ?? 1), warning: w });
+  }
+  return { ...rest, warnings: rest.warnings.filter((w) => w.kind !== 'event'), notices: [...moved.values()].sort((a, b) => a.idx - b.idx) };
+}
+
+/** 保存した状態を、この石板のものか確かめてから写す。違えば投げる (呼び手は石板の初めからにする) */
+function restoredState(def: ScenarioDef, saved: LegacyRunnerState): RunnerState {
+  const mismatch = runnerStateMismatch(saved, def.id);
+  if (mismatch) throw new Error(mismatch);
+  return withNotices(def, structuredClone(saved));
+}
 
 /**
  * 石板の予言を実行する。予定コマンド (滅びの進行) を年に合わせて dispatch し、年が変わるたびに判定する。
@@ -101,68 +231,71 @@ export function createScenarioRunner(
     onPrayer?: (e: Extract<TimelineEvent, { kind: 'prayer' }>) => void;
     ticksPerYear?: number;
   } = {},
+  /** 途中で閉じた石板の続き (M19-14)。world はこの状態と同じ tick の SaveData から restore したもの */
+  restored?: RunnerState,
 ): ScenarioRunner {
   const first = world.snapshot();
-  const startTick = first.tick;
+  const init = restored ? restoredState(def, restored) : freshState(def, first);
+  const startTick = init.startTick;
   const ticksPerYear = opts.ticksPerYear ?? 360;
-  let start: StartStats = startStats(first);
+  let start: StartStats = init.start;
   const size = first.size;
   const baselineYear = def.baselineYear ?? 0;
   const scale = size / (def.referenceSize ?? 128);
   /** 総量 (セル密度の和) はセル数に比例するので、species_mean の min は面積比で合わせる */
   const areaScale = scale * scale;
-  const fired = new Set<string>();
+  const fired = new Set<string>(init.fired);
   /** 迎撃で取り消した予定の index (M10-02)。fireDue は飛ばす */
-  const cancelled = new Set<number>();
-  let lastYear = -1;
-  let interventions = 0;
-  let verdict: Verdict = { status: 'running', reason: `${def.years} 年` };
+  const cancelled = new Set<number>(init.cancelled);
+  let lastYear = init.lastYear;
+  let interventions = init.interventions;
+  let verdict: Verdict = init.verdict;
 
   const budgetDef = def.budget;
   const budgetMax = budgetDef ? (budgetDef.max ?? budgetDef.start * 3) : 0;
-  let power = budgetDef?.start ?? 0;
-  let incomeLastYear = 0;
-  let upkeepLastYear = 0;
-  let powerSpent = 0;
-  let warnings: Warning[] = [];
+  let power = init.power;
+  let incomeLastYear = init.incomeLastYear;
+  let upkeepLastYear = init.upkeepLastYear;
+  let powerSpent = init.powerSpent;
+  let warnings: Warning[] = init.warnings;
   /** 年ごとの総量の履歴 (species_mean の判定用)。年に 1 件 */
-  const history: Record<string, number>[] = [];
+  const history: Record<string, number>[] = init.history;
   /** 年ごとの文明の段階の履歴 (civ_stage の years 判定用)。history と同じ並びで年に 1 件 */
-  const civHistory: number[] = [];
+  const civHistory: number[] = init.civHistory;
   /** 年ごとの集落の生気平均の履歴 (M9-03、civHistory と同じ並び)。civ_vitality の years 判定用 */
-  const civVitalityHistory: number[] = [];
+  const civVitalityHistory: number[] = init.civVitalityHistory;
   /** 最後に年表に積んだ勅令の通し番号 (M9-03)。新しい勅令が記録されていれば年表に積む (同じ年の 2 つ目も) */
-  let lastEdictN: number | null = first.civ?.edict?.n ?? null;
+  let lastEdictN: number | null = init.lastEdictN;
   /** 撃ったがまだ World に適用されていない迎撃の数 (M10 レビュー)。snapshot の intercepted が増えたぶん減らす */
-  let pendingIntercepts = 0;
-  let lastIntercepted = first.civ?.intercepted ?? 0;
+  let pendingIntercepts = init.pendingIntercepts;
+  let lastIntercepted = init.lastIntercepted;
   /** 前年の舟の進み (M10-04、ship_stalled の判定)。前年に建造中の舟が無ければ null */
-  let prevShipProgress: number | null = null;
+  let prevShipProgress: number | null = init.prevShipProgress;
   /** 前年の文明の段階。civ_declining の判定に使う。最初の年はまだ「前年」が無いので null */
-  let prevCivStage: number | null = null;
+  let prevCivStage: number | null = init.prevCivStage;
   /** 一度ログに出した警告の key。同じ警告を毎年出さない */
-  const warned = new Set<string>();
-  const timeline: TimelineEvent[] = [];
-  let currentYear = 0;
+  const warned = new Set<string>(init.warned);
+  const timeline: TimelineEvent[] = init.timeline;
+  let currentYear = init.currentYear;
   /** 直近に見た文明の段階。年をまたいで変わったら timeline に積む (M8-04) */
-  let lastCivStage = first.civ?.stage ?? 0;
+  let lastCivStage = init.lastCivStage;
   /** 直近に見た信仰の値。文明が無い・stage 0 のあいだは null (M9-01) */
-  let lastCivFaith: number | null = first.civ?.faith ?? null;
+  let lastCivFaith: number | null = init.lastCivFaith;
   /** 直近に見た信仰の上限。文明が無い・stage 0 のあいだは null (M10R-02) */
-  let lastCivFaithCap: number | null = first.civ?.faithCap ?? null;
+  let lastCivFaithCap: number | null = init.lastCivFaithCap;
   /** 直近に見た夢喰いの有無 (M10R-03)。snapshot.dreamEater は World が年に一度更新するだけなので、ここでは有無の flip を見るだけでよい */
-  let lastDreamEater = first.dreamEater != null;
+  let lastDreamEater = init.lastDreamEater;
   /** 祈り (M9-02): 直近の年次評価で報告済みの issuedYear。同じ祈りを二重に issued 扱いしないための目印 */
-  let lastPrayerIssuedYear: number | null = first.civ?.prayer?.issuedYear ?? null;
+  let lastPrayerIssuedYear: number | null = init.lastPrayerIssuedYear;
   /** 祈り (M9-02): 直近に見た祈りの種類。解決 (answered/ignored) された時点では civ.prayer が消えているので、
    * 「何が解決されたか」を answered/ignored の件数が増えた瞬間まで覚えておく */
-  let lastPrayerKind: PrayerKind | null = first.civ?.prayer?.kind ?? null;
+  let lastPrayerKind: PrayerKind | null = init.lastPrayerKind;
   /** 祈り (M9-02): 直近に見た応えた・無視した回数。前年と比べて増えていれば TimelineEvent を積む */
-  let lastPrayersAnswered = first.civ?.prayersAnswered ?? 0;
-  let lastPrayersIgnored = first.civ?.prayersIgnored ?? 0;
-  let lastPrayersWithdrawn = first.civ?.prayersWithdrawn ?? 0;
+  let lastPrayersAnswered = init.lastPrayersAnswered;
+  let lastPrayersIgnored = init.lastPrayersIgnored;
+  let lastPrayersWithdrawn = init.lastPrayersWithdrawn;
   /** 祈り (M9-02): 石板が毎フレーム読む現在の祈り。年次評価を待たず、最新の snapshot でそのまま更新する */
-  let currentPrayer = first.civ?.prayer ?? null;
+  let currentPrayer = init.currentPrayer;
 
   const yearOf = (s: WorldSnapshot) => Math.floor((s.tick - startTick) / ticksPerYear);
 
@@ -179,7 +312,7 @@ export function createScenarioRunner(
    * 表示中の告知。予定の添字ごとに 1 件だけ持ち、次の発火で置き換える。発火した年から noticeYears 年 (既定 1 = 発火した年だけ)
    * 残し、その種のレイヤーが開かれたら消す (M21-02 D5: 100x では 1 年が数秒で、遅い環境ではチップを押す前に消えていた)
    */
-  const notices = new Map<number, Notice>();
+  const notices = new Map<number, Notice>(init.notices.map((n) => [n.idx, n]));
   let viewedSpecies: string | null = null;
   const fireDue = (year: number) => {
     for (const [idx, sc] of def.schedule.entries()) {
@@ -206,6 +339,15 @@ export function createScenarioRunner(
         }
         if (!sc.everyYears) break;
       }
+    }
+  };
+
+  /** World が適用した迎撃の数 (snapshot の intercepted の増え) だけ pendingIntercepts を減らす。何度呼んでも同じ (M19-04) */
+  const syncIntercepts = (s: WorldSnapshot) => {
+    const intercepted = s.civ?.intercepted ?? 0;
+    if (intercepted !== lastIntercepted) {
+      pendingIntercepts = Math.max(0, pendingIntercepts - (intercepted - lastIntercepted));
+      lastIntercepted = intercepted;
     }
   };
 
@@ -293,6 +435,7 @@ export function createScenarioRunner(
   return {
     def,
     yearOf,
+    ticksToNextYear: (s) => ticksPerYear - ((s.tick - startTick) % ticksPerYear),
     interventions: () => interventions,
     verdict: () => verdict,
     power: () => power,
@@ -308,11 +451,51 @@ export function createScenarioRunner(
       if (id !== null && (opts?.acknowledge ?? true)) for (const [idx, n] of notices) if (n.warning.id === id) notices.delete(idx);
     },
     timeline: () => timeline,
+    totalsByYear: () => history,
     milestones: () => {
       const gone = new Set([...cancelled].map((idx) => def.schedule[idx].atYear));
       return (def.milestones ?? []).filter((m) => !gone.has(m.atYear));
     },
     nextMeteorYear: () => nextMeteor()?.atYear ?? null,
+    save: () =>
+      structuredClone({
+        version: RUNNER_STATE_VERSION,
+        scenarioId: def.id,
+        startTick,
+        start,
+        fired: [...fired],
+        cancelled: [...cancelled],
+        lastYear,
+        interventions,
+        verdict,
+        power,
+        incomeLastYear,
+        upkeepLastYear,
+        powerSpent,
+        warnings,
+        history,
+        civHistory,
+        civVitalityHistory,
+        lastEdictN,
+        pendingIntercepts,
+        lastIntercepted,
+        prevShipProgress,
+        prevCivStage,
+        warned: [...warned],
+        timeline,
+        currentYear,
+        lastCivStage,
+        lastCivFaith,
+        lastCivFaithCap,
+        lastDreamEater,
+        lastPrayerIssuedYear,
+        lastPrayerKind,
+        lastPrayersAnswered,
+        lastPrayersIgnored,
+        lastPrayersWithdrawn,
+        currentPrayer,
+        notices: [...notices.values()].sort((a, b) => a.idx - b.idx),
+      }),
     intervene(cmd) {
       if (verdict.status !== 'running') return { ok: false, reason: 'finished' };
       // 迎撃 (M10-02): 民の条件 (星・備蓄) と取り消せる予定隕石があるときだけ。dispatch は次の step で適用されるので、
@@ -322,7 +505,10 @@ export function createScenarioRunner(
         if (!target) return { ok: false, reason: 'no_target' };
         // M10 レビュー: 同じ step 内 (停止中の連打) に 2 回目を撃つと snapshot の備蓄はまだ減っていないので、
         // まだ適用されていない迎撃の分 (pendingIntercepts) を備蓄から引いて判定する
-        const civ = world.snapshot().civ;
+        const snap = world.snapshot();
+        // M19-04: 年代記の再生は境目でしか update しないので、ここでも World が適用した分を pending から引く
+        syncIntercepts(snap);
+        const civ = snap.civ;
         const stock = (civ?.works?.stock ?? 0) - pendingIntercepts * INTERCEPT_NEED;
         if (!civ || !canIntercept({ ...civ, works: { stock, stopped: civ.works?.stopped ?? false } }).ok) return { ok: false, reason: 'rejected' };
         const res = world.dispatch(cmd);
@@ -372,11 +558,7 @@ export function createScenarioRunner(
       // 祈り (M9-02): 石板が毎フレーム読めるように、年次評価を待たず最新の値に更新しておく
       currentPrayer = s.civ?.prayer ?? null;
       // 迎撃 (M10 レビュー): World が適用した分だけ pending を減らす
-      const intercepted = s.civ?.intercepted ?? 0;
-      if (intercepted !== lastIntercepted) {
-        pendingIntercepts = Math.max(0, pendingIntercepts - (intercepted - lastIntercepted));
-        lastIntercepted = intercepted;
-      }
+      syncIntercepts(s);
       fireDue(year);
       if (year !== lastYear) {
         // 最初の呼び出し (lastYear === -1) はまだ 1 年も経っていないので力は動かさない

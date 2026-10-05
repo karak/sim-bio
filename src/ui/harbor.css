@@ -1,0 +1,116 @@
+/*
+ * 港の画面 (M19-09)。観察画面の知らせの帯 (observe/notice.ts) と同じ石: 青緑がかった石の面に六角の刻みと粒、面取りの縁の明かり、継ぎ目の光。
+ * 島の名とひとことは刻んだ文字 (明朝)、操作は HUD と同じ小さな札。光らせるのは継ぎ目の線と「出港する」「訪れる」だけにする
+ */
+:root {
+  /* 港の札 (.harbor-dock) の幅。HUD の左下の板 (.hud-bl) はこの右に置く (hud.css、M25-10) */
+  --harbor-dock-w: 36px;
+  --harbor-face-hi: #33504e;
+  --harbor-face: #223736;
+  --harbor-face-lo: #182827;
+  --harbor-rim: #7e918b;
+  --harbor-glow: #8feadf;
+  --harbor-text: #eef7f2;
+  --harbor-dim: #a9bdb8;
+  --harbor-carve: "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP", "Noto Serif CJK JP", serif;
+  --harbor-hex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='41.6' viewBox='0 0 24 41.6'%3E%3Cpath d='M12 0 24 6.9v13.9L12 27.7 0 20.8V6.9zM0 34.7 12 41.6 24 34.7M12 27.7v13.9' fill='none' stroke='%23000' stroke-opacity='.4' stroke-width='1'/%3E%3Cpath d='M12 1 23 7.4v12.9' fill='none' stroke='%23fff' stroke-opacity='.12' stroke-width='1'/%3E%3C/svg%3E");
+  --harbor-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1.4 0 0 0 -0.2 1.4 0 0 0 -0.2 1.4 0 0 0 -0.2 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 石の面。角を面取りした板 (知らせの帯は尖らせ、港の板は四隅を落とす) */
+.harbor-stone {
+  --cut: 10px;
+  position: absolute;
+  color: var(--harbor-text);
+  font: 13px/1.55 system-ui, sans-serif;
+  background: var(--harbor-grain), var(--harbor-hex), radial-gradient(120% 90% at 50% 0%, rgba(210, 255, 246, 0.12), transparent 60%), linear-gradient(180deg, var(--harbor-face-hi) 0%, var(--harbor-face) 55%, var(--harbor-face-lo) 100%);
+  background-size: 160px 160px, 24px 41.6px, auto, auto;
+  background-blend-mode: soft-light, normal, normal, normal;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  box-shadow: inset 0 1px 0 rgba(220, 255, 248, 0.28), inset 0 -2px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(126, 145, 139, 0.55);
+  pointer-events: auto;
+}
+.harbor-stone[hidden] { display: none; }
+/* 上の継ぎ目の光 */
+.harbor-stone::before { content: ''; position: absolute; left: 18px; right: 18px; top: 5px; height: 1px; background: linear-gradient(90deg, transparent, var(--harbor-glow) 14%, var(--harbor-glow) 86%, transparent); opacity: 0.5; box-shadow: 0 0 4px var(--harbor-glow); pointer-events: none; }
+
+.harbor-line { margin: 0; }
+.harbor-dim { color: var(--harbor-dim); font-size: 12px; }
+.harbor-sub { margin: 0; color: var(--harbor-dim); font: 12px/1.4 var(--harbor-carve); letter-spacing: 0.12em; }
+.harbor-title, .harbor-name { margin: 0; font-family: var(--harbor-carve); font-weight: 600; letter-spacing: 0.14em; color: var(--harbor-text); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8), 0 0 10px rgba(0, 0, 0, 0.45); }
+.harbor-title { font-size: 26px; line-height: 1.1; }
+.harbor-name { font-size: 18px; line-height: 1.3; }
+.harbor-inscription { margin: 2px 0 4px; font: 15px/1.6 var(--harbor-carve); letter-spacing: 0.08em; color: #dcebe5; }
+
+/* 札。HUD の .chip と同じ大きさで、石の上では縁を刻む */
+.harbor-chip { display: inline-block; background: rgba(15, 26, 36, 0.55); color: var(--harbor-dim); border: 1px solid rgba(126, 145, 139, 0.6); border-radius: 3px; padding: 3px 11px; font: 12px/1.5 system-ui, sans-serif; cursor: pointer; text-decoration: none; }
+.harbor-chip:hover { color: #fff; border-color: var(--harbor-glow); }
+.harbor-chip:focus-visible, .harbor-carve:focus-visible, .harbor-dock:focus-visible { outline: 2px solid var(--harbor-glow); outline-offset: 2px; }
+.harbor-chip:disabled { opacity: 0.45; cursor: default; }
+.harbor-primary { color: #0f1f1e; background: var(--harbor-glow); border-color: var(--harbor-glow); box-shadow: 0 0 10px rgba(143, 234, 223, 0.45); }
+.harbor-primary:hover { color: #0f1f1e; background: #b6f4ec; }
+.harbor-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* 港の口: 左の縁に立てた石の札 */
+.harbor-dock { position: absolute; left: 0; top: 50%; box-sizing: border-box; width: var(--harbor-dock-w); transform: translateY(-50%); z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 9px 14px 7px; border: 0; cursor: pointer; color: var(--harbor-text); background: linear-gradient(180deg, var(--harbor-face-hi), var(--harbor-face-lo)); clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%); box-shadow: inset -1px 0 0 rgba(126, 145, 139, 0.7), inset 0 1px 0 rgba(220, 255, 248, 0.25); }
+.harbor-dock-glyph { font: 600 20px/1 var(--harbor-carve); text-shadow: 0 0 8px rgba(143, 234, 223, 0.55); }
+.harbor-dock[aria-expanded='true'] .harbor-dock-glyph { color: var(--harbor-glow); }
+.harbor-dock-count { writing-mode: vertical-rl; text-orientation: upright; font-size: 11px; color: #f2d27a; letter-spacing: 0.1em; }
+
+/* 一覧: 左から開く石の棚 */
+/* 板ごと巻く (M19-15): 低い画面 (DevTools を開いた窓) でも、漂着・判定の出た島の下にある閉港の知らせと出港の結果まで届く */
+.harbor-drawer { left: 34px; top: 12px; max-height: calc(100% - 24px); box-sizing: border-box; z-index: 26; width: min(380px, calc(100% - 58px)); display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; overflow-y: auto; overscroll-behavior: contain; }
+.harbor-head { display: grid; grid-template-columns: 1fr auto; align-items: end; column-gap: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(126, 145, 139, 0.45); }
+.harbor-head .harbor-sub { grid-column: 1; }
+.harbor-close { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.harbor-state { color: var(--harbor-dim); font-size: 12px; }
+.harbor-list { list-style: none; margin: 0; padding: 0 2px 0 0; flex: none; display: flex; flex-direction: column; gap: 10px; }
+/* 1 件は石碑: 左の刻みの色が結末 */
+.harbor-card { --tone: var(--harbor-rim); position: relative; padding: 9px 10px 9px 16px; background: rgba(8, 18, 18, 0.35); box-shadow: inset 0 0 0 1px rgba(126, 145, 139, 0.35); }
+.harbor-card::before { content: ''; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 2px; background: var(--tone); box-shadow: 0 0 6px var(--tone); }
+.harbor-card.alive, .harbor-visit-body.alive { --tone: #6fbf7c; }
+.harbor-card.dead, .harbor-visit-body.dead { --tone: #e07a55; }
+.harbor-card.escaped, .harbor-visit-body.escaped { --tone: #7fb3e0; }
+.harbor-version { color: #c9b98f; font-size: 12px; }
+.harbor-own { color: #f2d27a; font-size: 12px; }
+.harbor-card-status:empty { display: none; }
+.harbor-card-gone { opacity: 0.45; }
+
+/* 判定の板の中の出港 */
+.harbor-publish { margin: 4px 0 14px; padding-top: 12px; border-top: 1px solid rgba(126, 145, 139, 0.45); text-align: left; }
+.harbor-publish-title { margin: 0 0 2px; font: 600 15px/1.4 var(--harbor-carve); letter-spacing: 0.14em; }
+.harbor-inscriptions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+.harbor-carve { font: 13px/1.5 var(--harbor-carve); letter-spacing: 0.06em; color: var(--harbor-dim); background: rgba(8, 18, 18, 0.45); border: 1px solid rgba(126, 145, 139, 0.45); border-radius: 2px; padding: 3px 10px; cursor: pointer; }
+.harbor-carve[aria-checked='true'] { color: var(--harbor-text); border-color: var(--harbor-glow); box-shadow: inset 0 0 8px rgba(143, 234, 223, 0.3); }
+.harbor-publish-status { margin-top: 8px; color: #c9d6cd; font-size: 12px; }
+.harbor-link { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.harbor-link[hidden] { display: none; }
+.harbor-url { flex: 1 1 100%; min-width: 0; font: 11px/1.6 ui-monospace, Menlo, monospace; color: var(--harbor-text); background: rgba(8, 18, 18, 0.6); border: 1px solid rgba(126, 145, 139, 0.5); padding: 3px 6px; }
+
+/* 訪問の板: 観察画面の上にも出す */
+.harbor-visit { right: 12px; bottom: 110px; z-index: 40; width: min(320px, calc(100% - 24px)); padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+.harbor-visit-body { --tone: var(--harbor-rim); border-left: 2px solid var(--tone); padding-left: 10px; margin: 4px 0 8px; }
+.harbor-reader { margin-top: 8px; }
+.harbor-visit > .harbor-chip { align-self: flex-start; }
+.harbor-track { position: relative; height: 4px; margin: 8px 0 4px; background: rgba(8, 18, 18, 0.7); box-shadow: inset 0 0 0 1px rgba(126, 145, 139, 0.4); }
+.harbor-track[hidden] { display: none; }
+.harbor-track i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--read, 0)); background: var(--harbor-glow); box-shadow: 0 0 6px var(--harbor-glow); transition: transform 0.4s ease-out; }
+#harbor-read-status { font-size: 12px; color: #c9d6cd; }
+/* 板の頭の「訪れている島」は、面の明るい上端に載るので --harbor-dim ではコントラスト比が 3.26 (lens の 4.5 を割る)。訪問の板の中だけ明るくする (M25-13) */
+.harbor-visit .harbor-sub { color: #cddcd6; }
+
+.harbor-toast { left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 50; padding: 10px 26px; font: 14px/1.5 var(--harbor-carve); letter-spacing: 0.06em; }
+.harbor-human { left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60; padding: 16px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+/* 訪問のあいだは、介入と島の入れ替えの列をしまう (他人の島なので打てない) */
+.harbor-visiting .hud-b, .harbor-visiting .hud-palette { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .harbor-track i { transition: none; }
+}
+
+/* 浜の漂着 (M19-10)。港の板の頭の下、一覧の上に置く */
+.harbor-drift { margin: 8px 0 10px; padding: 8px 0 10px; border-top: 1px solid rgba(126, 145, 139, 0.45); border-bottom: 1px solid rgba(126, 145, 139, 0.45); }
+.harbor-drift[hidden], .harbor-drift [hidden] { display: none; }
+/* 判定の出た最後の島 (M19-14 の直し)。開き直した後も港の板から出港できる */
+.harbor-finished { margin: 4px 0 8px; }

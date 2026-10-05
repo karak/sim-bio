@@ -22,6 +22,8 @@ M22-06 で足したノード: woven_screen (二本の柱に張った編み繊維
  近い形の塗る石は rock (目の細かい格子の丸めた箱・低い周波数の歪み・角の欠け・継ぎ目の陰) に weather (天端・根元・継ぎ目・北側の苔の斑、
  雨の筋、泥のはね、地衣) を頂点色で塗る。石垣は石の大きさをばらし、目地の奥に暗い芯と間詰め石。立石・船台の石も塗る石に。
  小屋の奥の柱と桁の継ぎ目に苔、干し棚の脚・衝立の柱の地面際を湿らせる。遠距離版は箱のまま同じ色の式。材質は増やさない)
+(M23-10 で追加: 書き出した後に glb_quantize.py で法線を int8 (KHR_mesh_quantization)・頂点色を uint8 に詰める。
+ ゲームは小屋でない部品の影を近い・遠いに依らず遠距離版 <名前>_lod1 で落とす (settlementLayout.ts の shadowNodeOf))
 
 実行: blender -b --factory-startup --python tools/blender/observe_settlement.py
 """
@@ -35,6 +37,7 @@ from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import observe_kit as K  # noqa: E402
+import glb_quantize  # noqa: E402
 from observe_kit import Y, Z  # noqa: E402
 from observe_kit import X as X_AXIS  # noqa: E402
 from lowpoly_kit import hex_rgb  # noqa: E402
@@ -1555,4 +1558,7 @@ if __name__ == "__main__":
     nodes = [hut(), hut(far=True, lite=not far_full), hut_lod1("hut_shadow"), stepping_stone(), lantern_post(), slipway(), stone_wall(), megalith(), woven_screen(),
              stone_wall_corner()] + [far_of(b) for b in props]
     objs = [nd.build() for nd in nodes]
-    K.export_glb(objs, os.path.join(K.OUT_DIR, "settlement.glb"))
+    out = os.path.join(K.OUT_DIR, "settlement.glb")
+    K.export_glb(objs, out)
+    # (M23-10) 法線を int8・頂点色を uint8 に詰める (4.42 → 2.94 MB)。形・三角形・材質は変わらない
+    glb_quantize.quantize(out)

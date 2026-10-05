@@ -1,10 +1,10 @@
 /**
  * 観察画面の区域 (M22-04、設計 docs/design/2026-09-23-observation-view-design.md §1〜§3)。
- * 集落 (home) を中心に半径 radius セルを snapshot から切り出す。純粋関数のみ (Three.js・DOM に依存しない)。
+ * observeCenter の決める中心 (集落、無ければ島の真ん中。引数名は home) から半径 radius セルを snapshot から切り出す。純粋関数のみ (Three.js・DOM に依存しない)。
  *
  * 契約:
  * - 区域のセルは forEachInRadius と同じ円判定で選び、index の昇順に並べる。
- * - 位置は m 単位。1 セル = CELL_M (10 m)、集落のセルの中心が原点。x は列 (東) の向き、z は行 (南) の向き。
+ * - 位置は m 単位。1 セル = CELL_M (10 m)、中心のセル (observeCenter) の中心が原点。x は列 (東) の向き、z は行 (南) の向き。
  * - isLand は elevation ≥ SEA_LEVEL。landCount は区域の陸セルの数。
  * - openSea は地図の縁から 4 近傍でつながる海 (外海)。陸に囲まれた池・湖は false。
  * - density は snapshot の populations をセルごとに写したもの (全種)。snapshot の配列は参照しない (コピー)。
@@ -235,4 +235,42 @@ function bowToward(area: Area, from: AreaCell): Point {
     }
   }
   return { x: 1, z: 0 };
+}
+
+/** 観察画面の中心のセルと、そこが集落か (M19-18) */
+export type ObserveCenter = { cell: number; settlement: boolean };
+
+/**
+ * 観察画面の区域の中心 (M19-18、ユーザーの判断 2026-09-27)。集落 (civ.home ≥ 0) があれば集落のセル。
+ * 無ければ島の真ん中 = 陸セルの重心 (列・行の平均) に最も近い陸セル (同じ近さなら index の小さい方)。陸が無ければ地図の真ん中のセル。
+ * 地形だけで決め、個体の密度には依らない
+ */
+export function observeCenter(s: WorldSnapshot): ObserveCenter {
+  if (s.civ && s.civ.home >= 0) return { cell: s.civ.home, settlement: true };
+  const size = s.size;
+  const elevation = s.layers.elevation;
+  let n = 0;
+  let sumCol = 0;
+  let sumRow = 0;
+  for (let i = 0; i < size * size; i++) {
+    if (elevation[i] < SEA_LEVEL) continue;
+    n++;
+    sumCol += i % size;
+    sumRow += Math.floor(i / size);
+  }
+  const middle = Math.floor(size / 2) * size + Math.floor(size / 2);
+  if (n === 0) return { cell: middle, settlement: false };
+  const mc = sumCol / n;
+  const mr = sumRow / n;
+  let best = middle;
+  let bestD = Infinity;
+  for (let i = 0; i < size * size; i++) {
+    if (elevation[i] < SEA_LEVEL) continue;
+    const d = (i % size - mc) ** 2 + (Math.floor(i / size) - mr) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return { cell: best, settlement: false };
 }

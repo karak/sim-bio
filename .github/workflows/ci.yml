@@ -8,20 +8,28 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      # pnpm の版は package.json の packageManager から読む。setup-node の cache: pnpm より前に置く
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+          cache: pnpm
+      # scripts/ の Python (課金にしない構成検査・運用スクリプト、M19-12) を uv で回す
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: pnpm install --frozen-lockfile
       # typecheck + lint + 単体テスト。通し実行 (npm run test:slow、約 15〜20 分) は CI では走らせない (README 参照)
-      - run: npm run check
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - run: pnpm run check
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test
+      # ビルドを wrangler dev (ローカルの workerd) で配り、本物のログの受け口に当てる (M19-02)
+      - run: pnpm run test:e2e:cloudflare
+      # 上の build:cloudflare の dist と wrangler.jsonc が無料枠の内か (設計書 §3.3、M19-12)
+      - run: pnpm run check:free-tier
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

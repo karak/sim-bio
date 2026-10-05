@@ -4,7 +4,7 @@ import { BoxGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera
 import { lodProps } from '../../src/observe/render/instancer';
 import { switchJitter } from '../../src/observe/render/impostor';
 import { installShadowOnly } from '../../src/observe/render/shadowOnly';
-import { HUT_NEAR_M, HUT_NEAR_SPREAD, HUT_OFFSETS, PROP_NEAR_M, hutPlacements } from '../../src/observe/settlementLayout';
+import { HUT_NEAR_M, HUT_NEAR_SPREAD, HUT_OFFSETS, PROP_NEAR_M, hutPlacements, shadowNodeOf } from '../../src/observe/settlementLayout';
 
 /**
  * 小屋の遠距離版 (M23-09): hut と hut_lod1 を lodProps で振り分ける。切り替えの距離は小屋ごとに揺らし、カメラの高さも入れた距離で測る。
@@ -216,5 +216,62 @@ describe('settlement.glb の小屋の 3 つの形 (M23-09 のやり直し)', () 
       stone_wall_corner: [6262, 508],
       woven_screen: [1060, 884],
     });
+  });
+
+  it('影の形 (M23-10): 小屋でない部品は近い・遠いに依らず遠距離版で影を落とし、集落の影は settle1 の前 (13.3 千三角形) の水準に収まる', () => {
+    expect(shadowNodeOf('hut')).toBe('hut_shadow');
+    const props = ['lantern_post', 'megalith', 'slipway', 'stone_wall', 'stone_wall_corner', 'woven_screen'];
+    for (const name of props) expect(shadowNodeOf(name)).toBe(`${name}_lod1`);
+    // 空の舟 25 年目の集落の置き場所の数 (view.ts の place)。敷石は小屋ごとに 3 枚で、遠距離版が無いので自分の形で落とす
+    const placed: Record<string, number> = { hut: 3, lantern_post: 5, megalith: 2, slipway: 1, stone_wall: 2, stone_wall_corner: 1, woven_screen: 2 };
+    const steps = HUT_OFFSETS.length * 3 * nodeOf('stepping_stone').triangles;
+    const shadow = Object.entries(placed).reduce((t, [name, n]) => t + n * nodeOf(shadowNodeOf(name)).triangles, steps);
+    // 近い形で落としていたとき (settle1 の後) は 53,149 (台の集落の画の settlement の影と同じ。置き場所の数の裏付け)
+    const near = Object.entries(placed).reduce((t, [name, n]) => t + n * nodeOf(name === 'hut' ? 'hut_shadow' : name).triangles, steps);
+    expect(near).toBeGreaterThan(50_000);
+    expect(shadow).toBeLessThanOrEqual(13_300);
+  });
+
+  it('法線と頂点色は小さい型 (M23-10、tools/blender/glb_quantize.py): three.js で読むと法線は長さ 1 で面の向きに合い、頂点色は暗い所から白まで散らばる', async () => {
+    expect(glb.length).toBeLessThan(3_000_000);
+    const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+    const ab = glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength);
+    const gltf = await new GLTFLoader().parseAsync(ab, '');
+    let checked = 0;
+    const faces = { total: 0, agree: 0 };
+    const colors: number[] = [];
+    gltf.scene.traverse((o) => {
+      const geo = (o as Mesh).geometry;
+      if (!(o as Mesh).isMesh || !geo) return;
+      const n = geo.getAttribute('normal');
+      const c = geo.getAttribute('color');
+      expect(n.normalized && c.normalized).toBe(true);
+      for (let i = 0; i < n.count; i += 7) expect(Math.abs(Math.hypot(n.getX(i), n.getY(i), n.getZ(i)) - 1)).toBeLessThan(0.02);
+      // 法線の向き: 三角形の 3 頂点の法線の平均が、位置から求めた面の向きと 25° 以内 (角ばった石は平らな面の法線、柔らかい面も近い)
+      const p = geo.getAttribute('position');
+      const idx = geo.index!;
+      const [a, b, q, e1, e2, avg] = [0, 0, 0, 0, 0, 0].map(() => new Vector3());
+      for (let t = 0; t < idx.count; t += 3) {
+        const [i0, i1, i2] = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+        a.fromBufferAttribute(p, i0);
+        b.fromBufferAttribute(p, i1);
+        q.fromBufferAttribute(p, i2);
+        const face = e1.subVectors(b, a).cross(e2.subVectors(q, a));
+        if (face.length() < 1e-6) continue;
+        avg.fromBufferAttribute(n, i0).add(e2.fromBufferAttribute(n, i1)).add(b.fromBufferAttribute(n, i2)).normalize();
+        faces.total++;
+        if (avg.dot(face.normalize()) > Math.cos((25 * Math.PI) / 180)) faces.agree++;
+      }
+      for (let i = 0; i < c.count; i++) colors.push(c.getX(i), c.getY(i), c.getZ(i));
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(50);
+    expect(faces.agree / faces.total).toBeGreaterThan(0.9);
+    // 頂点色: 石の揺らぎ・苔・陰りで暗い所から白まで散らばる (全部が白や 0 に張り付いていない)
+    const mean = colors.reduce((t, v) => t + v, 0) / colors.length;
+    const sd = Math.sqrt(colors.reduce((t, v) => t + (v - mean) ** 2, 0) / colors.length);
+    expect(mean).toBeGreaterThan(0.2);
+    expect(mean).toBeLessThan(0.9);
+    expect(sd).toBeGreaterThan(0.1);
   });
 });

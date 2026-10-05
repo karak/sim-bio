@@ -1,4 +1,4 @@
-import { DepthTexture, HalfFloatType, ShaderMaterial, Vector2, WebGLRenderTarget, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
+import { DepthTexture, HalfFloatType, ShaderMaterial, UniformsUtils, Vector2, WebGLRenderTarget, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { createBloom } from './bloom';
 
@@ -149,7 +149,7 @@ export function createGrade(renderer: WebGLRenderer, scene: Scene, camera: Persp
   if (layer) layer.source = target;
   // シアンの発光 (ムーの遺産の光) と鐘の灯りだけが滲むよう、閾値を高めにする
   const bloom = createBloom(0.4, 0.5, 0.92);
-  const mat = new ShaderMaterial({ ...GradeShader, uniforms: GradeShader.uniforms, depthTest: false, depthWrite: false });
+  const mat = new ShaderMaterial({ ...GradeShader, uniforms: UniformsUtils.clone(GradeShader.uniforms), depthTest: false, depthWrite: false });
   const u = mat.uniforms;
   u.tDiffuse.value = target.texture;
   u.tDepth.value = target.depthTexture;

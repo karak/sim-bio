@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createScenarioRunner } from '../../src/scenario/ScenarioRunner';
+import { createScenarioRunner, type RunnerState } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
 import { createViewedSpecies } from '../../src/ui/viewedSpecies';
@@ -121,6 +121,48 @@ describe('createScenarioRunner', () => {
     expect(events()).toEqual(['event:0@1']);
     vs.select('wolf');
     expect(events()).toEqual([]);
+  });
+  it('表示中の告知は RunnerState (M19-14) に入り、閉じて開き直しても残り、開いた後も押せば消え、期限で消える', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 8, schedule: [{ atYear: 1, noticeYears: 3, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    for (let y = 0; y <= 1; y++) { r.update(w.snapshot()); w.step(360); }
+    const saved = JSON.parse(JSON.stringify(r.save())) as RunnerState;
+    expect(saved.notices).toEqual([{ idx: 0, untilYear: 4, warning: { kind: 'event', key: 'event:0@1', text: '狼の群れが北の谷に下りた', id: 'wolf' } }]);
+    // 年次評価の警告には混ぜない (告知は notices だけが持つ)
+    expect(saved.warnings.filter((x) => x.kind === 'event')).toEqual([]);
+    const keys = (x: ReturnType<typeof createScenarioRunner>) => x.warnings().filter((v) => v.kind === 'event').map((v) => v.key);
+    const reopened = createScenarioRunner(d, w, {}, saved);
+    expect(keys(reopened)).toEqual(['event:0@1']);
+    // 期限 (untilYear 4) までは残り、4 年目の評価で消える
+    const byYear: string[][] = [];
+    for (let y = 2; y <= 4; y++) { reopened.update(w.snapshot()); byYear.push(keys(reopened)); w.step(360); }
+    expect(byYear).toEqual([['event:0@1'], ['event:0@1'], []]);
+    const again = createScenarioRunner(d, w, {}, saved);
+    again.setViewedSpecies('wolf');
+    expect(keys(again)).toEqual([]);
+  });
+  it('notices を持つ前の形の RunnerState (告知を warnings に混ぜ、announced を持つ) も読め、告知は notices に移って押せば消える', () => {
+    const w = fakeWorld({ deer: 1 });
+    const wave: Command = { type: 'spawn_species', speciesId: 'wolf', cell: 5, amount: 1, radius: 3 };
+    const d: ScenarioDef = { ...def, years: 8, schedule: [{ atYear: 1, noticeYears: 3, text: '狼の群れが北の谷に下りた', command: wave }] };
+    const r = createScenarioRunner(d, w);
+    for (let y = 0; y <= 1; y++) { r.update(w.snapshot()); w.step(360); }
+    const { notices, ...rest } = JSON.parse(JSON.stringify(r.save())) as RunnerState;
+    // 旧い runner は年次評価の時に告知を warnings の先頭に混ぜ、発火してまだ混ぜていない分を announced に持っていた
+    const legacies = [
+      { ...rest, warnings: [...notices.map((n) => n.warning), ...rest.warnings], announced: [] },
+      { ...rest, announced: notices.map((n) => n.warning) },
+    ];
+    for (const legacy of legacies) {
+      const reopened = createScenarioRunner(d, w, {}, legacy as unknown as RunnerState);
+      expect(reopened.warnings()).toEqual(r.warnings());
+      expect(reopened.save().notices).toEqual(notices);
+      expect(reopened.save()).not.toHaveProperty('announced');
+      reopened.setViewedSpecies('wolf');
+      expect(reopened.warnings().filter((x) => x.kind === 'event')).toEqual([]);
+    }
   });
   it('noticeYears を過ぎた告知は、押されていなくても消える (「着くまで三月」が何年も残らない)', () => {
     const w = fakeWorld({ deer: 1 });
@@ -275,5 +317,20 @@ describe('species_mean (runner)', () => {
     // 直近 3 年 (0, 0, 12) 平均 4 < 5
     expect(r.verdict().status).toBe('dead');
     expect(r.verdict().reason).toContain('群れが小さい(3 年平均): deer 4.0 (< 5.0)');
+  });
+});
+
+describe('ticksToNextYear (M19-04)', () => {
+  it('開始 tick から数えた次の年の境目までの tick 数を返す。境目ちょうどなら 1 年分', () => {
+    const w = fakeWorld({ deer: 1 });
+    w.step(100);
+    const r = createScenarioRunner(def, w);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(360);
+    w.step(1);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(359);
+    w.step(358);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(1);
+    w.step(1);
+    expect(r.ticksToNextYear(w.snapshot())).toBe(360);
   });
 });

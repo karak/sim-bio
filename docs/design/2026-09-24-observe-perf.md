@@ -6,14 +6,14 @@
 
 ## 計測の道具
 
-`window.__observeBreakdown()`(`src/observe/render/breakdown.ts`、単体テスト `tests/unit/observe.breakdown.test.ts`)が区分ごとに次を数える(単位は三角形)。
+`window.__probe.observe.breakdown()`(`src/observe/render/breakdown.ts`、単体テスト `tests/unit/observe.breakdown.test.ts`)が区分ごとに次を数える(単位は三角形)。
 
 - drawn: いま本の描画で送っている数。three.js は InstancedMesh を丸ごとでしか視錐台で落とさないので、区域の全インスタンスが入る。
 - inView: インスタンスごとに視錐台で落としたら残る数。
 - shadow: 影の描画で送っている数(影のカメラは区域全体 200 m 四方を覆う)。
 - beyond30 / beyond60: カメラから 30 m / 60 m より遠いインスタンスの数(遠距離用の軽量版に差し替える候補)。
 
-`__observeStats.triangles` は本の描画と影の描画の合計。
+`__probe.observe.stats().triangles` は本の描画と影の描画の合計。
 
 ## 村の試算(空の舟 25 年目、朝、舟は肋材の段、1280×720、寄せ先の 6 画)
 
@@ -29,7 +29,7 @@
 | 地面 | 45 | 45 | 0 | 45 | 0 | 1 |
 | 集落 | 14 | 14 | 14 | 9 | 0 | 18 |
 | 舟(肋材の段。完成は 11) | 4 | 4 | 4 | 4 | 0 | 2 |
-| 合計(`__observeStats`) | 1,397 = 本 約 1,116 + 影 約 337 | | | | | draw call 102 |
+| 合計(`__probe.observe.stats()`) | 1,397 = 本 約 1,116 + 影 約 337 | | | | | draw call 102 |
 
 6 画の合計の幅: 1,086〜1,397 千、draw call 87〜108。草の inView は画によって 49〜206 千、鐘樹の inView は 2〜143 千(林の画で最大)。
 
