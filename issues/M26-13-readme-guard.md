@@ -1,11 +1,12 @@
 ---
 id: M26-13
 title: README に運用の手順が戻らないよう、check で機械的に落とす柵 (scripts/check_readme.py)
-status: todo
+status: review
 milestone: M26
 plan: null
 depends_on: []
-evidence: []
+evidence:
+  - 4ff7552 5a18eeb scripts/check_readme.py, scripts/test_check_readme.py (34 件), package.json (check:readme を check に), docs/operations/README.md, issues/README.md
 ---
 
 # README に運用の手順を置かせない柵
@@ -38,11 +39,12 @@ evidence: []
 
 ## Acceptance criteria
 
-- [ ] 上の試験が通る (先に赤)。今の README は通り、85294e0 の前の README は落ちる
-- [ ] `pnpm run check` に入り、CI で回る
-- [ ] docs/operations/ に、運用の文書の置き場の決まりを 1 段落 (README.md ではなくここに書く)
+- [x] 上の試験が通る (先に赤)。今の README は通り、85294e0 の前の README は落ちる
+- [x] `pnpm run check` に入り、CI で回る
+- [x] docs/operations/ に、運用の文書の置き場の決まりを 1 段落 (README.md ではなくここに書く)
 
 ## 作業ログ
 
 - 2026-10-06: 起票 (設計の案、ユーザーの承認待ち)。
 - 2026-10-06: ユーザーの決定「柵はいったんそれでよい」。案の 1〜4 を入れ、長さの上限は 200 行。定期の再評価は M26-14。
+- 2026-10-06: 実装 (4ff7552・5a18eeb)。試験を先に書いて赤 (import 失敗) → 緑。許可表は今の見出し 11 個、印は wrangler (deploy|login|secret|tail|rollback)・pnpm run deploy・scripts/deploy.py・gh (secret|variable|workflow run|api -X)・scripts/mod.py・--remote・security (add|find)-generic-password、上限 200 行 (今は 169)。別 agent (opus) の読むだけのレビューで、コードの塊の中のリンク免除・見出しの形 (字下げ・setext)・fence の閉じ方・配備の印・票の誤警告を直した。今 open の票で警告に出るものは無い。表の行にリンクと印が同居すると通る (案の通り、リンクを含む行は許す)。

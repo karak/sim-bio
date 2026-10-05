@@ -21,6 +21,7 @@ evidence: []        # done 時に commit SHA とテストファイルを列挙
 
 - 状態遷移は frontmatter の `status` を書き換える。着手時 `in_progress`、テスト通過とコミット後 `done`。
 - `done` にする時は `evidence` に commit SHA とテストファイルパスを必ず入れる(受入基準の証跡)。
+- 受入の基準で README を置き場に指定しない。運用の手順は docs/operations/(`scripts/check_readme.py` が open の票を警告し、README 本体も `pnpm run check` で見る)。
 - 一覧は `tools/issues.sh` で表示する。
 
 ```bash
