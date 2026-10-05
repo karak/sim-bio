@@ -1,0 +1,22 @@
+{
+  "account_id": "14c725d39e9cf53743be403ab146174f",
+  "worker": "biotope-island",
+  "d1_databases": ["biotope-harbor"],
+  "keychain_service": "sim-bio-local-deploy",
+  "keychain_account": null,
+  "build": {
+    "script": "build:cloudflare",
+    "env": { "VITE_TURNSTILE_SITEKEY": "0x4AAAAAAFFM5qcR0ciWH4Br" }
+  },
+  "checks": ["check:free-tier"],
+  "smoke": [
+    { "url": "https://biotope-island.dev-sim-bio.workers.dev/", "expect": "ok" },
+    { "url": "https://biotope-island.dev-sim-bio.workers.dev/api/v1/chronicles", "expect": "json" }
+  ],
+  "branch": "main",
+  "remote": "origin",
+  "untracked_ok": [".claude/"],
+  "lfs_dirs": ["assets/"],
+  "lfs_suffixes": [".glb", ".png"],
+  "wrangler_config": "wrangler.jsonc"
+}

@@ -82,6 +82,10 @@ class CheckConfigTest(unittest.TestCase):
         self.assertEqual(where_of(violations), [("unknown_key", "some_future_product")])
         self.assertIn("表に無い", violations[0].why)
 
+    def test_account_id_pin_is_allowed(self):
+        config = {**BASE_CONFIG, "account_id": "14c725d39e9cf53743be403ab146174f"}
+        self.assertEqual(check_config(config), [])
+
     def test_d1_ratelimits_and_cron_are_allowed_for_m19_08(self):
         config = {
             **BASE_CONFIG,
