@@ -62,9 +62,11 @@ wrangler は `CLOUDFLARE_API_TOKEN` が環境にあれば OAuth を見ない。�
 
 ```bash
 gh workflow run deploy.yml --ref main --repo karak/sim-bio
-gh run list --workflow deploy.yml --repo karak/sim-bio --limit 1
-gh run watch --repo karak/sim-bio --exit-status
+sleep 5  # 起こした run が一覧に出るまで
+gh run watch "$(gh run list --workflow deploy.yml --repo karak/sim-bio --limit 1 --json databaseId --jq '.[0].databaseId')" --repo karak/sim-bio --exit-status
 ```
+
+`gh run watch` に run の id を渡さないと、端末で run を選ばせる問いが出る。上の形は最新の run を名指しする。
 
 ワークフローは check → site key の有無 → build → 課金にしない検査 → D1 のマイグレーション → `wrangler deploy` の順に回る。終わったら 5 の確かめをする。
 
