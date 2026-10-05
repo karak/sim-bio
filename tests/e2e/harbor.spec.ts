@@ -79,7 +79,10 @@ test('M19-09: 出港 → リンク → 訪問 (3D 観察画面) → 照合 (年�
   await plaque.getByRole('button', { name: '年表を読む' }).click();
   await expect(plaque.getByRole('progressbar', { name: '年表を読む進み' })).toBeVisible();
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
-  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた');
+  // 確かめた人の数は、読み終えの文を書いた後に港へ confirm を送り、年代記を引き直してから書き換わる (HarborVisit.ts の reader)。
+  // この 2 往復と hash の計算は 3D を描く main thread のタスクに並ぶので、暇な Mac でも 1.2 秒かかり、CI (1 worker、ソフトウェア描画) では
+  // 既定の 5 秒で 2 回しか見に行けないほど遅れて落ちた。港のクライアントは 1 往復 10 秒で諦めるので、30 秒待てば足り、それより後には書き換わらない
+  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた', { timeout: 30_000 });
   expect(harbor.fake.ledger.get(id)?.card).toMatchObject({ confirms: 1, mismatches: 0 });
   await shot(page, '05-visit-read');
 });

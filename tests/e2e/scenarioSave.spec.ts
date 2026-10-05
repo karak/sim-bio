@@ -123,7 +123,8 @@ test('M19-17: 石板で枠に保存し、介入して進めてから読むと、
   const plaque = page.getByRole('region', { name: '訪れている島' });
   await plaque.getByRole('button', { name: '年表を読む' }).click();
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
-  expect(harbor.ledger.get(id)?.card).toMatchObject({ confirms: 1, mismatches: 0 });
+  // 港への confirm は読み終えの文を書いた後に送られる (harbor.spec の M19-09 と同じ競り)。帳簿に着くまで待つ
+  await expect.poll(() => harbor.ledger.get(id)?.card, { timeout: 30_000 }).toMatchObject({ confirms: 1, mismatches: 0 });
 });
 
 test('M19-17: 自由モードの枠を石板の中で読むと、確かめてから自由モード (/) へ移ってその島になり、石板の続きは書き換わらない', async ({ page }) => {
