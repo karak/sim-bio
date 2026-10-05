@@ -16,7 +16,7 @@
   "branch": "main",
   "remote": "origin",
   "untracked_ok": [".claude/"],
-  "lfs_dirs": ["assets/"],
+  "lfs_dirs": ["."],
   "lfs_suffixes": [".glb", ".png"],
   "wrangler_config": "wrangler.jsonc"
 }

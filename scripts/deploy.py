@@ -8,10 +8,10 @@
 macOS の Keychain から読み、wrangler の子プロセスの環境 (CLOUDFLARE_API_TOKEN) にだけ渡す。
 トークンはコマンドの引数・画面の出力・例外の文に出さない。
 
-    pnpm run deploy -- --dry-run      # 設定と手順を出すだけ (Keychain・wrangler・ネットワークに触れない)
+    pnpm run deploy --dry-run         # 設定と手順を出すだけ (Keychain・wrangler・ネットワークに触れない)
     pnpm run deploy                   # 配る
-    pnpm run deploy -- --check        # 配る前に pnpm run check も回す
-    pnpm run deploy -- --allow-branch # HEAD の木が origin/<branch> と違っても配る
+    pnpm run deploy --check           # 配る前に pnpm run check も回す
+    pnpm run deploy --allow-branch    # HEAD の木が origin/<branch> と違っても配る
 
 repo ごとの値はすべて repo の根の deploy.config.json に置く。wrangler.jsonc の account_id・name・D1 の id と食い違えば止まる。
 """
@@ -25,6 +25,7 @@ import re
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -39,6 +40,9 @@ RUNBOOK = "docs/operations/deploy-runbook.md"
 
 # 継いだ環境から外す資格情報の接頭辞。どの子プロセスにも、手元に残った別アカウントの値を渡さない
 SCRUBBED_PREFIXES = ("CLOUDFLARE_", "CF_", "WRANGLER_")
+# Cloudflare の API トークンの形。これに合わない値は、header に載せる前に (値を出さずに) 断る
+TOKEN_SHAPE = re.compile(r"[A-Za-z0-9_-]{30,}")
+SUBPROCESS_TIMEOUT_S = 900
 
 CONFIG_KEYS = frozenset(
     {
@@ -89,7 +93,13 @@ class Secret:
 
 
 def redact(text: str, secret: Secret | None) -> str:
-    return text.replace(secret.reveal(), "***") if secret else text
+    """値そのものと、repr・URL の形に化けた値を伏せる。"""
+    if not secret:
+        return text
+    value = secret.reveal()
+    for form in {value, repr(value)[1:-1], urllib.parse.quote(value, safe="")}:
+        text = text.replace(form, "***")
+    return text
 
 
 @dataclass(frozen=True)
@@ -112,7 +122,7 @@ class Config:
     branch: str
     remote: str = "origin"
     untracked_ok: tuple[str, ...] = (".claude/",)
-    lfs_dirs: tuple[str, ...] = ("assets/",)
+    lfs_dirs: tuple[str, ...] = (".",)
     lfs_suffixes: tuple[str, ...] = (".glb", ".png")
     wrangler_config: str = "wrangler.jsonc"
 
@@ -222,7 +232,7 @@ def parse_config(raw: Mapping[str, object], wrangler: Mapping[str, object]) -> C
         branch=_str(raw, "branch"),
         remote=_str(raw, "remote", default="origin"),
         untracked_ok=_strs(raw, "untracked_ok", (".claude/",)),
-        lfs_dirs=_strs(raw, "lfs_dirs", ("assets/",)),
+        lfs_dirs=_strs(raw, "lfs_dirs", (".",)),
         lfs_suffixes=_strs(raw, "lfs_suffixes", (".glb", ".png")),
         wrangler_config=_str(raw, "wrangler_config", default="wrangler.jsonc"),
     )
@@ -255,6 +265,8 @@ def wrangler_env(
         "CLOUDFLARE_API_TOKEN": token.reveal(),
         "CLOUDFLARE_ACCOUNT_ID": account_id,
         "WRANGLER_SEND_METRICS": "false",
+        # repo の .env が API の宛先を変えても、トークンを Cloudflare の外へ送らない
+        "CLOUDFLARE_API_BASE_URL": CLOUDFLARE_API,
     }
 
 
@@ -372,14 +384,29 @@ def _git(deps: Deps, *args: str) -> str:
     return result.stdout
 
 
+def _status_entries(z: str) -> list[str]:
+    """git status -z の出力を「XY 道」の並びにする。R・C の次の欄 (元の道) は飛ばす。"""
+    fields = z.split("\0")
+    entries: list[str] = []
+    i = 0
+    while i < len(fields):
+        entry = fields[i].rstrip("\n")
+        i += 1
+        if not entry:
+            continue
+        entries.append(entry)
+        if entry[:1] in "RC" or entry[1:2] in "RC":
+            i += 1
+    return entries
+
+
 def preflight(config: Config, deps: Deps, *, allow_branch: bool) -> None:
     dirty = [
-        line
-        for line in _git(
-            deps, "status", "--porcelain=v1", "--untracked-files=all"
-        ).splitlines()
-        if line
-        and not (line.startswith("?? ") and line[3:].startswith(config.untracked_ok))
+        entry
+        for entry in _status_entries(
+            _git(deps, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+        )
+        if not (entry.startswith("?? ") and entry[3:].startswith(config.untracked_ok))
     ]
     if dirty:
         raise DeployError(
@@ -424,23 +451,34 @@ def read_token(config: Config, deps: Deps) -> Secret:
         "-w",
     )
     result = deps.run(argv, scrub_env(deps.base_env), deps.cwd)
+    where = f"Keychain の service {config.keychain_service} / account {account}"
+    if result.returncode == 44:  # errSecItemNotFound
+        raise DeployError(f"{where} の項目が無い (人が一度だけ置く: {RUNBOOK} の H12)")
     if result.returncode != 0:
         raise DeployError(
-            f"Keychain に service {config.keychain_service} / account {account} の項目が無い"
-            f" (人が一度だけ置く: {RUNBOOK} の H12)"
+            f"{where} を読めない (security の終了 {result.returncode}。許可の問いを断った・Keychain が閉じているなど)"
         )
-    return Secret(result.stdout.rstrip("\n"))
+    value = result.stdout.strip()
+    if not TOKEN_SHAPE.fullmatch(value):
+        raise DeployError(
+            f"{where} の値が API トークンの形 (英数字・_・- で 30 字以上) でない。値は出さない。"
+            f" 入れ直す: {RUNBOOK} の 4"
+        )
+    return Secret(value)
 
 
 def verify_account(config: Config, token: Secret, http_get: HttpGet) -> None:
     """wrangler を起こす前に、トークンが config のアカウントに届くかを Cloudflare の API で確かめる。"""
     headers = {"Authorization": f"Bearer {token.reveal()}", "User-Agent": "deploy.py"}
     for name, expected in config.d1.items():
-        url = f"{CLOUDFLARE_API}/accounts/{config.account_id}/d1/database?name={name}"
+        query = urllib.parse.urlencode({"name": name})
+        url = f"{CLOUDFLARE_API}/accounts/{config.account_id}/d1/database?{query}"
         status, body = http_get(url, headers)
         try:
             payload = json.loads(body)
         except ValueError:
+            payload = {}
+        if not isinstance(payload, dict):
             payload = {}
         if status != 200 or not payload.get("success"):
             errors = payload.get("errors") or []
@@ -499,6 +537,7 @@ def latest_version(stdout: str) -> list[str] | None:
 
 def deploy(config: Config, deps: Deps, *, check: bool, allow_branch: bool) -> None:
     token: Secret | None = None
+    touched_remote = False
 
     def say(text: str) -> None:
         deps.print(redact(text, token))
@@ -506,6 +545,7 @@ def deploy(config: Config, deps: Deps, *, check: bool, allow_branch: bool) -> No
     try:
         for step in plan(config, check=check):
             say(f"== {step.name}: {step.describe}")
+            touched_remote = touched_remote or step.name.startswith("migrations-apply")
             match step.kind:
                 case "preflight":
                     preflight(config, deps, allow_branch=allow_branch)
@@ -547,16 +587,27 @@ def deploy(config: Config, deps: Deps, *, check: bool, allow_branch: bool) -> No
                             f"{step.name} が失敗 (終了 {result.returncode})"
                         )
     except DeployError as e:
-        raise DeployError(redact(str(e), token)) from None
+        raise DeployError(redact(str(e) + _hint(touched_remote), token)) from None
     except (
         OSError,
         ValueError,
         LookupError,
         TypeError,
+        AttributeError,
         subprocess.SubprocessError,
     ) as e:
         # 子プロセス・ファイル・JSON の想定の外の失敗も、文を伏せてから上げる
-        raise DeployError(redact(f"{type(e).__name__}: {e}", token)) from None
+        text = f"{type(e).__name__}: {e}" + _hint(touched_remote)
+        raise DeployError(redact(text, token)) from None
+
+
+def _hint(touched_remote: bool) -> str:
+    if not touched_remote:
+        return ""
+    return (
+        f"\n本番の D1 にマイグレーションを当てた後で止まった。"
+        f"Worker の版を戻すなら {RUNBOOK} の 6 (D1 は戻らない)"
+    )
 
 
 def dry_run(config: Config, deps: Deps, *, check: bool) -> None:
@@ -591,14 +642,27 @@ def _subprocess_run(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> R
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_S,
     )
     return Result(p.returncode, p.stdout, p.stderr)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Authorization を載せた要求が、よその host へ転送されないようにする。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code, "redirect は辿らない", headers, fp
+        )
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def _urllib_get(url: str, headers: Mapping[str, str]) -> tuple[int, bytes]:
     request = urllib.request.Request(url, headers=dict(headers), method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _OPENER.open(request, timeout=30) as response:
             return response.status, response.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()

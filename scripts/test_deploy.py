@@ -18,6 +18,7 @@ from deploy import (
     parse_config,
     plan,
     preflight,
+    read_token,
     redact,
     scrub_env,
     verify_account,
@@ -25,7 +26,7 @@ from deploy import (
 )
 
 REPO = Path(__file__).resolve().parent.parent
-TOKEN = "tok_SECRET_value_1234567890"
+TOKEN = "tok_SECRET_value_1234567890abcdefghijklmn"
 ACCOUNT = "14c725d39e9cf53743be403ab146174f"
 DB_ID = "4b9db893-5306-4a01-9eb9-4926c2b34d17"
 
@@ -154,7 +155,7 @@ class ParseConfigTest(unittest.TestCase):
         self.assertEqual(c.remote, "origin")
         self.assertIsNone(c.keychain_account)
         self.assertEqual(c.untracked_ok, (".claude/",))
-        self.assertEqual(c.lfs_dirs, ("assets/",))
+        self.assertEqual(c.lfs_dirs, (".",))
 
     def test_rejects_bad_values(self):
         cases = {
@@ -211,6 +212,33 @@ class SecretTest(unittest.TestCase):
         with self.assertRaises(DeployError):
             Secret("")
 
+    def test_token_with_control_or_odd_characters_is_refused_without_echo(self):
+        for bad in [
+            TOKEN[:9] + "\r" + TOKEN[9:],
+            "short",
+            TOKEN + "\u00e9",
+            "a b" + TOKEN,
+        ]:
+            with self.subTest(bad=bad):
+                runner = FakeRunner({("security",): Result(0, bad + "\n", "")})
+                with self.assertRaises(DeployError) as cm:
+                    read_token(config(), deps(runner)[0])
+                self.assertNotIn(bad.strip(), str(cm.exception))
+
+    def test_surrounding_whitespace_is_stripped(self):
+        runner = FakeRunner({("security",): Result(0, TOKEN + "\r\n", "")})
+        self.assertEqual(read_token(config(), deps(runner)[0]).reveal(), TOKEN)
+
+    def test_keychain_denied_is_not_reported_as_missing(self):
+        runner = FakeRunner({("security",): Result(128, "", "")})
+        with self.assertRaises(DeployError) as cm:
+            read_token(config(), deps(runner)[0])
+        self.assertIn("128", str(cm.exception))
+
+    def test_redact_covers_escaped_forms(self):
+        s = Secret(TOKEN)
+        self.assertNotIn(TOKEN, redact(repr(TOKEN), s))
+
     def test_redact(self):
         self.assertEqual(redact(f"a {TOKEN} b", Secret(TOKEN)), "a *** b")
         self.assertEqual(redact("plain", None), "plain")
@@ -241,6 +269,7 @@ class EnvTest(unittest.TestCase):
                 "CLOUDFLARE_API_TOKEN": TOKEN,
                 "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
                 "WRANGLER_SEND_METRICS": "false",
+                "CLOUDFLARE_API_BASE_URL": "https://api.cloudflare.com/client/v4",
             },
         )
 
@@ -291,16 +320,16 @@ class PreflightTest(unittest.TestCase):
         self.assertIn(("git", "rev-parse", "origin/main^{tree}"), argvs)
 
     def test_dirty_tree_is_refused(self):
-        runner = FakeRunner({("git", "status"): Result(0, " M src/a.ts\n", "")})
+        runner = FakeRunner({("git", "status"): Result(0, " M src/a.ts\0", "")})
         d, _ = deps(runner)
         with self.assertRaises(DeployError) as cm:
             preflight(config(), d, allow_branch=False)
         self.assertIn("src/a.ts", str(cm.exception))
 
     def test_untracked_under_allowed_prefix_is_ok_but_assets_is_not(self):
-        ok = FakeRunner({("git", "status"): Result(0, "?? .claude/x.md\n", "")})
+        ok = FakeRunner({("git", "status"): Result(0, "?? .claude/x.md\0", "")})
         preflight(config(), deps(ok)[0], allow_branch=False)
-        bad = FakeRunner({("git", "status"): Result(0, "?? assets/new.png\n", "")})
+        bad = FakeRunner({("git", "status"): Result(0, "?? assets/new.png\0", "")})
         with self.assertRaises(DeployError):
             preflight(config(), deps(bad)[0], allow_branch=False)
 
@@ -318,6 +347,28 @@ class PreflightTest(unittest.TestCase):
             preflight(config(), deps(Runner())[0], allow_branch=False)
         self.assertIn("origin/main", str(cm.exception))
         preflight(config(), deps(Runner())[0], allow_branch=True)
+
+    def test_quoted_untracked_paths_under_allowed_prefix_are_ok(self):
+        runner = FakeRunner(
+            {("git", "status"): Result(0, "?? .claude/日本 x.md\0?? .claude/a\0", "")}
+        )
+        preflight(config(), deps(runner)[0], allow_branch=False)
+        [argv] = [a for a, _ in runner.calls if a[:2] == ("git", "status")]
+        self.assertIn("-z", argv)
+
+    def test_rename_is_dirty(self):
+        runner = FakeRunner(
+            {("git", "status"): Result(0, "R  new.ts\0.claude/old.ts\0", "")}
+        )
+        with self.assertRaises(DeployError) as cm:
+            preflight(config(), deps(runner)[0], allow_branch=False)
+        self.assertIn("new.ts", str(cm.exception))
+
+    def test_lfs_check_covers_the_whole_repo(self):
+        runner = FakeRunner()
+        preflight(config(), deps(runner)[0], allow_branch=False)
+        [argv] = [a for a, _ in runner.calls if a[:2] == ("git", "ls-files")]
+        self.assertEqual(argv, ("git", "ls-files", "-z", "--", "."))
 
     def test_lfs_pointer_is_refused(self):
         runner = FakeRunner(
@@ -361,6 +412,14 @@ class VerifyAccountTest(unittest.TestCase):
             verify_account(config(), Secret(TOKEN), http)
         self.assertIn("7403", str(cm.exception))
         self.assertIn(ACCOUNT, str(cm.exception))
+
+    def test_non_object_json_fails_cleanly(self):
+        class Http(FakeHttp):
+            def __call__(self, url, headers):
+                return 200, b"[]"
+
+        with self.assertRaises(DeployError):
+            verify_account(config(), Secret(TOKEN), Http())
 
     def test_d1_id_mismatch_fails(self):
         http = FakeHttp(
@@ -466,6 +525,15 @@ class DeployTest(unittest.TestCase):
         self.assertNotIn(TOKEN, repr(cm.exception))
         self.assertNotIn(TOKEN, out.getvalue())
         self.assertIn("leak ***", out.getvalue())
+
+    def test_failure_after_migrations_points_to_rollback(self):
+        runner = FakeRunner(
+            {("pnpm", "exec", "wrangler", "deploy"): Result(1, "", "boom")}
+        )
+        d, _ = deps(runner)
+        with self.assertRaises(DeployError) as cm:
+            deploy(config(), d, check=False, allow_branch=False)
+        self.assertIn("deploy-runbook.md の 6", str(cm.exception))
 
     def test_smoke_failure_is_an_error(self):
         class Http(FakeHttp):

@@ -87,11 +87,11 @@ pnpm run deploy            # 本番に配る
 pnpm run deploy --check    # 配る前に pnpm run check も回す
 ```
 
-人の端末で `!` を付けて打つ(Keychain を読むと、初回は macOS が許可を聞く)。`--allow-branch` は、HEAD の木が `origin/main` と違っても配る(ふだんは使わない)。
+人の端末で `!` を付けて打つ(Keychain を読むと、初回は macOS が許可を聞く)。repo の根で `pnpm install --frozen-lockfile` 済み、`uv` が入っていること(`pnpm run deploy` は `uv run scripts/deploy.py`)。`--allow-branch` は、HEAD の木が `origin/main` と違っても配る(ふだんは使わない)。
 
 スクリプトの手順:
 
-1. 前の確かめ: 作業の木が綺麗か(未追跡は `deploy.config.json` の `untracked_ok` の下だけ許す)、`git fetch origin` の後、HEAD の木が `origin/main` の木と同じか(違えば止まる。`--allow-branch` で外せる)、`assets/` の glb・png が git LFS のポインタのままでないか。
+1. 前の確かめ: 作業の木が綺麗か(未追跡は `deploy.config.json` の `untracked_ok` の下だけ許す)、`git fetch origin main` の後、HEAD の木が `origin/main` の木と同じか(違えば止まる。`--allow-branch` で外せる)、追跡している glb・png(repo の全体)が git LFS のポインタのままでないか。
 2. `--check` のときは `pnpm run check`。
 3. Keychain からトークンを読み、Cloudflare の API(`GET /accounts/<id>/d1/database`)で、トークンが sim-bio に届き、`biotope-harbor` の id が `wrangler.jsonc` と同じかを確かめる。違えば wrangler を一度も起こさずに止まる。
 4. `pnpm run build:cloudflare`(`VITE_TURNSTILE_SITEKEY` を付けて)→ `pnpm run check:free-tier`。
@@ -99,7 +99,7 @@ pnpm run deploy --check    # 配る前に pnpm run check も回す
 6. `wrangler deploy`。
 7. `wrangler deployments list --json` から版の id を出し、画面(`/` が 200)と港(`/api/v1/chronicles` が JSON)を確かめる。
 
-トークンは wrangler の子プロセスの環境(`CLOUDFLARE_API_TOKEN`)と、3 の API の要求の header にだけ渡る。コマンドの引数・画面の出力・例外の文には出さない(子プロセスの出力に混じっても伏せ字にする)。継いだ環境にある `CLOUDFLARE_*`・`CF_*` の資格情報は、どの子プロセスからも外す。
+トークンは wrangler の子プロセスの環境(`CLOUDFLARE_API_TOKEN`)と、3 の API の要求の header にだけ渡る。コマンドの引数・画面の出力・例外の文には出さない(子プロセスの出力に混じっても伏せ字にする)。継いだ環境にある `CLOUDFLARE_*`・`CF_*`・`WRANGLER_*` は、どの子プロセスからも外す。wrangler には `CLOUDFLARE_API_BASE_URL` も明示して渡すので、repo の `.env` が宛先を書き換えてもトークンは Cloudflare の外へ出ない。Keychain の値が API トークンの形(英数字・`_`・`-` で 30 字以上)でなければ、値を出さずに止まる。マイグレーションを当てた後で止まったときは、6 の戻し方を指す。
 
 ## 4. トークンの差し替え
 
@@ -134,10 +134,10 @@ CLOUDFLARE_ACCOUNT_ID=14c725d39e9cf53743be403ab146174f \
 # 戻したい版の Version ID を選び
 CLOUDFLARE_API_TOKEN="$(security find-generic-password -s sim-bio-local-deploy -a "$USER" -w)" \
 CLOUDFLARE_ACCOUNT_ID=14c725d39e9cf53743be403ab146174f \
-  pnpm exec wrangler rollback <version-id>
+  pnpm exec wrangler rollback <version-id> --message "<戻す訳>"
 ```
 
-これも OAuth を使わないよう、トークンを環境変数で渡す(値は `$(...)` で直に渡り、画面にも履歴にも残らない)。人の端末で打つ(`!` を付けて)。
+`--message` を付けないと、wrangler が訳を問う。これも OAuth を使わないよう、トークンを環境変数で渡す(値は `$(...)` で直に渡り、画面にも履歴にも残らない)。人の端末で打つ(`!` を付けて)。
 
 `wrangler rollback` が戻すのは Worker の版だけ。D1 のマイグレーションは前へしか進まないので、戻した Worker は新しい表の形の上で動く。列を足すだけのマイグレーションなら古い Worker でも動くが、列や表を消す・名前を変えるマイグレーションの後は戻さない(戻すと港が壊れる)。そういうマイグレーションは、Worker の 2 回の配備に分けて入れる(先に新旧どちらの形でも動く Worker、次にマイグレーション)。
 
