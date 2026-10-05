@@ -202,7 +202,8 @@ test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯
 
   await plaque.getByRole('button', { name: '年表を読む' }).click();
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
-  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた');
+  // 確かめた人の数は、読み終えの後に港へ 2 往復してから書き換わる (harbor.spec の M19-09 と同じ待ち)
+  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた', { timeout: 30_000 });
   await expect(plaque.getByRole('progressbar', { name: '年表を読む進み' })).toHaveAttribute('aria-valuenow', '5');
   await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }, undefined, true, { masks: { 読み終えた訪問の板: [plaque.getByRole('heading')] } }));
 });
