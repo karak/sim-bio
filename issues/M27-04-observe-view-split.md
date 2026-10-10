@@ -1,7 +1,7 @@
 ---
 id: M27-04
 title: 観察画面の view.ts (1 関数 836 行) を組み立て・更新・inspect に分ける
-status: todo
+status: in_progress
 milestone: M27
 plan: docs/design/2026-10-10-architecture-review.md#6-所見と推奨優先順
 depends_on: [M27-01]
@@ -23,3 +23,4 @@ evidence: []
 - [ ] `tools/bench-observe.ts` の fps・三角形・draw call が前と同じ (前後の数を作業ログに)
 
 ## 作業ログ
+- 2026-10-10 23:40 安全網を先に: `tests/e2e/observeCharacterization.spec.ts` (3 視点の inspect() を `tests/e2e/fixtures/observe-characterization.json` に留める。2 回目の実行で一致、鐘樹の rng の seed を変えると落ちる)。次に柵のラチェットから view.ts と createObservationView の例外を消して赤にした (ファイル 1074 > 700、関数 836 > 150)。

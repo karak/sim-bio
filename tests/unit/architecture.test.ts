@@ -114,12 +114,11 @@ const rel = (f: string) => relative(ROOT, f).replace(/\\/g, '/');
 
 const LONG_FUNCTION = 150;
 /** ファイルの行数の上限。既定を超えるものだけ名指しで上限を置く (今の行数。減らしたら下げる) */
-const FILE_LINES = { default: 700, 'src/observe/view.ts': 1074, 'src/simulation/World.ts': 985 } as const;
+const FILE_LINES = { default: 700, 'src/simulation/World.ts': 985 } as const;
 /** main.ts は配線だけ (設計書 §4)。M27-03 で部品を src/app へ出してからこの値にする */
 const MAIN_LINES = 265;
 /** 150 行を超えてよい関数と、その上限 (今の長さ)。表に無い関数が 150 行を超えたら落ちる */
 const LONG_FUNCTIONS: Record<string, Record<string, number>> = {
-  'src/observe/view.ts': { createObservationView: 836 },
   'src/main.ts': { boot: 225 },
   'src/ui/Hud.ts': { createHud: 447 },
   'src/scenario/ScenarioRunner.ts': { createScenarioRunner: 424 },
