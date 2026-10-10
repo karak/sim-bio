@@ -280,6 +280,7 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(
             names,
             [
+                "auth",
                 "preflight",
                 "token",
                 "verify-account",
@@ -295,7 +296,7 @@ class PlanTest(unittest.TestCase):
 
     def test_check_runs_before_reading_the_token(self):
         names = [s.name for s in plan(config(), check=True)]
-        self.assertEqual(names[:3], ["preflight", "check", "token"])
+        self.assertEqual(names[:4], ["auth", "preflight", "check", "token"])
 
     def test_wrangler_steps(self):
         steps = {s.name: s for s in plan(config(), check=False)}
@@ -488,7 +489,7 @@ class DeployTest(unittest.TestCase):
 
     def test_keychain_is_read_by_service_and_user(self):
         runner, _ = self.run_deploy()
-        [argv] = [a for a, _ in runner.calls if a[0] == "security"]
+        [argv] = [a for a, _ in runner.calls if a[0] == "security" and a[-1] == "-w"]
         self.assertEqual(
             argv,
             (
@@ -501,6 +502,41 @@ class DeployTest(unittest.TestCase):
                 "-w",
             ),
         )
+
+    def test_auth_check_comes_first_and_does_not_run_whoami(self):
+        runner, out = self.run_deploy()
+        self.assertEqual(
+            runner.calls[0][0],
+            (
+                "security",
+                "find-generic-password",
+                "-s",
+                "sim-bio-local-deploy",
+                "-a",
+                "yasushi",
+            ),
+        )
+        self.assertFalse([a for a, _ in runner.calls if "whoami" in a])
+        self.assertIn("使う道: Keychain のトークン", out)
+        self.assertIn("端末の OAuth は使わない", out)
+
+    def test_missing_keychain_item_stops_before_anything_else(self):
+        runner = FakeRunner(
+            {
+                (
+                    "security",
+                    "find-generic-password",
+                    "-s",
+                    "sim-bio-local-deploy",
+                ): Result(44, "", "")
+            }
+        )
+        d, out = deps(runner)
+        with self.assertRaises(DeployError) as cm:
+            deploy(config(), d, check=True, allow_branch=False)
+        self.assertEqual([a[0] for a, _ in runner.calls], ["security"])
+        self.assertIn("H11", str(cm.exception))
+        self.assertIn("止める", out.getvalue())
 
     def test_wrong_account_stops_before_any_wrangler_or_build(self):
         runner = FakeRunner()
@@ -571,6 +607,7 @@ class DryRunTest(unittest.TestCase):
             "pnpm exec wrangler d1 migrations apply biotope-harbor --remote",
             "pnpm exec wrangler deploy",
             "pnpm run check",
+            "資格情報の照合",
             "https://biotope-island.dev-sim-bio.workers.dev/api/v1/chronicles",
         ]:
             self.assertIn(needle, text)

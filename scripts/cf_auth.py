@@ -243,6 +243,7 @@ class AuthReport:
     lines: tuple[str, ...]
     ready: bool
     token: Secret | None
+    problem: str | None = None
 
 
 def wrangler_auth_file(
@@ -428,7 +429,7 @@ def check_auth(
         "使う道: 無い。止める。wrangler は起こしていない。"
         f" wrangler login では直さない (ほかの repo の資格情報を壊す。{RUNBOOK} の 1)"
     )
-    return AuthReport(tuple(lines), False, None)
+    return AuthReport(tuple(lines), False, None, problem)
 
 
 def default_oauth_file(

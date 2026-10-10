@@ -31,9 +31,13 @@ from pathlib import Path
 from cf_auth import (
     CLOUDFLARE_API,
     RUNBOOK,
+    AuthTarget,
     HttpGet,
+    OAuthFile,
     Runner,
     Secret,
+    check_auth,
+    default_oauth_file,
     read_keychain_token,
     redact,
     scrub_env,
@@ -232,6 +236,11 @@ class Deps:
     print: Callable[[str], None]
     base_env: Mapping[str, str]
     cwd: Path
+    # 端末の OAuth のファイルの秘密でない欄 (照らすだけ)。試験では読まない
+    oauth_file: Callable[[], tuple[Path, OAuthFile | None]] = lambda: (
+        Path("(読まない)"),
+        None,
+    )
 
 
 @dataclass(frozen=True)
@@ -260,12 +269,18 @@ def _wrangler_step(name: str, *args: str, kind: str = "run") -> Step:
 def plan(config: Config, *, check: bool) -> list[Step]:
     steps = [
         Step(
+            "auth",
+            "auth",
+            f"資格情報の照合: 端末の OAuth を照らし (使わない)、Keychain の {config.keychain_service}"
+            " が有るかを見る (値は読まない。whoami は打たない)",
+        ),
+        Step(
             "preflight",
             "preflight",
             f"作業の木が綺麗か・git fetch {config.remote} {config.branch} の後に HEAD の木が"
             f" {config.remote}/{config.branch} と同じか・{', '.join(config.lfs_dirs)} の"
             f" {', '.join(config.lfs_suffixes)} が LFS のポインタでないか",
-        )
+        ),
     ]
     if check:
         steps.append(_run_step("check", ("pnpm", "run", "check")))
@@ -437,6 +452,28 @@ def deploy(config: Config, deps: Deps, *, check: bool, allow_branch: bool) -> No
             say(f"== {step.name}: {step.describe}")
             touched_remote = touched_remote or step.name.startswith("migrations-apply")
             match step.kind:
+                case "auth":
+                    report = check_auth(
+                        AuthTarget(
+                            config.account_id,
+                            config.d1,
+                            config.keychain_service,
+                            config.keychain_account,
+                        ),
+                        run=deps.run,
+                        http_get=deps.http_get,
+                        env=deps.base_env,
+                        cwd=deps.cwd,
+                        oauth_file=deps.oauth_file,
+                        whoami=False,
+                        verify=False,
+                    )
+                    for line in report.lines:
+                        say(line)
+                    if not report.ready:
+                        raise DeployError(
+                            f"トークンの道がまだ使えない: {report.problem}"
+                        )
                 case "preflight":
                     preflight(config, deps, allow_branch=allow_branch)
                 case "token":
@@ -556,6 +593,7 @@ def main(argv: list[str] | None = None) -> int:
         print=print,
         base_env=dict(os.environ),
         cwd=args.root,
+        oauth_file=default_oauth_file(os.environ),
     )
     try:
         config = load_config(args.config or args.root / "deploy.config.json", args.root)
