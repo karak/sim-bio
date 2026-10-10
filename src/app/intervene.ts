@@ -21,10 +21,10 @@ export type InterveneDeps = {
   flash: () => void;
 };
 
+/** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
 export function createIntervene(deps: InterveneDeps): (c: Command) => boolean {
   const { session, log, saveChronicle } = deps;
-  /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
-  const intervene = (c: Command): boolean => {
+  return (c) => {
     if (deps.visiting) return false;
     if (!session.recorder) {
       session.world.dispatch(c);
@@ -39,7 +39,6 @@ export function createIntervene(deps: InterveneDeps): (c: Command) => boolean {
     }
     return result.ok;
   };
-  return intervene;
 }
 
 export type LandCargoDeps = {
@@ -48,21 +47,22 @@ export type LandCargoDeps = {
   at: () => At;
   speciesNames: Readonly<Record<string, string>>;
   intervene: (c: Command) => boolean;
-  tablet: { flash(): void };
+  /** 石板を短く揺らして、力が足りないことを知らせる */
+  flash: () => void;
   hud: { addMarker(x: number, label: string, color: string): void; showCell(cell: number, s: WorldSnapshot): void };
 };
 
+/** 受け取った漂着 (M19-10) を浜のセルに放つ。石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
 export function createLandCargo(deps: LandCargoDeps): (d: DrawnCargo) => LandResult {
   const { session, scenario, at, speciesNames, intervene } = deps;
-  /** 受け取った漂着 (M19-10) を浜のセルに放つ。石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
-  const landCargo = (d: DrawnCargo): LandResult => {
+  return (d) => {
     const s = session.world.snapshot();
     const place = at();
     const power = session.runner?.budget()?.power;
     const spawnCost = scenario?.budget?.costs.spawn;
     const gate = { finished: place.stage === 'scenario' && place.finished, budget: power !== undefined && spawnCost !== undefined ? { power, spawnCost } : undefined };
     const landing = planLanding(d, { elevation: s.layers.elevation, size: s.size }, gate, speciesNames);
-    if (landing.kind === 'budget') deps.tablet.flash();
+    if (landing.kind === 'budget') deps.flash();
     if (landing.kind !== 'land') return landing.kind;
     if (!landing.commands.every(intervene)) return 'refused';
     deps.hud.addMarker(s.year, landing.marker, '#8FEADF');
@@ -71,5 +71,4 @@ export function createLandCargo(deps: LandCargoDeps): (d: DrawnCargo) => LandRes
     deps.hud.showCell(landing.cell, s);
     return 'ok';
   };
-  return landCargo;
 }

@@ -53,8 +53,8 @@ export function landingCell(id: CargoId, island: { elevation: ArrayLike<number>;
   return cells.length === 0 ? null : cells[hashOf(id) % cells.length];
 }
 
-/** 受け取りの放流の半径。UI の放流 (ui/clicks.ts の SPAWN_RADIUS) と同じ値にし、tests/unit/harbor.cargo.test.ts が揃っていることを見る (harbor は ui を読まない、M27-02) */
-const SPAWN_RADIUS = 1;
+/** 1 セルだけだと見えにくいので半径 1 (3×3 相当) に放つ。1 コマンドなので値段も 1 回分 */
+export const SPAWN_RADIUS = 1;
 
 /**
  * 漂着を受け取る 1 クリック (M19-10)。港の口の「受け取る」と台本が、積荷の種ごとに 1 つの放流を着いた浜のセルへ打つ。

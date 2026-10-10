@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { World } from '../../src/simulation/World';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
+import { SPAWN_RADIUS } from '../../src/harbor/cargo';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
 import type { ScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { CargoId } from '../../src/harbor/contract';
-import { SPAWN_RADIUS } from '../../src/ui/clicks';
 import { createIntervene, createLandCargo } from '../../src/app/intervene';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import type { ChronicleRecorder } from '../../src/chronicle/recorder';
@@ -24,7 +24,7 @@ const priced = { budget: { costs: { spawn: 3 } } } as unknown as ScenarioDef;
 function setup(o: { at: At; scenario?: ScenarioDef; power?: number; accept?: boolean }) {
   const calls: string[] = [];
   const sent: Command[] = [];
-  const session = sessionOf({ snapshot: () => snap } as unknown as World, false);
+  const session = sessionOf({ snapshot: () => snap } as unknown as World);
   if (o.power !== undefined) session.runner = { budget: () => ({ power: o.power }) } as unknown as ScenarioRunner;
   const land = createLandCargo({
     session,
@@ -32,7 +32,7 @@ function setup(o: { at: At; scenario?: ScenarioDef; power?: number; accept?: boo
     at: () => o.at,
     speciesNames: { rabbit: 'ウサギ', wolf: '狼' },
     intervene: (c) => (sent.push(c), o.accept ?? true),
-    tablet: { flash: () => calls.push('flash') },
+    flash: () => calls.push('flash'),
     hud: { addMarker: (x, label, color) => calls.push(`marker ${x} ${label} ${color}`), showCell: (cell) => calls.push(`showCell ${cell}`) },
   });
   return { land, calls, sent, session };
@@ -81,9 +81,9 @@ describe('介入の入口 createIntervene (M27-03)', () => {
 
   it('訪問では受けない。自由モードは島へそのまま送る', () => {
     const dispatched: Command[] = [];
-    const visiting = createIntervene({ session: sessionOf(world(dispatched), true), visiting: true, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
+    const visiting = createIntervene({ session: sessionOf(world(dispatched)), visiting: true, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
     expect(visiting(cmd)).toBe(false);
-    const free = createIntervene({ session: sessionOf(world(dispatched), false), visiting: false, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
+    const free = createIntervene({ session: sessionOf(world(dispatched)), visiting: false, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
     expect(free(cmd)).toBe(true);
     expect(dispatched).toEqual([cmd]);
   });
@@ -91,7 +91,7 @@ describe('介入の入口 createIntervene (M27-03)', () => {
   it('石板では記録器を通す。受けたら年代記を書き、力が足りずに弾かれたら cmd.rejected を残して石板を揺らす', () => {
     const calls: string[] = [];
     const log = createMemorySink();
-    const session = sessionOf(world([]), false);
+    const session = sessionOf(world([]));
     let result: InterveneResult = { ok: true };
     session.recorder = { dispatch: () => result } as unknown as ChronicleRecorder<InterveneResult>;
     const intervene = createIntervene({ session, visiting: false, log, saveChronicle: () => void calls.push('save'), flash: () => calls.push('flash') });

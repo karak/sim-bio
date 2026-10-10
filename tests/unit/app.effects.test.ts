@@ -14,7 +14,7 @@ function setup(over: Partial<EffectsDeps> = {}) {
   const calls: string[] = [];
   const logs: { level: string; event: string; tick: number; extra: Record<string, unknown> }[] = [];
   const persistLog: SaveLog = (level, event, tick, extra = {}) => logs.push({ level, event, tick, extra });
-  const session = sessionOf(World.create(config, { log: createMemorySink() }), false);
+  const session = sessionOf(World.create(config, { log: createMemorySink() }));
   let search = '?player=ann&scenario=sinking';
   const deps: EffectsDeps = {
     session,
@@ -115,7 +115,7 @@ describe('確かめを受けた後の効果 createEffects (M27-03)', () => {
     const fromUrl = setup({ seed: 42 });
     fromUrl.effects.showSeed(false);
     expect(fromUrl.calls).toEqual(['setSeed 42', 'replace ?player=ann&scenario=sinking&seed=42']);
-    const other = setup({ session: sessionOf(World.create({ ...config, seed: 7 }, { log: createMemorySink() }), false) });
+    const other = setup({ session: sessionOf(World.create({ ...config, seed: 7 }, { log: createMemorySink() })) });
     other.effects.showSeed(false);
     expect(other.calls).toEqual(['setSeed 7', 'replace ?player=ann&scenario=sinking&seed=7']);
     const inScenario = setup({ scenario: { id: 'sinking' } as EffectsDeps['scenario'] });

@@ -38,6 +38,9 @@ export type FrameDeps = {
   };
 };
 
+/** 自由モードと、予算の無い石板では、どのチップも買える */
+const ALL_AFFORDABLE = { spawn: true, disaster: true, climate: true, tower: true } as const;
+
 export function createOnFrame(deps: FrameDeps): (s: WorldSnapshot) => void {
   const { session, scenario, localSave, viewedSpecies, observe, hud, tablet } = deps;
   return (s) => {
@@ -52,25 +55,26 @@ export function createOnFrame(deps: FrameDeps): (s: WorldSnapshot) => void {
     if (!observe.active()) view.update(s);
     hud.update(s);
     // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)
-    hud.setNextMeteor(session.runner ? session.runner.nextMeteorYear() : null);
+    hud.setNextMeteor(session.runner?.nextMeteorYear() ?? null);
     if (session.selected !== null) hud.showCell(session.selected, s);
-    if (session.runner) {
-      const verdict = session.runner.update(s);
-      const budgetInfo = session.runner.budget();
-      tablet.update(session.runner.yearOf(s), verdict, budgetInfo, session.runner.warnings(), session.runner.timeline(), session.runner.prayer(), session.runner.milestones());
-      const costs = scenario?.budget?.costs;
-      hud.setAffordable(
-        budgetInfo && costs
-          ? {
-              spawn: budgetInfo.power >= costs.spawn,
-              disaster: budgetInfo.power >= costs.disaster,
-              climate: budgetInfo.power >= costs.climate,
-              tower: budgetInfo.power >= (costs.tower ?? TOWER_COST),
-            }
-          : { spawn: true, disaster: true, climate: true, tower: true },
-      );
-    } else {
-      hud.setAffordable({ spawn: true, disaster: true, climate: true, tower: true });
+    const runner = session.runner;
+    if (!runner) {
+      hud.setAffordable(ALL_AFFORDABLE);
+      return;
     }
+    const verdict = runner.update(s);
+    const budgetInfo = runner.budget();
+    tablet.update(runner.yearOf(s), verdict, budgetInfo, runner.warnings(), runner.timeline(), runner.prayer(), runner.milestones());
+    const costs = scenario?.budget?.costs;
+    hud.setAffordable(
+      budgetInfo && costs
+        ? {
+            spawn: budgetInfo.power >= costs.spawn,
+            disaster: budgetInfo.power >= costs.disaster,
+            climate: budgetInfo.power >= costs.climate,
+            tower: budgetInfo.power >= (costs.tower ?? TOWER_COST),
+          }
+        : ALL_AFFORDABLE,
+    );
   };
 }

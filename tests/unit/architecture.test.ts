@@ -13,13 +13,14 @@ import { FORBIDDEN } from '../../layering.config.mjs';
  */
 
 const ROOT = resolve(__dirname, '../..');
+const rel = (f: string) => relative(ROOT, f).replace(/\\/g, '/');
 
 /** src の下のディレクトリを層にまとめる。core/log は core、observe/render は observe。入口 (main.ts・観察画面の試作) は何でも読んでよい */
 function layerOf(file: string): string {
-  const rel = relative(ROOT, file).replace(/\\/g, '/');
-  if (rel === 'src/main.ts' || rel === 'src/observe/prototype.ts') return 'entry';
-  if (rel.startsWith('worker/src/')) return 'worker';
-  const m = /^src\/([a-z]+)\//.exec(rel);
+  const r = rel(file);
+  if (r === 'src/main.ts' || r === 'src/observe/prototype.ts') return 'entry';
+  if (r.startsWith('worker/src/')) return 'worker';
+  const m = /^src\/([a-z]+)\//.exec(r);
   return m ? m[1] : 'root';
 }
 
@@ -60,12 +61,15 @@ function edgesOf(file: string): Edge[] {
 }
 
 const EDGES = FILES.flatMap(edgesOf);
+/** 値の辺のうち、このリポジトリの中を指すもの */
+const VALUE_EDGES = EDGES.filter((e) => !e.typeOnly && e.spec.startsWith('.'));
+
+const LONG_FUNCTION = 150;
 
 /** 層の間の値の辺 (同じ層の中と、型だけの辺は除く)。入口と dev は上に載るだけなので循環の検査から外す */
 function layerGraph(): Map<string, Set<string>> {
   const g = new Map<string, Set<string>>();
-  for (const e of EDGES) {
-    if (e.typeOnly || !e.spec.startsWith('.')) continue;
+  for (const e of VALUE_EDGES) {
     const a = layerOf(e.from);
     const b = layerOf(e.to);
     if (a === b || a === 'entry' || a === 'dev') continue;
@@ -110,13 +114,10 @@ function longFunctions(file: string): { name: string; lines: number }[] {
   return out;
 }
 
-const rel = (f: string) => relative(ROOT, f).replace(/\\/g, '/');
-
-const LONG_FUNCTION = 150;
-/** ファイルの行数の上限。既定を超えるものだけ名指しで上限を置く (今の行数。減らしたら下げる) */
-const FILE_LINES = { default: 700, 'src/observe/view.ts': 1074, 'src/simulation/World.ts': 985 } as const;
-/** main.ts は配線だけ (設計書 §4)。M27-03 で部品を src/app へ出してからこの値にする */
-const MAIN_LINES = 265;
+/** ファイルの行数の既定の上限 */
+const DEFAULT_LINES = 700;
+/** 既定と違う上限を持つファイル (今の行数。減らしたら下げる)。main.ts は配線だけ (設計書 §4) なので既定より低く置く */
+const FILE_LINES: Record<string, number> = { 'src/main.ts': 265, 'src/observe/view.ts': 1074, 'src/simulation/World.ts': 985 };
 /** 150 行を超えてよい関数と、その上限 (今の長さ)。表に無い関数が 150 行を超えたら落ちる */
 const LONG_FUNCTIONS: Record<string, Record<string, number>> = {
   'src/observe/view.ts': { createObservationView: 836 },
@@ -139,7 +140,7 @@ describe('アーキテクチャの柵 (M27-01): 依存の向き', () => {
   });
 
   it('層の向きは動的 import と深い相対パスでも守る (eslint は静的な import しか見ない)', () => {
-    const bad = EDGES.filter((e) => !e.typeOnly && e.spec.startsWith('.') && (FORBIDDEN[layerOf(e.from)] ?? []).includes(layerOf(e.to))).map((e) => `${rel(e.from)} → ${e.spec}`);
+    const bad = VALUE_EDGES.filter((e) => (FORBIDDEN[layerOf(e.from)] ?? []).includes(layerOf(e.to))).map((e) => `${rel(e.from)} → ${e.spec}`);
     expect(bad).toEqual([]);
   });
 
@@ -160,14 +161,8 @@ describe('アーキテクチャの柵 (M27-01): 依存の向き', () => {
 });
 
 describe('アーキテクチャの柵 (M27-01): 大きさのラチェット', () => {
-  it('main.ts は配線だけ (設計書 §4)', () => {
-    expect(lines(join(ROOT, 'src/main.ts'))).toBeLessThanOrEqual(MAIN_LINES);
-  });
-
-  it('ファイルは上限の内 (既定 700 行。名指しの上限は今の行数で、増やさない)', () => {
-    const over = FILES.map((f) => ({ file: rel(f), lines: lines(f) }))
-      .filter((r) => r.file !== 'src/main.ts')
-      .filter((r) => r.lines > ((FILE_LINES as Record<string, number>)[r.file] ?? FILE_LINES.default));
+  it('ファイルは上限の内 (既定 700 行。main.ts は配線だけなので 265 行。名指しの上限は今の行数で、増やさない)', () => {
+    const over = FILES.map((f) => ({ file: rel(f), lines: lines(f) })).filter((r) => r.lines > (FILE_LINES[r.file] ?? DEFAULT_LINES));
     expect(over).toEqual([]);
   });
 

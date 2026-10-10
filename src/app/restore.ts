@@ -65,13 +65,14 @@ export async function restoreIsland(order: readonly Restore[], deps: RestoreDeps
         );
     }
   };
-  let resumed: Restored | null = null;
-  let fromSlot = false;
+  let found: { resumed: Restored; fromSlot: boolean } | null = null;
   for (const r of order) {
-    resumed = await restoreFrom(r);
-    fromSlot = resumed !== null && r.from === 'slot';
-    if (resumed) break;
+    const resumed = await restoreFrom(r);
+    if (resumed) {
+      found = { resumed, fromSlot: r.from === 'slot' };
+      break;
+    }
   }
-  if (deps.pending && !fromSlot) persistLog('warn', 'persist.slot.load.failed', 0, { slot: deps.pending });
-  return { resumed, fromSlot };
+  if (deps.pending && !found?.fromSlot) persistLog('warn', 'persist.slot.load.failed', 0, { slot: deps.pending });
+  return found ?? { resumed: null, fromSlot: false };
 }

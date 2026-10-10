@@ -2,6 +2,7 @@ import type { Command, DisasterKind } from '../simulation/types';
 import type { Chronicle, Digest } from '../chronicle/chronicle';
 import type { PublishInput } from '../harbor/client';
 import type { InscriptionId } from '../harbor/contract';
+import { SPAWN_RADIUS } from '../harbor/cargo';
 
 /**
  * 災害の半径 (セル)。山火事は 1 点着火で延焼に任せる。
@@ -11,8 +12,6 @@ import type { InscriptionId } from '../harbor/contract';
 export const DISASTER_RADIUS: Record<DisasterKind, number> = { meteor: 4, volcano: 4, wildfire: 0, plague: 4 };
 /** 種を放つときに各セルへ加える密度 */
 export const SPAWN_AMOUNT = 0.5;
-/** 1 セルだけだと見えにくいので半径 1 (3×3 相当) に放つ。1 コマンドなので値段も 1 回分 */
-export const SPAWN_RADIUS = 1;
 
 /**
  * プレイヤーの 1 クリックが出すコマンド。通し実行 (tests/slow) の台本もこれで打ち、手で再現できない想定解を作らない (M21-01)。

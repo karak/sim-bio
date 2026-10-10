@@ -9,12 +9,11 @@ import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { exportCargo } from '../../src/simulation/ship';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
-import { cargoOfHold, landingCell, planLanding, receiveCargoClick } from '../../src/harbor/cargo';
+import { cargoOfHold, landingCell, planLanding, receiveCargoClick, SPAWN_RADIUS } from '../../src/harbor/cargo';
 import { parseCargo, parsePublicChronicle, type CargoId } from '../../src/harbor/contract';
 import { recordChronicle } from '../../src/chronicle/recorder';
 import { digestOf } from '../../src/chronicle/digest';
 import { replay } from '../../src/chronicle/replay';
-import { SPAWN_RADIUS } from '../../src/ui/clicks';
 import { catalogFrom } from '../fixtures/fakeHarbor';
 import { FIXTURE_YEARS, fixtureIsland } from '../fixtures/chronicle';
 

@@ -15,7 +15,7 @@
 | FF-04 | 描画ライブラリを本体・UI・保存・港に入れない(G1) | `three` / `three/*` を import する層 | 層の集合 | `{observe, render}` と一致 | check(unit)+ lint | 同上 「three.js を読むのは render と observe だけ」、`eslint.config.js` の simulation の塊 |
 | FF-05 | 本体の依存を最小に保つ(G1、設計書 §2 #8) | `src/simulation/**` が読む外部パッケージ | パッケージの集合 | `{simplex-noise}` と一致 | check(unit) | 同上 「simulation が読む外部パッケージは simplex-noise だけ」 |
 | FF-06 | Worker に本体・UI・保存を持ち込まない(C2、Q9) | `worker/src/**` が読む `src/` の層 | 層の集合 | `{chronicle, core, harbor}` と一致 | check(unit) | 同上 「worker が src から読むのは…」 |
-| FF-07 | main.ts を配線だけに保つ(設計書 §4、R2) | `src/main.ts` | 行数(改行の数) | ≤ 265 | check(unit) | 同上 `MAIN_LINES` |
+| FF-07 | main.ts を配線だけに保つ(設計書 §4、R2) | `src/main.ts` | 行数(改行の数) | ≤ 265 | check(unit) | 同上 `FILE_LINES['src/main.ts']` |
 | FF-08 | ファイルの肥大を止める(R2、Development) | `src/**`・`worker/src/**` の各ファイル | 行数 | 既定 ≤ 700。例外は表 `FILE_LINES` の今の値以下(`observe/view.ts` 1074、`simulation/World.ts` 985) | check(unit) | 同上 「ファイルは上限の内」 |
 | FF-09 | 関数の肥大を止める(R2) | 全関数の本体(宣言・式・アロー・メソッド) | 本体の行数 | 既定 ≤ 150。例外は表 `LONG_FUNCTIONS` の今の値以下(`boot` 225、`createObservationView` 836 ほか 11 件) | check(unit) | 同上 「本体 150 行を超える関数は表のものだけ」 |
 

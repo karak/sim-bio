@@ -11,6 +11,7 @@ import type { IslandStore } from '../persist/islandStore';
 import type { SaveLog } from '../persist/localSave';
 import { createScenarioAutosave } from '../persist/scenarioSave';
 import { createScenarioRunner, type RunnerState } from '../scenario/ScenarioRunner';
+import { stepByYear } from '../scenario/stepByYear';
 import type { ScenarioDef, Verdict } from '../scenario/types';
 import { exportCargo, type Cargo as Hold } from '../simulation/ship';
 import type { WorldConfig } from '../simulation/types';
@@ -28,8 +29,8 @@ export type ScenarioSessionDeps = {
   config: WorldConfig;
   /** 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない */
   visiting: boolean;
-  /** 石板の定義。開発用の近道 (M19-16) では打ち切る年を縮めた定義になる。runner を作るたびに引く */
-  defOf: () => ScenarioDef;
+  /** 石板の定義。開発用の近道 (M19-16) では打ち切る年を縮めた定義 (URL だけで決まる) */
+  def: ScenarioDef;
   /** 開発用の近道で判定を打ち切った (M19-16) */
   forced: boolean;
   log: LogSink;
@@ -49,9 +50,20 @@ export type ScenarioSessionDeps = {
   observe: { enter(): Promise<void> };
 };
 
-export function createScenarioSession(scenario: ScenarioDef, deps: ScenarioSessionDeps): void {
-  const { session, config, visiting, defOf, forced, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
-  const newRunner = (restored?: RunnerState) => createScenarioRunner(defOf(), session.world, {
+export function createScenarioSession(deps: ScenarioSessionDeps): void {
+  const { session, config, visiting, def, forced, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
+  const scenario = def;
+  /** 今の島の tick・年を添えた石板のログ */
+  const note = (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => {
+    const snap = session.world.snapshot();
+    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level, event, scenario: scenario.id, ...extra });
+  };
+  session.scenarioStep = visiting
+    ? () => {}
+    : (n) => {
+        if (session.runner) stepByYear(session.world, session.runner, n);
+      };
+  const newRunner = (restored?: RunnerState) => createScenarioRunner(def, session.world, {
     ticksPerYear: config.ticksPerYear,
     onVerdict: (v) => {
       loop.setSpeed(0);
@@ -69,20 +81,13 @@ export function createScenarioSession(scenario: ScenarioDef, deps: ScenarioSessi
           harbor.settle({ chronicle, digest }, cargo);
         });
       }
-      log.write({ ts: new Date().toISOString(), tick: session.world.snapshot().tick, year: session.world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
+      note('info', `scenario.${v.status}`, { reason: v.reason });
     },
-    onWarning: (w) => {
-      const snap = session.world.snapshot();
-      log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.warning', scenario: scenario.id, kind: w.kind, id: w.id, text: w.text });
-    },
-    onPrayer: (e) => {
-      const snap = session.world.snapshot();
-      log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.prayer', scenario: scenario.id, phase: e.phase, kind: e.prayer });
-    },
+    onWarning: (w) => note('warn', 'scenario.warning', { kind: w.kind, id: w.id, text: w.text }),
+    onPrayer: (e) => note('info', 'scenario.prayer', { phase: e.phase, kind: e.prayer }),
     onPowerExhausted: () => {
       tablet.flash();
-      const snap = session.world.snapshot();
-      log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.power.exhausted', scenario: scenario.id });
+      note('warn', 'scenario.power.exhausted', {});
     },
   }, restored);
   session.runner = newRunner(resumed?.runner);

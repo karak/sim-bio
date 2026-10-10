@@ -15,7 +15,7 @@ import { bootPlanOf, searchFor, type BootPlan } from './place';
 /** タイトルの「続きから」を決めるために置き場の一覧を待つ上限 (ms) */
 const TITLE_LIST_TIMEOUT_MS = 2000;
 
-/** タイトルで選ばれた舞台 (ui/titleMenu.ts の TitleChoice と同じ形) */
+/** タイトルで選んだもの (M24-01)。scenario は石板の続き (M24-05、?scenario=<id> の道で resumeScenario が戻す) */
 export type TitleChoice = { kind: 'free' } | { kind: 'scenario'; scenarioId: string };
 
 export type TitleDeps = {
@@ -69,5 +69,5 @@ export function createTitle(deps: TitleDeps) {
     if (choice.kind === 'scenario') nav.replace(`?${searchFor(nav.search(), choice.scenarioId)}`);
     return bootPlanOf(nav.search(), scenarios, null);
   };
-  return { enterFromTitle, scenarioProgressFor };
+  return { enterFromTitle };
 }

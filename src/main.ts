@@ -83,6 +83,7 @@ async function boot(): Promise<void> {
   const config = scenarioConfigOf(base, species, scenario);
   // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
   const visitId = booted.visitId;
+  const visiting = !!visitId;
   /** 最後に遊んだ舞台の印 (M24-05)。舞台に入った時と自動保存の時に書く。訪問 (他人の島) では書かない */
   const markStage = () => {
     if (!visitId) writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now(), dev?.player?.name);
@@ -103,7 +104,7 @@ async function boot(): Promise<void> {
   const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
   const { resumed, fromSlot } = await restoreIsland(booted.restore, { localSave, store, head, log, persistLog, seed: seeded.seed, pending });
-  const session = sessionOf(resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log }), !!visitId);
+  const session = sessionOf(resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log }));
   // 枠から開いた自由モードの島は、読込と同じくその場で自動の枠に書く
   if (fromSlot) localSave.replaced(session.world.serialize());
 
@@ -120,9 +121,9 @@ async function boot(): Promise<void> {
   const chips: Chips = { armed: null, spawnArmed: null, towerArmed: false };
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
   const saveChronicle = () => session.scenarioAutosave?.flush();
-  const intervene = createIntervene({ session, visiting: !!visitId, log, saveChronicle, flash: () => tablet.flash() });
+  const intervene = createIntervene({ session, visiting, log, saveChronicle, flash: () => tablet.flash() });
   const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
-  const at = () => atOf(!!visitId, head, session.runner?.verdict().status ?? null);
+  const at = () => atOf(visiting, head, session.runner?.verdict().status ?? null);
   const { perform, slotSave, showSeed } = createEffects({
     session, scenario, config, seed: seeded.seed, at, drawSeed, log, persistLog, store, localSave, saveChronicle, storage: sessionStorage, nav,
     remakeView: (size, species) => {
@@ -169,24 +170,24 @@ async function boot(): Promise<void> {
     onTowerArm: (v) => {
       chips.towerArmed = v;
     },
-  }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visitId });
+  }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visiting });
 
+  const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
   const tablet = createTablet(
     app,
     scenarios,
     scenario,
     (id) => void run({ kind: 'select', scenarioId: id }),
-    Object.fromEntries(species.map((d) => [d.id, d.name])),
+    speciesNames,
     (id) => hud.showSpeciesLayer(id),
     undefined,
     () => {
       if (scenario) void run({ kind: 'retry', scenarioId: scenario.id });
     },
   );
-  hud.setReplaceable(!visitId);
+  hud.setReplaceable(!visiting);
   showSeed(false);
-  const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
-  const landCargo = createLandCargo({ session, scenario, at, speciesNames, intervene, tablet, hud });
+  const landCargo = createLandCargo({ session, scenario, at, speciesNames, intervene, flash: () => tablet.flash(), hud });
   const harbor = mountHarbor(app, {
     scenarios,
     speciesIds: species.map((d) => d.id),
@@ -194,9 +195,9 @@ async function boot(): Promise<void> {
     baseUrl: import.meta.env.VITE_HARBOR_URL,
     sitekey: import.meta.env.VITE_TURNSTILE_SITEKEY,
     visit: visitId && scenario ? { id: visitId, island: { def: scenario, config } } : null,
-    scenarioId: scenario && !visitId ? scenario.id : null,
+    scenarioId: scenario && !visiting ? scenario.id : null,
     speciesNames,
-    land: visitId ? null : landCargo,
+    land: visiting ? null : landCargo,
     log: (level, event, extra) => persistLog(level, event, session.world.snapshot().tick, extra),
     player: dev?.player,
     guard: {
@@ -213,7 +214,7 @@ async function boot(): Promise<void> {
   });
   // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
   const observe = createObserveEntry(app, {
-    names: Object.fromEntries(species.map((d) => [d.id, d.name])),
+    names: speciesNames,
     getSpeed: () => loop.getSpeed(),
     now: dev?.clock,
     setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
@@ -233,8 +234,8 @@ async function boot(): Promise<void> {
     },
   );
   if (scenario) {
-    createScenarioSession(scenario, {
-      session, config, visiting: !!visitId, defOf: () => dev?.scenarioDef(scenario) ?? scenario, forced: !!dev?.shortcut, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe,
+    createScenarioSession({
+      session, config, visiting, def: dev?.scenarioDef(scenario) ?? scenario, forced: !!dev?.shortcut, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe,
     });
   }
 
