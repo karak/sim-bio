@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" font-family="Hiragino Sans, Noto Sans JP, system-ui, sans-serif">
+<title>コンフィグ (デスクトップ)</title>
+<rect width="1280" height="720" fill="#f2f2f2"/>
+<rect x="0" y="0" width="1280" height="720" rx="0" fill="#ddd" stroke="#bbb" stroke-width="1.5"/>
+<path d="M0 0L1280 720M1280 0L0 720" stroke="#bbb" stroke-width="1"/>
+<text x="640.0" y="360.0" font-size="14" fill="#888" text-anchor="middle" font-weight="normal"></text>
+<rect x="0" y="0" width="1280" height="720" fill="#222" fill-opacity="0.55"/>
+<rect x="240" y="80" width="800" height="560" rx="8" fill="#fff" stroke="#222" stroke-width="2"/>
+<rect x="264" y="100" width="96" height="36" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="280" y="122.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">← 戻る</text>
+<text x="380" y="125" font-size="20" fill="#222" text-anchor="start" font-weight="bold">コンフィグ</text>
+<text x="1016" y="124" font-size="12" fill="#888" text-anchor="end" font-weight="normal">Esc でタイトルへ</text>
+<text x="264" y="190" font-size="17" fill="#222" text-anchor="start" font-weight="bold">画質</text>
+<text x="264" y="214" font-size="12" fill="#888" text-anchor="start" font-weight="normal">観察画面の影・草・解像度</text>
+<rect x="640" y="172" width="110" height="36" rx="0" fill="#555" stroke="#888" stroke-width="1.5"/>
+<text x="695.0" y="196" font-size="14" fill="#fff" text-anchor="middle" font-weight="normal">自動</text>
+<rect x="750" y="172" width="110" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="805.0" y="196" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">軽い</text>
+<rect x="860" y="172" width="110" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="915.0" y="196" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">きれい</text>
+<line x1="264" y1="242" x2="1016" y2="242" stroke="#ddd"/>
+<text x="264" y="286" font-size="17" fill="#222" text-anchor="start" font-weight="bold">動きを減らす</text>
+<text x="264" y="310" font-size="12" fill="#888" text-anchor="start" font-weight="normal">背景の動き・ピンの揺れ</text>
+<rect x="640" y="268" width="110" height="36" rx="0" fill="#555" stroke="#888" stroke-width="1.5"/>
+<text x="695.0" y="292" font-size="14" fill="#fff" text-anchor="middle" font-weight="normal">OS に従う</text>
+<rect x="750" y="268" width="110" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="805.0" y="292" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">入</text>
+<rect x="860" y="268" width="110" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="915.0" y="292" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">切</text>
+<line x1="264" y1="338" x2="1016" y2="338" stroke="#ddd"/>
+<text x="264" y="382" font-size="17" fill="#222" text-anchor="start" font-weight="bold">最初の速さ</text>
+<text x="264" y="406" font-size="12" fill="#888" text-anchor="start" font-weight="normal">島を開いたときの速さ (いまは 1x)</text>
+<rect x="640" y="364" width="110" height="36" rx="0" fill="#555" stroke="#888" stroke-width="1.5"/>
+<text x="695.0" y="388" font-size="14" fill="#fff" text-anchor="middle" font-weight="normal">1x</text>
+<rect x="750" y="364" width="110" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="805.0" y="388" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">10x</text>
+<line x1="264" y1="434" x2="1016" y2="434" stroke="#ddd"/>
+<text x="264" y="488" font-size="13" fill="#888" text-anchor="start" font-weight="normal">変えた値はその場で保存し、次の起動でも戻る</text>
+<rect x="264" y="520" width="200" height="44" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="280" y="546.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">既定に戻す</text>
+<rect x="264" y="584" width="563" height="24" rx="2" fill="#fff" stroke="#555" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="272" y="599" font-size="12" fill="#555" text-anchor="start" font-weight="normal">推し (案 A) の 3 項目。案 B なら「判定の板の位置を戻す」「手元の島を消す」が下に並ぶ</text>
+<text x="1268" y="710" font-size="11" fill="#888" text-anchor="end" font-weight="normal">config-desktop 1280x720</text>
+</svg>

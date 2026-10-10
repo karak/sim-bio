@@ -2,6 +2,7 @@ import type { Chronicle, ChronicleHead } from '../harbor/chronicle';
 import { parseChronicleId, type ChronicleId } from '../harbor/contract';
 import { checkSlot, planSlotLoad, type Here, type SlotSave } from '../persist/slotSave';
 import type { ManualSlot, PendingSlot, SlotId } from '../persist/slots';
+import type { TabMarks } from '../persist/tabMarks';
 import type { RunnerState } from '../scenario/ScenarioRunner';
 import type { ScenarioDef, ScenarioStatus } from '../scenario/types';
 import type { SaveData } from '../simulation/types';
@@ -18,14 +19,16 @@ export type At =
   | { stage: 'scenario'; head: ChronicleHead; finished: boolean }
   | { stage: 'visit' };
 
-/** やり直しの効かない操作。select は石板を選ぶ・自由モードへ (null)、retry は判定の板のもう一度 (訪問中は visit を残す、M26-08)、visit は港の訪れる札。load の slot が null ならファイル */
+/** やり直しの効かない操作。select は石板を選ぶ・自由モードへ (null)、retry は判定の板のもう一度 (訪問中は visit を残す、M26-08)、visit は港の訪れる札、title はタイトルへ (M24-04)。load の slot が null ならファイル */
 export type Op =
   | { kind: 'new_island' }
   | { kind: 'load'; data: SlotSave; slot: SlotId | null }
   | { kind: 'slot_save'; slot: ManualSlot; overwrites: string | null }
   | { kind: 'select'; scenarioId: string | null }
   | { kind: 'retry'; scenarioId: string }
-  | { kind: 'visit'; href: string };
+  | { kind: 'visit'; href: string }
+  /** (M24-04) title は操作画面の「タイトルへ」。舞台を離れる操作で、確かめは select と同じ */
+  | { kind: 'title' };
 
 /** 確かめを受けた後に順に行うこと。replace が島を戻せなければ、残りを行わない */
 export type Effect =
@@ -38,7 +41,9 @@ export type Effect =
   | { kind: 'save_slot'; slot: ManualSlot }
   | { kind: 'flush' }
   | { kind: 'go'; scenarioId: string | null; keepVisit?: true }
-  | { kind: 'assign'; href: string };
+  | { kind: 'assign'; href: string }
+  /** (M24-04) タイトルへ移る: このタブの舞台に入った印を消し、タイトルを開く合図を置いてから / へ (見守り手と開発の板の検索語は残す) */
+  | { kind: 'to_title' };
 
 export type Plan = { ask: Ask | null; effects: readonly Effect[] };
 
@@ -76,11 +81,14 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
       return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: op.scenarioId, keepVisit: true }] };
     case 'visit':
       return { ask: leaving(at), effects: [{ kind: 'assign', href: op.href }] };
+    case 'title':
+      // タイトルへ (M24-04、docs/uiux/2026-10-04-title-flow.md の「タイトルへ戻るときの約束」)。書き切ってから移る。訪問では flush が何も書かない
+      return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'to_title' }] };
   }
 }
 
 /**
- * 舞台を移る操作 (石板を選ぶ・自由モードへ・もう一度・訪れる) の確かめ (M21-04)。走っている島は書き切ってから移るので確かめない。
+ * 舞台を移る操作 (石板を選ぶ・自由モードへ・もう一度・訪れる・タイトルへ) の確かめ (M21-04)。走っている島は書き切ってから移るので確かめない。
  * 判定の出た自分の石板の島は、開き直すと初めからになる (M19-14) ので確かめる
  */
 const leaving = (at: At): Ask | null => askOf({ kind: 'leave', finished: at.stage === 'scenario' && at.finished });
@@ -127,6 +135,19 @@ export function searchFor(search: string, scenarioId: string | null, opts: { kee
   return q.toString();
 }
 
+/**
+ * 「タイトルへ」の移る先 (M24-04、2026-10-10 の決定)。見守り手 (?player=) と開発の板 (?dev=1) は自由モードへと同じく残し、
+ * 舞台を決める検索語 (石板・訪問・seed・近道など) は落とす。残した検索語があっても、移った先の起動は openTitle の合図でタイトルを出す
+ */
+export function titleHrefOf(search: string): string {
+  const from = new URLSearchParams(search);
+  const q = new URLSearchParams();
+  const player = from.get('player');
+  if (player !== null) q.set('player', player);
+  if (from.get('dev') === '1') q.set('dev', '1');
+  return q.size ? `/?${q.toString()}` : '/';
+}
+
 /** 起動で島を戻す置き場。上から順に試し、最初に戻せたものから開く。どれも無ければ新しい島 */
 export type Restore = { from: 'slot'; slot: PendingSlot } | { from: 'scenario' } | { from: 'auto' };
 
@@ -154,6 +175,20 @@ export function bootPlanOf<S extends { id: string }>(search: string, scenarios: 
   const slot: Restore[] = pending ? [{ from: 'slot', slot: pending }] : [];
   const restore: Restore[] = visitId ? [] : [...slot, scenario ? { from: 'scenario' } : { from: 'auto' }];
   return { scenario, visitId, unknown, restore };
+}
+
+/** 起動の行き先 (M24-01)。タイトルか、bootPlanOf が決める舞台か */
+export type BootRoute<S> = { kind: 'title' } | { kind: 'stage'; plan: BootPlan<S> };
+
+/**
+ * 起動の行き先 (M24-01、docs/uiux/2026-10-04-title-flow.md の「起動の判断」)。上から順に: タイトルの合図ならタイトル、
+ * 移る途中の枠・検索語が 1 つでもある・このタブで舞台に入った後・開発の印 (devSkip、本番のビルドでは常に false) なら舞台、どれでもなければタイトル。
+ * 舞台の中身は bootPlanOf が決める (起動の道を 2 つ持たない)。pending は takePendingSlot が取り出した後の値
+ */
+export function bootRouteOf<S extends { id: string }>(search: string, scenarios: readonly S[], pending: PendingSlot | null, marks: TabMarks, devSkip: boolean): BootRoute<S> {
+  if (marks.openTitle) return { kind: 'title' };
+  const stage = pending !== null || new URLSearchParams(search).size > 0 || marks.entered || devSkip;
+  return stage ? { kind: 'stage', plan: bootPlanOf(search, scenarios, pending) } : { kind: 'title' };
 }
 
 /** 訪問の道。石板の無い道 (自由モード) では訪問しない (その島を組めない) */

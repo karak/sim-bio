@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" font-family="Hiragino Sans, Noto Sans JP, system-ui, sans-serif">
+<title>ロード (狭い画面)</title>
+<rect width="390" height="844" fill="#f2f2f2"/>
+<rect x="0" y="0" width="390" height="844" rx="0" fill="#fff" stroke="#fff" stroke-width="1.5"/>
+<rect x="16" y="16" width="96" height="36" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="32" y="38.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">← 戻る</text>
+<text x="132" y="41" font-size="20" fill="#222" text-anchor="start" font-weight="bold">ロード</text>
+<text x="374" y="40" font-size="12" fill="#888" text-anchor="end" font-weight="normal">Esc でタイトルへ</text>
+<rect x="16" y="72" width="358" height="80" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="32" y="102" font-size="16" fill="#222" text-anchor="start" font-weight="bold">自動の枠</text>
+<text x="32" y="126" font-size="12" fill="#888" text-anchor="start" font-weight="normal">自由モード · 12 年 · 10/04 18:40</text>
+<text x="358" y="102" font-size="14" fill="#555" text-anchor="end" font-weight="normal">読む ›</text>
+<rect x="16" y="164" width="358" height="80" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="32" y="194" font-size="16" fill="#222" text-anchor="start" font-weight="bold">枠 1</text>
+<text x="32" y="218" font-size="12" fill="#888" text-anchor="start" font-weight="normal">『沈む欠片』 · 34 年 · 10/03 21:12</text>
+<text x="358" y="194" font-size="14" fill="#555" text-anchor="end" font-weight="normal">読む ›</text>
+<rect x="16" y="256" width="358" height="80" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="32" y="286" font-size="16" fill="#222" text-anchor="start" font-weight="bold">枠 2</text>
+<text x="32" y="310" font-size="12" fill="#888" text-anchor="start" font-weight="normal">自由モード · 80 年 · 10/02 09:05</text>
+<text x="358" y="286" font-size="14" fill="#555" text-anchor="end" font-weight="normal">読む ›</text>
+<rect x="16" y="348" width="358" height="80" rx="6" fill="#f2f2f2" stroke="#ddd" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="32" y="378" font-size="16" fill="#888" text-anchor="start" font-weight="bold">枠 3</text>
+<text x="32" y="402" font-size="12" fill="#888" text-anchor="start" font-weight="normal">空</text>
+<rect x="16" y="450" width="358" height="50" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="32" y="480.25" font-size="15" fill="#222" text-anchor="start" font-weight="normal">ファイルから読む…</text>
+<rect x="0" y="520" width="390" height="324" fill="#222" fill-opacity="0.55"/>
+<rect x="24" y="560" width="342" height="240" rx="10" fill="#fff" stroke="#222" stroke-width="2"/>
+<text x="44" y="600" font-size="13" fill="#888" text-anchor="start" font-weight="normal">確かめ (いまの askOf load の板)</text>
+<text x="44" y="630" font-size="15" fill="#222" text-anchor="start" font-weight="bold">舞台を移って読む</text>
+<text x="44" y="656" font-size="12" fill="#888" text-anchor="start" font-weight="normal">(planSlotLoad の confirm の文)</text>
+<rect x="44" y="690" width="302" height="44" rx="6" fill="#555" stroke="#222" stroke-width="2"/>
+<text x="60" y="717.25" font-size="15" fill="#fff" text-anchor="start" font-weight="bold">移って読む</text>
+<rect x="44" y="742" width="302" height="44" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="60" y="769.25" font-size="15" fill="#222" text-anchor="start" font-weight="normal">やめる</text>
+<rect x="150" y="516" width="204" height="23" rx="2" fill="#fff" stroke="#555" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="158" y="530" font-size="11" fill="#555" text-anchor="start" font-weight="normal">枠を押すと確かめ (いまの板と同じ)</text>
+<text x="378" y="834" font-size="11" fill="#888" text-anchor="end" font-weight="normal">load-narrow 390x844</text>
+</svg>

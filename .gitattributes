@@ -3,3 +3,4 @@ assets/**/*.glb filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
 docs/design/qa/**/*.jpg filter=lfs diff=lfs merge=lfs -text
 docs/design/screenshots/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/title/*.jpg filter=lfs diff=lfs merge=lfs -text

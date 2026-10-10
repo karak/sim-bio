@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" font-family="Hiragino Sans, Noto Sans JP, system-ui, sans-serif">
+<title>新規ゲーム (デスクトップ)</title>
+<rect width="1280" height="720" fill="#f2f2f2"/>
+<rect x="0" y="0" width="1280" height="720" rx="0" fill="#ddd" stroke="#bbb" stroke-width="1.5"/>
+<path d="M0 0L1280 720M1280 0L0 720" stroke="#bbb" stroke-width="1"/>
+<text x="640.0" y="360.0" font-size="14" fill="#888" text-anchor="middle" font-weight="normal"></text>
+<rect x="0" y="0" width="1280" height="720" fill="#222" fill-opacity="0.55"/>
+<rect x="48" y="40" width="1184" height="640" rx="8" fill="#fff" stroke="#222" stroke-width="2"/>
+<rect x="72" y="60" width="96" height="36" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="88" y="82.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">← 戻る</text>
+<text x="188" y="85" font-size="20" fill="#222" text-anchor="start" font-weight="bold">新規ゲーム</text>
+<text x="1208" y="84" font-size="12" fill="#888" text-anchor="end" font-weight="normal">Esc でタイトルへ</text>
+<rect x="72" y="116" width="420" height="56" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="88" y="142.6" font-size="16" fill="#222" text-anchor="start" font-weight="normal">自由モード</text>
+<text x="88" y="160.6" font-size="12" fill="#888" text-anchor="start" font-weight="normal">制約の無い島。好きに介入する</text>
+<text x="72" y="198" font-size="13" fill="#888" text-anchor="start" font-weight="normal">石板 (予言に抗う)</text>
+<rect x="72" y="208" width="420" height="38" rx="4" fill="#ddd" stroke="#222" stroke-width="2"/>
+<text x="88" y="233" font-size="15" fill="#222" text-anchor="start" font-weight="bold">沈む欠片</text>
+<text x="330" y="233" font-size="12" fill="#888" text-anchor="start" font-weight="normal">耐える · 100 年</text>
+<rect x="420" y="217" width="62" height="20" rx="10" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="451" y="232" font-size="11" fill="#555" text-anchor="middle" font-weight="normal">続きあり</text>
+<rect x="72" y="252" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="277" font-size="15" fill="#222" text-anchor="start" font-weight="normal">星が落ちる夜</text>
+<text x="330" y="277" font-size="12" fill="#888" text-anchor="start" font-weight="normal">耐える · 90 年</text>
+<rect x="72" y="296" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="321" font-size="15" fill="#222" text-anchor="start" font-weight="normal">火の山の目覚め</text>
+<text x="330" y="321" font-size="12" fill="#888" text-anchor="start" font-weight="normal">耐える · 130 年</text>
+<rect x="72" y="340" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="365" font-size="15" fill="#222" text-anchor="start" font-weight="normal">豊かさの罠</text>
+<text x="330" y="365" font-size="12" fill="#888" text-anchor="start" font-weight="normal">防ぐ · 100 年</text>
+<rect x="72" y="384" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="409" font-size="15" fill="#222" text-anchor="start" font-weight="normal">生気の飢饉</text>
+<text x="330" y="409" font-size="12" fill="#888" text-anchor="start" font-weight="normal">防ぐ · 100 年</text>
+<rect x="72" y="428" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="453" font-size="15" fill="#222" text-anchor="start" font-weight="normal">塔の重さ</text>
+<text x="330" y="453" font-size="12" fill="#888" text-anchor="start" font-weight="normal">耐える · 100 年</text>
+<rect x="72" y="472" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="497" font-size="15" fill="#222" text-anchor="start" font-weight="normal">祈りに応えるな</text>
+<text x="330" y="497" font-size="12" fill="#888" text-anchor="start" font-weight="normal">耐える · 100 年</text>
+<rect x="72" y="516" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="541" font-size="15" fill="#222" text-anchor="start" font-weight="normal">霊脈枯れ</text>
+<text x="330" y="541" font-size="12" fill="#888" text-anchor="start" font-weight="normal">耐える · 100 年</text>
+<rect x="72" y="560" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="585" font-size="15" fill="#222" text-anchor="start" font-weight="normal">迎撃の塔</text>
+<text x="330" y="585" font-size="12" fill="#888" text-anchor="start" font-weight="normal">防ぐ · 150 年</text>
+<rect x="72" y="604" width="420" height="38" rx="4" fill="#fff" stroke="#bbb" stroke-width="1"/>
+<text x="88" y="629" font-size="15" fill="#222" text-anchor="start" font-weight="normal">空の舟</text>
+<text x="330" y="629" font-size="12" fill="#888" text-anchor="start" font-weight="normal">逃がす · 200 年</text>
+<rect x="520" y="116" width="688" height="540" rx="6" fill="#f2f2f2" stroke="#bbb" stroke-width="1.5"/>
+<rect x="544" y="140" width="640" height="180" rx="0" fill="#ddd" stroke="#bbb" stroke-width="1.5"/>
+<path d="M544 140L1184 320M1184 140L544 320" stroke="#bbb" stroke-width="1"/>
+<text x="864" y="236" font-size="12" fill="#888" text-anchor="middle" font-weight="normal">石板の絵 (動物の紋) · 任意</text>
+<text x="544" y="356" font-size="24" fill="#222" text-anchor="start" font-weight="bold">沈む欠片</text>
+<text x="544" y="382" font-size="13" fill="#888" text-anchor="start" font-weight="normal">耐える · 100 年 · 続きあり (34 年)</text>
+<rect x="544" y="402" width="620" height="12" rx="2" fill="#bbb" stroke="#bbb" stroke-width="1.5"/>
+<rect x="544" y="426" width="560" height="12" rx="2" fill="#bbb" stroke="#bbb" stroke-width="1.5"/>
+<rect x="544" y="450" width="500" height="12" rx="2" fill="#bbb" stroke="#bbb" stroke-width="1.5"/>
+<rect x="544" y="474" width="440" height="12" rx="2" fill="#bbb" stroke="#bbb" stroke-width="1.5"/>
+<text x="544" y="518" font-size="12" fill="#888" text-anchor="start" font-weight="normal">予言の文 (石板の prophecy をそのまま)</text>
+<rect x="544" y="572" width="240" height="56" rx="6" fill="#555" stroke="#222" stroke-width="2"/>
+<text x="560" y="605.6" font-size="16" fill="#fff" text-anchor="start" font-weight="bold">続きから始める</text>
+<rect x="800" y="572" width="240" height="56" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="816" y="605.6" font-size="16" fill="#222" text-anchor="start" font-weight="normal">初めから始める</text>
+<rect x="800" y="520" width="278" height="24" rx="2" fill="#fff" stroke="#555" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="808" y="535" font-size="12" fill="#555" text-anchor="start" font-weight="normal">続きが無い石板は「この石板で始める」1 つだけ</text>
+<text x="1268" y="710" font-size="11" fill="#888" text-anchor="end" font-weight="normal">new-game-desktop 1280x720</text>
+</svg>

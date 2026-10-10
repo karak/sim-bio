@@ -65,7 +65,16 @@ export type ScenarioAutosave = {
 };
 
 /** 石板の途中の島を書く。capture は島・runner・年代記を同じ tick で取る。from は数え始める tick (開き直した島ならその tick) */
-export function createScenarioAutosave(deps: { store: IslandStore | null; scenarioId: string; every: number; log: SaveLog; from: number; capture: () => ScenarioSave }): ScenarioAutosave {
+// (M24-05) onSaved は書き終えたとき (最後に遊んだ舞台の印を書く、persist/lastStage.ts)
+export function createScenarioAutosave(deps: {
+  store: IslandStore | null;
+  scenarioId: string;
+  every: number;
+  log: SaveLog;
+  from: number;
+  capture: () => ScenarioSave;
+  onSaved?: () => void;
+}): ScenarioAutosave {
   const { store, log } = deps;
   let last = deps.from;
   let writing = false;
@@ -77,7 +86,10 @@ export function createScenarioAutosave(deps: { store: IslandStore | null; scenar
     return s
       .saveScenario(deps.scenarioId, captured)
       .then(
-        () => log('info', 'persist.scenario.saved', tick, { scenario: deps.scenarioId }),
+        () => {
+          log('info', 'persist.scenario.saved', tick, { scenario: deps.scenarioId });
+          deps.onSaved?.();
+        },
         (e: unknown) => log('warn', 'persist.scenario.save.failed', tick, { scenario: deps.scenarioId, error: String(e) }),
       )
       .finally(() => {

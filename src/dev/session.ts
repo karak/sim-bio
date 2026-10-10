@@ -6,7 +6,7 @@ import { mountDevPanel, type DevPanelDeps } from './panel';
 
 /**
  * 開発・受入のときだけの手段 (M19-16)。main.ts は DEVTOOLS_BUILT のときだけこの module を動的に読み込むので、本番のビルドには入らない。
- * どれも URL の明示の指定で効く: ?dev=1 (開発の板と 1000x)、?player=<名前> (別の見守り手)、?shortcut=alive (判定を alive で打ち切る近道)
+ * どれも URL の明示の指定で効く: ?dev=1 (開発の板と 1000x)、?player=<名前> (別の見守り手)、?shortcut=alive (判定を alive で打ち切る近道)。タイトルを飛ばす印 (localStorage の biotope-dev-skip-title、M24-01) だけは E2E の storageState が置く
  */
 export type DevPlayer = {
   name: string;
@@ -83,4 +83,15 @@ export function devSessionOf(params: URLSearchParams): DevSession {
     },
   };
   return session;
+}
+
+/** E2E と開発の手順でタイトルを飛ばす印 (M24-01)。playwright.config.ts の use.storageState が localStorage に置く。本番のビルドはこの module を読まないので効かない */
+export const SKIP_TITLE_KEY = 'biotope-dev-skip-title';
+
+export function skipsTitle(storage: Pick<Storage, 'getItem'>): boolean {
+  try {
+    return storage.getItem(SKIP_TITLE_KEY) === '1';
+  } catch {
+    return false;
+  }
 }

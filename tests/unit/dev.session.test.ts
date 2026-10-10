@@ -4,7 +4,7 @@ import { createMemorySink } from '../../src/core/log/memorySink';
 import { createScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import { stepByYear } from '../../src/scenario/stepByYear';
 import type { ScenarioDef } from '../../src/scenario/types';
-import { devSessionOf } from '../../src/dev/session';
+import { devSessionOf, SKIP_TITLE_KEY, skipsTitle } from '../../src/dev/session';
 import { resumeIsland } from '../fixtures/resumeIsland';
 
 const session = (q: string) => devSessionOf(new URLSearchParams(q));
@@ -64,5 +64,22 @@ describe('開発用の指定 (M19-16)', () => {
     expect(session('scenario=sinking').shortcut).toBe(false);
     expect(session('scenario=sinking').scenarioDef(def)).toBe(def);
     expect(verdictAfter(def, config, 1)).toEqual({ status: 'running', year: 1 });
+  });
+});
+
+describe('タイトルを飛ばす開発の印 (M24-01)', () => {
+  it('localStorage の印が "1" のときだけ飛ばす。読めない置き場 (private mode) は飛ばさない', () => {
+    const storage = (v: string | null) => ({ getItem: (k: string) => (k === SKIP_TITLE_KEY ? v : null) });
+    expect(SKIP_TITLE_KEY).toBe('biotope-dev-skip-title');
+    expect(skipsTitle(storage('1'))).toBe(true);
+    expect(skipsTitle(storage(null))).toBe(false);
+    expect(skipsTitle(storage('true'))).toBe(false);
+    expect(
+      skipsTitle({
+        getItem: () => {
+          throw new Error('SecurityError');
+        },
+      }),
+    ).toBe(false);
   });
 });
