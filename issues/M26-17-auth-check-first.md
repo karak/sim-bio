@@ -31,6 +31,7 @@ evidence:
 ## Acceptance criteria
 
 - [x] OAuth のファイルからは `scopes`・`expiration_time` だけを読み、`oauth_token`・`refresh_token` の値は出さない (test_cf_auth.py `test_reads_only_scopes_and_expiry`・`test_oauth_file_tokens_never_reach_the_report`)
+- [x] whoami は `--whoami` を付けたときだけ打つ (test_cf_auth.py `test_main_does_not_run_whoami_unless_asked`・`test_main_runs_whoami_when_asked`)
 - [x] whoami は環境の `CLOUDFLARE_*` を外して打つ (`test_whoami_sees_only_the_machine_oauth`)。アカウントが違えば「sim-bio の account ではない」、スコープが欠ければその名を出す
 - [x] Keychain の項目が無ければ、値を読まずに止め、H11・H12 を指す (`test_missing_keychain_item_stops_without_reading_a_secret`)
 - [x] トークンが別のアカウントのものなら止める (`test_token_for_another_account_stops`)
@@ -42,3 +43,4 @@ evidence:
 
 - 2026-10-10: 起票 (ユーザーの決定 B)。
 - 2026-10-10: 実装。OAuth のファイルは、macOS では `~/Library/Preferences/.wrangler/config/default.toml` (`~/.wrangler` の dir があればそちら。wrangler 4.141 の getGlobalConfigPath と同じ)。`wrangler whoami --json` は期限の切れた OAuth を延ばしてファイルを書き換える (この Mac で expiration_time が変わるのを見た) ので、cf:auth でだけ打つ (`--no-whoami` で外せる)。deploy.py は最初の段で Keychain の項目の有る無しだけを見て、値を読むのは今までどおり `pnpm run check` の後。手順書の「0. 前提の値」の番号は変えず、その前に「最初に」の節を足した。
+- 2026-10-10: ユーザーの決定。cf:auth も既定では whoami を打たない (別のアカウントの OAuth のファイルを延ばして書き換えるため)。`--whoami` を付けたときだけ打つ。既定はファイルの scopes・期限だけを読み、アカウントは「分からない」と出す。`--no-whoami` は外した (1 日だけの旗で、既定と同じになったため)。

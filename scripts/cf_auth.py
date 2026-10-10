@@ -332,8 +332,8 @@ def _oauth_lines(
             lines.append("  アカウント: 分からない")
         elif seen is None:
             lines.append(
-                "  アカウント: 見ていない (whoami は端末の OAuth を延ばして書き換えるので、"
-                "pnpm run cf:auth でだけ見る)"
+                "  アカウント: 分からない (見るなら pnpm run cf:auth --whoami。"
+                "whoami は端末の OAuth を延ばしてファイルを書き換える)"
             )
         else:
             for account_id, name in seen.accounts:
@@ -476,9 +476,9 @@ def main(
         description="資格情報の照合 (pnpm run cf:auth、deploy-runbook.md の「最初に」)"
     )
     parser.add_argument(
-        "--no-whoami",
+        "--whoami",
         action="store_true",
-        help="wrangler whoami を打たない (端末の OAuth を書き換えない)",
+        help="wrangler whoami で端末の OAuth のアカウントも見る (期限の切れた OAuth を延ばし、ファイルを書き換える)",
     )
     raw = sys.argv[1:] if argv is None else argv
     args = parser.parse_args(raw[1:] if raw[:1] == ["--"] else raw)
@@ -501,7 +501,7 @@ def main(
         env=env,
         cwd=root,
         oauth_file=oauth_file or default_oauth_file(env),
-        whoami=not args.no_whoami,
+        whoami=args.whoami,
         verify=True,
     )
     print("\n".join(report.lines))

@@ -326,18 +326,38 @@ class MainTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("止める", out.getvalue())
 
-    def test_main_succeeds_when_ready(self):
+    def run_main(self, argv, runner):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = main(
-                ["--no-whoami"],
-                run=FakeRunner(),
+                argv,
+                run=runner,
                 http_get=FakeHttp(),
                 env=ENV,
                 oauth_file=lambda: (CONFIG_PATH, parse_oauth_file(TOML)),
             )
+        return code, out.getvalue()
+
+    def test_main_succeeds_when_ready(self):
+        code, out = self.run_main([], FakeRunner())
         self.assertEqual(code, 0)
-        self.assertNotIn(TOKEN, out.getvalue())
+        self.assertNotIn(TOKEN, out)
+
+    def test_main_does_not_run_whoami_unless_asked(self):
+        # whoami は端末の OAuth (別のアカウントのもの) を延ばして書き換えるので、頼まれたときだけ打つ
+        runner = FakeRunner()
+        _, out = self.run_main([], runner)
+        self.assertFalse([a for a, _ in runner.calls if "whoami" in a])
+        self.assertIn("アカウント: 分からない", out)
+        self.assertIn("pnpm run cf:auth --whoami", out)
+        self.assertIn("スコープ: 要る 6 つはそろっている", out)
+        self.assertIn("ログイン: 済 (期限 2026-10-10T06:15:17.231Z", out)
+
+    def test_main_runs_whoami_when_asked(self):
+        runner = FakeRunner()
+        _, out = self.run_main(["--whoami"], runner)
+        self.assertTrue([a for a, _ in runner.calls if "whoami" in a])
+        self.assertIn(OTHER, out)
 
 
 if __name__ == "__main__":
