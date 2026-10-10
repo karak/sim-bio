@@ -64,4 +64,4 @@ E2E の Chromium には GPU が無く WebGL はソフトウェアで描くので
 
 - この系統 (feat/m19) の playwright.config.ts には、main の 95a4385 の「CI では 1 worker」の行が無い。通しは 5 worker で回る。この票では足していない (描き直しを消した後は 5 worker で通る)。main を取り込めば入る
 - 前からある: 島を差し替えても新しい島の tick が前と同じ (Year 0 Day 0 の島で「新しい島」、今の tick の枠を読む) だと、地形とインスタンスを置き直さない (SceneView の tick と層の比べ)。この票の前も同じ絵を描き直していただけで、見た目は変わらない
-- confirm.spec の AUTOSAVE_TICKS (90) は src/main.ts の値を写している。main.ts を変えたら合わせる
+- confirm.spec の AUTOSAVE_TICKS (90) は src/main.ts の値を写している。main.ts を変えたら合わせる (M25-12 で src/persist/autosave.ts の import に替えた)
