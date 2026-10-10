@@ -42,7 +42,7 @@ export type Effect =
   | { kind: 'flush' }
   | { kind: 'go'; scenarioId: string | null; keepVisit?: true }
   | { kind: 'assign'; href: string }
-  /** (M24-04) タイトルへ移る: このタブの舞台に入った印を消し、タイトルを開く合図を置いてから素の / へ */
+  /** (M24-04) タイトルへ移る: このタブの舞台に入った印を消し、タイトルを開く合図を置いてから / へ (見守り手と開発の板の検索語は残す) */
   | { kind: 'to_title' };
 
 export type Plan = { ask: Ask | null; effects: readonly Effect[] };

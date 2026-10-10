@@ -308,9 +308,8 @@ async function boot(): Promise<void> {
         location.assign(e.href);
         return true;
       case 'to_title':
-        // タイトルへ (M24-04): 移った先の起動 (bootRouteOf) がタイトルを選ぶよう、舞台に入った印を消して合図を置き、素の / へ
+        // タイトルへ (M24-04): 移った先の起動 (bootRouteOf) がタイトルを選ぶよう、舞台に入った印を消して合図を置き、/ へ (見守り手と開発の板の検索語は残す、titleHrefOf)
         putOpenTitle(sessionStorage);
-        // (2026-10-10 の決定) 見守り手と開発の板の検索語は残す (titleHrefOf)
         location.assign(titleHrefOf(location.search));
         return true;
     }
