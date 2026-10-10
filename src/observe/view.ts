@@ -9,14 +9,13 @@ import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import { createNoticeBand } from './notice';
 import { observeYearText } from '../core/season';
 import { mulberry32 } from '../simulation/rng';
-import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh, groundLayers } from './render/terrain';
+import { CELL_M, createTerrainField, createTerrainMesh, groundLayers } from './render/terrain';
 import { createWater } from './render/water';
 import { createGrass } from './render/grass';
 import { rimLight } from './render/toon';
 import { loadGlb } from './render/assets';
 import { glow } from './render/bake';
-import { createCreatureView } from './render/creatures';
-import { MIST_S, mistEnvelope, surgeStep, wetness, type SurgeState } from './fx';
+import { MIST_S, mistEnvelope, wetness } from './fx';
 import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './render/shotCamera';
 import { triangleBreakdown } from './render/breakdown';
 import { terrainDigest } from '../render/inspect';
@@ -25,15 +24,15 @@ import { directorContext, initialDirector, stepDirector, type Shot } from './dir
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
 import { createDynamicResolution } from './render/dynamicResolution';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
-import { extractArea, observeCenter } from './area';
-import { K_DEFAULT, BUDGET_PER_SECOND, folkRuleFor, reconcile, targetCounts } from './population';
-import { applyPlan, stepAgents, type AgentWorld } from './agents';
+import { observeCenter } from './area';
 import type { ViewState } from './view/state';
 import { AREA_R, OPT, params, WINDOW } from './view/options';
 import { createComposite, createStage, disposeStage } from './view/stage';
 import { layOutSite } from './view/layout';
 import { createFlora } from './view/flora';
 import { createSettlement } from './view/settlementBuild';
+import { createAgentLayer } from './view/agentLayer';
+import { createSea } from './view/sea';
 
 const DEPART_S = 70;
 
@@ -79,7 +78,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
 
   const canvas = host.canvas;
   const stage = createStage(canvas, field);
-  const { renderer, shadowOnly, scene, sky, camera, controls, hemi, sun } = stage;
+  const { renderer, scene, sky, camera, controls, hemi, sun } = stage;
 
   status.textContent = '地形を組んでいます…';
   const terrain = createTerrainMesh(s, field);
@@ -109,36 +108,15 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const settle = createSettlement({ s, field, rng, hasSettlement, marks, slip, plaza, worn, settleGlb, shipGlb, stage });
   const { settlement, hutSet, propSets, motes, puddles, shipView } = settle;
 
-  // 月鹿: 近い OPT.near 頭は SkinnedMesh、残りは VAT の InstancedMesh (設計 §8 の群れの LOD)
-  // (M22-04 の後: 近くの振り分けと VAT は render/creatures.ts に移し、頭数は個体層が決める)
-  // 個体層 (M22-04): 区域の密度 → 目標頭数 → 出入りの計画 → 状態機械。民は集落の近く (半径 3 セル) の鹿だけにする
-  // (設計どおり支え半径 8 にすると区域の鹿が全部民になり、夜は全頭が灯りに寄り、飛び立ちで群れが消える。M22-04 の申し送り)
   status.textContent = '鹿を焼いています…';
-  const folk = folkRuleFor(hasSettlement ? s.civ : null, 3);
-  let K = { ...K_DEFAULT };
-  if (OPT.deer > 0) {
-    const sum = area.cells.reduce((acc, c) => acc + (c.isLand ? (c.density['deer'] ?? 0) : 0), 0);
-    if (sum > 0) K = { ...K, deer: OPT.deer / sum };
-  }
-  const targets = targetCounts(area, K, folk);
-  // (M23-04 で変更: 近くの骨入りの個体の影は群れ LOD で落とす)
-  // (M23-08 で変更: 遠い段に替える距離 OPT.cfar を渡す)
-  const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50), (o) => shadowOnly.add(o), OPT.cfar);
-  scene.add(creatures.group);
-  let agents: AgentWorld = { agents: [], nextId: 1 };
-  let credit = 0;
-  const arng = mulberry32(23);
-  // 開いた瞬間から群れが見えるよう、最初の 1 回だけ目標頭数ぶんを上限なしで出す
-  {
-    const plan = reconcile(agents.agents, targets, 1e6, 1, arng, 0);
-    agents = applyPlan(agents, plan);
-  }
+  const herd = createAgentLayer({ s, area, hasSettlement, home, marks, deerGlb, wolfGlb, rabbitGlb, stage });
+  const { creatures } = herd;
   const state: ViewState = {
     snap: s,
     area,
-    targets,
+    targets: herd.targets,
     building: !!s.ship && s.ship.launchedYear === undefined && (s.civ?.stage ?? 0) >= 5,
-    agents,
+    agents: herd.agents,
     simSpeed: OPT.freeze ? 0 : OPT.speed,
     director: initialDirector(),
     touched: !OPT.auto,
@@ -152,23 +130,12 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // 本体の時間 (M22-08): 速度 speed のとき実時間 1 秒に speed tick 進める (操作画面と同じ。1 年 = 360 tick)。
   // 進んだら区域の密度から目標頭数を引き直す。目印 (船台・林) は最初に決めたまま動かさない (船台は着工の年に決めて動かさない)
   let simAcc = 0;
-  // 沈降 (M22-08): 集落のセルの標高が最初からどれだけ下がったかを、海面の上がりとして見せる
-  const elev0 = s.layers.elevation[home];
-  water.setLevel(OPT.sink);
-  grass.setLevel(OPT.sink);
-  // (M22-07 の手直し) 沈む海: 本体の沈降から決まる海面 seaTarget (と調整用の上げ seaExtra) へ、見せる海面 sea.level を上げていく
-  let seaTarget = OPT.sink;
-  let seaExtra = 0;
-  let sea: SurgeState = { level: OPT.sink, surge: 0, hold: 0 };
+  const sea = createSea(s, home, water, grass);
   const onSnapshot = (next: WorldSnapshot) => {
     state.snap = next;
     replant(next);
-    const level = OPT.sink + Math.max(0, elev0 - next.layers.elevation[home]) * ELEV_M;
-    // (M22-07 の手直しで変更: 海面はすぐには上げず、fx で SURGE_RATE m/s で追わせ、上がる間は波立ちと流れを見せる (沈む海岸「波立ちがない。流れが見えない。」))
-    seaTarget = level;
-    state.area = extractArea(state.snap, home, AREA_R);
-    state.targets = targetCounts(state.area, K, folkRuleFor(hasSettlement ? state.snap.civ : null, 3));
-    state.building = !!state.snap.ship && state.snap.ship.launchedYear === undefined && (state.snap.civ?.stage ?? 0) >= 5;
+    sea.retarget(next);
+    herd.retarget(state);
     if (OPT.ship === null && !OPT.launched && !OPT.depart) shipView.set(state.snap.ship);
   };
   const clock = host.clock;
@@ -344,11 +311,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     wet = wetness(wet, rainLeft > 0, dt, rain);
     puddles.update(wet, rain, hemi.color, fxTime);
     water.setRain(rain);
-    // (M22-07 の手直し) 沈む海: 海面を追わせ、上がる間の波立ちと流れ
-    sea = surgeStep(sea, seaTarget + seaExtra, dt);
-    water.setLevel(sea.level);
-    grass.setLevel(sea.level);
-    water.setSurge(sea.surge);
+    sea.step(dt);
   };
   // 調整用: 開発者ツールから場面を起こす (__probe.observe.fx('sprout' | 'mist' | 'rain'))
   // (M22-07 の手直しで変更: 'sinking' は海面を 1.5 m 上げる (本体の沈降の代わり)。上がる間は波立ちと流れが見える)
@@ -356,7 +319,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const at = marks.grove ?? marks.center;
     if (kind === 'sprout') playScene({ kind, year: state.snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
     else if (kind === 'mist') playScene({ kind, year: state.snap.year, cell: home, at, radius: 4 });
-    else if (kind === 'sinking') seaExtra += 1.5;
+    else if (kind === 'sinking') sea.raise(1.5);
     else playScene({ kind, year: state.snap.year });
   };
   // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__probe.observe.look('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
@@ -462,9 +425,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // 試作の徘徊: 目的地へ歩き、着いたら食むか待つ (M22-04 の個体層に置き換える)
     // (置き換えた: 以下は個体層の 1 フレーム。出入りの計画 → 状態機械 → 描画)
     advance(dt);
-    const plan = reconcile(state.agents.agents, state.targets, BUDGET_PER_SECOND, dt, arng, credit);
-    credit = plan.credit;
-    state.agents = applyPlan(state.agents, plan);
+    herd.flow(state, dt);
     const day = daylightAt(phaseAt(OPT.freeze ? 0 : (t * DAY_CYCLE_S) / OPT.day, OPT.time));
     if (sky && air) {
       sky.update(day, camera);
@@ -487,7 +448,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       }
     }
     fx(dt);
-    state.agents = stepAgents(state.agents, { area: state.area, marks, night: day.night > 0.6, building: state.building, launched: false, targets: state.targets }, dt, arng);
+    herd.step(state, dt, day.night > 0.6);
     motes.update(t, dt, day.night, camera, controls.target, state.agents.agents);
     water.update(t);
     shipView.update(t);
