@@ -1,14 +1,16 @@
 import type { LandResult } from '../harbor/cargo';
-import type { Chronicle, Digest } from '../harbor/chronicle';
+import type { Chronicle, Digest } from '../chronicle/chronicle';
 import { createHarbor, type HarborLog, type PublishResult } from '../harbor/client';
 import { chronicleId, type BrowseCursor, type Cargo, type ChronicleCard, type DrawnCargo, type InscriptionId } from '../harbor/contract';
 import { cardActionsOf, finishedScopeOf } from '../harbor/dock';
 import { inscriptionText, islandName, parseInscriptions, type Inscription } from '../harbor/names';
 import { createTurnstile, TEST_SITEKEY } from '../harbor/turnstile';
-import { createMemoryHarborStore, openHarborStore, type HarborStore } from '../persist/harborStore';
+import { createMemoryHarborStore, openHarborStore } from '../persist/harborStore';
+import type { HarborStore } from '../harbor/store';
 import type { ScenarioDef } from '../scenario/types';
-import { publishClick, visitHref } from './clicks';
-import type { Risky } from './confirmAsk';
+import { publishClick } from './clicks';
+import { visitHref } from '../harbor/links';
+import type { Risky } from '../app/confirmAsk';
 import { el } from './el';
 import { mountVisit, type HarborContext, type Visit } from './HarborVisit';
 import {

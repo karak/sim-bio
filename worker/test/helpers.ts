@@ -1,7 +1,7 @@
 import { exports } from 'cloudflare:workers';
 import { vi } from 'vitest';
 import { digestOf } from '../../src/chronicle/digest';
-import type { Chronicle, Digest } from '../../src/harbor/chronicle';
+import type { Chronicle, Digest } from '../../src/chronicle/chronicle';
 import type { HarborRequest, InscriptionId, TurnstileToken, WithdrawKey } from '../../src/harbor/contract';
 import { readRefusal, writeRequest, type ReadRefusal } from '../../src/harbor/wire';
 import { FIXTURE_CHRONICLE } from '../../tests/fixtures/chronicle';

@@ -20,7 +20,7 @@ import {
   type HarborResponses,
   type WithdrawKey,
 } from './contract';
-import type { Chronicle, Digest } from './chronicle';
+import type { Chronicle, Digest } from '../chronicle/chronicle';
 
 /**
  * 港の HTTP の形 (設計書 §5.2)。道・header・本文の JSON はこのファイルの中に閉じ、外へはドメインの型 (contract.ts) だけを出す。

@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { digestOf } from '../../src/chronicle/digest';
 import type { CargoId, ChronicleId, InscriptionId, WithdrawKey } from '../../src/harbor/contract';
-import { createMemoryHarborStore, openHarborStore, type HarborStore, type Outbound } from '../../src/persist/harborStore';
+import { createMemoryHarborStore, openHarborStore } from '../../src/persist/harborStore';
+import type { HarborStore, Outbound } from '../../src/harbor/store';
 import { openIslandStore } from '../../src/persist/islandStore';
 import { FIXTURE_CHRONICLE, FIXTURE_CHRONICLE_ID } from '../fixtures/chronicle';
 

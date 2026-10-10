@@ -1,4 +1,4 @@
-import type { Chronicle, ChronicleHead } from '../harbor/chronicle';
+import type { Chronicle, ChronicleHead } from '../chronicle/chronicle';
 import { parseChronicleId, type ChronicleId } from '../harbor/contract';
 import { checkSlot, planSlotLoad, type Here, type SlotSave } from '../persist/slotSave';
 import type { ManualSlot, PendingSlot, SlotId } from '../persist/slots';
@@ -6,7 +6,7 @@ import type { TabMarks } from '../persist/tabMarks';
 import type { RunnerState } from '../scenario/ScenarioRunner';
 import type { ScenarioDef, ScenarioStatus } from '../scenario/types';
 import type { SaveData } from '../simulation/types';
-import { askOf, type Ask } from '../ui/confirmAsk';
+import { askOf, type Ask } from './confirmAsk';
 
 /**
  * 島の置き場の判断 (M21-07)。操作の確かめと行き先・起動の舞台と戻し方・枠の札を押せるかを、DOM と置き場から離して決める。

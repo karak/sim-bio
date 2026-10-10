@@ -13,7 +13,7 @@ import {
   type HarborCatalog,
   type InscriptionId,
 } from '../../src/harbor/contract';
-import { CHRONICLE_LIMITS, parseChronicle, type Chronicle } from '../../src/harbor/chronicle';
+import { CHRONICLE_LIMITS, parseChronicle, type Chronicle } from '../../src/chronicle/chronicle';
 import { FIXTURE_CHRONICLE, FIXTURE_CHRONICLE_ID } from '../fixtures/chronicle';
 
 const ids = (file: string) => new Set((JSON.parse(readFileSync(file, 'utf8')) as { id: string }[]).map((d) => d.id));

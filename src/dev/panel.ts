@@ -1,4 +1,4 @@
-import type { Chronicle } from '../harbor/chronicle';
+import type { Chronicle } from '../chronicle/chronicle';
 import type { SaveData } from '../simulation/types';
 import { el } from '../ui/el';
 import type { DevSession } from './session';

@@ -1,5 +1,5 @@
 import type { Parsed } from '../core/parse';
-import type { Chronicle, ChronicleHead } from '../harbor/chronicle';
+import type { Chronicle, ChronicleHead } from '../chronicle/chronicle';
 import { runnerStateMismatch, type RunnerState } from '../scenario/ScenarioRunner';
 import type { SaveData } from '../simulation/types';
 import type { IslandStore, ScenarioSave } from './islandStore';

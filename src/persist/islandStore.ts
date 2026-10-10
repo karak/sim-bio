@@ -1,6 +1,6 @@
 import { fail, type Parsed } from '../core/parse';
 import type { SaveData } from '../simulation/types';
-import { parseChronicle, type Chronicle } from '../harbor/chronicle';
+import { parseChronicle, type Chronicle } from '../chronicle/chronicle';
 import type { RunnerState } from '../scenario/ScenarioRunner';
 import { SLOTS, type PendingSlot, type SlotId, type SlotSummary } from './slots';
 import { slotSaveOf, type SlotSave } from './slotSave';

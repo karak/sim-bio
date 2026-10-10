@@ -1,5 +1,5 @@
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
-import { describeEvent } from '../ui/Tablet';
+import { describeEvent } from '../scenario/describe';
 
 /**
  * 知らせの帯 (M22-08): 石板の祈り・警告・結末を、観察画面の上に控えめに出す。
