@@ -37,3 +37,4 @@ evidence: []
 
 - 2026-10-06: 起票 (保留)。
 - 2026-10-10: 4 の決定。`scripts/mod.py --remote` は Keychain の道にした (M26-16)。手順書とスクリプトの最初に資格情報の照合 `pnpm run cf:auth` を入れた (M26-17)。
+- 2026-10-11: ユーザーの決定「保留のままでいい」。H11・H12 (Keychain の sim-bio-local-deploy) は作らない。配備は GitHub Actions の deploy.yml だけ。手元の `pnpm run cf:auth`・`pnpm run deploy`・`mod.py --remote` はトークンが無いので落ちる (承知の上)
