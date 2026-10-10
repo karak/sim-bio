@@ -32,12 +32,29 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+
+from cf_auth import (
+    AuthError,
+    AuthTarget,
+    HttpGet,
+    OAuthFile,
+    Runner,
+    Secret,
+    check_auth,
+    default_oauth_file,
+    redact,
+    subprocess_run,
+    urllib_get,
+    wrangler_env,
+)
+from deploy import ConfigError, load_config
 
 REPO = Path(__file__).resolve().parent.parent
 WRANGLER = REPO / "node_modules" / ".bin" / "wrangler"
@@ -105,10 +122,15 @@ def wrangler_argv(target: Target, sql: str) -> list[str]:
 
 
 def execute(
-    target: Target, sql: str, run: Run = subprocess.run
+    target: Target,
+    sql: str,
+    run: Run = subprocess.run,
+    env: Mapping[str, str] | None = None,
 ) -> list[dict[str, object]]:
     """sql を流し、最後の文の行を返す。"""
-    done = run(wrangler_argv(target, sql), cwd=REPO, capture_output=True, text=True)
+    done = run(
+        wrangler_argv(target, sql), cwd=REPO, capture_output=True, text=True, env=env
+    )
     try:
         payload = json.loads(done.stdout)
     except json.JSONDecodeError:
@@ -184,6 +206,43 @@ def format_budget(rows: list[dict[str, object]]) -> list[str]:
     return lines
 
 
+def remote_env(
+    say: Callable[[str], None],
+    *,
+    run: Runner = subprocess_run,
+    http_get: HttpGet = urllib_get,
+    base_env: Mapping[str, str] | None = None,
+    oauth_file: Callable[[], tuple[Path, OAuthFile | None]] | None = None,
+) -> dict[str, str]:
+    """--remote の wrangler の環境。deploy.py と同じ道 (Keychain のトークン、端末の OAuth は使わない、M26-16)。
+
+    資格情報を照合し (cf_auth.check_auth)、トークンが deploy.config.json の account に届き
+    D1 の id が合うのを確かめてから、トークンを CLOUDFLARE_API_TOKEN に入れた環境を返す。
+    """
+    env = dict(os.environ) if base_env is None else base_env
+    config = load_config(REPO / "deploy.config.json", REPO)
+    report = check_auth(
+        AuthTarget(
+            config.account_id,
+            config.d1,
+            config.keychain_service,
+            config.keychain_account,
+        ),
+        run=run,
+        http_get=http_get,
+        env=env,
+        cwd=REPO,
+        oauth_file=oauth_file or default_oauth_file(env),
+        whoami=False,
+        verify=True,
+    )
+    for line in report.lines:
+        say(line)
+    if not report.ready or report.token is None:
+        raise AuthError(f"トークンの道がまだ使えない: {report.problem}")
+    return wrangler_env(env, report.token, config.account_id)
+
+
 def days_arg(text: str) -> int:
     days = int(text)
     if not 1 <= days <= 90:
@@ -223,7 +282,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None, run: Run = subprocess.run) -> int:
+def _say_err(text: str) -> None:
+    print(text, file=sys.stderr)
+
+
+def main(
+    argv: list[str] | None = None,
+    run: Run = subprocess.run,
+    remote_env: Callable[[Callable[[str], None]], Mapping[str, str]] = remote_env,
+) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.persist_to and args.remote:
@@ -232,14 +299,23 @@ def main(argv: list[str] | None = None, run: Run = subprocess.run) -> int:
         print(f"消すと戻せない。消すなら --yes を付ける: {args.id}", file=sys.stderr)
         return 2
     target = Target(remote=args.remote, config=args.config, persist_to=args.persist_to)
+    env: Mapping[str, str] | None = None
+    if args.remote:
+        try:
+            env = remote_env(_say_err)
+        except (AuthError, ConfigError) as error:
+            print(f"--remote を止めた: {error}", file=sys.stderr)
+            return 1
+    token = Secret(env["CLOUDFLARE_API_TOKEN"]) if env else None
     try:
         if args.op == "budget":
-            print("\n".join(format_budget(execute(target, budget_sql(args.days), run))))
+            rows = execute(target, budget_sql(args.days), run, env)
+            print("\n".join(format_budget(rows)))
             return 0
         to_sql, done = ROW_OPS[args.op]
-        rows = execute(target, to_sql(args.id), run)
+        rows = execute(target, to_sql(args.id), run, env)
     except D1Error as error:
-        print(f"D1 がエラーを返した: {error}", file=sys.stderr)
+        print(redact(f"D1 がエラーを返した: {error}", token), file=sys.stderr)
         return 1
     if not rows:
         print(f"見つからない: {args.id}", file=sys.stderr)
