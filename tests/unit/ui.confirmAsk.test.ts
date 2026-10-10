@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { askOf } from '../../src/ui/confirmAsk';
+import { askOf } from '../../src/app/confirmAsk';
 import { planSlotLoad, type Here } from '../../src/persist/slotSave';
 
 const head = { simVersion: 'v', scenarioId: 'test-quick', seed: 1 };

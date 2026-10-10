@@ -10,7 +10,7 @@ import type { HarborStore } from '../harbor/store';
 import type { ScenarioDef } from '../scenario/types';
 import { publishClick } from './clicks';
 import { visitHref } from '../harbor/links';
-import type { Risky } from './confirmAsk';
+import type { Risky } from '../app/confirmAsk';
 import { el } from './el';
 import { mountVisit, type HarborContext, type Visit } from './HarborVisit';
 import {

@@ -36,7 +36,7 @@ import { mountHarbor } from './ui/Harbor';
 import { createConfirm } from './ui/confirm';
 import { showTitle } from './ui/Title';
 import { markEntered, putOpenTitle, takeTabMarks } from './persist/tabMarks';
-import { askOf, type Risky } from './ui/confirmAsk';
+import { askOf, type Risky } from './app/confirmAsk';
 import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, titleHrefOf, type Effect, type Op, type Restore } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
