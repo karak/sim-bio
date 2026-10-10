@@ -5,7 +5,8 @@ import { chronicleId, type BrowseCursor, type Cargo, type ChronicleCard, type Dr
 import { cardActionsOf, finishedScopeOf } from '../harbor/dock';
 import { inscriptionText, islandName, parseInscriptions, type Inscription } from '../harbor/names';
 import { createTurnstile, TEST_SITEKEY } from '../harbor/turnstile';
-import { createMemoryHarborStore, openHarborStore, type HarborStore } from '../persist/harborStore';
+import { createMemoryHarborStore, openHarborStore } from '../persist/harborStore';
+import type { HarborStore } from '../harbor/store';
 import type { ScenarioDef } from '../scenario/types';
 import { publishClick, visitHref } from './clicks';
 import type { Risky } from './confirmAsk';
