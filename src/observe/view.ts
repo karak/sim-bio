@@ -58,6 +58,7 @@ import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks, observeCenter } from './area';
 import { K_DEFAULT, BUDGET_PER_SECOND, folkRuleFor, reconcile, targetCounts } from './population';
 import { applyPlan, stepAgents, type AgentWorld } from './agents';
+import type { ViewState } from './view/state';
 
 /**
  * M22-02 デフォルメ試作 (observe.html)。空の舟 25 年目 (舟は肋の段) の保存から、集落の周り半径 8 セルを組んで見る。
@@ -117,6 +118,7 @@ const FERN_BEYOND_M = 45;
 /** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
 const AREA_R = 8;
 const WINDOW = 12;
+const DEPART_S = 70;
 
 function skyTexture(): CanvasTexture {
   const c = document.createElement('canvas');
@@ -310,7 +312,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   scene.add(grass.mesh);
 
   // (M22-06: 林の切り開きと株を船台に合わせるため、区域と目印をここで決める。元は集落の一角の直前)
-  let area = extractArea(s, home, AREA_R);
+  const area = extractArea(s, home, AREA_R);
   const marks = hasSettlement ? landmarks(area) : { ...landmarks(area), lanterns: [] };
   // (M22-06 試作 2: 船台が 27 m になったので、船台の点 (外海に接する陸のセルの中心) から陸の側へ 6.5 m ずらし、
   //  舳先の端が水際を 2 m ほど越えるところに置く。舟・丸太の山・切り開きはこの中心に合わせる)
@@ -610,7 +612,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const sum = area.cells.reduce((acc, c) => acc + (c.isLand ? (c.density['deer'] ?? 0) : 0), 0);
     if (sum > 0) K = { ...K, deer: OPT.deer / sum };
   }
-  let targets = targetCounts(area, K, folk);
+  const targets = targetCounts(area, K, folk);
   // (M23-04 で変更: 近くの骨入りの個体の影は群れ LOD で落とす)
   // (M23-08 で変更: 遠い段に替える距離 OPT.cfar を渡す)
   const creatures = createCreatureView({ deer: deerGlb, wolf: wolfGlb, rabbit: rabbitGlb }, Math.max(400, targets.totals.deer * 2 + 50), (o) => shadowOnly.add(o), OPT.cfar);
@@ -623,12 +625,25 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const plan = reconcile(agents.agents, targets, 1e6, 1, arng, 0);
     agents = applyPlan(agents, plan);
   }
-  let building = !!s.ship && s.ship.launchedYear === undefined && (s.civ?.stage ?? 0) >= 5;
+  const state: ViewState = {
+    snap: s,
+    area,
+    targets,
+    building: !!s.ship && s.ship.launchedYear === undefined && (s.civ?.stage ?? 0) >= 5,
+    agents,
+    simSpeed: OPT.freeze ? 0 : OPT.speed,
+    director: initialDirector(),
+    touched: !OPT.auto,
+    followId: null,
+    departLeft: OPT.depart && OPT.auto ? DEPART_S : 0,
+    newEvents: [],
+    seenEvents: 0,
+    // 入った (start した) あとの最初の年表は、見る前の出来事として既読にするだけ (入るたびに昔の介入を再生しない)
+    baseline: true,
+  };
   // 本体の時間 (M22-08): 速度 speed のとき実時間 1 秒に speed tick 進める (操作画面と同じ。1 年 = 360 tick)。
   // 進んだら区域の密度から目標頭数を引き直す。目印 (船台・林) は最初に決めたまま動かさない (船台は着工の年に決めて動かさない)
-  let simSpeed = OPT.freeze ? 0 : OPT.speed;
   let simAcc = 0;
-  let snap = s;
   // 沈降 (M22-08): 集落のセルの標高が最初からどれだけ下がったかを、海面の上がりとして見せる
   const elev0 = s.layers.elevation[home];
   water.setLevel(OPT.sink);
@@ -638,20 +653,20 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   let seaExtra = 0;
   let sea: SurgeState = { level: OPT.sink, surge: 0, hold: 0 };
   const onSnapshot = (next: WorldSnapshot) => {
-    snap = next;
+    state.snap = next;
     replant(next);
     const level = OPT.sink + Math.max(0, elev0 - next.layers.elevation[home]) * ELEV_M;
     // (M22-07 の手直しで変更: 海面はすぐには上げず、fx で SURGE_RATE m/s で追わせ、上がる間は波立ちと流れを見せる (沈む海岸「波立ちがない。流れが見えない。」))
     seaTarget = level;
-    area = extractArea(snap, home, AREA_R);
-    targets = targetCounts(area, K, folkRuleFor(hasSettlement ? snap.civ : null, 3));
-    building = !!snap.ship && snap.ship.launchedYear === undefined && (snap.civ?.stage ?? 0) >= 5;
-    if (OPT.ship === null && !OPT.launched && !OPT.depart) shipView.set(snap.ship);
+    state.area = extractArea(state.snap, home, AREA_R);
+    state.targets = targetCounts(state.area, K, folkRuleFor(hasSettlement ? state.snap.civ : null, 3));
+    state.building = !!state.snap.ship && state.snap.ship.launchedYear === undefined && (state.snap.civ?.stage ?? 0) >= 5;
+    if (OPT.ship === null && !OPT.launched && !OPT.depart) shipView.set(state.snap.ship);
   };
   const clock = host.clock;
   const advance = (dt: number) => {
-    if (!clock || simSpeed <= 0) return;
-    simAcc += dt * simSpeed;
+    if (!clock || state.simSpeed <= 0) return;
+    simAcc += dt * state.simSpeed;
     const n = Math.min(Math.floor(simAcc), 50);
     if (n <= 0) return;
     simAcc -= n;
@@ -707,7 +722,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   };
   // 群れは区域の縁の何か所かに分かれるので、重心ではなく「15 m 以内の仲間が最も多い個体」に寄る
   const centroid = (sp: string) => {
-    const xs = agents.agents.filter((a) => a.species === sp && a.state !== 'enter' && a.state !== 'leave');
+    const xs = state.agents.agents.filter((a) => a.species === sp && a.state !== 'enter' && a.state !== 'leave');
     let best: { x: number; z: number } | null = null;
     let bestN = -1;
     for (const a of xs) {
@@ -746,7 +761,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   for (const v of clock ? [0, 1, 10] : []) {
     const b = document.createElement('button');
     b.textContent = v === 0 ? '⏸' : `${v}x`;
-    b.addEventListener('click', () => (simSpeed = v));
+    b.addEventListener('click', () => (state.simSpeed = v));
     shots.appendChild(b);
   }
   // 自動カメラ (M22-08): 場面の引き金・狩り・民・群れ・風景からショットを選び、触れば自由カメラ、20 秒触らなければ戻る
@@ -761,19 +776,13 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     return [{ x: shipBall.center.x, y: shipBall.center.y, z: shipBall.center.z, r: shipBall.radius }];
   };
   const shotCam = createShotCamera(camera, field.heightAt, () => [...lods.map((l) => l.group), settlement, shipView.group], AREA_R * CELL_M, mulberry32(31), shipAvoid);
-  let director = initialDirector();
   let prevFrame: SceneFrame | null = null;
-  let touched = !OPT.auto;
   let shownShot: Shot | null = null;
-  controls.addEventListener('start', () => (touched = true));
-  shots.addEventListener('click', () => (touched = true));
+  controls.addEventListener('start', () => (state.touched = true));
+  shots.addEventListener('click', () => (state.touched = true));
   const drng = mulberry32(37);
   const baseFov = camera.fov;
   // 介入の場面 (M22-08): 芽吹きの金の粒・疫病の霧・雨。霧と雨は実時間で薄れる
-  let newEvents: TimelineEvent[] = [];
-  let seenEvents = 0;
-  // 入った (start した) あとの最初の年表は、見る前の出来事として既読にするだけ (入るたびに昔の介入を再生しない)
-  let baseline = true;
   let mist = 0;
   // (M22-07 の手直し) 霧が立ってからの秒数。濃さと余韻は fx.ts の mistEnvelope が決める (MIST_S を過ぎたら消えている)
   let mistAge = MIST_S;
@@ -794,7 +803,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       mistR = Math.max(12, e.radius * CELL_M);
       mistAt = { x: e.at.x, y: field.heightAt(e.at.x, e.at.z), z: e.at.z };
     } else if (e.kind === 'rain') rainLeft = RAIN_S;
-    else if (e.kind === 'departure') departLeft = DEPART_S;
+    else if (e.kind === 'departure') state.departLeft = DEPART_S;
     else if (e.kind === 'sailLost') lampsTarget = 0;
   };
   // 帆を失う (M22-08、設計 §6): 民が灯りを消す。文明の段階が帆に戻ったら (船が進み出したら) また灯す
@@ -806,12 +815,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const notice = (e: TimelineEvent) => band.push(e);
   // 調整用: 開発者ツールから知らせを出す (__probe.observe.notice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
   // 飛び立ちの画 (M22-08、key-visuals/departure): 自動カメラの間は、船台の後ろの高い所から外海へ去る舟を追う
-  const DEPART_S = 70;
-  let departLeft = OPT.depart && OPT.auto ? DEPART_S : 0;
   const shipAt = new Vector3();
   const departCam = (dt: number): boolean => {
-    if (departLeft <= 0) return false;
-    departLeft -= dt;
+    if (state.departLeft <= 0) return false;
+    state.departLeft -= dt;
     const b = marks.slipwayBow;
     const y = field.heightAt(slip.x, slip.z);
     camera.position.set(slip.x - b.x * 62 + b.z * 22, y + 20, slip.z - b.z * 62 - b.x * 22);
@@ -825,7 +832,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   };
   const fx = (dt: number) => {
     band.step(nowMs());
-    if (lampsTarget === 0 && snap.ship && snap.civ && snap.civ.stage >= 5) lampsTarget = 1;
+    if (lampsTarget === 0 && state.snap.ship && state.snap.civ && state.snap.civ.stage >= 5) lampsTarget = 1;
     lamps += (lampsTarget - lamps) * Math.min(1, dt / 3);
     motes.setLamps(lamps);
     // (M22-07 の手直しで変更: 霧の濃さは一様に薄めず、fx.ts の mistEnvelope (立ち上がり → 満ちる → 最後の 32 秒の余韻) で決める)
@@ -853,10 +860,10 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M22-07 の手直しで変更: 'sinking' は海面を 1.5 m 上げる (本体の沈降の代わり)。上がる間は波立ちと流れが見える)
   const fxInsp: ObserveInspect['fx'] = (kind) => {
     const at = marks.grove ?? marks.center;
-    if (kind === 'sprout') playScene({ kind, year: snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
-    else if (kind === 'mist') playScene({ kind, year: snap.year, cell: home, at, radius: 4 });
+    if (kind === 'sprout') playScene({ kind, year: state.snap.year, cell: home, at, speciesId: 'belltree', radius: 1 });
+    else if (kind === 'mist') playScene({ kind, year: state.snap.year, cell: home, at, radius: 4 });
     else if (kind === 'sinking') seaExtra += 1.5;
-    else playScene({ kind, year: snap.year });
+    else playScene({ kind, year: state.snap.year });
   };
   // (草の磨き上げ) 調整用: 種の群れ (または点 {x, z}) へ寄る (__probe.observe.look('rabbit', 距離, 高さ, 向き))。兎が草に埋もれないかを近くの低い目で確かめる
   const lookInsp: ObserveInspect['look'] = (at, dist = 6, height = 1.2, yaw = 0) => {
@@ -868,27 +875,27 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   // (M23-09 の 3 回目で追加) 調整用: 集落の部品の名前と置き場所
   const propsInsp: ObserveInspect['props'] = () => [...settlementPlacements].map(([name, ms]) => ({ name, at: ms.map((m) => [m.elements[12], m.elements[13], m.elements[14]]) }));
   const direct = (dt: number) => {
-    const frame = sceneFrame(snap, area);
-    const scenes = detectScenes(prevFrame, frame, newEvents, area);
-    for (const e of newEvents) notice(e);
-    newEvents = [];
+    const frame = sceneFrame(state.snap, state.area);
+    const scenes = detectScenes(prevFrame, frame, state.newEvents, state.area);
+    for (const e of state.newEvents) notice(e);
+    state.newEvents = [];
     for (const e of scenes) playScene(e);
     prevFrame = frame;
-    const was = director.mode;
-    director = stepDirector(director, directorContext(agents.agents, marks), { dt, scenes, userInput: touched }, drng);
+    const was = state.director.mode;
+    state.director = stepDirector(state.director, directorContext(state.agents.agents, marks), { dt, scenes, userInput: state.touched }, drng);
     // auto=0 のあいだは自動に戻らない
-    if (!OPT.auto) director = { ...director, mode: 'free', shot: null, idle: 0 };
-    touched = false;
-    if (director.mode === 'auto' && departCam(dt)) {
+    if (!OPT.auto) state.director = { ...state.director, mode: 'free', shot: null, idle: 0 };
+    state.touched = false;
+    if (state.director.mode === 'auto' && departCam(dt)) {
       shownShot = null;
       return;
     }
-    if (director.mode === 'auto' && director.shot) {
-      if (director.shot !== shownShot) {
-        shownShot = director.shot;
-        shotCam.start(director.shot, agents.agents);
+    if (state.director.mode === 'auto' && state.director.shot) {
+      if (state.director.shot !== shownShot) {
+        shownShot = state.director.shot;
+        shotCam.start(state.director.shot, state.agents.agents);
       }
-      shotCam.update(dt, agents.agents);
+      shotCam.update(dt, state.agents.agents);
       return;
     }
     if (was === 'auto') {
@@ -899,8 +906,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       shownShot = null;
     }
     // 個体を追う (M22-08): 押した個体が動いたぶん、狙いとカメラを一緒に動かす
-    const f = followId !== null ? agents.agents.find((a) => a.id === followId) : undefined;
-    if (followId !== null && !f) followId = null;
+    const f = state.followId !== null ? state.agents.agents.find((a) => a.id === state.followId) : undefined;
+    if (state.followId !== null && !f) state.followId = null;
     if (f) {
       const y = field.heightAt(f.x, f.z) + 0.8;
       followDelta.set(f.x - controls.target.x, y - controls.target.y, f.z - controls.target.z).multiplyScalar(Math.min(1, dt * 3));
@@ -910,7 +917,6 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     controls.update();
   };
   // 個体を押す (ドラッグでない短い押し) と、その個体を追う。何もない所を押すと追うのをやめる
-  let followId: number | null = null;
   const followDelta = new Vector3();
   const down = { x: 0, y: 0 };
   const proj = new Vector3();
@@ -919,7 +925,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const breakdownInsp: ObserveInspect['breakdown'] = () =>
     triangleBreakdown(camera, { terrain: [terrain], water: [water.mesh], grass: [grass.mesh], belltree: lods.filter((l) => l !== forestSet).map((l) => l.group), forest: forestSet ? [forestSet.group] : [], settlement: [settlement], ship: [shipView.group], creatures: [creatures.group] }, scene);
   const screenInsp: ObserveInspect['screen'] = (id) => {
-    const a = agents.agents.find((g) => g.id === id);
+    const a = state.agents.agents.find((g) => g.id === id);
     if (!a) return null;
     proj.set(a.x, field.heightAt(a.x, a.z) + 0.8, a.z).project(camera);
     if (proj.z > 1 || Math.abs(proj.x) > 0.9 || Math.abs(proj.y) > 0.9) return null;
@@ -935,7 +941,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     const r = canvas.getBoundingClientRect();
     let best: number | null = null;
     let bestD = 40;
-    for (const a of agents.agents) {
+    for (const a of state.agents.agents) {
       proj.set(a.x, field.heightAt(a.x, a.z) + 0.8, a.z).project(camera);
       if (proj.z > 1) continue;
       const d = Math.hypot(((proj.x + 1) / 2) * r.width - (e.clientX - r.left), ((1 - proj.y) / 2) * r.height - (e.clientY - r.top));
@@ -944,8 +950,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
         best = a.id;
       }
     }
-    followId = best;
-    touched = true;
+    state.followId = best;
+    state.touched = true;
   });
   const first = params.get('shot');
   const presetTimer = first && presets[first] ? setTimeout(presets[first], 1500) : 0;
@@ -966,9 +972,9 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     // 試作の徘徊: 目的地へ歩き、着いたら食むか待つ (M22-04 の個体層に置き換える)
     // (置き換えた: 以下は個体層の 1 フレーム。出入りの計画 → 状態機械 → 描画)
     advance(dt);
-    const plan = reconcile(agents.agents, targets, BUDGET_PER_SECOND, dt, arng, credit);
+    const plan = reconcile(state.agents.agents, state.targets, BUDGET_PER_SECOND, dt, arng, credit);
     credit = plan.credit;
-    agents = applyPlan(agents, plan);
+    state.agents = applyPlan(state.agents, plan);
     const day = daylightAt(phaseAt(OPT.freeze ? 0 : (t * DAY_CYCLE_S) / OPT.day, OPT.time));
     if (sky && air) {
       sky.update(day, camera);
@@ -991,13 +997,13 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       }
     }
     fx(dt);
-    agents = stepAgents(agents, { area, marks, night: day.night > 0.6, building, launched: false, targets }, dt, arng);
-    motes.update(t, dt, day.night, camera, controls.target, agents.agents);
+    state.agents = stepAgents(state.agents, { area: state.area, marks, night: day.night > 0.6, building: state.building, launched: false, targets: state.targets }, dt, arng);
+    motes.update(t, dt, day.night, camera, controls.target, state.agents.agents);
     water.update(t);
     shipView.update(t);
     direct(dt);
     // (M23-02 で変更: 視錐台で落とすもの (群れ・木・下草・草) は、このコマのカメラが決まった後 (direct の後) に更新する。前だと寄せ先へ切り替えた最初のコマが前の画の視錐台で描かれる)
-    creatures.update(agents.agents, camera, field.heightAt, t, dt);
+    creatures.update(state.agents.agents, camera, field.heightAt, t, dt);
     for (const l of lods) l.update(camera);
     hutSet?.update(camera);
     stumpSet?.update(camera);
@@ -1014,12 +1020,12 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       frames = 0;
       acc = 0;
       const info = renderer.info.render;
-      const count = (sp: string) => agents.agents.filter((a) => a.species === sp).length;
-      const st: ObserveStats = { follow: followId, camera: director.mode === 'auto' ? `${director.shot?.kind}:${director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: snap.year, tick: snap.tick, speed: simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const count = (sp: string) => state.agents.agents.filter((a) => a.species === sp).length;
+      const st: ObserveStats = { follow: state.followId, camera: state.director.mode === 'auto' ? `${state.director.shot?.kind}:${state.director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: state.snap.year, tick: state.snap.tick, speed: state.simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: state.agents.agents.filter((a) => a.role === 'folk').length, trees: treeCount, grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
       lastStats = st;
-      lastDebug = { marks, agents: agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
-      if (host.debug === false) stats.textContent = observeYearText(snap);
-      else stats.textContent = `${st.year} 年 · ${!clock ? '' : simSpeed === 0 ? '⏸ · ' : `${simSpeed}x · `}${st.fps} fps${st.res < 1 ? ` (解像度 ×${st.res})` : ''} · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
+      lastDebug = { marks, agents: state.agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
+      if (host.debug === false) stats.textContent = observeYearText(state.snap);
+      else stats.textContent = `${st.year} 年 · ${!clock ? '' : state.simSpeed === 0 ? '⏸ · ' : `${state.simSpeed}x · `}${st.fps} fps${st.res < 1 ? ` (解像度 ×${st.res})` : ''} · calls ${st.calls} · tris ${(st.triangles / 1000).toFixed(0)}k · 鹿 ${st.deer}(民 ${st.folk}) · 狼 ${st.wolf} · 兎 ${st.rabbit} · 鐘樹 ${st.trees} · 草 ${st.grass}`;
     }
     if (running) handle = requestAnimationFrame(loop);
   };
@@ -1029,17 +1035,17 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     inspect: () => ({ air: airInsp, notice, fx: fxInsp, look: lookInsp, huts: hutsInsp, props: propsInsp, breakdown: breakdownInsp, screen: screenInsp, stats: () => lastStats, debug: () => lastDebug, terrainDigest: () => terrainDigest(terrain.geometry.getAttribute('position').array as Float32Array) }),
     setSnapshot(next, timeline) {
       if (timeline) {
-        if (timeline.length < seenEvents) seenEvents = 0;
-        if (!baseline) newEvents.push(...timeline.slice(seenEvents));
-        seenEvents = timeline.length;
-        baseline = false;
+        if (timeline.length < state.seenEvents) state.seenEvents = 0;
+        if (!state.baseline) state.newEvents.push(...timeline.slice(state.seenEvents));
+        state.seenEvents = timeline.length;
+        state.baseline = false;
       }
-      if (next.tick !== snap.tick) onSnapshot(next);
+      if (next.tick !== state.snap.tick) onSnapshot(next);
     },
     start() {
       if (running) return;
       running = true;
-      baseline = true;
+      state.baseline = true;
       last = nowMs();
       resize();
       handle = requestAnimationFrame(loop);
@@ -1067,8 +1073,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       renderer.forceContextLoss();
     },
     cameraMode() {
-      if (director.mode === 'auto') return 'auto';
-      return followId !== null ? 'follow' : 'free';
+      if (state.director.mode === 'auto') return 'auto';
+      return state.followId !== null ? 'follow' : 'free';
     },
   };
 }
