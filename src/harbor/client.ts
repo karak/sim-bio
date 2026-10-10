@@ -1,6 +1,6 @@
 import { isObject, under, type ParseError, type Parsed } from '../core/parse';
 import type { HarborStore, Outbound } from './store';
-import { visitHref } from '../ui/clicks';
+import { visitHref } from './links';
 import type { Chronicle, Digest } from '../chronicle/chronicle';
 import {
   chronicleId,
