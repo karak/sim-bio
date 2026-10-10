@@ -117,10 +117,9 @@ function longFunctions(file: string): { name: string; lines: number }[] {
 /** ファイルの行数の既定の上限 */
 const DEFAULT_LINES = 700;
 /** 既定と違う上限を持つファイル (今の行数。減らしたら下げる)。main.ts は配線だけ (設計書 §4) なので既定より低く置く */
-const FILE_LINES: Record<string, number> = { 'src/main.ts': 265, 'src/observe/view.ts': 1074, 'src/simulation/World.ts': 985 };
+const FILE_LINES: Record<string, number> = { 'src/main.ts': 265, 'src/simulation/World.ts': 985 };
 /** 150 行を超えてよい関数と、その上限 (今の長さ)。表に無い関数が 150 行を超えたら落ちる */
 const LONG_FUNCTIONS: Record<string, Record<string, number>> = {
-  'src/observe/view.ts': { createObservationView: 836 },
   'src/main.ts': { boot: 225 },
   'src/ui/Hud.ts': { createHud: 447 },
   'src/scenario/ScenarioRunner.ts': { createScenarioRunner: 424 },
