@@ -1,5 +1,5 @@
 import { World } from './simulation/World';
-import type { DisasterKind, SpeciesDef, WorldConfig } from './simulation/types';
+import type { SpeciesDef, WorldConfig } from './simulation/types';
 import { createAppLogSink } from './core/log/appSink';
 import { createRunner } from './core/runner';
 import { createSceneView, type SceneView } from './render/SceneView';
@@ -8,8 +8,7 @@ import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
 import type { ScenarioDef } from './scenario/types';
 import { TOWER_COST } from './simulation/weatherTower';
-import { disasterClick, spawnClick } from './ui/clicks';
-import { IDLE, pressStep, type PressInput } from './ui/press';
+import { mountMapClick, type Chips } from './ui/mapClick';
 import { createObserveEntry } from './observe/entry';
 import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
@@ -150,10 +149,7 @@ async function boot(): Promise<void> {
     const ask = askOf(r);
     return ask ? confirm(ask) : Promise.resolve(true);
   };
-  let armed: DisasterKind | null = null;
-  let spawnArmed: string | null = null;
-  /** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
-  let towerArmed = false;
+  const chips: Chips = { armed: null, spawnArmed: null, towerArmed: false };
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
   const saveChronicle = () => session.scenarioAutosave?.flush();
   const intervene = createIntervene({ session, visiting: !!visitId, log, saveChronicle, flash: () => tablet.flash() });
@@ -196,14 +192,14 @@ async function boot(): Promise<void> {
     onNewIsland: () => void run({ kind: 'new_island' }),
     onTitle: () => void run({ kind: 'title' }),
     onDisasterArm: (k) => {
-      armed = k;
+      chips.armed = k;
       view.setVolcanoHint(k === 'volcano');
     },
     onSpawnArm: (id) => {
-      spawnArmed = id;
+      chips.spawnArmed = id;
     },
     onTowerArm: (v) => {
-      towerArmed = v;
+      chips.towerArmed = v;
     },
   }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visitId });
 
@@ -307,53 +303,7 @@ async function boot(): Promise<void> {
 
   // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す
   hud.setShipEnabled(!scenario || !!scenario.escape);
-  // カメラのドラッグの終わりにも click が来る。押しと判別し、ドラッグだったときは次の click を選びにしない (M26-03)
-  let press = IDLE;
-  let dragged = false;
-  const feedPress = (input: PressInput) => {
-    const step = pressStep(press, input);
-    press = step.state;
-    if (input.type === 'down') dragged = false;
-    if (step.action === 'drag') dragged = true;
-  };
-  canvas.addEventListener('pointerdown', (e) => feedPress({ type: 'down', pointerId: e.pointerId, x: e.clientX, y: e.clientY }));
-  canvas.addEventListener('pointermove', (e) => feedPress({ type: 'move', pointerId: e.pointerId, x: e.clientX, y: e.clientY }));
-  canvas.addEventListener('pointerup', (e) => feedPress({ type: 'up', pointerId: e.pointerId }));
-  canvas.addEventListener('pointercancel', (e) => feedPress({ type: 'cancel', pointerId: e.pointerId }));
-  canvas.addEventListener('click', (e) => {
-    if (dragged) return;
-    const cell = view.pickCell(e.clientX, e.clientY);
-    if (cell === null) return;
-    if (spawnArmed) {
-      const id = spawnArmed;
-      const s = session.world.snapshot();
-      // 1 セルだけだと見えにくいので半径 1 (3×3 相当) に放つ。1 コマンドなので値段も 1 回分。海セルは World 側で無視される
-      const ok = intervene(spawnClick(id, cell));
-      if (ok) {
-        const def = s.species.find((d) => d.id === id);
-        hud.addMarker(s.year, def?.name ?? id, def?.color ?? '#6FBF7C');
-      }
-      hud.setSpawnArmed(null);
-      return;
-    }
-    if (armed) {
-      const kind = armed;
-      const s = session.world.snapshot();
-      const ok = intervene(disasterClick(kind, cell));
-      if (ok) hud.addMarker(s.year, kind, '#E07A55');
-      hud.setArmed(null);
-      return;
-    }
-    if (towerArmed) {
-      const s = session.world.snapshot();
-      const ok = intervene({ type: 'build_tower', cell });
-      if (ok) hud.addMarker(s.year, '気象塔', '#7FB3E0');
-      hud.setTowerArmed(false);
-      return;
-    }
-    session.selected = cell;
-    hud.showCell(cell, session.world.snapshot());
-  });
+  mountMapClick(canvas, { pickCell: (x, y) => view.pickCell(x, y), session, chips, intervene, hud });
 
   dev?.mount(app, {
     scenario: !!scenario,
