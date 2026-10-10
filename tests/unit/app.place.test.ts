@@ -7,7 +7,7 @@ import { recordChronicle } from '../../src/chronicle/recorder';
 import { SIM_VERSION } from '../../src/simulation/version';
 import type { SlotSave } from '../../src/persist/slotSave';
 import type { ChronicleId } from '../../src/harbor/contract';
-import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, freshSeed, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, slotControlsOf, type At, type Effect, type Op, type Plan } from '../../src/app/place';
+import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, freshSeed, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, slotControlsOf, titleHrefOf, type At, type Effect, type Op, type Plan } from '../../src/app/place';
 import { resumeIsland } from '../fixtures/resumeIsland';
 
 const island = resumeIsland('test-quick', 5);
@@ -265,6 +265,23 @@ describe('石板を選んだ先の検索語 searchFor (M21-07)', () => {
     expect(next).toBe(`scenario=test-quick&visit=${visitId}&dev=1`);
     expect(bootPlanOf(`?${next}`, scenarios, null)).toMatchObject({ scenario: { id: 'test-quick' }, visitId, restore: [] });
     expect(searchFor('?scenario=test-quick&dev=1', 'test-quick', { keepVisit: true })).toBe('scenario=test-quick&dev=1');
+  });
+});
+
+describe('タイトルへ移る先 titleHrefOf (M24-04、2026-10-10 の決定)', () => {
+  const rows: [why: string, search: string, href: string][] = [
+    ['検索語が無ければ素の /', '', '/'],
+    ['見守り手と開発の板は残す (自由モードへと同じ)', '?player=a&dev=1', '/?player=a&dev=1'],
+    ['舞台を決める検索語 (石板・近道・seed・訪問) は落とす', `?scenario=test-quick&shortcut=alive&seed=9&player=a`, '/?player=a'],
+    ['訪問中でも見守り手だけ残す', `?scenario=test-quick&visit=${visitId}&dev=1`, '/?dev=1'],
+    ['dev=1 でない dev は落とす', '?dev=0&player=b', '/?player=b'],
+  ];
+  it.each(rows)('titleHrefOf: %s', (_why, search, href) => {
+    expect(titleHrefOf(search)).toBe(href);
+  });
+  it('titleHrefOf: 残した検索語があっても、合図のある起動はタイトルを出す', () => {
+    const href = titleHrefOf('?scenario=test-quick&player=a&dev=1');
+    expect(bootRouteOf(new URL(href, 'http://x').search, scenarios, null, { entered: false, openTitle: true }, false)).toEqual({ kind: 'title' });
   });
 });
 

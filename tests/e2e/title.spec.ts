@@ -187,3 +187,40 @@ test('M24-05: 石板を少し進めてタイトルへ戻ると、「続きから
   expect(await shownTick(page)).toBeGreaterThanOrEqual(left);
   await expect(page.locator('#hud-year')).toBeVisible();
 });
+
+test('M24-04 (2026-10-10 の決定): 「タイトルへ」は ?player= と ?dev=1 を残し、タイトルと「続きから」はその見守り手の置き場と印を読む', async ({ page }) => {
+  await page.goto('/?player=e2e-title&dev=1&seed=42');
+  await expect(page.locator('#hud-year')).toHaveText('Year 0');
+  await page.click('#speed-100');
+  await expect(page.locator('#hud-year')).not.toHaveText('Year 0', { timeout: 30_000 });
+  await page.click('#speed-0');
+  const left = await shownTick(page);
+
+  await toTitle(page).click();
+  await expect(page.getByRole('region', { name: 'タイトル' })).toBeVisible();
+  // 舞台を決める seed= は落とし、見守り手と開発の板は残す
+  expect(new URL(page.url()).search).toBe('?player=e2e-title&dev=1');
+  await expect(item(page, '続きから')).toBeFocused();
+  await expect(item(page, '続きから').locator('.title-item-note')).toHaveText(new RegExp(`^自由モード · ${Math.floor(left / TICKS_PER_YEAR)} 年 · `));
+  // 最後に遊んだ舞台の印は見守り手ごと。既定の見守り手の印は書かない
+  const marks = await page.evaluate(() => [localStorage.getItem('biotope.last-stage'), localStorage.getItem('biotope.last-stage@e2e-title')]);
+  expect(marks[0]).toBeNull();
+  expect(JSON.parse(marks[1] ?? 'null')).toMatchObject({ stage: 'free' });
+
+  // 自動の枠があるので新規ゲームは準備中の板 (文は 2026-10-10 の決定)
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  const panel = page.getByRole('dialog', { name: '新規ゲーム' });
+  await expect(panel.locator('p')).toHaveText('新しい島の始め方 (いまの島を残すかの確かめ) は準備中です。');
+  await page.keyboard.press('Escape');
+  await expect(item(page, '新規ゲーム')).toBeFocused();
+
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#hud-year')).toBeVisible();
+  expect(await shownTick(page)).toBeGreaterThanOrEqual(left);
+  const params = new URL(page.url()).searchParams;
+  expect([params.get('player'), params.get('dev')]).toEqual(['e2e-title', '1']);
+  // ?dev=1 の速さの札 (1000x) が残っている
+  await expect(page.locator('#speed-1000')).toBeVisible();
+});

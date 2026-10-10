@@ -37,7 +37,7 @@ import { createConfirm } from './ui/confirm';
 import { showTitle } from './ui/Title';
 import { markEntered, putOpenTitle, takeTabMarks } from './persist/tabMarks';
 import { askOf, type Risky } from './ui/confirmAsk';
-import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, type Effect, type Op, type Restore } from './app/place';
+import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, titleHrefOf, type Effect, type Op, type Restore } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
 const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
@@ -310,7 +310,8 @@ async function boot(): Promise<void> {
       case 'to_title':
         // タイトルへ (M24-04): 移った先の起動 (bootRouteOf) がタイトルを選ぶよう、舞台に入った印を消して合図を置き、素の / へ
         putOpenTitle(sessionStorage);
-        location.assign('/');
+        // (2026-10-10 の決定) 見守り手と開発の板の検索語は残す (titleHrefOf)
+        location.assign(titleHrefOf(location.search));
         return true;
     }
   };

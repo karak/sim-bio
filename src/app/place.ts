@@ -136,6 +136,19 @@ export function searchFor(search: string, scenarioId: string | null, opts: { kee
   return q.toString();
 }
 
+/**
+ * 「タイトルへ」の移る先 (M24-04、2026-10-10 の決定)。見守り手 (?player=) と開発の板 (?dev=1) は自由モードへと同じく残し、
+ * 舞台を決める検索語 (石板・訪問・seed・近道など) は落とす。残した検索語があっても、移った先の起動は openTitle の合図でタイトルを出す
+ */
+export function titleHrefOf(search: string): string {
+  const from = new URLSearchParams(search);
+  const q = new URLSearchParams();
+  const player = from.get('player');
+  if (player !== null) q.set('player', player);
+  if (from.get('dev') === '1') q.set('dev', '1');
+  return q.size ? `/?${q.toString()}` : '/';
+}
+
 /** 起動で島を戻す置き場。上から順に試し、最初に戻せたものから開く。どれも無ければ新しい島 */
 export type Restore = { from: 'slot'; slot: PendingSlot } | { from: 'scenario' } | { from: 'auto' };
 
