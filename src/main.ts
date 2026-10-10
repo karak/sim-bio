@@ -8,14 +8,12 @@ import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
 import { createScenarioRunner } from './scenario/ScenarioRunner';
 import type { ScenarioDef } from './scenario/types';
-import type { Command } from './simulation/types';
 import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
 import { IDLE, pressStep, type PressInput } from './ui/press';
-import { cargoOfHold, planLanding, type LandResult } from './harbor/cargo';
+import { cargoOfHold } from './harbor/cargo';
 import { afterVerdictOf } from './harbor/dock';
-import type { DrawnCargo } from './harbor/contract';
 import { createObserveEntry } from './observe/entry';
 import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
@@ -38,6 +36,7 @@ import { scenarioConfigOf } from './app/worldConfig';
 import { restoreIsland } from './app/restore';
 import { sessionOf } from './app/session';
 import { createEffects, type Nav } from './app/effects';
+import { createIntervene, createLandCargo } from './app/intervene';
 import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, planOp, runPlan, searchFor, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
@@ -164,23 +163,7 @@ async function boot(): Promise<void> {
   let towerArmed = false;
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
   const saveChronicle = () => session.scenarioAutosave?.flush();
-  /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
-  const intervene = (c: Command): boolean => {
-    if (visitId) return false;
-    if (!session.recorder) {
-      session.world.dispatch(c);
-      return true;
-    }
-    const result = session.recorder.dispatch(c);
-    if (result.ok) saveChronicle();
-    else {
-      const snap = session.world.snapshot();
-      log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'cmd.rejected', reason: result.reason, cmd: c });
-      if (result.reason === 'budget') tablet.flash();
-    }
-    return result.ok;
-  };
-
+  const intervene = createIntervene({ session, visiting: !!visitId, log, saveChronicle, flash: () => tablet.flash() });
   const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
   const at = () => atOf(!!visitId, head, session.runner?.verdict().status ?? null);
   const { perform, slotSave, showSeed } = createEffects({
@@ -246,23 +229,7 @@ async function boot(): Promise<void> {
   hud.setReplaceable(!visitId);
   showSeed(false);
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
-  /** 受け取った漂着 (M19-10) を浜のセルに放つ。石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
-  const landCargo = (d: DrawnCargo): LandResult => {
-    const s = session.world.snapshot();
-    const place = at();
-    const power = session.runner?.budget()?.power;
-    const spawnCost = scenario?.budget?.costs.spawn;
-    const gate = { finished: place.stage === 'scenario' && place.finished, budget: power !== undefined && spawnCost !== undefined ? { power, spawnCost } : undefined };
-    const landing = planLanding(d, { elevation: s.layers.elevation, size: s.size }, gate, speciesNames);
-    if (landing.kind === 'budget') tablet.flash();
-    if (landing.kind !== 'land') return landing.kind;
-    if (!landing.commands.every(intervene)) return 'refused';
-    hud.addMarker(s.year, landing.marker, '#8FEADF');
-    // 積荷は浜の 3×3 に着くので、島の総数ではほとんど動かない (M19-15)。着いた浜のセルを選び、周辺の密度の推移で見せる
-    session.selected = landing.cell;
-    hud.showCell(landing.cell, s);
-    return 'ok';
-  };
+  const landCargo = createLandCargo({ session, scenario, at, speciesNames, intervene, tablet, hud });
   const harbor = mountHarbor(app, {
     scenarios,
     speciesIds: species.map((d) => d.id),
