@@ -23,8 +23,8 @@ export type AgentLayerInput = {
 
 export type AgentLayer = {
   creatures: CreatureView;
-  targets: Targets;
-  agents: AgentWorld;
+  /** 組んだ時点の目標頭数と個体。以後の値は ViewState が持つ (ここは更新しない) */
+  initial: { targets: Targets; agents: AgentWorld };
   retarget(state: ViewState): void;
   flow(state: ViewState, dt: number): void;
   step(state: ViewState, dt: number, night: boolean): void;
@@ -56,8 +56,7 @@ export function createAgentLayer({ s, area, hasSettlement, home, marks, deerGlb,
   }
   return {
     creatures,
-    targets,
-    agents,
+    initial: { targets, agents },
     retarget(state) {
       state.area = extractArea(state.snap, home, AREA_R);
       state.targets = targetCounts(state.area, K, folkRuleFor(hasSettlement ? state.snap.civ : null, 3));

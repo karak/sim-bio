@@ -9,7 +9,7 @@ import type { AtmospherePass } from '../render/atmosphere';
 import { MIST_S, mistEnvelope, wetness } from '../fx';
 import type { SceneEvent } from '../scenes';
 import type { ObserveInspect } from '../inspect';
-import type { ObserveHost } from '../view';
+import type { ObserveHost } from './host';
 import type { Sea } from './sea';
 import type { Stage } from './stage';
 import type { ViewState } from './state';

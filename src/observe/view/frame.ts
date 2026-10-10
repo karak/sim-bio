@@ -1,4 +1,3 @@
-import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { WorldSnapshot } from '../../simulation/types';
 import { observeYearText } from '../../core/season';
 import type { Landmarks } from '../area';
@@ -10,7 +9,7 @@ import { glow } from '../render/bake';
 import { createDynamicResolution } from '../render/dynamicResolution';
 import type { ObserveDebug, ObserveStats } from '../inspect';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from '../daylight';
-import type { ObserveHost } from '../view';
+import type { ObserveHost } from './host';
 import { OPT } from './options';
 import type { Composite, Stage } from './stage';
 import type { ViewState } from './state';
@@ -35,7 +34,8 @@ export type FrameInput = {
   weather: Weather;
   direct(dt: number): void;
   onSnapshot(next: WorldSnapshot): void;
-  glbs: Record<'deerGlb' | 'treeGlb' | 'settleGlb' | 'floraGlb' | 'wolfGlb' | 'rabbitGlb', GLTF | null>;
+  /** 素材が読めたか (計測の行に出す。組んだ後は変わらない) */
+  assets: ObserveStats['assets'];
 };
 
 export type FrameLoop = { start(): void; stop(): void; stats(): ObserveStats | null; debug(): ObserveDebug | null };
@@ -48,7 +48,6 @@ export function createFrameLoop(input: FrameInput): FrameLoop {
   const { hutSet, propSets, motes, shipView } = settle;
   const { creatures } = herd;
   const { fx } = weather;
-  const { deerGlb, treeGlb, settleGlb, floraGlb, wolfGlb, rabbitGlb } = input.glbs;
   // 本体の時間 (M22-08): 速度 speed のとき実時間 1 秒に speed tick 進める (操作画面と同じ。1 年 = 360 tick)。
   // 進んだら区域の密度から目標頭数を引き直す。目印 (船台・林) は最初に決めたまま動かさない (船台は着工の年に決めて動かさない)
   let simAcc = 0;
@@ -129,7 +128,7 @@ export function createFrameLoop(input: FrameInput): FrameLoop {
       acc = 0;
       const info = renderer.info.render;
       const count = (sp: string) => state.agents.agents.filter((a) => a.species === sp).length;
-      const st: ObserveStats = { follow: state.followId, camera: state.director.mode === 'auto' ? `${state.director.shot?.kind}:${state.director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: state.snap.year, tick: state.snap.tick, speed: state.simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: state.agents.agents.filter((a) => a.role === 'folk').length, trees: flora.treeCount(), grass: grass.mesh.count + grass.far.count, assets: { deer: !!deerGlb, belltree: !!treeGlb, settlement: !!settleGlb, flora: !!floraGlb, wolf: !!wolfGlb, rabbit: !!rabbitGlb } };
+      const st: ObserveStats = { follow: state.followId, camera: state.director.mode === 'auto' ? `${state.director.shot?.kind}:${state.director.shot?.reason}` : 'free', at: camera.position.toArray().map(Math.round), year: state.snap.year, tick: state.snap.tick, speed: state.simSpeed, ship: shipView.node(), phase: +day.phase.toFixed(3), fps: Math.round(fps), res: dynres?.scale ?? 1, calls: info.calls, triangles: info.triangles, deer: count('deer'), wolf: count('wolf'), rabbit: count('rabbit'), folk: state.agents.agents.filter((a) => a.role === 'folk').length, trees: flora.treeCount(), grass: grass.mesh.count + grass.far.count, assets: input.assets };
       lastStats = st;
       lastDebug = { marks, agents: state.agents.agents.map((g) => ({ id: g.id, sp: g.species, role: g.role, st: g.state, x: Math.round(g.x), z: Math.round(g.z) })) };
       if (host.debug === false) stats.textContent = observeYearText(state.snap);
