@@ -16,8 +16,8 @@
 | FF-05 | 本体の依存を最小に保つ(G1、設計書 §2 #8) | `src/simulation/**` が読む外部パッケージ | パッケージの集合 | `{simplex-noise}` と一致 | check(unit) | 同上 「simulation が読む外部パッケージは simplex-noise だけ」 |
 | FF-06 | Worker に本体・UI・保存を持ち込まない(C2、Q9) | `worker/src/**` が読む `src/` の層 | 層の集合 | `{chronicle, core, harbor}` と一致 | check(unit) | 同上 「worker が src から読むのは…」 |
 | FF-07 | main.ts を配線だけに保つ(設計書 §4、R2) | `src/main.ts` | 行数(改行の数) | ≤ 265 | check(unit) | 同上 `FILE_LINES['src/main.ts']` |
-| FF-08 | ファイルの肥大を止める(R2、Development) | `src/**`・`worker/src/**` の各ファイル | 行数 | 既定 ≤ 700。例外は表 `FILE_LINES` の今の値以下(`observe/view.ts` 1074、`simulation/World.ts` 985) | check(unit) | 同上 「ファイルは上限の内」 |
-| FF-09 | 関数の肥大を止める(R2) | 全関数の本体(宣言・式・アロー・メソッド) | 本体の行数 | 既定 ≤ 150。例外は表 `LONG_FUNCTIONS` の今の値以下(`boot` 225、`createObservationView` 836 ほか 11 件) | check(unit) | 同上 「本体 150 行を超える関数は表のものだけ」 |
+| FF-08 | ファイルの肥大を止める(R2、Development) | `src/**`・`worker/src/**` の各ファイル | 行数 | 既定 ≤ 700。例外は表 `FILE_LINES` の今の値以下(`simulation/World.ts` 985) | check(unit) | 同上 「ファイルは上限の内」 |
+| FF-09 | 関数の肥大を止める(R2) | 全関数の本体(宣言・式・アロー・メソッド) | 本体の行数 | 既定 ≤ 150。例外は表 `LONG_FUNCTIONS` の今の値以下(`boot` 225 ほか 11 件。`createObservationView` は M27-04 で 126 行) | check(unit) | 同上 「本体 150 行を超える関数は表のものだけ」 |
 
 ## 2. 本番の形(開発の口・配布物・費用)
 
@@ -50,6 +50,7 @@
 |---|---|---|---|---|---|---|
 | FF-20 | 文が読める(G6、ADR 0001) | 正本で `checks: legible` の付いた画面の文字の箱 | 覆われていない(箱の 5 点)、画面の内、横に切れていない(許す欄の表を除く)、コントラスト比(背景は文字を透明にした画から)、画面の上の字の大きさ(canvas は `font × clientWidth / width`) | 覆い 0、はみ出し 0、コントラスト ≥ 4.5、字 ≥ 11px | CI(E2E) | `tests/e2e/lens.ts`(`MIN_CONTRAST`・`MIN_FONT_PX`) |
 | FF-21 | 板と札のずれと文の変わりを見る(G4) | 要素ごとの画(clip)と基準画 | 色の差(YIQ、`threshold` 0.2)を越える画素の割合 | ≤ 0.02。字が大半の細い板 4 要素は ≤ 0.12 | 手動(Mac、`pnpm run shots`。更新は `shots:update` と審査台の承認) | `tests/e2e/baseline.ts`、`tests/e2e/baselines/` |
+| FF-25 | 観察画面の構造を変えても描く物が同じ(M27-04 の安全網、Q8) | 3 視点(集落・群れ・海岸)で `inspect()` が返す計測(fps・解像度を除く)・小屋・小物・三角形の内訳・地形の要約・個体 | fixture `tests/e2e/fixtures/observe-characterization.json` との一致 | 完全一致(更新は `OBSERVE_FIXTURE=update`)。基準画と同じく手元の Mac だけで比べる | CI(E2E、約 3 分。CI は撮るだけ) | `tests/e2e/observeCharacterization.spec.ts` |
 | FF-22 | 受入の正本が指す試験が実在する(P2) | `docs/acceptance/scenarios.jsonl` の `covered_by`・`checks`・`judge` | 題名の一致するテストがあるか、札の付いた手順に checks か judge があるか | 不一致 0 件 | check(`test:scripts`) | `scripts/acceptance.py check`(`scripts/test_acceptance.py` から) |
 
 ## 6. 手動で回すもの(数は票の作業ログに残す)
