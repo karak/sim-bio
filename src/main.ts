@@ -7,7 +7,6 @@ import { buildAssetTable } from './render/assetTable';
 import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
 import type { ScenarioDef } from './scenario/types';
-import { TOWER_COST } from './simulation/weatherTower';
 import { mountMapClick, type Chips } from './ui/mapClick';
 import { createObserveEntry } from './observe/entry';
 import { createViewedSpecies } from './ui/viewedSpecies';
@@ -29,6 +28,7 @@ import { createEffects, type Nav } from './app/effects';
 import { createIntervene, createLandCargo } from './app/intervene';
 import { createScenarioSession } from './app/scenarioSession';
 import { createTitle } from './app/title';
+import { createOnFrame } from './app/frame';
 import { atOf, bootRouteOf, bootSeedOf, planOp, runPlan, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
@@ -229,38 +229,7 @@ async function boot(): Promise<void> {
       // グラフの点は年の境目ごとに積む (M25-02)。フレームで拾うと、境目から何 tick 過ぎた島を写すかが回ごとに違う
       ticksPerYear: config.ticksPerYear,
       onYear: (s) => hud.recordYear(s),
-      onFrame: (s) => {
-        localSave.onTick(s.tick, () => session.world.serialize());
-        session.scenarioAutosave?.onTick(s.tick);
-        // 観察画面の間は地図を描かないので、種を選んでいても見ていないとみなす
-        viewedSpecies.setObserving(observe.active());
-        observe.push(s, session.runner?.timeline());
-        // 選んだセルを 3D の島の上でも示す (M22-10)。選びを解けば (selected = null) 消える
-        view.setSelected(session.selected);
-        if (!observe.active()) view.update(s);
-        hud.update(s);
-        // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)
-        hud.setNextMeteor(session.runner ? session.runner.nextMeteorYear() : null);
-        if (session.selected !== null) hud.showCell(session.selected, s);
-        if (session.runner) {
-          const verdict = session.runner.update(s);
-          const budgetInfo = session.runner.budget();
-          tablet.update(session.runner.yearOf(s), verdict, budgetInfo, session.runner.warnings(), session.runner.timeline(), session.runner.prayer(), session.runner.milestones());
-          const costs = scenario?.budget?.costs;
-          hud.setAffordable(
-            budgetInfo && costs
-              ? {
-                  spawn: budgetInfo.power >= costs.spawn,
-                  disaster: budgetInfo.power >= costs.disaster,
-                  climate: budgetInfo.power >= costs.climate,
-                  tower: budgetInfo.power >= (costs.tower ?? TOWER_COST),
-                }
-              : { spawn: true, disaster: true, climate: true, tower: true },
-          );
-        } else {
-          hud.setAffordable({ spawn: true, disaster: true, climate: true, tower: true });
-        }
-      },
+      onFrame: createOnFrame({ session, scenario, localSave, viewedSpecies, observe, view: () => view, hud, tablet }),
     },
   );
   if (scenario) {
