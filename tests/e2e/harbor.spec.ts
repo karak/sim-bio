@@ -177,6 +177,78 @@ test('M26-15: 照合の後の引き直しが 1 回落ちても、間を置いて
   expect(afterConfirm.filter((w) => w.method === 'GET' && w.path === visitPath)).toHaveLength(2);
 });
 
+test('M26-15 案 b: 読み終えてから数が届くまでは途中の行を出し、届いたら数の行に替える', async ({ page }) => {
+  test.setTimeout(180_000);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-civ');
+  await publishFrom(page).getByRole('button', { name: '出港する' }).click();
+  await expect(publishFrom(page).getByRole('textbox', { name: '訪問のリンク' })).toBeVisible();
+  const [id] = [...harbor.fake.ledger.keys()];
+
+  await page.goto(`/?scenario=test-civ&visit=${id}`);
+  const plaque = page.getByRole('region', { name: '訪れている島' });
+  const confirms = plaque.locator('#harbor-visit-confirms');
+  await expect(confirms).toHaveText('まだ誰もたどっていない');
+  // confirm を送った後の最初の引き直しを、途中の行を見届けるまで止める。港のクライアントの 1 往復 10 秒より短く止める
+  const visitPath = `/api/v1/chronicles/${id}`;
+  const confirmed = () => harbor.sent.some((w) => w.path === `${visitPath}/confirm`);
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  let holding = 0;
+  await page.route(
+    (u) => u.pathname === visitPath,
+    async (route) => {
+      if (route.request().method() === 'GET' && confirmed() && holding === 0) {
+        holding += 1;
+        await held;
+      }
+      return route.fallback();
+    },
+  );
+
+  await plaque.getByRole('button', { name: '年表を読む' }).click();
+  await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
+  await expect.poll(() => holding, { timeout: 30_000 }).toBe(1);
+  await expect(confirms).toHaveText('確かめた人の数を港から引いている…');
+  release();
+  await expect(confirms).toHaveText('1 人がたどって確かめた', { timeout: 30_000 });
+});
+
+test('M26-15 案 b: 引き直しが最後まで届かなければ、誤りも「まだ誰もたどっていない」も出さず、数を言わない行にする', async ({ page }) => {
+  test.setTimeout(180_000);
+  const harbor = await routeHarbor(page, WITH_WIDGET);
+  await playScenarioToVerdict(page, 'test-civ');
+  await publishFrom(page).getByRole('button', { name: '出港する' }).click();
+  await expect(publishFrom(page).getByRole('textbox', { name: '訪問のリンク' })).toBeVisible();
+  const [id] = [...harbor.fake.ledger.keys()];
+
+  await page.goto(`/?scenario=test-civ&visit=${id}`);
+  const plaque = page.getByRole('region', { name: '訪れている島' });
+  const confirms = plaque.locator('#harbor-visit-confirms');
+  await expect(confirms).toHaveText('まだ誰もたどっていない');
+  // confirm を送った後の引き直しを全部網の失敗にする (1 回目と、1 秒・3 秒の間を置いた 2 回)
+  const visitPath = `/api/v1/chronicles/${id}`;
+  const confirmed = () => harbor.sent.some((w) => w.path === `${visitPath}/confirm`);
+  let dropped = 0;
+  await page.route(
+    (u) => u.pathname === visitPath,
+    async (route) => {
+      if (route.request().method() === 'GET' && confirmed()) {
+        dropped += 1;
+        harbor.sent.push(wireOf(route));
+        return route.abort('failed');
+      }
+      return route.fallback();
+    },
+  );
+
+  await plaque.getByRole('button', { name: '年表を読む' }).click();
+  await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
+  await expect(confirms).toHaveText('確かめた人の数は、次に訪れたときに見える', { timeout: 30_000 });
+  expect(dropped).toBe(3);
+  await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった');
+});
+
 test('M26-08: 訪問が判定まで進んだあとの「もう一度」は、URL の visit を残して同じ訪問を初めから開き直す', async ({ page }) => {
   test.setTimeout(240_000);
   const harbor = await routeHarbor(page, WITH_WIDGET);

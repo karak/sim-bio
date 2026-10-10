@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { digestOf } from '../../src/chronicle/digest';
 import type { CargoId, ChronicleId } from '../../src/harbor/contract';
-import { avoidanceText, cargoItemsText, castText, confirmText, DISMISSED_TEXT, drawText, endingText, publishText, receiveText, readResultOf, readText, readingText, reportText, resentText, withdrawText } from '../../src/ui/harborText';
+import { avoidanceText, cargoItemsText, castText, confirmText, DISMISSED_TEXT, drawText, endingText, publishText, receiveText, readResultOf, readText, readingText, RECOUNT_ASKING_TEXT, RECOUNT_DROPPED_TEXT, recountLineOf, reportText, resentText, withdrawText } from '../../src/ui/harborText';
 
 const id = 'a'.repeat(64) as ChronicleId;
 
@@ -17,6 +17,21 @@ describe('港の画面の言葉 (M19-09)', () => {
     expect(confirmText({ confirms: 3, mismatches: 0 })).toBe('3 人がたどって確かめた');
     expect(confirmText({ confirms: 2, mismatches: 1 })).toBe('2 人がたどって確かめた。1 人は違う結末になった');
     expect(confirmText({ confirms: 0, mismatches: 1 })).toBe('たどって確かめた人はまだいない。1 人は違う結末になった');
+  });
+
+  it('照合の後の引き直し (M26-15 案 b): 待つ間は途中の行、届けば数、届かなければ数を言わない行', () => {
+    expect(RECOUNT_ASKING_TEXT).toBe('確かめた人の数を港から引いている…');
+    expect(RECOUNT_DROPPED_TEXT).toBe('確かめた人の数は、次に訪れたときに見える');
+    expect(recountLineOf(0, { kind: 'asking', run: 1 })).toEqual({ shown: 1, text: RECOUNT_ASKING_TEXT });
+    expect(recountLineOf(1, { kind: 'counted', run: 1, card: { confirms: 1, mismatches: 0 } })).toEqual({ shown: 1, text: '1 人がたどって確かめた' });
+    expect(recountLineOf(1, { kind: 'dropped', run: 1 })).toEqual({ shown: 1, text: RECOUNT_DROPPED_TEXT });
+  });
+
+  it('照合の後の引き直し (M26-15): 読み直して後の読みが行を持ったら、前の読みの答えは数も届かなかったことも書かない', () => {
+    expect(recountLineOf(1, { kind: 'asking', run: 2 })).toEqual({ shown: 2, text: RECOUNT_ASKING_TEXT });
+    expect(recountLineOf(2, { kind: 'counted', run: 1, card: { confirms: 1, mismatches: 0 } })).toEqual({ shown: 2, text: null });
+    expect(recountLineOf(2, { kind: 'dropped', run: 1 })).toEqual({ shown: 2, text: null });
+    expect(recountLineOf(2, { kind: 'counted', run: 2, card: { confirms: 2, mismatches: 0 } })).toEqual({ shown: 2, text: '2 人がたどって確かめた' });
   });
 
   it('出港の結末ごとに、何が起きて次に何をするかを言う (閉港は預けた、と言う)', () => {
