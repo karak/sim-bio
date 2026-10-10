@@ -211,7 +211,7 @@ test('M24-04 (2026-10-10 の決定): 「タイトルへ」は ?player= と ?dev=
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   const panel = page.getByRole('dialog', { name: '新規ゲーム' });
-  await expect(panel.locator('p')).toHaveText('新しい島の始め方 (いまの島を残すかの確かめ) は準備中です。');
+  await expect(panel.locator('p')).toHaveText('タイトルからの新規ゲームは準備中です。島の中の「新しい島」で始められます。');
   await page.keyboard.press('Escape');
   await expect(item(page, '新規ゲーム')).toBeFocused();
 

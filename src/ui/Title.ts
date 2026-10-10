@@ -12,8 +12,7 @@ import './title.css';
 export type { TitleChoice };
 
 export type TitleDeps = {
-  /** 自動の枠の続き。あれば「続きから」を先頭に出して既定にする */
-  // (M24-05) 石板の続きのこともある。どちらを出すかは persist/lastStage.ts の continueTargetOf が決める
+  /** 続き (自動の枠か石板の続き。どちらかは persist/lastStage.ts の continueTargetOf が決める、M24-05)。あれば「続きから」を先頭に出して既定にする */
   continuation: Continuation | null;
   /** 自動の枠 (自由モード) に続きがあるか (M24-05)。無ければ新規ゲームは自由モードの最初の島 */
   freeSaved: boolean;
@@ -23,7 +22,7 @@ export type TitleDeps = {
 
 /** 中身がまだ無い板 (M24-02・M24-03 で作る) の文 */
 const PENDING_TEXT: Record<Exclude<TitleItemId, 'continue'>, string> = {
-  new: '新しい島の始め方 (いまの島を残すかの確かめ) は準備中です。',
+  new: 'タイトルからの新規ゲームは準備中です。島の中の「新しい島」で始められます。',
   load: '枠とファイルからの読込は準備中です。島の中の「枠」からは、いまも読めます。',
   harbor: 'タイトルからの港は準備中です。島の中の港の口からは、いまも訪れられます。',
   config: 'コンフィグ (画質・動きを減らす・始めの速さ) は準備中です。',

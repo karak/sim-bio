@@ -11,7 +11,7 @@ export type Risky =
   | { kind: 'load'; plan: SlotLoadPlan }
   /** 枠へ保存。overwrites は書いてある枠の一覧の 1 行 (空きなら null) */
   | { kind: 'slot_save'; overwrites: string | null }
-  /** 舞台を移る (石板を選ぶ・自由モードへ・もう一度・訪れる)。finished は判定の出た石板の島にいるか */
+  /** 舞台を移る (石板を選ぶ・自由モードへ・もう一度・訪れる・タイトルへ)。finished は判定の出た石板の島にいるか */
   | { kind: 'leave'; finished: boolean }
   /** 自分が出港した島を港から取り下げる */
   | { kind: 'withdraw'; name: string };

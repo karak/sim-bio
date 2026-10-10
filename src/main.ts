@@ -217,8 +217,7 @@ async function boot(): Promise<void> {
   let recorder: ChronicleRecorder<InterveneResult> | null = null;
   /** 石板の途中の島の自動保存 (M19-14)。runner と一緒に作る */
   let scenarioAutosave: ScenarioAutosave | null = null;
-  /** 年代記は石板ごとに最後の 1 本を置く。続きからの復帰 (島と runner を戻す) はまだ無いので、読むのは港への出港 (M19-09) */
-  // (M19-14 で変更: 続きからの復帰ができた。年代記は島・runner の状態と同じ transaction で書く。persist/scenarioSave.ts)
+  /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
   const saveChronicle = () => scenarioAutosave?.flush();
   /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
   const intervene = (c: Command): boolean => {

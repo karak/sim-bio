@@ -19,7 +19,7 @@ export type At =
   | { stage: 'scenario'; head: ChronicleHead; finished: boolean }
   | { stage: 'visit' };
 
-/** やり直しの効かない操作。select は石板を選ぶ・自由モードへ (null)、retry は判定の板のもう一度 (訪問中は visit を残す、M26-08)、visit は港の訪れる札。load の slot が null ならファイル */
+/** やり直しの効かない操作。select は石板を選ぶ・自由モードへ (null)、retry は判定の板のもう一度 (訪問中は visit を残す、M26-08)、visit は港の訪れる札、title はタイトルへ (M24-04)。load の slot が null ならファイル */
 export type Op =
   | { kind: 'new_island' }
   | { kind: 'load'; data: SlotSave; slot: SlotId | null }
@@ -87,9 +87,8 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
   }
 }
 
-// (M24-04) タイトルへ (title) も舞台を離れる操作なので、同じ確かめを通す
 /**
- * 舞台を移る操作 (石板を選ぶ・自由モードへ・もう一度・訪れる) の確かめ (M21-04)。走っている島は書き切ってから移るので確かめない。
+ * 舞台を移る操作 (石板を選ぶ・自由モードへ・もう一度・訪れる・タイトルへ) の確かめ (M21-04)。走っている島は書き切ってから移るので確かめない。
  * 判定の出た自分の石板の島は、開き直すと初めからになる (M19-14) ので確かめる
  */
 const leaving = (at: At): Ask | null => askOf({ kind: 'leave', finished: at.stage === 'scenario' && at.finished });
