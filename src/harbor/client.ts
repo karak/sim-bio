@@ -54,6 +54,12 @@ export type Harbor = {
   visit(id: ChronicleId): Promise<{ kind: 'ok'; chronicle: Chronicle; card: ChronicleCard } | { kind: 'closed' | 'missing' }>;
   /** 照合の結末を送る。失敗は握りつぶす (照合は善意の付加物) */
   confirm(id: ChronicleId, d: Digest): Promise<void>;
+  /**
+   * 照合の後に札を引き直す (M26-15)。閉港 (読めない返事・id の食い違いを含む) なら RECOUNT_BACKOFF_MS の間を置いて問い直し、
+   * 最後まで閉港なら null (握りつぶす)。
+   * 港に無い (取り下げ済み) も null で、問い直さない
+   */
+  recount(id: ChronicleId): Promise<ChronicleCard | null>;
   /** 港に無い (取り下げ済み・隠された) も ok (通報するものがもう無い) */
   report(id: ChronicleId): Promise<'ok' | 'closed' | 'not_human' | 'slow_down'>;
   /** 手元の鍵で取り下げる。港に無い (取り下げ済み) も ok にし、鍵を忘れる */
@@ -95,9 +101,13 @@ export type HarborDeps = {
   log?: HarborLog;
   /** どの要求にも添える header。開発用の見守り手の名乗り (M19-16) だけが使い、本番では無い */
   headers?: Readonly<Record<string, string>>;
+  /** 問い直しの間を ms だけ待つ。無ければ setTimeout */
+  wait?: (ms: number) => Promise<void>;
 };
 
 const REQUEST_TIMEOUT_MS = 10_000;
+/** 引き直しの問い直しの間 (M26-15)。問うのは最初の 1 回と、この間の数だけ (計 3 回) */
+export const RECOUNT_BACKOFF_MS: readonly number[] = [1_000, 3_000];
 const CLOSED: ReadRefusal = { error: 'closed', reason: 'unknown' };
 
 /** 港の答え。読めた本文か、断り (網の失敗と港の形でない返事は閉港) */
@@ -118,6 +128,7 @@ export function createHarbor(deps: HarborDeps): Harbor {
   const newKey = deps.newKey ?? randomWithdrawKey;
   const base = deps.baseUrl?.trim() || null;
   const fetchImpl = deps.fetch ?? ((input, init) => fetch(input, init));
+  const wait = deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const linkOf = (id: ChronicleId, scenarioId: string) => new URL(visitHref({ id, scenarioId }), deps.linkBase).href;
 
   /** 港へ 1 回問う。2xx の本文は read で読み、読めなければ港の形でないので閉港 */
@@ -195,6 +206,16 @@ export function createHarbor(deps: HarborDeps): Harbor {
     return { ok: true, value: { id, chronicle: chronicle.value, digest: digest.value, inscription: inscription.value } };
   }
 
+  async function visit(id: ChronicleId): ReturnType<Harbor['visit']> {
+    const got = await ask('visit', { kind: 'visit', id });
+    if (!got.ok) return { kind: got.refusal.error === 'not_found' ? 'missing' : 'closed' };
+    if (got.value.card.id !== id || (await chronicleId(got.value.chronicle)) !== id) {
+      log('warn', 'harbor.unreadable', { kind: 'visit', id, reason: 'id_mismatch' });
+      return { kind: 'closed' };
+    }
+    return { kind: 'ok', ...got.value };
+  }
+
   let flushing: Promise<readonly PublishResult[]> | null = null;
   async function flush(): Promise<readonly PublishResult[]> {
     const results: PublishResult[] = [];
@@ -232,18 +253,23 @@ export function createHarbor(deps: HarborDeps): Harbor {
       const got = await ask('browse', { kind: 'browse', scenarioId: q.scenarioId ?? null, before: q.before ?? null });
       return got.ok ? { kind: 'ok', ...got.value } : { kind: 'closed' };
     },
-    async visit(id) {
-      const got = await ask('visit', { kind: 'visit', id });
-      if (!got.ok) return { kind: got.refusal.error === 'not_found' ? 'missing' : 'closed' };
-      if (got.value.card.id !== id || (await chronicleId(got.value.chronicle)) !== id) {
-        log('warn', 'harbor.unreadable', { kind: 'visit', id, reason: 'id_mismatch' });
-        return { kind: 'closed' };
-      }
-      return { kind: 'ok', ...got.value };
-    },
+    visit,
     async confirm(id, digest) {
       const r = await tell({ kind: 'confirm', id, digest });
       if (!r.ok) log('info', 'harbor.confirm.dropped', { id, error: r.refusal.error });
+    },
+    async recount(id) {
+      for (let tries = 1; ; tries += 1) {
+        const got = await visit(id);
+        if (got.kind === 'ok') return got.card;
+        if (got.kind === 'missing') return null;
+        const pause = RECOUNT_BACKOFF_MS[tries - 1];
+        if (pause === undefined) {
+          log('info', 'harbor.recount.dropped', { id, tries });
+          return null;
+        }
+        await wait(pause);
+      }
     },
     async report(id) {
       if (base === null) return 'closed';
