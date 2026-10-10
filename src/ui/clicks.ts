@@ -1,5 +1,5 @@
 import type { Command, DisasterKind } from '../simulation/types';
-import type { Chronicle, Digest } from '../harbor/chronicle';
+import type { Chronicle, Digest } from '../chronicle/chronicle';
 import type { PublishInput } from '../harbor/client';
 import type { Cargo, InscriptionId } from '../harbor/contract';
 

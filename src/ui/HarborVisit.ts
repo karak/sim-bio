@@ -1,6 +1,6 @@
 import type { ReplayIsland } from '../chronicle/replay';
 import { replayInWorker } from '../chronicle/replayInWorker';
-import type { Chronicle } from '../harbor/chronicle';
+import type { Chronicle } from '../chronicle/chronicle';
 import type { Harbor } from '../harbor/client';
 import type { ChronicleCard, ChronicleId } from '../harbor/contract';
 import { inscriptionText, islandName, type Inscription } from '../harbor/names';

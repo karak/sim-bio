@@ -2,7 +2,7 @@ import type { ParseError } from '../core/parse';
 import type { ScenarioRunner } from '../scenario/ScenarioRunner';
 import { stepByYear } from '../scenario/stepByYear';
 import type { WorldSnapshot } from '../simulation/types';
-import type { TimedCommand } from '../harbor/chronicle';
+import type { TimedCommand } from './chronicle';
 
 type SteppableWorld = { step(n: number): void; snapshot(): WorldSnapshot };
 

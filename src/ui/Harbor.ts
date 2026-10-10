@@ -1,5 +1,5 @@
 import type { LandResult } from '../harbor/cargo';
-import type { Chronicle, Digest } from '../harbor/chronicle';
+import type { Chronicle, Digest } from '../chronicle/chronicle';
 import { createHarbor, type HarborLog, type PublishResult } from '../harbor/client';
 import { chronicleId, type BrowseCursor, type Cargo, type ChronicleCard, type DrawnCargo, type InscriptionId } from '../harbor/contract';
 import { cardActionsOf, finishedScopeOf } from '../harbor/dock';

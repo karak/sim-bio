@@ -26,7 +26,7 @@ import { AUTOSAVE_TICKS } from './persist/autosave';
 import { checkScenarioSave, createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
 import { continueTargetOf, readLastStage, scenarioProgressOf, writeLastStage, type ScenarioProgress } from './persist/lastStage';
 import { checkSlot, putPendingSlot, slotSaveOf, takePendingSlot, type Here, type SlotSave } from './persist/slotSave';
-import type { Chronicle } from './harbor/chronicle';
+import type { Chronicle } from './chronicle/chronicle';
 import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
 import type { InterveneResult, RunnerState } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';

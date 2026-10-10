@@ -1,6 +1,6 @@
 import { SEA_LEVEL } from '../simulation/terrain';
 import type { Cargo as Hold } from '../simulation/ship';
-import { MAX_AMOUNT } from './chronicle';
+import { MAX_AMOUNT } from '../chronicle/chronicle';
 import { HARBOR_LIMITS, type Cargo, type CargoId, type DrawnCargo } from './contract';
 import type { Command } from '../simulation/types';
 import { receiveCargoClick } from '../ui/clicks';

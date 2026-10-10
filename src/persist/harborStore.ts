@@ -1,4 +1,4 @@
-import type { Chronicle, Digest } from '../harbor/chronicle';
+import type { Chronicle, Digest } from '../chronicle/chronicle';
 import { parseChronicleId, parseWithdrawKey, type CargoId, type ChronicleId, type InscriptionId, type WithdrawKey } from '../harbor/contract';
 import { openDb, requestDone, transactionDone } from './islandStore';
 

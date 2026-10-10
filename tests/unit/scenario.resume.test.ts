@@ -5,7 +5,7 @@ import { createScenarioRunner, type RunnerState, type ScenarioRunner } from '../
 import { stepByYear } from '../../src/scenario/stepByYear';
 import { SIM_VERSION } from '../../src/simulation/version';
 import type { Command, SaveData } from '../../src/simulation/types';
-import type { Chronicle, Digest } from '../../src/harbor/chronicle';
+import type { Chronicle, Digest } from '../../src/chronicle/chronicle';
 import { recordChronicle, type ChronicleRecorder } from '../../src/chronicle/recorder';
 import { digestOf } from '../../src/chronicle/digest';
 import { replay, type ReplayIsland } from '../../src/chronicle/replay';

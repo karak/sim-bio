@@ -1,4 +1,4 @@
-import type { Chronicle, ChronicleHead } from '../harbor/chronicle';
+import type { Chronicle, ChronicleHead } from '../chronicle/chronicle';
 import { parseChronicleId, type ChronicleId } from '../harbor/contract';
 import { checkSlot, planSlotLoad, type Here, type SlotSave } from '../persist/slotSave';
 import type { ManualSlot, PendingSlot, SlotId } from '../persist/slots';
