@@ -26,7 +26,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 |---|---|---|---|
 | H1 | 人(済 2026-09-27、アカウント名 sim-bio、既存のユーザーに追加) | このゲーム専用の Cloudflare アカウントを作る。**支払い方法は登録しない**(無料枠を使い切った日に課金されず止まるため) | https://dash.cloudflare.com/sign-up |
 | H2 | 人(済 2026-09-27、`dev-sim-bio`) | workers.dev のサブドメインを決める | ダッシュボード → Workers & Pages → Account details の Subdomain |
-| H3 | 人(済 2026-09-27) | 手元の wrangler をこのアカウントでログインする(ブラウザで OAuth、sim-bio だけを許し、スコープを絞る) | `pnpm exec wrangler login --scopes account:read user:read workers_scripts:write workers_tail:read d1:write challenge-widgets.write` |
+| H3 | 人(済 2026-09-27) | 手元の wrangler をこのアカウントでログインする(ブラウザで OAuth、sim-bio だけを許し、スコープを絞る)(記録。今は deploy-runbook.md の「最初に」で照らすだけ) | `pnpm exec wrangler login --scopes account:read user:read workers_scripts:write workers_tail:read d1:write challenge-widgets.write` |
 | A1 | AI(済 2026-09-27、sim-bio `14c725d39e9cf53743be403ab146174f`) | ログインしたアカウントを確かめる。account_id を控える(秘密ではない)。whoami が見るのは端末の OAuth で、配備のトークンではない(今は別のアカウントが出る) | `pnpm exec wrangler whoami` |
 | A1a | AI・人 | 今の端末の状態を照らす。端末の OAuth のアカウントと、H3 の 6 つのスコープがそろうかを出し(使わない)、Keychain のトークンが sim-bio に届くかを確かめる。H3・A1 は 2026-09-27 の記録で、今の配備は端末のログインに頼らない | `pnpm run cf:auth`(deploy-runbook.md の「最初に」) |
 
@@ -90,8 +90,8 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
 | A13 | AI | 画面と港が答えるか | `curl -sI https://biotope-island.dev-sim-bio.workers.dev/` と `curl -s https://biotope-island.dev-sim-bio.workers.dev/api/v1/chronicles` |
-| A14 | AI | ログが流れるか(画面を開いた人の操作に合わせて見る) | `pnpm exec wrangler tail biotope-island --format pretty` |
-| A15 | AI | D1 に行が入るか(出港のあと) | `uv run scripts/mod.py --remote budget` と `pnpm exec wrangler d1 execute biotope-harbor --remote --command "SELECT COUNT(*) FROM chronicles"` |
+| A14 | AI | ログが流れるか(画面を開いた人の操作に合わせて見る)。この Mac では deploy-runbook.md の 6 の形でトークンを環境で渡す(端末の OAuth で打つと 7403) | `pnpm exec wrangler tail biotope-island --format pretty` |
+| A15 | AI | D1 に行が入るか(出港のあと)。この Mac では deploy-runbook.md の 6 の形でトークンを環境で渡す(端末の OAuth で打つと 7403) | `uv run scripts/mod.py --remote budget` と `pnpm exec wrangler d1 execute biotope-harbor --remote --command "SELECT COUNT(*) FROM chronicles"` |
 | H9 | 人 | 本物の Turnstile で出港 → リンク → 訪問 → 年表を読む を通す。積荷と回避率も見る | ブラウザで `https://biotope-island.dev-sim-bio.workers.dev/?scenario=test-quick` |
 | H10 | 人 | Observability で CPU Time(10 ms の内か)・429 が返るか(Rate Limiting が無料で効くか)・`harbor.cron.stats` の行(毎日 00:10 UTC)を見る | ダッシュボード → Workers & Pages → biotope-island → Observability |
 

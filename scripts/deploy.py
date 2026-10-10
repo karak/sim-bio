@@ -246,7 +246,7 @@ class Deps:
 @dataclass(frozen=True)
 class Step:
     name: str
-    kind: str  # preflight | token | verify | run | deployments | smoke
+    kind: str  # auth | preflight | token | verify | run | deployments | smoke
     describe: str
     argv: tuple[str, ...] = ()
     wrangler: bool = False

@@ -1,6 +1,6 @@
 # 配備の手順書(端末の状態に左右されない形)
 
-この Mac は、いくつもの repo で wrangler を使う。`wrangler login` の OAuth は機械に 1 つだけで(`~/.wrangler` に置かれ、どの repo からも同じものが使われる)、今はこのゲームとは別の Cloudflare アカウントのものになっている。そのため、手元で `wrangler` をそのまま打つ配備は、そのときの端末の状態で結果が変わる。
+この Mac は、いくつもの repo で wrangler を使う。`wrangler login` の OAuth は機械に 1 つだけで(macOS では `~/Library/Preferences/.wrangler`、古い形の `~/.wrangler` の dir があればそこに置かれ、どの repo からも同じものが使われる)、今はこのゲームとは別の Cloudflare アカウントのものになっている。そのため、手元で `wrangler` をそのまま打つ配備は、そのときの端末の状態で結果が変わる。
 
 この手順書は、端末の OAuth を一度も使わずに配る 2 つの道を書く。
 
@@ -91,7 +91,7 @@ gh run watch "$(gh run list --workflow deploy.yml --repo karak/sim-bio --limit 1
 
 ## 3. 控えの道: 手元の `scripts/deploy.py`
 
-端末の OAuth は使わない。`wrangler login` も `wrangler whoami` も打たない。
+端末の OAuth は使わない。`wrangler login` は打たない。`wrangler whoami` は「最初に」の照合で `pnpm run cf:auth --whoami` と頼んだときだけ打つ。
 
 ### 3.1 一度だけの準備(人)
 
