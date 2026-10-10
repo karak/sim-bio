@@ -23,7 +23,7 @@ import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
 import { checkScenarioSave, createScenarioAutosave } from './persist/scenarioSave';
 import { continueTargetOf, readLastStage, scenarioProgressOf, writeLastStage, type ScenarioProgress } from './persist/lastStage';
-import { putPendingSlot, slotSaveOf, takePendingSlot, type SlotSave } from './persist/slotSave';
+import { slotSaveOf, takePendingSlot } from './persist/slotSave';
 import { recordChronicle } from './chronicle/recorder';
 import type { RunnerState } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';
@@ -32,12 +32,13 @@ import { createPlayback } from './chronicle/playback';
 import { mountHarbor } from './ui/Harbor';
 import { createConfirm } from './ui/confirm';
 import { showTitle } from './ui/Title';
-import { markEntered, putOpenTitle, takeTabMarks } from './persist/tabMarks';
+import { markEntered, takeTabMarks } from './persist/tabMarks';
 import { askOf, type Risky } from './app/confirmAsk';
 import { scenarioConfigOf } from './app/worldConfig';
 import { restoreIsland } from './app/restore';
 import { sessionOf } from './app/session';
-import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedSearchFor, titleHrefOf, type Effect, type Op } from './app/place';
+import { createEffects, type Nav } from './app/effects';
+import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, planOp, runPlan, searchFor, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
 const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
@@ -62,6 +63,14 @@ async function boot(): Promise<void> {
       return null;
     }),
   ]);
+  const nav: Nav = {
+    search: () => location.search,
+    go: (search) => {
+      location.search = search;
+    },
+    assign: (href) => location.assign(href),
+    replace: (search) => history.replaceState(null, '', `${location.pathname}${search}${location.hash}`),
+  };
   const pending = takePendingSlot(sessionStorage);
   // 起動の行き先 (M24-01): 素の / で、このタブでまだ舞台に入っていなければタイトル。選ばれてから舞台を組む
   const route = bootRouteOf(location.search, scenarios, pending, takeTabMarks(sessionStorage), devTools ? devTools.skipsTitle(localStorage) : false);
@@ -106,12 +115,12 @@ async function boot(): Promise<void> {
   markEntered(sessionStorage);
   const scenario = booted.scenario;
   if (booted.unknown) {
-    history.replaceState(null, '', `${location.pathname}${booted.unknown.search}${location.hash}`);
+    nav.replace(booted.unknown.search);
     log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.url.unknown_scenario', scenario: booted.unknown.scenarioId });
   }
   // 自由モードの seed (M26-10): URL の seed= (石板・訪問は無視して URL から落とす)。無ければ既定 (world.default.json の 42)
   const seeded = bootSeedOf(location.search, scenario !== null);
-  if (seeded.search !== null) history.replaceState(null, '', `${location.pathname}${seeded.search}${location.hash}`);
+  if (seeded.search !== null) nav.replace(seeded.search);
   const config = scenarioConfigOf(base, species, scenario);
   // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
   const visitId = booted.visitId;
@@ -172,81 +181,16 @@ async function boot(): Promise<void> {
     return result.ok;
   };
 
-  /** 今の島の seed を HUD に出し、自由モードなら URL の seed= も揃える (M26-10)。初めて開いた 42 の島だけは URL を変えない */
-  const showSeed = (always: boolean) => {
-    hud.setSeed(session.world.seed);
-    if (scenario) return;
-    if (always || seeded.seed !== null || session.world.seed !== DEFAULT_SEED) history.replaceState(null, '', `${location.pathname}${seedSearchFor(location.search, session.world.seed)}${location.hash}`);
-  };
-  const replaceWorld = (next: World) => {
-    const shown = session.world.snapshot();
-    session.world = next;
-    const { size, species: nextSpecies } = session.world.snapshot();
-    // 描き分けの表は種から作るので、大きさか種の並びが変われば作り直す
-    if (size !== shown.size || nextSpecies.map((d) => d.id).join() !== shown.species.map((d) => d.id).join()) {
-      view.dispose();
-      view = createSceneView(canvas, { assets: buildAssetTable(nextSpecies), size, now: dev?.clock });
-    }
-    session.selected = null;
-    localSave.replaced(session.world.serialize());
-    showSeed(true);
-  };
-  /** 枠とファイルの包み (M19-17)。石板の中では島・runner の状態・年代記の 3 つ */
-  const slotSave = (): SlotSave =>
-    scenario && session.runner && session.recorder
-      ? { stage: 'scenario', scenarioId: scenario.id, save: session.world.serialize(), runner: session.runner.save(), chronicle: session.recorder.current() }
-      : { stage: 'free', save: session.world.serialize() };
   const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
   const at = () => atOf(!!visitId, head, session.runner?.verdict().status ?? null);
-  /** 確かめを受けた後に 1 つ行う。false なら残りを行わない */
-  const perform = async (e: Effect): Promise<boolean> => {
-    switch (e.kind) {
-      case 'new_world':
-        replaceWorld(World.create({ ...config, seed: newWorldSeed(at(), config.seed, session.world.seed, drawSeed) }, { log }));
-        return true;
-      case 'restart':
-        session.restartScenario(e.from);
-        return true;
-      case 'replace': {
-        let restored: World;
-        try {
-          restored = World.restore(e.save, { log });
-        } catch (err) {
-          persistLog('warn', 'persist.load.failed', e.save.tick, { slot: e.slot ?? 'file', error: String(err) });
-          return false;
-        }
-        replaceWorld(restored);
-        return true;
-      }
-      case 'refuse':
-        persistLog('warn', 'persist.load.failed', e.tick, { slot: e.slot ?? 'file', error: e.error });
-        return false;
-      case 'stash_import':
-        await store?.stashImport(e.data).catch((err: unknown) => persistLog('warn', 'persist.save.failed', e.data.save.tick, { slot: 'import', error: String(err) }));
-        return true;
-      case 'put_pending':
-        putPendingSlot(sessionStorage, e.slot);
-        return true;
-      case 'save_slot':
-        void localSave.saveSlot(e.slot, slotSave());
-        return true;
-      case 'flush':
-        // 移る前に、今の島と石板の続きを書き切る (M19-17)。訪問ではどちらも何も書かない
-        await Promise.all([localSave.flush(() => session.world.serialize()), saveChronicle()]);
-        return true;
-      case 'go':
-        location.search = searchFor(location.search, e.scenarioId, { keepVisit: e.keepVisit });
-        return true;
-      case 'assign':
-        location.assign(e.href);
-        return true;
-      case 'to_title':
-        // タイトルへ (M24-04): 移った先の起動 (bootRouteOf) がタイトルを選ぶよう、舞台に入った印を消して合図を置き、/ へ (見守り手と開発の板の検索語は残す、titleHrefOf)
-        putOpenTitle(sessionStorage);
-        location.assign(titleHrefOf(location.search));
-        return true;
-    }
-  };
+  const { perform, slotSave, showSeed } = createEffects({
+    session, scenario, config, seed: seeded.seed, at, drawSeed, log, persistLog, store, localSave, saveChronicle, storage: sessionStorage, nav,
+    remakeView: (size, species) => {
+      view.dispose();
+      view = createSceneView(canvas, { assets: buildAssetTable(species), size, now: dev?.clock });
+    },
+    setSeed: (seed) => hud.setSeed(seed),
+  });
   /** やり直しの効かない操作 (M21-04)。確かめと行き先は planOp が決め、ここは確かめてから effects を順に行うだけ */
   const run = (op: Op) => runPlan(planOp(op, at(), titleOf), confirm, perform);
 
