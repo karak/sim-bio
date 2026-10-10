@@ -5,7 +5,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 - **人(H)**: 本人のアカウント・支払い・秘密の値・ブラウザでのログインが要る作業。AI は代われない。
 - **AI(A)**: 端末で打てる作業。どれもユーザーの許可を得てから行う。リモートに触れる(Cloudflare・GitHub に書く)ものは特に、その都度許可を得る。
 
-どのコマンドも、このリポジトリでまだ実際に打ってはいない(配備の許可が出ていないため)。形は wrangler・gh の docs と `--help` に合わせた。コマンドはすべて repo の根(feat/m19 か、それを取り込んだ main の checkout)で打つ。`pnpm install --frozen-lockfile` 済みとする。
+「済」の付いた行は実際に打った(初回の配備は 2026-09-27)。ほかの行の形は wrangler・gh の docs と `--help` に合わせた。コマンドはすべて repo の根(feat/m19 か、それを取り込んだ main の checkout)で打つ。`pnpm install --frozen-lockfile` 済みとする。
 
 2 回目からの配備は、端末の `wrangler login` に依らない手順書 docs/operations/deploy-runbook.md で行う(手元の OAuth が別のアカウントのものになっていて 7403 で止まったため、2026-10-05)。
 
@@ -25,7 +25,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 | H1 | 人(済 2026-09-27、アカウント名 sim-bio、既存のユーザーに追加) | このゲーム専用の Cloudflare アカウントを作る。**支払い方法は登録しない**(無料枠を使い切った日に課金されず止まるため) | https://dash.cloudflare.com/sign-up |
 | H2 | 人(済 2026-09-27、`dev-sim-bio`) | workers.dev のサブドメインを決める | ダッシュボード → Workers & Pages → Account details の Subdomain |
 | H3 | 人(済 2026-09-27) | 手元の wrangler をこのアカウントでログインする(ブラウザで OAuth、sim-bio だけを許し、スコープを絞る) | `pnpm exec wrangler login --scopes account:read user:read workers_scripts:write workers_tail:read d1:write challenge-widgets.write` |
-| A1 | AI(済 2026-09-27、sim-bio `14c725d39e9cf53743be403ab146174f`) | ログインしたアカウントを確かめる。account_id を控える(秘密ではない) | `pnpm exec wrangler whoami` |
+| A1 | AI(済 2026-09-27、sim-bio `14c725d39e9cf53743be403ab146174f`) | ログインしたアカウントを確かめる。account_id を控える(秘密ではない)。whoami が見るのは端末の OAuth で、配備のトークンではない(今は別のアカウントが出る) | `pnpm exec wrangler whoami` |
 
 ## 2. 港の D1(AI)
 
@@ -80,7 +80,7 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 | # | 誰 | 作業 | コマンド |
 |---|---|---|---|
 | A12 | AI | 配備のワークフローを main で起こし、終わりまで見る | `gh workflow run deploy.yml --ref main --repo karak/sim-bio` → `gh run watch --repo karak/sim-bio` |
-| A12a | 人(済 2026-09-27。AI の端末からの `wrangler deploy` はツールの許可の判定に止められたので、人の端末で打った) | **初回だけは手元から配る**(新しい Worker を作るには product scope の Admin が要り、CI のトークンでは作れない)。secret は一時ファイルで渡す。その後に H6 のトークンを作る | `VITE_TURNSTILE_SITEKEY=0x4AAAAAAFFM5qcR0ciWH4Br pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote` → `f=$(mktemp) && chmod 600 "$f"; printf 'Turnstile secret key: '; read -rs t; echo; printf 'TURNSTILE_SECRET_KEY="%s"\nSENDER_SECRET="%s"\n' "$t" "$(openssl rand -base64 32)" > "$f"; unset t; pnpm exec wrangler deploy --secrets-file "$f"; rm -f "$f"` |
+| A12a | 人(済 2026-09-27。AI の端末からの `wrangler deploy` はツールの許可の判定に止められたので、人の端末で打った) | 【記録。2026-09-27 の初回だけ。今の端末の OAuth で打つと 7403。今の配備は deploy-runbook.md】**初回だけは手元から配る**(新しい Worker を作るには product scope の Admin が要り、CI のトークンでは作れない)。secret は一時ファイルで渡す。その後に H6 のトークンを作る | `VITE_TURNSTILE_SITEKEY=0x4AAAAAAFFM5qcR0ciWH4Br pnpm run build:cloudflare && pnpm run check:free-tier && pnpm exec wrangler d1 migrations apply biotope-harbor --remote` → `f=$(mktemp) && chmod 600 "$f"; printf 'Turnstile secret key: '; read -rs t; echo; printf 'TURNSTILE_SECRET_KEY="%s"\nSENDER_SECRET="%s"\n' "$t" "$(openssl rand -base64 32)" > "$f"; unset t; pnpm exec wrangler deploy --secrets-file "$f"; rm -f "$f"` |
 
 ## 8. 配ったあとの確かめ
 

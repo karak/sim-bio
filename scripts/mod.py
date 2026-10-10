@@ -11,7 +11,7 @@
     uv run scripts/mod.py --remote delete <年代記の id> --yes
     uv run scripts/mod.py --remote budget [--days 7]
 
---remote は配った港の D1 に書く (要 wrangler login)。--local は wrangler dev のローカルの D1。
+--remote は配った港の D1 に書く (トークンは Keychain の sim-bio-local-deploy から環境で wrangler に渡す。deploy-runbook.md)。--local は wrangler dev のローカルの D1。
 
 表と列は M19-08 のマイグレーションの前の仮の形 (設計書 §5・§6 から置いた)。M19-08 で本物に合わせる:
   chronicles(id TEXT PRIMARY KEY  -- 正規化した年代記の SHA-256 の 16 進 64 文字,

@@ -61,12 +61,12 @@ printf 'TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA\nSENDER_SECRET=
 3. ダッシュボードの **Workers & Pages** で、`workers.dev` のサブドメインを決める。配った画面は `https://biotope-island.<サブドメイン>.workers.dev` になる。
 4. **Account API tokens** で、テンプレート **Edit Cloudflare Workers** のトークンを作り、このアカウントだけに絞る。
 5. GitHub の Settings → Environments で `production` を作り、Deployment branches and tags を `main` だけにする。その Environment secrets に、`CLOUDFLARE_API_TOKEN`(4 のトークン)と `CLOUDFLARE_ACCOUNT_ID`(アカウント ID)を置く。値はリポジトリに書かない。
-6. **港の D1 を作り、id を書く(M19-08)。** `pnpm exec wrangler login` のあと `pnpm exec wrangler d1 create biotope-harbor` で作り、出てきた `database_id` を `wrangler.jsonc` の `d1_databases` の仮の値(`00000000-0000-0000-0000-000000000000`)と置き換えて main に入れる。仮の値のままでは配備が落ちる。
+6. **港の D1 を作り、id を書く(M19-08)。** `pnpm exec wrangler login` のあと `pnpm exec wrangler d1 create biotope-harbor` で作り、出てきた `database_id` を `wrangler.jsonc` の `d1_databases` の仮の値(`00000000-0000-0000-0000-000000000000`)と置き換えて main に入れる。仮の値のままでは配備が落ちる。(2026-09-27 に済み。作り直すときは端末のログインに頼らず、deploy-runbook.md の形でトークンを環境で渡す)
 7. **Turnstile の widget を作る(M19-08)。** ダッシュボードの Turnstile で、hostname に `biotope-island.<サブドメイン>.workers.dev` を入れた widget を 1 つ作る。site key は画面(M19-09)に、secret key は次の 8 で Worker に置く。
 8. **Worker の secret を置く(M19-08)。** 値はリポジトリにもコマンドの引数にも書かず、対話の入力で渡す。`pnpm exec wrangler secret put TURNSTILE_SECRET_KEY`(7 の secret key)と `pnpm exec wrangler secret put SENDER_SECRET`(送り手の HMAC の鍵。`openssl rand -base64 32` などで作った乱数)。`wrangler.jsonc` の `secrets.required` に名前だけを書いてある。
 9. Actions の `Deploy (Cloudflare)` を、branch に `main` を選んで「Run workflow」で起こす。ほかの branch を選ぶと、job は飛ばされる。
 
-配ったあとのログは、ダッシュボードの Workers & Pages → `biotope-island` → Observability で読む。手元の端末からは `pnpm exec wrangler tail`(要 `pnpm exec wrangler login`)でも流れを見られる。
+配ったあとのログは、ダッシュボードの Workers & Pages → `biotope-island` → Observability で読む。手元の端末からは、Keychain のトークンを環境で渡して `pnpm exec wrangler tail` でも流れを見られる(形は deploy-runbook.md の 6 の戻しと同じ)。
 
 ## 課金にしない
 
@@ -88,7 +88,7 @@ pnpm run build:cloudflare && pnpm run check:free-tier
 
 ## 運用(`scripts/mod.py`)
 
-荒らしの片づけと予算の確かめは `scripts/mod.py` 1 本で行う(設計書 Q4)。中身は `wrangler d1 execute`。配った港に当てるときは `--remote`(要 `pnpm exec wrangler login`)、`wrangler dev` のローカルの D1 には `--local` を付ける。どちらかを必ず選ぶ。
+荒らしの片づけと予算の確かめは `scripts/mod.py` 1 本で行う(設計書 Q4)。中身は `wrangler d1 execute`。配った港に当てるときは `--remote`(トークンの渡し方は scripts/mod.py の docstring)、`wrangler dev` のローカルの D1 には `--local` を付ける。どちらかを必ず選ぶ。
 
 ```bash
 uv run scripts/mod.py --remote hide <年代記の id>          # 一覧と訪問から隠す。もう隠れていれば、隠した時刻はそのまま
