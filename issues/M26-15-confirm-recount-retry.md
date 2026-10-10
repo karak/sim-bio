@@ -1,7 +1,7 @@
 ---
 id: M26-15
 title: 照合の後の引き直しが失敗すると、確かめた人の数が「まだ誰もたどっていない」のまま残る
-status: in_progress
+status: review
 milestone: M26
 plan: null
 depends_on: []
@@ -11,6 +11,10 @@ evidence:
   - "tests/unit/harbor.client.test.ts '照合の後の引き直し recount (M26-15)' の 3 本 (修正前に赤を確認: recount is not a function)"
   - "17e4fce tests/e2e/harbor.spec.ts 'M26-15: 照合の後の引き直しが 1 回落ちても…' (修正前に赤を確認: 30 秒待っても「まだ誰もたどっていない」)"
   - "pnpm run check 通過 (unit 1289・worker 66)。E2E harbor・confirm を --repeat-each 3 で 78 本通過、flaky 無し"
+  - "案 b: 9b9b24f tests/unit/ui.harborText.test.ts '照合の後の引き直し (M26-15 案 b)…' と '…読み直して後の読みが行を持ったら…' (修正前に赤: recountLineOf が無い)"
+  - "案 b: 9b9b24f tests/e2e/harbor.spec.ts 'M26-15 案 b: 読み終えてから数が届くまでは途中の行…' と 'M26-15 案 b: 引き直しが最後まで届かなければ…' (修正前に赤: 「まだ誰もたどっていない」のまま)"
+  - "案 b: 8608f6a src/ui/harborText.ts の RECOUNT_ASKING_TEXT・RECOUNT_DROPPED_TEXT・recountLineOf、src/ui/HarborVisit.ts の reader。586c042 引き直しが投げても途中の行を残さない (レビュー)"
+  - "案 b: pnpm run check 通過 (unit 1291・worker 66・scripts 286)。E2E harbor・confirm を --repeat-each 3 で 84 本中 82 本通過。落ちた 2 本は M19-09 の一連の harbor.spec.ts:74 (観察画面の帯「0 年 · 夏」、年表を読む前) で、単独の --repeat-each 3 では 3 本通過"
 
 ---
 
@@ -46,8 +50,8 @@ evidence:
 - [x] 引き直しの 1 回目が閉港でも数が届く試験 (単体・E2E) が通る。直す前に赤
 - [x] 港に無いときは問い直さず、最後まで閉港なら null と `harbor.recount.dropped` の 1 行 (単体)
 - [x] `pnpm run check` と港・照合の E2E が通る
-- [ ] 案 b: 引き直しを待つ間は途中の行、数が届けば数の行、最後まで届かなければ数を言わない行 (E2E)。読み直しとの競りで前の読みが行を書き戻さない (単体)。直す前に赤
-- [ ] 訪問の板の基準画 (HBR-007) が変わらない
+- [x] 案 b: 引き直しを待つ間は途中の行、数が届けば数の行、最後まで届かなければ数を言わない行 (E2E)。読み直しとの競りで前の読みが行を書き戻さない (単体)。直す前に赤
+- [x] 訪問の板の基準画 (HBR-007) が変わらない
 
 ## 作業ログ
 
@@ -55,3 +59,5 @@ evidence:
 - 2026-10-10: 実装 (87c5140・17e4fce)。単体と E2E を先に書いて赤を確かめてから直した。E2E は confirm の後の最初の引き直し (GET) だけを page.route で網の失敗にする。
 - 2026-10-10: 別 agent (sonnet) の読むだけのレビュー。読み直したときに前の読みの引き直しが後から届いて数を書き戻す競りを直した (ac63ee9)。この守りは単体の試験が無い (reader は Worker の再生を通すので DOM の単体の台が無い)。E2E は待ちの長さを見ない (単体が [1000] を見る)。
 - 2026-10-10: ユーザーの決定で案 b を足す (in_progress に戻す)。
+- 2026-10-10: 案 b を実装 (9b9b24f・8608f6a)。単体と E2E を先に書いて赤を確かめてから直した。読み直しとの競りの決め方を recountLineOf に寄せ、単体で確かめる (前の作業ログの「この守りは単体の試験が無い」を埋めた)。
+- 2026-10-10: 別 agent (sonnet) の読むだけのレビュー。引き直しが投げたときに途中の行が残る隙を塞ぎ、この票の途中の行の最長を照合の 1 往復込みの約 44 秒に直した (586c042)。基準画: HBR-007 の画 1 は読む前 (shots.spec.ts:190)、画 3 は「1 人がたどって確かめた」を待ってから撮る (shots.spec.ts:206・208) ので変わらない。
