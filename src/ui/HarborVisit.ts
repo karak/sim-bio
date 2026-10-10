@@ -96,7 +96,8 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
     if (outcome.kind !== 'done') return;
     recount({ kind: 'asking', run });
     await ctx.harbor.confirm(visit.id, outcome.digest);
-    const again = await ctx.harbor.recount(visit.id);
+    // 引き直しが投げても途中の行を残さず、届かなかったことにする
+    const again = await ctx.harbor.recount(visit.id).catch(() => null);
     recount(again === null ? { kind: 'dropped', run } : { kind: 'counted', run, card: again });
   });
   stop.addEventListener('click', () => ctl?.abort());
