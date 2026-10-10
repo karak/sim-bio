@@ -35,7 +35,8 @@ async function read(page: import('@playwright/test').Page): Promise<Reading> {
 }
 
 test('M27-04: 観察画面の inspect() (計測・小屋・小物・三角形の内訳・地形・個体) が、3 つの視点で fixture と一致する', async ({ page }) => {
-  test.setTimeout(180_000);
+  // 1 本で約 170 秒 (3 視点 × 入りと寄せのコマ送り)。通しで他の spec と並ぶと 180 秒を越えるので余裕を持つ
+  test.setTimeout(360_000);
   await enterObserve(page);
   const got: Record<string, Reading> = {};
   for (const view of OBSERVE_VIEWS) {
