@@ -22,9 +22,9 @@ import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
-import { checkScenarioSave, createScenarioAutosave, resumeScenario, type ScenarioAutosave } from './persist/scenarioSave';
+import { checkScenarioSave, createScenarioAutosave, type ScenarioAutosave } from './persist/scenarioSave';
 import { continueTargetOf, readLastStage, scenarioProgressOf, writeLastStage, type ScenarioProgress } from './persist/lastStage';
-import { checkSlot, putPendingSlot, slotSaveOf, takePendingSlot, type Here, type SlotSave } from './persist/slotSave';
+import { putPendingSlot, slotSaveOf, takePendingSlot, type SlotSave } from './persist/slotSave';
 import type { Chronicle } from './chronicle/chronicle';
 import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
 import type { InterveneResult, RunnerState } from './scenario/ScenarioRunner';
@@ -37,16 +37,14 @@ import { showTitle } from './ui/Title';
 import { markEntered, putOpenTitle, takeTabMarks } from './persist/tabMarks';
 import { askOf, type Risky } from './app/confirmAsk';
 import { scenarioConfigOf } from './app/worldConfig';
-import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, titleHrefOf, type Effect, type Op, type Restore } from './app/place';
+import { restoreIsland } from './app/restore';
+import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedSearchFor, titleHrefOf, type Effect, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
 const DEVTOOLS_BUILT = import.meta.env.DEV || import.meta.env.VITE_DEVTOOLS === '1';
 
 /** タイトルの「続きから」を決めるために置き場の一覧を待つ上限 (ms) */
 const TITLE_LIST_TIMEOUT_MS = 2000;
-
-/** 置き場から戻した島。石板なら runner の状態と年代記も持つ (続きからの復帰 M19-14 と、枠の読込 M19-17) */
-type Restored = { world: World; runner?: RunnerState; chronicle?: Chronicle };
 
 async function boot(): Promise<void> {
   const { log, flushViaBeacon } = createAppLogSink({
@@ -137,46 +135,7 @@ async function boot(): Promise<void> {
   });
   const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
-  const here: Here = head ? { stage: 'scenario', head } : { stage: 'free' };
-  /** 枠とファイルの包みを、今の舞台の島 (石板なら runner の状態と年代記も) に戻す (M19-17)。違う舞台・読めない包みは投げる */
-  const openSlot = (data: SlotSave): Restored => {
-    const checked = checkSlot(data, here);
-    if (!checked.ok) throw new Error(checked.reason);
-    const s = checked.value;
-    const world = World.restore(s.save, { log });
-    return s.stage === 'scenario' ? { world, runner: s.runner, chronicle: s.chronicle } : { world };
-  };
-  const restoreFrom = async (r: Restore): Promise<Restored | null> => {
-    switch (r.from) {
-      case 'slot':
-        // 違う舞台の枠を読むために移ってきた (M19-17 §4)。読めなければ、この舞台の自動の続きで開く。訪問では読まない
-        return localSave.loadSlot(r.slot, openSlot);
-      case 'scenario':
-        // 石板の途中で閉じた島の続き (M19-14): 島・runner の状態・年代記を戻す。無い・判定の出た石板・読めない続きなら石板の初めから。
-        // 訪問 (M19-09) では戻さない (他人の島を訪れているので、自分の続きを差し込まない)
-        return head
-          ? resumeScenario({ store, head, log: persistLog }, (s) => ({
-              world: World.restore(s.save, { log }),
-              runner: s.runner,
-              chronicle: s.chronicle,
-            }))
-          : null;
-      case 'auto':
-        // 閉じる前の続きから (M19-05)
-        return localSave.resume(
-          (save) => ({ world: World.restore(save, { log }) }),
-          (save) => seedMatches(seeded.seed, save.config.seed),
-        );
-    }
-  };
-  let resumed: Restored | null = null;
-  let fromSlot = false;
-  for (const r of booted.restore) {
-    resumed = await restoreFrom(r);
-    fromSlot = resumed !== null && r.from === 'slot';
-    if (resumed) break;
-  }
-  if (pending && !fromSlot) persistLog('warn', 'persist.slot.load.failed', 0, { slot: pending });
+  const { resumed, fromSlot } = await restoreIsland(booted.restore, { localSave, store, head, log, persistLog, seed: seeded.seed, pending });
   let world = resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log });
   // 枠から開いた自由モードの島は、読込と同じくその場で自動の枠に書く
   if (fromSlot) localSave.replaced(world.serialize());
