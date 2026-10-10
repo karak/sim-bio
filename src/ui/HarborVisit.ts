@@ -5,7 +5,7 @@ import type { Harbor } from '../harbor/client';
 import type { ChronicleCard, ChronicleId } from '../harbor/contract';
 import { inscriptionText, islandName, type Inscription } from '../harbor/names';
 import { el } from './el';
-import { confirmText, endingText, HARBOR_CLOSED_TEXT, otherVersionText, readingText, readResultOf, readText, VISIT_MISMATCH_TEXT, VISIT_MISSING_TEXT } from './harborText';
+import { confirmText, endingText, HARBOR_CLOSED_TEXT, otherVersionText, readingText, readResultOf, readText, recountLineOf, type RecountEvent, VISIT_MISMATCH_TEXT, VISIT_MISSING_TEXT } from './harborText';
 
 /** 港の画面の部品が共に使うもの。港のクライアントと碑文のカタログが揃ってから組む */
 export type HarborContext = { harbor: Harbor; inscriptions: readonly Inscription[]; simVersion: string; titleOf(scenarioId: string): string };
@@ -50,12 +50,12 @@ export async function mountVisit(app: HTMLElement, ready: Promise<HarborContext>
     body.append(el('p', { class: 'harbor-line harbor-version' }, VISIT_MISMATCH_TEXT));
     return null;
   }
-  body.append(reader(ctx, visit, chronicle, card, (c) => (confirms.textContent = confirmText(c))));
+  body.append(reader(ctx, visit, chronicle, card, (text) => (confirms.textContent = text)));
   return chronicle;
 }
 
 /** 照合 (「年表を読む」)。再生は重い (Chromium で size 64 の 100 年が 25 秒ほど) ので、明示の操作にし、進みと中断を見せる */
-function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: ChronicleCard, recounted: (c: ChronicleCard) => void): HTMLElement {
+function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: ChronicleCard, countLine: (text: string) => void): HTMLElement {
   const years = visit.island.def.years;
   const start = el('button', { class: 'harbor-chip harbor-primary' }, '年表を読む');
   const stop = el('button', { class: 'harbor-chip', hidden: '' }, 'やめる');
@@ -68,6 +68,11 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
    */
   let runs = 0;
   let shown = 0;
+  const recount = (e: RecountEvent) => {
+    const next = recountLineOf(shown, e);
+    shown = next.shown;
+    if (next.text !== null) countLine(next.text);
+  };
   const progress = (year: number) => {
     bar.setAttribute('aria-valuenow', String(Math.min(year, years)));
     bar.style.setProperty('--read', `${Math.min(1, year / years)}`);
@@ -89,11 +94,10 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
     reading(false);
     start.textContent = r.kind === 'aborted' ? '年表を読む' : 'もう一度読む';
     if (outcome.kind !== 'done') return;
+    recount({ kind: 'asking', run });
     await ctx.harbor.confirm(visit.id, outcome.digest);
     const again = await ctx.harbor.recount(visit.id);
-    if (again === null || run < shown) return;
-    shown = run;
-    recounted(again);
+    recount(again === null ? { kind: 'dropped', run } : { kind: 'counted', run, card: again });
   });
   stop.addEventListener('click', () => ctl?.abort());
   return el(
