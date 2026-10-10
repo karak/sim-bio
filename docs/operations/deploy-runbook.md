@@ -1,6 +1,6 @@
 # 配備の手順書(端末の状態に左右されない形)
 
-この Mac は、いくつもの repo で wrangler を使う。`wrangler login` の OAuth は機械に 1 つだけで(`~/.wrangler` に置かれ、どの repo からも同じものが使われる)、今はこのゲームとは別の Cloudflare アカウントのものになっている。そのため、手元で `wrangler` をそのまま打つ配備は、そのときの端末の状態で結果が変わる。
+この Mac は、いくつもの repo で wrangler を使う。`wrangler login` の OAuth は機械に 1 つだけで(macOS では `~/Library/Preferences/.wrangler`、古い形の `~/.wrangler` の dir があればそこに置かれ、どの repo からも同じものが使われる)、今はこのゲームとは別の Cloudflare アカウントのものになっている。そのため、手元で `wrangler` をそのまま打つ配備は、そのときの端末の状態で結果が変わる。
 
 この手順書は、端末の OAuth を一度も使わずに配る 2 つの道を書く。
 
@@ -8,6 +8,25 @@
 - **控えの道**: 手元の `scripts/deploy.py`(`pnpm run deploy`)。この repo 専用の API トークンを macOS の Keychain から読み、wrangler の子プロセスにだけ環境変数で渡す。Actions が使えないときに使う。
 
 人(H)と AI(A)の分け方、番号(H6・H7・A7〜A9)は docs/operations/cloudflare-deploy.md と同じ。トークンの権限の型は docs/operations/cloudflare-api-token.md。
+
+## 最初に: 資格情報の照合
+
+どの手順の前にも、まず今の端末の状態を照らす。端末がどうなっていても、この手順書の道は変わらない。照合はそれを確かめ、どの道を使うかを言う。
+
+```bash
+pnpm run cf:auth           # uv run scripts/cf_auth.py。wrangler whoami は打たない
+pnpm run cf:auth --whoami  # 端末の OAuth のアカウントも見る(whoami が OAuth のファイルを書き換える)
+```
+
+人の端末で `!` を付けて打つ(Keychain を読むと、初回は macOS が許可を聞く)。出すもの:
+
+1. **端末の wrangler の OAuth**(照らすだけで、使わない): ログインしているか、期限、sim-bio に要る 6 つのスコープ(`account:read user:read workers_scripts:write workers_tail:read d1:write challenge-widgets.write`、cloudflare-deploy.md の H3)がそろっているか。どのアカウントかは `--whoami` のときだけ出し、sim-bio の account が無ければ「sim-bio の account ではない」と出る(付けないときは「アカウント: 分からない」)。どちらでも、この repo のスクリプトは端末の OAuth を使わない。
+   - ファイル(macOS では `~/Library/Preferences/.wrangler/config/default.toml`。`~/.wrangler` の dir があればそちら、`XDG_CONFIG_HOME` があれば `$XDG_CONFIG_HOME/.wrangler`)からは `scopes` と `expiration_time` だけを読む。`oauth_token`・`refresh_token` の値は読まず、出さない。
+   - `--whoami` のときだけ、アカウントを `wrangler whoami --json` で見る(環境の `CLOUDFLARE_*` を外して打つので、端末の OAuth のアカウントが出る)。whoami は期限の切れた OAuth を延ばし、そのファイルを書き換える(ログインし直しはしない)。whoami が答えないとき(網の失敗など)は、ログインしていないとは言わず「whoami が答えない」と出す。whoami はこの Mac では別のアカウントの OAuth を書き換えるので、既定では打たない。
+2. **Keychain のトークン** `sim-bio-local-deploy`(account は `$USER`): 項目が有るか(値を読まずに見る)。有れば値を読み、Cloudflare の API(`GET /accounts/14c725d39e9cf53743be403ab146174f/d1/database`)で、トークンが sim-bio に届き、`biotope-harbor` の id が `wrangler.jsonc` の `4b9db893-5306-4a01-9eb9-4926c2b34d17` と同じかを確かめる。トークンは出さない。
+3. **使う道**: 使えるときは「使う道: Keychain のトークン (sim-bio-local-deploy) を CLOUDFLARE_API_TOKEN として wrangler の子プロセスにだけ渡す。端末の OAuth は使わない」と出て、終了 0。使えないときは「使う道: 無い。止める」と訳(項目が無い → H11・H12。API が断ったときは、返したコード(7403 など)と「別のアカウントのトークンか、権限が足りない」)を出して、終了 1。`wrangler login` では直さない。
+
+`scripts/deploy.py`(3 の控えの道)と `scripts/mod.py --remote` は、同じ照合を最初に行う(どちらも whoami は打たない)。deploy.py はここで Keychain の項目の有る無しだけを見て、値を読むのは `pnpm run check` の後の token の段。mod.py --remote は値を読んで照合し、通ったときだけ wrangler を起こす(照合する D1 は wrangler.jsonc のものなので、--remote には `--config` を付けられない)。主の道(GitHub Actions)は端末に依らないので、照合は要らない。
 
 ## 0. 前提の値(どれも秘密ではない)
 
@@ -72,7 +91,7 @@ gh run watch "$(gh run list --workflow deploy.yml --repo karak/sim-bio --limit 1
 
 ## 3. 控えの道: 手元の `scripts/deploy.py`
 
-端末の OAuth は使わない。`wrangler login` も `wrangler whoami` も打たない。
+端末の OAuth は使わない。`wrangler login` は打たない。`wrangler whoami` は「最初に」の照合で `pnpm run cf:auth --whoami` と頼んだときだけ打つ。
 
 ### 3.1 一度だけの準備(人)
 
@@ -84,6 +103,7 @@ gh run watch "$(gh run list --workflow deploy.yml --repo karak/sim-bio --limit 1
 ### 3.2 配る
 
 ```bash
+pnpm run cf:auth           # 最初に: 資格情報の照合。「使う道: Keychain のトークン」が出てから進む
 pnpm run deploy --dry-run  # 設定と手順を出すだけ。Keychain・wrangler・ネットワークに触れない
 pnpm run deploy            # 本番に配る
 pnpm run deploy --check    # 配る前に pnpm run check も回す
@@ -93,6 +113,7 @@ pnpm run deploy --check    # 配る前に pnpm run check も回す
 
 スクリプトの手順:
 
+0. 資格情報の照合(「最初に」と同じ。whoami は打たず、Keychain は項目の有る無しだけを見る)。項目が無ければ、ほかに何もせずに止まる。
 1. 前の確かめ: 作業の木が綺麗か(未追跡は `deploy.config.json` の `untracked_ok` の下だけ許す)、`git fetch origin main` の後、HEAD の木が `origin/main` の木と同じか(違えば止まる。`--allow-branch` で外せる)、追跡している glb・png(repo の全体)が git LFS のポインタのままでないか。
 2. `--check` のときは `pnpm run check`。
 3. Keychain からトークンを読み、Cloudflare の API(`GET /accounts/<id>/d1/database`)で、トークンが sim-bio に届き、`biotope-harbor` の id が `wrangler.jsonc` と同じかを確かめる。違えば wrangler を一度も起こさずに止まる。

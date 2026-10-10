@@ -88,6 +88,8 @@ export type HudHandlers = {
   onSlotLoad(slot: SlotId): void;
   // (M19-17 で変更: 石板の中では「石板を初めから」。今の続きを捨てて Year 0 から)
   onNewIsland(): void;
+  /** 「タイトルへ」(M24-04)。確かめと行き先は main.ts の planOp (title) が決める。訪問でも押せる */
+  onTitle(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
   onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
@@ -167,6 +169,7 @@ export function createHud(
     <div id="hud-works" class="row" hidden><span class="dim">迎撃</span><button id="intercept-btn" class="chip">星を砕け</button><span id="intercept-next" class="dim"></span><span class="dim">星の民が備蓄 ${INTERCEPT_NEED} を積むと撃てる(工事は信仰 ${WORKS_FAITH} 以上で進む)</span><span id="intercept-reason" class="dim"></span></div>
     <div id="hud-ship" class="row" hidden><span class="dim">舟</span><button id="ship-btn" class="chip">舟を作れ</button><span id="ship-hint" class="dim"></span><span id="ship-reason" class="dim"></span></div>
     <div class="row" id="speed-row">${speeds.map((s) => `<button id="speed-${s}" class="chip${s === 1 ? ' on' : ''}">${s === 0 ? '⏸' : s + 'x'}</button>`).join('')}</div>
+    <div class="row"><button id="to-title" class="chip">タイトルへ</button></div>
   </div>
   <div class="hud-right">
   <div class="hud hud-tr row" id="layer-row">${LAYERS.map((l) => `<button id="layer-${l.id}" class="chip${l.id === 'terrain' ? ' on' : ''}">${l.label}</button>`).join('')}<span id="layer-mode" class="row"><button id="layer-mode-density" class="chip on">密度</button><button id="layer-mode-suit" class="chip">住みやすさ</button></span><span id="layer-species" class="row"></span></div>
@@ -365,6 +368,7 @@ export function createHud(
     // (M21-04 で変更: 確かめは main.ts の onNewIsland が確かめのダイアログ (confirm.ts) で。文は confirmAsk.ts)
     h.onNewIsland();
   });
+  $('to-title').addEventListener('click', () => h.onTitle());
   renderSlots();
 
   const canvas = $<HTMLCanvasElement>('graph');

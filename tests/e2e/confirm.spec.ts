@@ -141,6 +141,8 @@ test('M21-04: 枠の読込とファイルの読込は、取り消せば今の島
 });
 
 test('M21-04: 書いてある枠へ保存するときだけ確かめ、取り消せば枠の中身 (一覧の年) は前のまま、受ければ上書きする', async ({ page }) => {
+  // 年が進むのを 2 回待つ (各 30 秒まで)。通しの負荷では既定の 60 秒を超える
+  test.setTimeout(120_000);
   await runFree(page);
   await page.selectOption('#slot-select', 'manual-3');
   await page.click('#slot-save');

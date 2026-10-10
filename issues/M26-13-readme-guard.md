@@ -1,7 +1,7 @@
 ---
 id: M26-13
 title: README に運用の手順が戻らないよう、check で機械的に落とす柵 (scripts/check_readme.py)
-status: review
+status: done
 milestone: M26
 plan: null
 depends_on: []
@@ -48,3 +48,4 @@ evidence:
 - 2026-10-06: 起票 (設計の案、ユーザーの承認待ち)。
 - 2026-10-06: ユーザーの決定「柵はいったんそれでよい」。案の 1〜4 を入れ、長さの上限は 200 行。定期の再評価は M26-14。
 - 2026-10-06: 実装 (4ff7552・5a18eeb)。試験を先に書いて赤 (import 失敗) → 緑。許可表は今の見出し 11 個、印は wrangler (deploy|login|secret|tail|rollback)・pnpm run deploy・scripts/deploy.py・gh (secret|variable|workflow run|api -X)・scripts/mod.py・--remote・security (add|find)-generic-password、上限 200 行 (今は 169)。別 agent (opus) の読むだけのレビューで、コードの塊の中のリンク免除・見出しの形 (字下げ・setext)・fence の閉じ方・配備の印・票の誤警告を直した。今 open の票で警告に出るものは無い。表の行にリンクと印が同居すると通る (案の通り、リンクを含む行は許す)。
+- 2026-10-07: PR #7 で main へ (cdbfa30)。main の CI 通過 (run 37474834082)。CI の途中で落ちた confirm.spec:143 (読み直しで自動保存の年に戻る) は 29089b1 で直した。done。

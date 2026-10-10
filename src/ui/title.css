@@ -1,0 +1,59 @@
+/* タイトル画面 (M24-01)。背景の主役は右 2/3、メニューとロゴは左 1/3 の暗い帯の上 (狭い画面は下半分) */
+.title { position: absolute; inset: 0; z-index: 50; overflow: hidden; background: #0b1218; color: #e9eff3; font-family: system-ui, sans-serif; }
+.title-demo { position: absolute; inset: 0; pointer-events: none; }
+.title-demo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; user-select: none; animation: title-slide var(--title-cycle, 80s) linear var(--title-delay, 0s) infinite backwards; }
+.title-demo.still img { animation: none; opacity: 1; transform: scale(1.06); }
+/* 1 枚の持ち分は 1 周の 1/4 (20 s)。寄りながら右から左へ流し、前後 1/5 で重ねて入れ替える */
+@keyframes title-slide {
+  0% { opacity: 0; transform: scale(1.14) translateX(3%); }
+  5% { opacity: 1; }
+  25% { opacity: 1; }
+  30% { opacity: 0; transform: scale(1.08) translateX(-3%); }
+  100% { opacity: 0; transform: scale(1.08) translateX(-3%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .title-demo img { animation: none; }
+  .title-demo img:first-child { opacity: 1; }
+}
+/* 字の地の帯 (不透明度 0.55 以上)。帯のいちばん明るい所 (字の右端) でも 0.7 を下回らない */
+.title-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(7, 12, 17, 0.9) 0%, rgba(7, 12, 17, 0.78) 30%, rgba(7, 12, 17, 0.35) 48%, rgba(7, 12, 17, 0) 62%); }
+.title-body { position: absolute; left: clamp(24px, 6vw, 88px); top: clamp(28px, 9vh, 80px); bottom: clamp(24px, 7vh, 64px); width: min(380px, calc(100% - 48px)); display: flex; flex-direction: column; gap: 10px; }
+.title-logo { display: flex; align-items: center; gap: 14px; margin: 0; font-size: 40px; font-weight: 800; letter-spacing: 0.08em; line-height: 1.1; }
+.title-logo-mark { width: 56px; height: 80px; flex: none; }
+.title-logo-mark .glow { fill: #5ff3ea; filter: drop-shadow(0 0 3px rgba(95, 243, 234, 0.85)); }
+.title-logo-mark .glow.line { fill: none; stroke: #5ff3ea; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.title-logo-text { padding-bottom: 6px; border-bottom: 1px solid rgba(95, 243, 234, 0.55); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
+.title-tagline { margin: 0 0 auto; color: #c9d6df; font-size: 15px; letter-spacing: 0.12em; }
+.title-menu { display: flex; flex-direction: column; gap: 4px; }
+.title-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 14px; border: 0; border-left: 3px solid transparent; border-radius: 4px; background: transparent; color: #c9d6df; font: inherit; font-size: 18px; text-align: left; cursor: pointer; }
+.title-item.default { color: #ffffff; font-weight: 700; font-size: 21px; }
+.title-item:hover { background: rgba(95, 243, 234, 0.08); color: #ffffff; }
+.title-item:focus { outline: none; border-left-color: #5ff3ea; background: rgba(95, 243, 234, 0.12); color: #ffffff; }
+.title-item:focus-visible { outline: 2px solid #5ff3ea; outline-offset: 1px; }
+.title-item-note { font-size: 13px; font-weight: 400; color: #b5c4cf; }
+.title-hint { margin: 6px 0 0; color: #9fb3c2; font-size: 12px; }
+.title-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px)); padding: 18px 20px; border-radius: 8px; background: rgba(15, 26, 36, 0.96); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); }
+.title-panel h2 { margin: 0 0 8px; font-size: 18px; }
+.title-panel p { margin: 0 0 14px; font-size: 14px; line-height: 1.6; color: #c9d6df; }
+.title-panel-back { background: #233544; color: #e9eff3; border: 0; border-radius: 10px; padding: 6px 16px; font: inherit; font-size: 14px; cursor: pointer; }
+.title-panel-back:focus-visible { outline: 2px solid #5ff3ea; outline-offset: 2px; }
+/* 狭い画面 (縦長): 背景の主役は上半分、メニューは親指の届く下半分 */
+@media (max-width: 640px), (max-aspect-ratio: 3/4) {
+  /* 画は上 62% に収める (16:9 の画を縦長いっぱいに cover すると、主役の群れが帯の下に隠れる) */
+  .title-demo { bottom: 38%; mask-image: linear-gradient(#000 82%, transparent); }
+  .title-shade { background: linear-gradient(0deg, rgba(7, 12, 17, 0.92) 0%, rgba(7, 12, 17, 0.82) 48%, rgba(7, 12, 17, 0.3) 62%, rgba(7, 12, 17, 0) 72%); }
+  .title-body { left: 16px; right: 16px; width: auto; top: auto; bottom: 20px; gap: 8px; }
+  .title-logo { font-size: 30px; gap: 10px; }
+  .title-logo-mark { width: 40px; height: 58px; }
+  .title-tagline { margin: 0 0 10px; font-size: 13px; }
+  .title-item { padding: 10px 12px; }
+}
+/* 背の低い画面 (横長の電話など): 帯の中で縦に流せるようにし、上へはみ出させない */
+@media (max-height: 480px) {
+  .title-body { top: 12px; bottom: 12px; overflow-y: auto; gap: 6px; }
+  .title-logo { font-size: 26px; }
+  .title-logo-mark { width: 34px; height: 48px; }
+  .title-tagline { margin: 0 0 6px; }
+  .title-item { padding: 6px 12px; font-size: 16px; }
+  .title-item.default { font-size: 18px; }
+}

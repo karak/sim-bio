@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { digestOf } from '../../src/chronicle/digest';
 import { chronicleId, type CargoId, type ChronicleId, type InscriptionId, type TurnstileToken, type WithdrawKey } from '../../src/harbor/contract';
 import { writeRefusal, type WireRequest } from '../../src/harbor/wire';
-import { createHarbor, type HumanAnswer } from '../../src/harbor/client';
+import { createHarbor, RECOUNT_BACKOFF_MS, type HumanAnswer } from '../../src/harbor/client';
 import { createMemoryHarborStore, type HarborStore } from '../../src/persist/harborStore';
 import { catalogFrom, createFakeHarbor, DUMMY_TOKEN, type FakeReply } from '../fixtures/fakeHarbor';
 import { FIXTURE_CHRONICLE, FIXTURE_CHRONICLE_ID } from '../fixtures/chronicle';
@@ -33,6 +33,8 @@ function harness(opts: { store?: HarborStore; human?: HumanAnswer['kind']; baseU
     return new Response(r.body, { status: r.status, headers: r.headers });
   };
   const human = opts.human ?? 'token';
+  const logs: { level: string; event: string; extra?: Record<string, unknown> }[] = [];
+  const waits: number[] = [];
   const harbor = createHarbor({
     baseUrl: 'baseUrl' in opts ? opts.baseUrl : 'https://harbor.test',
     linkBase: 'https://island.test',
@@ -42,8 +44,12 @@ function harness(opts: { store?: HarborStore; human?: HumanAnswer['kind']; baseU
     turnstile: async (): Promise<HumanAnswer> => (human === 'token' ? { kind: 'token', token: DUMMY_TOKEN as TurnstileToken } : { kind: human }),
     newKey: () => KEYS[keys++ % KEYS.length],
     headers: opts.headers,
+    log: (level, event, extra) => logs.push({ level, event, extra }),
+    wait: async (ms) => {
+      waits.push(ms);
+    },
   });
-  return { harbor, store, fake, sent, answerWith: (w: Wire) => (answer = w), openAgain: () => (answer = (w) => fake.serve(w)) };
+  return { harbor, store, fake, sent, logs, waits, answerWith: (w: Wire) => (answer = w), openAgain: () => (answer = (w) => fake.serve(w)) };
 }
 
 const refusal = (r: Parameters<typeof writeRefusal>[0]): FakeReply => ({ ...writeRefusal(r), headers: { 'content-type': 'application/json' } });
@@ -194,6 +200,52 @@ describe('港のクライアント createHarbor (M19-09、設計書 §5.2)', () 
     expect(h.fake.ledger.get(id)?.card).toMatchObject({ confirms: 1, mismatches: 0 });
     h.answerWith(CLOSED_REPLIES[2][1]);
     await expect(h.harbor.confirm(id, digest)).resolves.toBeUndefined();
+  });
+
+  describe('照合の後の引き直し recount (M26-15)', () => {
+    const visits = (sent: readonly WireRequest[]) => sent.filter((w) => w.method === 'GET' && w.path === `/api/v1/chronicles/${id}`);
+
+    it('引き直しの 1 回目が閉港 (網の失敗) でも、間を置いて問い直し、確かめた人の数が届く', async () => {
+      const h = harness();
+      await h.harbor.publish(island);
+      await h.harbor.confirm(id, digest);
+      let first = true;
+      h.answerWith((w) => {
+        if (first && w.method === 'GET') {
+          first = false;
+          return Promise.reject(new TypeError('Failed to fetch'));
+        }
+        return h.fake.serve(w);
+      });
+      const before = h.sent.length;
+
+      const card = await h.harbor.recount(id);
+
+      expect(card).toMatchObject({ id, confirms: 1, mismatches: 0 });
+      expect(visits(h.sent.slice(before))).toHaveLength(2);
+      expect(h.waits).toEqual([RECOUNT_BACKOFF_MS[0]]);
+      expect(h.logs.filter((l) => l.event === 'harbor.recount.dropped')).toEqual([]);
+    });
+
+    it('港に無い (取り下げ済み) なら問い直さずに null', async () => {
+      const h = harness();
+      expect(await h.harbor.recount(id)).toBeNull();
+      expect(visits(h.sent)).toHaveLength(1);
+      expect(h.waits).toEqual([]);
+    });
+
+    it('最後まで閉港なら、決まった回数だけ問い直して null を返し、harbor.recount.dropped を 1 行残す (投げない)', async () => {
+      const h = harness();
+      await h.harbor.publish(island);
+      h.answerWith(CLOSED_REPLIES[0][1]);
+      const before = h.sent.length;
+
+      await expect(h.harbor.recount(id)).resolves.toBeNull();
+
+      expect(visits(h.sent.slice(before))).toHaveLength(RECOUNT_BACKOFF_MS.length + 1);
+      expect(h.waits).toEqual([...RECOUNT_BACKOFF_MS]);
+      expect(h.logs.filter((l) => l.event === 'harbor.recount.dropped')).toEqual([{ level: 'info', event: 'harbor.recount.dropped', extra: { id, tries: RECOUNT_BACKOFF_MS.length + 1 } }]);
+    });
   });
 
   it('通報は人間確認の札を添える。閉港は closed、札が落ちれば not_human', async () => {

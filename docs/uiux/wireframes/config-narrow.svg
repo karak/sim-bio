@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" font-family="Hiragino Sans, Noto Sans JP, system-ui, sans-serif">
+<title>コンフィグ (狭い画面)</title>
+<rect width="390" height="844" fill="#f2f2f2"/>
+<rect x="0" y="0" width="390" height="844" rx="0" fill="#fff" stroke="#fff" stroke-width="1.5"/>
+<rect x="16" y="16" width="96" height="36" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="32" y="38.9" font-size="14" fill="#222" text-anchor="start" font-weight="normal">← 戻る</text>
+<text x="132" y="41" font-size="20" fill="#222" text-anchor="start" font-weight="bold">コンフィグ</text>
+<text x="374" y="40" font-size="12" fill="#888" text-anchor="end" font-weight="normal">Esc でタイトルへ</text>
+<text x="16" y="100" font-size="17" fill="#222" text-anchor="start" font-weight="bold">画質</text>
+<text x="16" y="122" font-size="12" fill="#888" text-anchor="start" font-weight="normal">観察画面の影・草・解像度</text>
+<rect x="16" y="138" width="119" height="36" rx="0" fill="#555" stroke="#888" stroke-width="1.5"/>
+<text x="75.5" y="162" font-size="14" fill="#fff" text-anchor="middle" font-weight="normal">自動</text>
+<rect x="135" y="138" width="119" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="194.5" y="162" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">軽い</text>
+<rect x="254" y="138" width="119" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="313.5" y="162" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">きれい</text>
+<text x="16" y="232" font-size="17" fill="#222" text-anchor="start" font-weight="bold">動きを減らす</text>
+<text x="16" y="254" font-size="12" fill="#888" text-anchor="start" font-weight="normal">背景の動き・ピンの揺れ</text>
+<rect x="16" y="270" width="119" height="36" rx="0" fill="#555" stroke="#888" stroke-width="1.5"/>
+<text x="75.5" y="294" font-size="14" fill="#fff" text-anchor="middle" font-weight="normal">OS に従う</text>
+<rect x="135" y="270" width="119" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="194.5" y="294" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">入</text>
+<rect x="254" y="270" width="119" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="313.5" y="294" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">切</text>
+<text x="16" y="364" font-size="17" fill="#222" text-anchor="start" font-weight="bold">最初の速さ</text>
+<text x="16" y="386" font-size="12" fill="#888" text-anchor="start" font-weight="normal">島を開いたときの速さ (いまは 1x)</text>
+<rect x="16" y="402" width="179" height="36" rx="0" fill="#555" stroke="#888" stroke-width="1.5"/>
+<text x="105.5" y="426" font-size="14" fill="#fff" text-anchor="middle" font-weight="normal">1x</text>
+<rect x="195" y="402" width="179" height="36" rx="0" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="284.5" y="426" font-size="14" fill="#222" text-anchor="middle" font-weight="normal">10x</text>
+<text x="16" y="500" font-size="13" fill="#888" text-anchor="start" font-weight="normal">変えた値はその場で保存</text>
+<rect x="16" y="520" width="358" height="48" rx="6" fill="#fff" stroke="#888" stroke-width="1.5"/>
+<text x="32" y="549.25" font-size="15" fill="#222" text-anchor="start" font-weight="normal">既定に戻す</text>
+<text x="378" y="834" font-size="11" fill="#888" text-anchor="end" font-weight="normal">config-narrow 390x844</text>
+</svg>

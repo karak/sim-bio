@@ -28,6 +28,28 @@ export function confirmText(card: Pick<ChronicleCard, 'confirms' | 'mismatches'>
   return card.mismatches > 0 ? `${confirmed}。${card.mismatches} 人は違う結末になった` : confirmed;
 }
 
+/** 照合の後の引き直し (M26-15 案 b)。読み終えてから数が届くまで、古い数の代わりに出す */
+export const RECOUNT_ASKING_TEXT = '確かめた人の数を港から引いている…';
+/** 引き直しが最後まで届かなかったとき。照合を送った後なので前の数は古く、数を言わない */
+export const RECOUNT_DROPPED_TEXT = '確かめた人の数は、次に訪れたときに見える';
+
+export type RecountEvent = { kind: 'asking' | 'dropped'; run: number } | { kind: 'counted'; run: number; card: Pick<ChronicleCard, 'confirms' | 'mismatches'> };
+
+/**
+ * 確かめた人の数の行を、何回目の読み (run) の出来事で書くか。shown は行を持つ読み。途中の行を書いた読みが行を持ち、
+ * それより前の読みの答え (数も、届かなかったことも) は書かない (text が null)
+ */
+export function recountLineOf(shown: number, e: RecountEvent): { shown: number; text: string | null } {
+  switch (e.kind) {
+    case 'asking':
+      return { shown: e.run, text: RECOUNT_ASKING_TEXT };
+    case 'counted':
+      return e.run < shown ? { shown, text: null } : { shown: e.run, text: confirmText(e.card) };
+    case 'dropped':
+      return { shown, text: e.run === shown ? RECOUNT_DROPPED_TEXT : null };
+  }
+}
+
 /** 版違いの島は回し直せないので、刻まれた要約だけを見せる (設計書 §2.2・§8-2) */
 export function otherVersionText(simVersion: string): string {
   return `別の版 (版 ${simVersion}) の島。今の版では回し直せないので、刻まれた要約だけを見せる`;
