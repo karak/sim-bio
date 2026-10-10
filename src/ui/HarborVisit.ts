@@ -63,8 +63,9 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
   const status = el('p', { class: 'harbor-line', id: 'harbor-read-status', role: 'status' });
   let ctl: AbortController | null = null;
   /**
-   * 何回目の読みか (runs) と、数を書いた読み (shown)。引き直しは閉港なら間を置いて問い直すので、読み直すと前の読みの答えが
-   * 後から届くことがある。後の読みの数を書いた後に届いた前の読みの答えは書かない (M26-15)
+   * 何回目の読みか (runs) と、確かめた人の数の行を持つ読み (shown。途中の行を書いた読み)。引き直しは閉港なら間を置いて問い直すので、
+   * 読み直すと前の読みの答えが後から届くことがある。後の読みが行を持った後に届いた前の読みの答えは、数も届かなかったことも書かない
+   * (M26-15。決め方は recountLineOf)
    */
   let runs = 0;
   let shown = 0;
