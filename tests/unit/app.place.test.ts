@@ -273,7 +273,7 @@ describe('タイトルへ移る先 titleHrefOf (M24-04、2026-10-10 の決定)',
     ['検索語が無ければ素の /', '', '/'],
     ['見守り手と開発の板は残す (自由モードへと同じ)', '?player=a&dev=1', '/?player=a&dev=1'],
     ['舞台を決める検索語 (石板・近道・seed・訪問) は落とす', `?scenario=test-quick&shortcut=alive&seed=9&player=a`, '/?player=a'],
-    ['訪問中でも見守り手だけ残す', `?scenario=test-quick&visit=${visitId}&dev=1`, '/?dev=1'],
+    ['訪問中でも開発の板の印 (dev=1) は残し、訪問は落とす', `?scenario=test-quick&visit=${visitId}&dev=1`, '/?dev=1'],
     ['dev=1 でない dev は落とす', '?dev=0&player=b', '/?player=b'],
   ];
   it.each(rows)('titleHrefOf: %s', (_why, search, href) => {
