@@ -379,11 +379,11 @@ def check_auth(
     problem: str | None = None
     account = target.keychain_account or env.get("USER")
     if not account:
-        lines.append(f"Keychain の service {target.keychain_service}:")
+        lines.append("Keychain のトークン:")
         problem = "Keychain の account が決まらない (keychain_account も $USER も無い)"
     else:
         where = _keychain_where(target.keychain_service, account)
-        lines.append(f"{where}:")
+        lines.append("Keychain のトークン:")
         found = run(
             (
                 "security",
@@ -426,8 +426,8 @@ def check_auth(
         return AuthReport(tuple(lines), True, token)
     lines.append(f"  {problem}")
     lines.append(
-        "使う道: 無い。止める。wrangler は起こしていない。"
-        f" wrangler login では直さない (ほかの repo の資格情報を壊す。{RUNBOOK} の 1)"
+        "使う道: 無い。止める (配備・D1 の wrangler は起こさない)。"
+        f"wrangler login では直さない (ほかの repo の資格情報を壊す。{RUNBOOK} の 1)"
     )
     return AuthReport(tuple(lines), False, None, problem)
 

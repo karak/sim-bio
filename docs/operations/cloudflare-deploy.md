@@ -9,6 +9,8 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 
 2 回目からの配備は、端末の `wrangler login` に依らない手順書 docs/operations/deploy-runbook.md で行う(手元の OAuth が別のアカウントのものになっていて 7403 で止まったため、2026-10-05)。
 
+どの手順の前にも、まず `pnpm run cf:auth` で資格情報を照合する(deploy-runbook.md の「最初に」)。端末の OAuth のアカウントとスコープを照らし、Keychain のトークンが sim-bio に届くかを確かめて、どの道を使うかを言う。下の表の `pnpm exec wrangler …` を手元でそのまま打つと端末の OAuth を使うので、手元では deploy-runbook.md の形(トークンを環境で渡す)で打つ。
+
 ## 0. 前提の値
 
 | 名前 | 値 | 決める人 |
@@ -26,6 +28,7 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 | H2 | 人(済 2026-09-27、`dev-sim-bio`) | workers.dev のサブドメインを決める | ダッシュボード → Workers & Pages → Account details の Subdomain |
 | H3 | 人(済 2026-09-27) | 手元の wrangler をこのアカウントでログインする(ブラウザで OAuth、sim-bio だけを許し、スコープを絞る) | `pnpm exec wrangler login --scopes account:read user:read workers_scripts:write workers_tail:read d1:write challenge-widgets.write` |
 | A1 | AI(済 2026-09-27、sim-bio `14c725d39e9cf53743be403ab146174f`) | ログインしたアカウントを確かめる。account_id を控える(秘密ではない)。whoami が見るのは端末の OAuth で、配備のトークンではない(今は別のアカウントが出る) | `pnpm exec wrangler whoami` |
+| A1a | AI・人 | 今の端末の状態を照らす。端末の OAuth のアカウントと、H3 の 6 つのスコープがそろうかを出し(使わない)、Keychain のトークンが sim-bio に届くかを確かめる。H3・A1 は 2026-09-27 の記録で、今の配備は端末のログインに頼らない | `pnpm run cf:auth`(deploy-runbook.md の「最初に」) |
 
 ## 2. 港の D1(AI)
 
