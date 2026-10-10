@@ -1,11 +1,13 @@
 # Cloudflare への配備の手順(人の作業と AI の作業)
 
-wrangler を前提にした、初回の配備と配ったあとの確かめの手順。設計は docs/design/2026-09-26-cloudflare-architecture.md、ふだんの運用は README の「Cloudflare へ配る」「課金にしない」「運用」。
+wrangler を前提にした、初回の配備と配ったあとの確かめの手順。設計は docs/design/2026-09-26-cloudflare-architecture.md、ふだんの運用は docs/operations/cloudflare.md の「課金にしない」「運用」、配備は docs/operations/deploy-runbook.md。
 
 - **人(H)**: 本人のアカウント・支払い・秘密の値・ブラウザでのログインが要る作業。AI は代われない。
 - **AI(A)**: 端末で打てる作業。どれもユーザーの許可を得てから行う。リモートに触れる(Cloudflare・GitHub に書く)ものは特に、その都度許可を得る。
 
 どのコマンドも、このリポジトリでまだ実際に打ってはいない(配備の許可が出ていないため)。形は wrangler・gh の docs と `--help` に合わせた。コマンドはすべて repo の根(feat/m19 か、それを取り込んだ main の checkout)で打つ。`pnpm install --frozen-lockfile` 済みとする。
+
+2 回目からの配備は、端末の `wrangler login` に依らない手順書 docs/operations/deploy-runbook.md で行う(手元の OAuth が別のアカウントのものになっていて 7403 で止まったため、2026-10-05)。
 
 ## 0. 前提の値
 

@@ -14,7 +14,7 @@ concurrency:
 jobs:
   deploy:
     # 「Run workflow」は branch を選べる。レビュー前の branch を出さないよう main だけにする。
-    # Secrets は Environment production に置き、その Deployment branches も main だけにする (README「Cloudflare へ配る」)
+    # Secrets は Environment production に置き、その Deployment branches も main だけにする (docs/operations/deploy-runbook.md)
     if: github.ref == 'refs/heads/main'
     environment: production
     runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
-      # トークンは GitHub Secrets にだけ置く (README「Cloudflare へ配る」)
+      # CI のトークンは Environment production の secret に置く (手元用は別のトークンを Keychain に。docs/operations/deploy-runbook.md)
       - run: pnpm exec wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

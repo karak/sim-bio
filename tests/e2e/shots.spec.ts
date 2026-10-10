@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { writeRequest } from '../../src/harbor/wire';
 import { settle, selection, tilt, type View } from '../driver/camera';
+import { cropRectAround } from '../driver/crop';
 import { installFrames, stepFrames, withRealFrames } from '../driver/frames';
 import { routeHarbor } from '../driver/harbor';
 import { advanceTo, openPaused } from '../driver/island';
@@ -75,7 +76,14 @@ function shotsOf(info: TestInfo) {
   let n = 0;
   // pixels: false は画素の基準を持たない画 (観察画面の 3D)。ずれの基準ではなく、pnpm run judge の採点表で見る
   // masks は要素名ごとに、基準画の比べで塗りつぶす要素 (画ごとに変わる字)。noBaseline は lens だけ掛けて基準画を持たない要素名 (M25-14)
-  return async (page: Page, shown: Record<string, Locator>, canvas?: Locator, pixels = true, { masks = {}, noBaseline = [] }: { masks?: Record<string, Locator[]>; noBaseline?: string[] } = {}) => {
+  // cropAround は画面 (ページ) の位置。全体の画 <ID>-<n>.png に加えて、その辺りの切り抜きを <ID>-<n>-<name>.png に書く (M26-11)。この名前は画の名前の形に合わず、shots の一覧には数えない。judge が crops.json で指す
+  return async (
+    page: Page,
+    shown: Record<string, Locator>,
+    canvas?: Locator,
+    pixels = true,
+    { masks = {}, noBaseline = [], cropAround }: { masks?: Record<string, Locator[]>; noBaseline?: string[]; cropAround?: { name: string; at: { x: number; y: number } } } = {},
+  ) => {
     const targets = Object.values(shown);
     if (targets.length === 0) throw new Error('写すものを 1 つ以上渡す');
     for (const t of targets) await expect(t).toBeInViewport({ ratio: 1 });
@@ -92,6 +100,11 @@ function shotsOf(info: TestInfo) {
     }
     if (isAuto) return;
     await page.screenshot({ path: join(dir, `${id}-${n}.png`), style: HIDE_DEV });
+    if (cropAround) {
+      const frame = page.viewportSize();
+      if (!frame) throw new Error('viewport が無い');
+      await page.screenshot({ path: join(dir, `${id}-${n}-${cropAround.name}.png`), style: HIDE_DEV, clip: cropRectAround(cropAround.at, frame) });
+    }
   };
 }
 
@@ -189,7 +202,8 @@ test('HBR-007: 訪問の画面 (島の名前と碑文の板・観察画面の帯
 
   await plaque.getByRole('button', { name: '年表を読む' }).click();
   await expect(plaque.locator('#harbor-read-status')).toHaveText('読み終えた。港の記録と同じ結末になった', { timeout: 90_000 });
-  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた');
+  // 確かめた人の数は、読み終えの後に港へ 2 往復してから書き換わる (harbor.spec の M19-09 と同じ待ち)
+  await expect(plaque.locator('#harbor-visit-confirms')).toHaveText('1 人がたどって確かめた', { timeout: 30_000 });
   await expect(plaque.getByRole('progressbar', { name: '年表を読む進み' })).toHaveAttribute('aria-valuenow', '5');
   await withRealFrames(visitor, () => shoot(visitor, { 年表の結末: plaque.locator('#harbor-read-status'), 読み終えた訪問の板: plaque }, undefined, true, { masks: { 読み終えた訪問の板: [plaque.getByRole('heading')] } }));
 });
@@ -270,6 +284,15 @@ const seen = (v: View | null | undefined) => v && { sea: v.sea, cellHidden: v.ce
 /** 寄ったカメラ (45°) から倒して、選んだセルを手前の丘に隠す角 */
 const LOW = 35;
 
+/** 選んだセルの面の、ページの上の位置 (probe の screen は canvas の上の位置)。切り抜きの真ん中 */
+async function cellAt(page: Page, box: { x: number; y: number }) {
+  const screen = (await selection(page))?.view?.screen;
+  if (!screen) throw new Error('選んだセルの screen が読めない');
+  return { x: box.x + screen.x, y: box.y + screen.y };
+}
+
+const AROUND_CELL = 'セルの辺り';
+
 test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄ったカメラ・丘に隠れたセル)', async ({ page }, info) => {
   test.setTimeout(240_000);
   const shoot = shotsOf(info);
@@ -283,14 +306,14 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
   await expect(cellInfo).toContainText(/^セル \(\d+, \d+\)/);
   await expect.poll(async () => seen((await selection(page))?.view), { timeout: 15_000 }).toEqual(visible);
-  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'));
+  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'), true, { cropAround: { name: AROUND_CELL, at: await cellAt(page, box) } });
 
   const far = (await selection(page))?.marker?.scale ?? 0;
   for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -400);
   await settle(page);
   expect((await selection(page))?.marker?.scale).toBeLessThan(far / 2);
   expect(seen((await selection(page))?.view)).toEqual(visible);
-  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'));
+  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'), true, { cropAround: { name: AROUND_CELL, at: await cellAt(page, box) } });
 
   // 丘に隠れたセル: 倒したカメラで、陸のセルの面が隠れ印の頭は見えるセルを探し、寄ったカメラに戻してそのセルを押し、もう一度倒す
   const size = (await selection(page))?.size ?? 0;
@@ -338,7 +361,7 @@ test('SEL-003: 選んだセルの帯とピン (遠い既定のカメラ・寄っ
   }
   expect(view).toEqual({ sea: false, cellHidden: true, markerHidden: false, markerOnScreen: true });
   await expect(cellInfo).not.toContainText('· 海');
-  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'));
+  await shoot(page, { セルの詳細: cellInfo }, page.locator('#scene'), true, { cropAround: { name: AROUND_CELL, at: await cellAt(page, box) } });
 });
 
 test('OBS-002: 観察画面の 3 枚 (集落・群れ・海岸) を止めた時計で撮る', async ({ page }, info) => {

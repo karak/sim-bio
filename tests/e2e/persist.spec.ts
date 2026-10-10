@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { shownTick, TICKS_PER_YEAR } from '../driver/island';
+import { AUTOSAVE_TICKS } from '../../src/persist/autosave';
 
 type Logged = { event: string; slot?: string; tick: number };
 
@@ -102,6 +103,10 @@ test('M19-05: 「新しい島」は確かめてから Year 0 に作り直し (�
   await runUntilAutosaved(page, logs, TICKS_PER_YEAR);
   await expect(page.locator('#hud-year')).not.toHaveText('Year 0');
 
+  // 止めた後も、前の自動保存から AUTOSAVE_TICKS 進んでいれば次のフレームで 1 回書く (M21-10)。書き終えてから before を覚える
+  // (負荷で止める位置が遅れると前の書き込みから 90 tick を超え、確かめの間に書き終わって before と食い違っていた)
+  const pausedAt = await shownTick(page);
+  await expect.poll(() => pausedAt - (saved(logs, 'auto').at(-1)?.tick ?? -Infinity)).toBeLessThan(AUTOSAVE_TICKS);
   const before = await storedAutoTick(page);
   await page.click('#new-island');
   await answerDialog(page, false);

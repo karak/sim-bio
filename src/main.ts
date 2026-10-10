@@ -19,6 +19,7 @@ import { cargoOfHold, planLanding, type LandResult } from './harbor/cargo';
 import { afterVerdictOf } from './harbor/dock';
 import type { DrawnCargo } from './harbor/contract';
 import { createObserveEntry } from './observe/entry';
+import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
@@ -316,10 +317,22 @@ async function boot(): Promise<void> {
   /** やり直しの効かない操作 (M21-04)。確かめと行き先は planOp が決め、ここは確かめてから effects を順に行うだけ */
   const run = (op: Op) => runPlan(planOp(op, at(), titleOf), confirm, perform);
 
+  /** 直近に知らせた見ている種。石板を始め直したとき (restartScenario) に新しい runner へ渡し直す */
+  let viewing: string | null = null;
+  // いま地図で見ている種 (M21-02 D5)。変わったら石板の告知に反映し、ログに残す (e2e が HUD からの通知を確かめる)
+  const viewedSpecies = createViewedSpecies((id, opts) => {
+    viewing = id;
+    if (!runner) return;
+    runner.setViewedSpecies(id, opts);
+    const snap = world.snapshot();
+    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: runner.def.id, id, acknowledge: opts.acknowledge });
+  });
   const hud = createHud(app, {
     onCommand: intervene,
     onSpeed: (s) => loop.setSpeed(s),
     onLayer: (l) => view.setLayer(l),
+    // 種のレイヤーを見ている間はその種の告知を出さない (M21-02 D5: 警告のチップからでも HUD からでも開けば消える)
+    onSpeciesLayer: (id) => viewedSpecies.select(id),
     onSave: slotSave,
     onLoad: (raw) => void run({ kind: 'load', data: slotSaveOf(raw), slot: null }),
     onSlotSave: (slot, overwrites) => void run({ kind: 'slot_save', slot, overwrites }),
@@ -426,6 +439,8 @@ async function boot(): Promise<void> {
       onFrame: (s) => {
         localSave.onTick(s.tick, () => world.serialize());
         scenarioAutosave?.onTick(s.tick);
+        // 観察画面の間は地図を描かないので、種を選んでいても見ていないとみなす
+        viewedSpecies.setObserving(observe.active());
         observe.push(s, runner?.timeline());
         // 選んだセルを 3D の島の上でも示す (M22-10)。選びを解けば (selected = null) 消える
         view.setSelected(selected);
@@ -517,6 +532,8 @@ async function boot(): Promise<void> {
     if (fromSlot) void saveChronicle();
     restartScenario = (from) => {
       runner = scenarioRunner = newRunner(from?.runner);
+      // HUD のレイヤーは始め直しても変わらないので、見ている種を新しい runner にも知らせる。枠から戻した告知は読んでいないので既読にしない
+      scenarioRunner.setViewedSpecies(viewing, { acknowledge: false });
       // 記録器は runner を scenarioRunner 越しに包むので、命令の列だけを枠の年代記 (初めからなら空) に差し替える
       scenarioRecorder?.resume(from?.chronicle ?? { ...scenarioRecorder.current(), commands: [] });
       scenarioRunner.update(world.snapshot());

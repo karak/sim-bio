@@ -153,7 +153,6 @@ test('M21-04: 書いてある枠へ保存するときだけ確かめ、取り消
   await page.click('#speed-100');
   await expect(page.locator('#hud-year')).not.toHaveText(first.replace('枠 3 · ', ''), { timeout: 30_000 });
   await page.click('#speed-0');
-  const second = `枠 3 · ${await page.locator('#hud-year').textContent()}`;
   const over = { title: '枠を上書きする', message: `「${first}」を今の島で上書きしますか (前の保存には戻せません)` };
 
   await page.click('#slot-save');
@@ -161,7 +160,11 @@ test('M21-04: 書いてある枠へ保存するときだけ確かめ、取り消
   await page.reload();
   await expect(label).toHaveText(first);
 
+  // 読み直した島は最後の自動保存の年で、止めた年より前のことがある (低 fps の CI)。年を進め直してから上書きの年を覚える
+  await page.click('#speed-100');
+  await expect(page.locator('#hud-year')).not.toHaveText(first.replace('枠 3 · ', ''), { timeout: 30_000 });
   await page.click('#speed-0');
+  const second = `枠 3 · ${await page.locator('#hud-year').textContent()}`;
   await page.selectOption('#slot-select', 'manual-3');
   await page.click('#slot-save');
   await answer(page, over, true);
