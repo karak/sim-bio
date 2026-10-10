@@ -83,8 +83,8 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
     start.textContent = r.kind === 'aborted' ? '年表を読む' : 'もう一度読む';
     if (outcome.kind !== 'done') return;
     await ctx.harbor.confirm(visit.id, outcome.digest);
-    const again = await ctx.harbor.visit(visit.id);
-    if (again.kind === 'ok') recounted(again.card);
+    const again = await ctx.harbor.recount(visit.id);
+    if (again !== null) recounted(again);
   });
   stop.addEventListener('click', () => ctl?.abort());
   return el(
