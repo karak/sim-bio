@@ -10,7 +10,6 @@ import { createScenarioRunner, type ScenarioRunner } from './scenario/ScenarioRu
 import { stepByYear } from './scenario/stepByYear';
 import type { ScenarioDef } from './scenario/types';
 import type { Command } from './simulation/types';
-import { resolveCivilizationStart } from './simulation/civilization';
 import { TOWER_COST } from './simulation/weatherTower';
 import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
@@ -37,6 +36,7 @@ import { createConfirm } from './ui/confirm';
 import { showTitle } from './ui/Title';
 import { markEntered, putOpenTitle, takeTabMarks } from './persist/tabMarks';
 import { askOf, type Risky } from './app/confirmAsk';
+import { scenarioConfigOf } from './app/worldConfig';
 import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedMatches, seedSearchFor, titleHrefOf, type Effect, type Op, type Restore } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
@@ -115,22 +115,7 @@ async function boot(): Promise<void> {
   // 自由モードの seed (M26-10): URL の seed= (石板・訪問は無視して URL から落とす)。無ければ既定 (world.default.json の 42)
   const seeded = bootSeedOf(location.search, scenario !== null);
   if (seeded.search !== null) history.replaceState(null, '', `${location.pathname}${seeded.search}${location.hash}`);
-  const config: WorldConfig = { ...base, species: species.map((d) => ({ ...d, ...(scenario?.start?.species?.[d.id] ?? {}) })) };
-  if (scenario?.start) {
-    if (scenario.start.seed !== undefined) config.seed = scenario.start.seed;
-    if (scenario.start.size !== undefined) config.size = scenario.start.size;
-    if (scenario.start.tempOffset !== undefined) config.climate.tempOffset = scenario.start.tempOffset;
-    if (scenario.start.rainScale !== undefined) config.climate.rainScale = scenario.start.rainScale;
-    // 文明の初期段階・集落の上書き (M8-02)。home は他のコマンドと同じ規約で -1 なら島の中心
-    config.civilization = resolveCivilizationStart(scenario.start.civilization, config.size);
-    // 輝石の倍率 (M10-02): 脈を薄くする舞台装置
-    if (scenario.start.crystalScale !== undefined) config.crystalScale = scenario.start.crystalScale;
-    // 火山セルの上書き (M8-08)。他のセル指定と同じ規約で -1 なら島の中心。省略時は World の既定 (標高最大の陸セル) のまま
-    if (scenario.start.volcanoCell !== undefined) {
-      const { size } = config;
-      config.volcanoCell = scenario.start.volcanoCell === -1 ? Math.floor(size / 2) * size + Math.floor(size / 2) : scenario.start.volcanoCell;
-    }
-  }
+  const config = scenarioConfigOf(base, species, scenario);
   // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
   const visitId = booted.visitId;
   /** 最後に遊んだ舞台の印 (M24-05)。舞台に入った時と自動保存の時に書く。訪問 (他人の島) では書かない */
