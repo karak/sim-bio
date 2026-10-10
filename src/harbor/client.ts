@@ -55,7 +55,8 @@ export type Harbor = {
   /** 照合の結末を送る。失敗は握りつぶす (照合は善意の付加物) */
   confirm(id: ChronicleId, d: Digest): Promise<void>;
   /**
-   * 照合の後に札を引き直す (M26-15)。閉港なら RECOUNT_BACKOFF_MS の間を置いて問い直し、最後まで閉港なら null (握りつぶす)。
+   * 照合の後に札を引き直す (M26-15)。閉港 (読めない返事・id の食い違いを含む) なら RECOUNT_BACKOFF_MS の間を置いて問い直し、
+   * 最後まで閉港なら null (握りつぶす)。
    * 港に無い (取り下げ済み) も null で、問い直さない
    */
   recount(id: ChronicleId): Promise<ChronicleCard | null>;
@@ -100,12 +101,12 @@ export type HarborDeps = {
   log?: HarborLog;
   /** どの要求にも添える header。開発用の見守り手の名乗り (M19-16) だけが使い、本番では無い */
   headers?: Readonly<Record<string, string>>;
-  /** 問い直しの間を待つ。テストは待たずに間を記録する */
+  /** 問い直しの間を ms だけ待つ。無ければ setTimeout */
   wait?: (ms: number) => Promise<void>;
 };
 
 const REQUEST_TIMEOUT_MS = 10_000;
-/** 引き直しの問い直しの間 (M26-15)。長さ + 1 回まで問う */
+/** 引き直しの問い直しの間 (M26-15)。問うのは最初の 1 回と、この間の数だけ (計 3 回) */
 export const RECOUNT_BACKOFF_MS: readonly number[] = [1_000, 3_000];
 const CLOSED: ReadRefusal = { error: 'closed', reason: 'unknown' };
 

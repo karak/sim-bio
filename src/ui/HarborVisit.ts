@@ -62,6 +62,12 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
   const bar = el('div', { class: 'harbor-track', role: 'progressbar', 'aria-label': '年表を読む進み', 'aria-valuemin': '0', 'aria-valuemax': String(years), 'aria-valuenow': '0', hidden: '' }, el('i'));
   const status = el('p', { class: 'harbor-line', id: 'harbor-read-status', role: 'status' });
   let ctl: AbortController | null = null;
+  /**
+   * 何回目の読みか (runs) と、数を書いた読み (shown)。引き直しは閉港なら間を置いて問い直すので、読み直すと前の読みの答えが
+   * 後から届くことがある。後の読みの数を書いた後に届いた前の読みの答えは書かない (M26-15)
+   */
+  let runs = 0;
+  let shown = 0;
   const progress = (year: number) => {
     bar.setAttribute('aria-valuenow', String(Math.min(year, years)));
     bar.style.setProperty('--read', `${Math.min(1, year / years)}`);
@@ -72,6 +78,7 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
     stop.hidden = !on;
   };
   start.addEventListener('click', async () => {
+    const run = ++runs;
     ctl = new AbortController();
     reading(true);
     bar.hidden = false;
@@ -84,7 +91,9 @@ function reader(ctx: HarborContext, visit: Visit, chronicle: Chronicle, card: Ch
     if (outcome.kind !== 'done') return;
     await ctx.harbor.confirm(visit.id, outcome.digest);
     const again = await ctx.harbor.recount(visit.id);
-    if (again !== null) recounted(again);
+    if (again === null || run < shown) return;
+    shown = run;
+    recounted(again);
   });
   stop.addEventListener('click', () => ctl?.abort());
   return el(
