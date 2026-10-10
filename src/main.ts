@@ -6,27 +6,19 @@ import { createSceneView, type SceneView } from './render/SceneView';
 import { buildAssetTable } from './render/assetTable';
 import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
-import { createScenarioRunner } from './scenario/ScenarioRunner';
 import type { ScenarioDef } from './scenario/types';
 import { TOWER_COST } from './simulation/weatherTower';
-import { exportCargo } from './simulation/ship';
 import { disasterClick, spawnClick } from './ui/clicks';
 import { IDLE, pressStep, type PressInput } from './ui/press';
-import { cargoOfHold } from './harbor/cargo';
-import { afterVerdictOf } from './harbor/dock';
 import { createObserveEntry } from './observe/entry';
 import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
-import { checkScenarioSave, createScenarioAutosave } from './persist/scenarioSave';
+import { checkScenarioSave } from './persist/scenarioSave';
 import { continueTargetOf, readLastStage, scenarioProgressOf, writeLastStage, type ScenarioProgress } from './persist/lastStage';
 import { slotSaveOf, takePendingSlot } from './persist/slotSave';
-import { recordChronicle } from './chronicle/recorder';
-import type { RunnerState } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';
-import { digestOf } from './chronicle/digest';
-import { createPlayback } from './chronicle/playback';
 import { mountHarbor } from './ui/Harbor';
 import { createConfirm } from './ui/confirm';
 import { showTitle } from './ui/Title';
@@ -37,6 +29,7 @@ import { restoreIsland } from './app/restore';
 import { sessionOf } from './app/session';
 import { createEffects, type Nav } from './app/effects';
 import { createIntervene, createLandCargo } from './app/intervene';
+import { createScenarioSession } from './app/scenarioSession';
 import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, planOp, runPlan, searchFor, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
@@ -307,88 +300,9 @@ async function boot(): Promise<void> {
     },
   );
   if (scenario) {
-    const newRunner = (restored?: RunnerState) => createScenarioRunner(dev?.scenarioDef(scenario) ?? scenario, session.world, {
-      ticksPerYear: config.ticksPerYear,
-      onVerdict: (v) => {
-        loop.setSpeed(0);
-        saveChronicle();
-        const chronicle = session.recorder?.current();
-        const after = afterVerdictOf(v.status, { visiting: !!visitId, forced: !!dev?.shortcut, chronicle: !!chronicle });
-        // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
-        const hold = after.hold ? exportCargo(session.world.snapshot()) : undefined;
-        tablet.showVerdict(v, hold);
-        // 空の舟の積荷 (M19-10) は持ち出しと同じ瞬間の snapshot から作り、港に流す
-        const cargo = after.harbor?.cargo && hold ? cargoOfHold(hold) : null;
-        if (chronicle && after.harbor) {
-          void digestOf(session.world.snapshot(), after.harbor.status).then((digest) => {
-            harbor.offerPublish({ chronicle, digest });
-            harbor.settle({ chronicle, digest }, cargo);
-          });
-        }
-        log.write({ ts: new Date().toISOString(), tick: session.world.snapshot().tick, year: session.world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
-      },
-      onWarning: (w) => {
-        const snap = session.world.snapshot();
-        log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.warning', scenario: scenario.id, kind: w.kind, id: w.id, text: w.text });
-      },
-      onPrayer: (e) => {
-        const snap = session.world.snapshot();
-        log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.prayer', scenario: scenario.id, phase: e.phase, kind: e.prayer });
-      },
-      onPowerExhausted: () => {
-        tablet.flash();
-        const snap = session.world.snapshot();
-        log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.power.exhausted', scenario: scenario.id });
-      },
-    }, restored);
-    session.runner = newRunner(resumed?.runner);
-    let scenarioRunner = session.runner;
-    session.recorder = visitId ? null : recordChronicle(
-      { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => session.world.snapshot() },
-      { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
-      () => scenarioRunner.totalsByYear(),
-    );
-    // 石板の途中の島の自動保存 (M19-14) は、記録する島 (自分の島) だけ。訪問している他人の島を自分の続きとして書かない
-    const scenarioRecorder = session.recorder;
-    if (scenarioRecorder) {
-      if (resumed?.chronicle) scenarioRecorder.resume(resumed.chronicle);
-      session.scenarioAutosave = createScenarioAutosave({
-        store,
-        scenarioId: scenario.id,
-        every: AUTOSAVE_TICKS,
-        log: persistLog,
-        from: session.world.snapshot().tick,
-        capture: () => ({ save: session.world.serialize(), runner: scenarioRunner.save(), chronicle: scenarioRecorder.current() }),
-        onSaved: markStage,
-      });
-    }
-    // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る
-    scenarioRunner.update(session.world.snapshot());
-    // 枠から開いた石板は、その場で石板の続きに書く (開き直してもその時点から)
-    if (fromSlot) void saveChronicle();
-    session.restartScenario = (from) => {
-      session.runner = scenarioRunner = newRunner(from?.runner);
-      // HUD のレイヤーは始め直しても変わらないので、見ている種を新しい runner にも知らせる。枠から戻した告知は読んでいないので既読にしない
-      scenarioRunner.setViewedSpecies(session.viewing, { acknowledge: false });
-      // 記録器は runner を scenarioRunner 越しに包むので、命令の列だけを枠の年代記 (初めからなら空) に差し替える
-      scenarioRecorder?.resume(from?.chronicle ?? { ...scenarioRecorder.current(), commands: [] });
-      scenarioRunner.update(session.world.snapshot());
-      void saveChronicle();
-      const verdict = scenarioRunner.verdict();
-      if (verdict.status === 'running') tablet.hideVerdict();
-      else {
-        loop.setSpeed(0);
-        tablet.showVerdict(verdict);
-      }
-    };
-    if (visitId) {
-      void harbor.visitChronicle().then((c) => {
-        if (!c) return;
-        session.scenarioStep = createPlayback(session.world, scenarioRunner, c.commands).step;
-        document.getElementById('speed-10')?.click();
-        requestAnimationFrame(() => void observe.enter());
-      });
-    }
+    createScenarioSession(scenario, {
+      session, config, visiting: !!visitId, defOf: () => dev?.scenarioDef(scenario) ?? scenario, forced: !!dev?.shortcut, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe,
+    });
   }
 
   // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す
