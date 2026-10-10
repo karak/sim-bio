@@ -1,0 +1,4370 @@
+{
+ "集落": {
+  "stats": {
+   "follow": null,
+   "camera": "free",
+   "at": [
+    28,
+    19,
+    -10
+   ],
+   "year": 10,
+   "tick": 3600,
+   "speed": 0,
+   "ship": null,
+   "phase": 0.16,
+   "calls": 79,
+   "triangles": 349486,
+   "deer": 45,
+   "wolf": 47,
+   "rabbit": 54,
+   "folk": 0,
+   "trees": 75,
+   "grass": 3829,
+   "assets": {
+    "deer": true,
+    "belltree": true,
+    "settlement": true,
+    "flora": true,
+    "wolf": true,
+    "rabbit": true
+   }
+  },
+  "huts": [
+   {
+    "x": -14,
+    "y": 6.023030850537916,
+    "z": -8,
+    "ry": 1.4288992721907328
+   },
+   {
+    "x": 12,
+    "y": 12.823038408780988,
+    "z": -12,
+    "ry": -1.1071487177940904
+   },
+   {
+    "x": -4,
+    "y": 10.744230614102555,
+    "z": -20,
+    "ry": 0.27829965900511133
+   }
+  ],
+  "props": [
+   {
+    "name": "slipway",
+    "at": [
+     [
+      -10,
+      1.7054471969727838,
+      53.5
+     ]
+    ]
+   },
+   {
+    "name": "hut",
+    "at": [
+     [
+      -14,
+      6.023030850537916,
+      -8
+     ],
+     [
+      12,
+      12.823038408780988,
+      -12
+     ],
+     [
+      -4,
+      10.744230614102555,
+      -20
+     ]
+    ]
+   },
+   {
+    "name": "stepping_stone",
+    "at": [
+     [
+      -11.909792354812565,
+      6.232242703040954,
+      -7.782211111394544
+     ],
+     [
+      -11.29460945518027,
+      6.280827699919323,
+      -7.492297331108059
+     ],
+     [
+      -10.620029585928302,
+      6.470215494894737,
+      -7.618162338159265
+     ],
+     [
+      10.157479986540173,
+      12.935068493041047,
+      -10.989297274170093
+     ],
+     [
+      9.486659593290238,
+      12.81609869259143,
+      -10.877493875295105
+     ],
+     [
+      9.003668910150282,
+      12.694029525590626,
+      -10.39003105620015
+     ],
+     [
+      -3.34616371560424,
+      10.004262879263049,
+      -18.002777400186062
+     ],
+     [
+      -3.359899771999109,
+      9.74838808786433,
+      -17.322842608640048
+     ],
+     [
+      -2.9697957703848323,
+      9.459988883940524,
+      -16.758290690810938
+     ]
+    ]
+   },
+   {
+    "name": "lantern_post",
+    "at": [
+     [
+      -7,
+      6.785277854062346,
+      -7
+     ],
+     [
+      3,
+      9.501465960496844,
+      -7
+     ],
+     [
+      13,
+      13.30010253053903,
+      -7
+     ],
+     [
+      -7,
+      5.80422426041759,
+      3
+     ],
+     [
+      3,
+      10.064526042646081,
+      3
+     ]
+    ]
+   },
+   {
+    "name": "megalith",
+    "at": [
+     [
+      -12,
+      5.908929644006715,
+      6
+     ],
+     [
+      16,
+      13.091960594389873,
+      2
+     ]
+    ]
+   },
+   {
+    "name": "stone_wall",
+    "at": [
+     [
+      -20,
+      6.265579589610868,
+      -2
+     ],
+     [
+      20,
+      11.749572437529192,
+      -4
+     ]
+    ]
+   },
+   {
+    "name": "woven_screen",
+    "at": [
+     [
+      -10,
+      8.053845396849944,
+      -12
+     ],
+     [
+      9,
+      13.009854972325268,
+      -7
+     ]
+    ]
+   },
+   {
+    "name": "stone_wall_corner",
+    "at": [
+     [
+      -22,
+      5.437535919187825,
+      -18
+     ]
+    ]
+   }
+  ],
+  "breakdown": {
+   "other": {
+    "drawn": 21204,
+    "inView": 18447,
+    "shadow": 1836,
+    "beyond30": 11199,
+    "beyond60": 2581,
+    "instances": 207
+   },
+   "terrain": {
+    "drawn": 45000,
+    "inView": 45000,
+    "shadow": 0,
+    "beyond30": 45000,
+    "beyond60": 0,
+    "instances": 1
+   },
+   "water": {
+    "drawn": 10020,
+    "inView": 10020,
+    "shadow": 0,
+    "beyond30": 10020,
+    "beyond60": 0,
+    "instances": 1
+   },
+   "grass": {
+    "drawn": 23808,
+    "inView": 19568,
+    "shadow": 0,
+    "beyond30": 7866,
+    "beyond60": 4536,
+    "instances": 3829
+   },
+   "belltree": {
+    "drawn": 60823,
+    "inView": 53206,
+    "shadow": 47139,
+    "beyond30": 44409,
+    "beyond60": 2905,
+    "instances": 61
+   },
+   "forest": {
+    "drawn": 6,
+    "inView": 6,
+    "shadow": 1900,
+    "beyond30": 6,
+    "beyond60": 6,
+    "instances": 3
+   },
+   "settlement": {
+    "drawn": 113946,
+    "inView": 113946,
+    "shadow": 10781,
+    "beyond30": 73820,
+    "beyond60": 1020,
+    "instances": 27
+   },
+   "creatures": {
+    "drawn": 35238,
+    "inView": 8512,
+    "shadow": 3824,
+    "beyond30": 35238,
+    "beyond60": 9702,
+    "instances": 73
+   }
+  },
+  "terrainDigest": 1444896288,
+  "agents": [
+   {
+    "id": 1,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -70,
+    "z": -4
+   },
+   {
+    "id": 2,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 10
+   },
+   {
+    "id": 3,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -50,
+    "z": -44
+   },
+   {
+    "id": 4,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -60,
+    "z": -34
+   },
+   {
+    "id": 5,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -56,
+    "z": -36
+   },
+   {
+    "id": 6,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -47,
+    "z": -45
+   },
+   {
+    "id": 7,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -20
+   },
+   {
+    "id": 8,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -54,
+    "z": -56
+   },
+   {
+    "id": 9,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -20
+   },
+   {
+    "id": 10,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -40,
+    "z": -59
+   },
+   {
+    "id": 11,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -56,
+    "z": -36
+   },
+   {
+    "id": 12,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 35,
+    "z": 54
+   },
+   {
+    "id": 13,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 50,
+    "z": -60
+   },
+   {
+    "id": 14,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 15,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 42,
+    "z": 50
+   },
+   {
+    "id": 16,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -54,
+    "z": -45
+   },
+   {
+    "id": 17,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -10
+   },
+   {
+    "id": 18,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 32,
+    "z": 60
+   },
+   {
+    "id": 19,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -49,
+    "z": -56
+   },
+   {
+    "id": 20,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -10
+   },
+   {
+    "id": 21,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 40,
+    "z": 60
+   },
+   {
+    "id": 22,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -40,
+    "z": -51
+   },
+   {
+    "id": 23,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -80,
+    "z": 0
+   },
+   {
+    "id": 24,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 60
+   },
+   {
+    "id": 25,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -34,
+    "z": -54
+   },
+   {
+    "id": 26,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -70,
+    "z": -4
+   },
+   {
+    "id": 27,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -51,
+    "z": -55
+   },
+   {
+    "id": 28,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 40,
+    "z": -51
+   },
+   {
+    "id": 29,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -66,
+    "z": -6
+   },
+   {
+    "id": 30,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -47,
+    "z": -56
+   },
+   {
+    "id": 31,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 46,
+    "z": -49
+   },
+   {
+    "id": 32,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": 10
+   },
+   {
+    "id": 33,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -55,
+    "z": -54
+   },
+   {
+    "id": 34,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 53,
+    "z": -56
+   },
+   {
+    "id": 35,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 10
+   },
+   {
+    "id": 36,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -47,
+    "z": -52
+   },
+   {
+    "id": 37,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -56,
+    "z": -41
+   },
+   {
+    "id": 38,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 20
+   },
+   {
+    "id": 39,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -40,
+    "z": -52
+   },
+   {
+    "id": 40,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -50,
+    "z": -41
+   },
+   {
+    "id": 41,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 20
+   },
+   {
+    "id": 42,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -35,
+    "z": -54
+   },
+   {
+    "id": 43,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -44,
+    "z": -44
+   },
+   {
+    "id": 44,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -60,
+    "z": -50
+   },
+   {
+    "id": 45,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -53,
+    "z": -38
+   },
+   {
+    "id": 46,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -36,
+    "z": -52
+   },
+   {
+    "id": 47,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -50,
+    "z": -50
+   },
+   {
+    "id": 48,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -50,
+    "z": -42
+   },
+   {
+    "id": 49,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 44,
+    "z": -44
+   },
+   {
+    "id": 50,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -57,
+    "z": -36
+   },
+   {
+    "id": 51,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -44,
+    "z": -44
+   },
+   {
+    "id": 52,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 50,
+    "z": -41
+   },
+   {
+    "id": 53,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -50,
+    "z": -44
+   },
+   {
+    "id": 54,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -37,
+    "z": -53
+   },
+   {
+    "id": 55,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 60,
+    "z": -37
+   },
+   {
+    "id": 56,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -46,
+    "z": -46
+   },
+   {
+    "id": 57,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -67,
+    "z": -33
+   },
+   {
+    "id": 58,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -70,
+    "z": -30
+   },
+   {
+    "id": 59,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -37,
+    "z": -55
+   },
+   {
+    "id": 60,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -60,
+    "z": -32
+   },
+   {
+    "id": 61,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -60,
+    "z": -31
+   },
+   {
+    "id": 62,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -30
+   },
+   {
+    "id": 63,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -35
+   },
+   {
+    "id": 64,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -34
+   },
+   {
+    "id": 65,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -60,
+    "z": -34
+   },
+   {
+    "id": 66,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -47,
+    "z": -43
+   },
+   {
+    "id": 67,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -46,
+    "z": -42
+   },
+   {
+    "id": 68,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -56,
+    "z": -36
+   },
+   {
+    "id": 69,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -44,
+    "z": -44
+   },
+   {
+    "id": 70,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -44,
+    "z": -44
+   },
+   {
+    "id": 71,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -47,
+    "z": -45
+   },
+   {
+    "id": 72,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -68,
+    "z": -28
+   },
+   {
+    "id": 73,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 46,
+    "z": -42
+   },
+   {
+    "id": 74,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -46,
+    "z": -46
+   },
+   {
+    "id": 75,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -20
+   },
+   {
+    "id": 76,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 54,
+    "z": -34
+   },
+   {
+    "id": 77,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -20
+   },
+   {
+    "id": 78,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -21
+   },
+   {
+    "id": 79,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 60,
+    "z": -31
+   },
+   {
+    "id": 80,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -20
+   },
+   {
+    "id": 81,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -35
+   },
+   {
+    "id": 82,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 70,
+    "z": -30
+   },
+   {
+    "id": 83,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -20
+   },
+   {
+    "id": 84,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 44,
+    "z": 45
+   },
+   {
+    "id": 85,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -69,
+    "z": -21
+   },
+   {
+    "id": 86,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -56,
+    "z": -36
+   },
+   {
+    "id": 87,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 53,
+    "z": 37
+   },
+   {
+    "id": 88,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": -20
+   },
+   {
+    "id": 89,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -47,
+    "z": -45
+   },
+   {
+    "id": 90,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 35,
+    "z": 54
+   },
+   {
+    "id": 91,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -20
+   },
+   {
+    "id": 92,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 93,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 43,
+    "z": 47
+   },
+   {
+    "id": 94,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -34
+   },
+   {
+    "id": 95,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -10
+   },
+   {
+    "id": 96,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 44,
+    "z": 45
+   },
+   {
+    "id": 97,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 61,
+    "z": -20
+   },
+   {
+    "id": 98,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -10
+   },
+   {
+    "id": 99,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 52,
+    "z": 40
+   },
+   {
+    "id": 100,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 61,
+    "z": -20
+   },
+   {
+    "id": 101,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -10
+   },
+   {
+    "id": 102,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 55,
+    "z": 45
+   },
+   {
+    "id": 103,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 71,
+    "z": -19
+   },
+   {
+    "id": 104,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -10
+   },
+   {
+    "id": 105,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 11,
+    "z": 62
+   },
+   {
+    "id": 106,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 107,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -78,
+    "z": -1
+   },
+   {
+    "id": 108,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 20,
+    "z": 62
+   },
+   {
+    "id": 109,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 110,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -70,
+    "z": -4
+   },
+   {
+    "id": 111,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 35,
+    "z": 54
+   },
+   {
+    "id": 112,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 113,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -66,
+    "z": -6
+   },
+   {
+    "id": 114,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 42,
+    "z": 50
+   },
+   {
+    "id": 115,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 61,
+    "z": -10
+   },
+   {
+    "id": 116,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -65,
+    "z": -7
+   },
+   {
+    "id": 117,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 50
+   },
+   {
+    "id": 118,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 69,
+    "z": -10
+   },
+   {
+    "id": 119,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -8
+   },
+   {
+    "id": 120,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 5,
+    "z": 64
+   },
+   {
+    "id": 121,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -74,
+    "z": -1
+   },
+   {
+    "id": 122,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 10
+   },
+   {
+    "id": 123,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 10,
+    "z": 62
+   },
+   {
+    "id": 124,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -1
+   },
+   {
+    "id": 125,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 10
+   },
+   {
+    "id": 126,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 20,
+    "z": 62
+   },
+   {
+    "id": 127,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -4
+   },
+   {
+    "id": 128,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 10
+   },
+   {
+    "id": 129,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 32,
+    "z": 60
+   },
+   {
+    "id": 130,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -6
+   },
+   {
+    "id": 131,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 10
+   },
+   {
+    "id": 132,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 40,
+    "z": 60
+   },
+   {
+    "id": 133,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 70,
+    "z": -1
+   },
+   {
+    "id": 134,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": 20
+   },
+   {
+    "id": 135,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 60
+   },
+   {
+    "id": 136,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 80,
+    "z": 0
+   },
+   {
+    "id": 137,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 20
+   },
+   {
+    "id": 138,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 2,
+    "z": 70
+   },
+   {
+    "id": 139,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -67,
+    "z": 4
+   },
+   {
+    "id": 140,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 20
+   },
+   {
+    "id": 141,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 15,
+    "z": 70
+   },
+   {
+    "id": 142,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": 10
+   },
+   {
+    "id": 143,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 30
+   },
+   {
+    "id": 144,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 25,
+    "z": 65
+   },
+   {
+    "id": 145,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -67,
+    "z": 14
+   },
+   {
+    "id": 146,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": 30
+   }
+  ]
+ },
+ "群れ": {
+  "stats": {
+   "follow": null,
+   "camera": "free",
+   "at": [
+    48,
+    6,
+    71
+   ],
+   "year": 10,
+   "tick": 3600,
+   "speed": 0,
+   "ship": null,
+   "phase": 0.16,
+   "calls": 96,
+   "triangles": 251595,
+   "deer": 45,
+   "wolf": 47,
+   "rabbit": 54,
+   "folk": 0,
+   "trees": 75,
+   "grass": 6607,
+   "assets": {
+    "deer": true,
+    "belltree": true,
+    "settlement": true,
+    "flora": true,
+    "wolf": true,
+    "rabbit": true
+   }
+  },
+  "huts": [
+   {
+    "x": -14,
+    "y": 6.023030850537916,
+    "z": -8,
+    "ry": 1.4288992721907328
+   },
+   {
+    "x": 12,
+    "y": 12.823038408780988,
+    "z": -12,
+    "ry": -1.1071487177940904
+   },
+   {
+    "x": -4,
+    "y": 10.744230614102555,
+    "z": -20,
+    "ry": 0.27829965900511133
+   }
+  ],
+  "props": [
+   {
+    "name": "slipway",
+    "at": [
+     [
+      -10,
+      1.7054471969727838,
+      53.5
+     ]
+    ]
+   },
+   {
+    "name": "hut",
+    "at": [
+     [
+      -14,
+      6.023030850537916,
+      -8
+     ],
+     [
+      12,
+      12.823038408780988,
+      -12
+     ],
+     [
+      -4,
+      10.744230614102555,
+      -20
+     ]
+    ]
+   },
+   {
+    "name": "stepping_stone",
+    "at": [
+     [
+      -11.909792354812565,
+      6.232242703040954,
+      -7.782211111394544
+     ],
+     [
+      -11.29460945518027,
+      6.280827699919323,
+      -7.492297331108059
+     ],
+     [
+      -10.620029585928302,
+      6.470215494894737,
+      -7.618162338159265
+     ],
+     [
+      10.157479986540173,
+      12.935068493041047,
+      -10.989297274170093
+     ],
+     [
+      9.486659593290238,
+      12.81609869259143,
+      -10.877493875295105
+     ],
+     [
+      9.003668910150282,
+      12.694029525590626,
+      -10.39003105620015
+     ],
+     [
+      -3.34616371560424,
+      10.004262879263049,
+      -18.002777400186062
+     ],
+     [
+      -3.359899771999109,
+      9.74838808786433,
+      -17.322842608640048
+     ],
+     [
+      -2.9697957703848323,
+      9.459988883940524,
+      -16.758290690810938
+     ]
+    ]
+   },
+   {
+    "name": "lantern_post",
+    "at": [
+     [
+      -7,
+      6.785277854062346,
+      -7
+     ],
+     [
+      3,
+      9.501465960496844,
+      -7
+     ],
+     [
+      13,
+      13.30010253053903,
+      -7
+     ],
+     [
+      -7,
+      5.80422426041759,
+      3
+     ],
+     [
+      3,
+      10.064526042646081,
+      3
+     ]
+    ]
+   },
+   {
+    "name": "megalith",
+    "at": [
+     [
+      -12,
+      5.908929644006715,
+      6
+     ],
+     [
+      16,
+      13.091960594389873,
+      2
+     ]
+    ]
+   },
+   {
+    "name": "stone_wall",
+    "at": [
+     [
+      -20,
+      6.265579589610868,
+      -2
+     ],
+     [
+      20,
+      11.749572437529192,
+      -4
+     ]
+    ]
+   },
+   {
+    "name": "woven_screen",
+    "at": [
+     [
+      -10,
+      8.053845396849944,
+      -12
+     ],
+     [
+      9,
+      13.009854972325268,
+      -7
+     ]
+    ]
+   },
+   {
+    "name": "stone_wall_corner",
+    "at": [
+     [
+      -22,
+      5.437535919187825,
+      -18
+     ]
+    ]
+   }
+  ],
+  "breakdown": {
+   "other": {
+    "drawn": 10788,
+    "inView": 10386,
+    "shadow": 1836,
+    "beyond30": 9406,
+    "beyond60": 7826,
+    "instances": 370
+   },
+   "terrain": {
+    "drawn": 45000,
+    "inView": 45000,
+    "shadow": 0,
+    "beyond30": 45000,
+    "beyond60": 45000,
+    "instances": 1
+   },
+   "water": {
+    "drawn": 10020,
+    "inView": 10020,
+    "shadow": 0,
+    "beyond30": 10020,
+    "beyond60": 10020,
+    "instances": 1
+   },
+   "grass": {
+    "drawn": 33444,
+    "inView": 30678,
+    "shadow": 0,
+    "beyond30": 14874,
+    "beyond60": 8884,
+    "instances": 6607
+   },
+   "belltree": {
+    "drawn": 24587,
+    "inView": 24587,
+    "shadow": 26904,
+    "beyond30": 24587,
+    "beyond60": 16630,
+    "instances": 84
+   },
+   "forest": {
+    "drawn": 10,
+    "inView": 10,
+    "shadow": 1900,
+    "beyond30": 10,
+    "beyond60": 10,
+    "instances": 5
+   },
+   "settlement": {
+    "drawn": 14654,
+    "inView": 14654,
+    "shadow": 10781,
+    "beyond30": 14654,
+    "beyond60": 14654,
+    "instances": 27
+   },
+   "creatures": {
+    "drawn": 69124,
+    "inView": 61317,
+    "shadow": 9816,
+    "beyond30": 20236,
+    "beyond60": 16772,
+    "instances": 132
+   }
+  },
+  "terrainDigest": 1444896288,
+  "agents": [
+   {
+    "id": 1,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -70,
+    "z": -2
+   },
+   {
+    "id": 2,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 10
+   },
+   {
+    "id": 3,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -50,
+    "z": -42
+   },
+   {
+    "id": 4,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -60,
+    "z": -32
+   },
+   {
+    "id": 5,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -55,
+    "z": -35
+   },
+   {
+    "id": 6,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -47,
+    "z": -43
+   },
+   {
+    "id": 7,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -20
+   },
+   {
+    "id": 8,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -56,
+    "z": -55
+   },
+   {
+    "id": 9,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -20
+   },
+   {
+    "id": 10,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -41,
+    "z": -57
+   },
+   {
+    "id": 11,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -55,
+    "z": -35
+   },
+   {
+    "id": 12,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 33,
+    "z": 53
+   },
+   {
+    "id": 13,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 50,
+    "z": -60
+   },
+   {
+    "id": 14,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 15,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 41,
+    "z": 50
+   },
+   {
+    "id": 16,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -52,
+    "z": -44
+   },
+   {
+    "id": 17,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -10
+   },
+   {
+    "id": 18,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 31,
+    "z": 60
+   },
+   {
+    "id": 19,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -49,
+    "z": -58
+   },
+   {
+    "id": 20,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -10
+   },
+   {
+    "id": 21,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 40,
+    "z": 60
+   },
+   {
+    "id": 22,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -41,
+    "z": -52
+   },
+   {
+    "id": 23,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -80,
+    "z": 0
+   },
+   {
+    "id": 24,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 60
+   },
+   {
+    "id": 25,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -32,
+    "z": -52
+   },
+   {
+    "id": 26,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -70,
+    "z": -2
+   },
+   {
+    "id": 27,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -52,
+    "z": -53
+   },
+   {
+    "id": 28,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 40,
+    "z": -51
+   },
+   {
+    "id": 29,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -65,
+    "z": -5
+   },
+   {
+    "id": 30,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -49,
+    "z": -55
+   },
+   {
+    "id": 31,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 44,
+    "z": -48
+   },
+   {
+    "id": 32,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": 10
+   },
+   {
+    "id": 33,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -53,
+    "z": -55
+   },
+   {
+    "id": 34,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 52,
+    "z": -57
+   },
+   {
+    "id": 35,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 10
+   },
+   {
+    "id": 36,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -45,
+    "z": -53
+   },
+   {
+    "id": 37,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -53,
+    "z": -41
+   },
+   {
+    "id": 38,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 20
+   },
+   {
+    "id": 39,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": -40,
+    "z": -51
+   },
+   {
+    "id": 40,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -50,
+    "z": -41
+   },
+   {
+    "id": 41,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 20
+   },
+   {
+    "id": 42,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -33,
+    "z": -53
+   },
+   {
+    "id": 43,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -42,
+    "z": -42
+   },
+   {
+    "id": 44,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -60,
+    "z": -50
+   },
+   {
+    "id": 45,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": -53,
+    "z": -38
+   },
+   {
+    "id": 46,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -35,
+    "z": -50
+   },
+   {
+    "id": 47,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -50,
+    "z": -50
+   },
+   {
+    "id": 48,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": -50,
+    "z": -41
+   },
+   {
+    "id": 49,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 42,
+    "z": -42
+   },
+   {
+    "id": 50,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -56,
+    "z": -35
+   },
+   {
+    "id": 51,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -43,
+    "z": -43
+   },
+   {
+    "id": 52,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 51,
+    "z": -39
+   },
+   {
+    "id": 53,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -50,
+    "z": -42
+   },
+   {
+    "id": 54,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -36,
+    "z": -51
+   },
+   {
+    "id": 55,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 61,
+    "z": -35
+   },
+   {
+    "id": 56,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -45,
+    "z": -45
+   },
+   {
+    "id": 57,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -66,
+    "z": -34
+   },
+   {
+    "id": 58,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -68,
+    "z": -29
+   },
+   {
+    "id": 59,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -37,
+    "z": -53
+   },
+   {
+    "id": 60,
+    "sp": "deer",
+    "role": "wild",
+    "st": "idle",
+    "x": -60,
+    "z": -31
+   },
+   {
+    "id": 61,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -59,
+    "z": -30
+   },
+   {
+    "id": 62,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -30
+   },
+   {
+    "id": 63,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -53,
+    "z": -33
+   },
+   {
+    "id": 64,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -52,
+    "z": -32
+   },
+   {
+    "id": 65,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -60,
+    "z": -32
+   },
+   {
+    "id": 66,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -46,
+    "z": -41
+   },
+   {
+    "id": 67,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -45,
+    "z": -40
+   },
+   {
+    "id": 68,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -55,
+    "z": -35
+   },
+   {
+    "id": 69,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -43,
+    "z": -43
+   },
+   {
+    "id": 70,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -42,
+    "z": -42
+   },
+   {
+    "id": 71,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -47,
+    "z": -43
+   },
+   {
+    "id": 72,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -68,
+    "z": -30
+   },
+   {
+    "id": 73,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 45,
+    "z": -40
+   },
+   {
+    "id": 74,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -45,
+    "z": -45
+   },
+   {
+    "id": 75,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -61,
+    "z": -21
+   },
+   {
+    "id": 76,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 52,
+    "z": -32
+   },
+   {
+    "id": 77,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -20
+   },
+   {
+    "id": 78,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -60,
+    "z": -21
+   },
+   {
+    "id": 79,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 60,
+    "z": -31
+   },
+   {
+    "id": 80,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -20
+   },
+   {
+    "id": 81,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -53,
+    "z": -33
+   },
+   {
+    "id": 82,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 70,
+    "z": -30
+   },
+   {
+    "id": 83,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -20
+   },
+   {
+    "id": 84,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 43,
+    "z": 44
+   },
+   {
+    "id": 85,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -68,
+    "z": -23
+   },
+   {
+    "id": 86,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -55,
+    "z": -35
+   },
+   {
+    "id": 87,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 51,
+    "z": 36
+   },
+   {
+    "id": 88,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -62,
+    "z": -18
+   },
+   {
+    "id": 89,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -46,
+    "z": -44
+   },
+   {
+    "id": 90,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 33,
+    "z": 53
+   },
+   {
+    "id": 91,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -59,
+    "z": -20
+   },
+   {
+    "id": 92,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 93,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 41,
+    "z": 46
+   },
+   {
+    "id": 94,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -52,
+    "z": -32
+   },
+   {
+    "id": 95,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -10
+   },
+   {
+    "id": 96,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 43,
+    "z": 43
+   },
+   {
+    "id": 97,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 59,
+    "z": -20
+   },
+   {
+    "id": 98,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -10
+   },
+   {
+    "id": 99,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 51,
+    "z": 41
+   },
+   {
+    "id": 100,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 61,
+    "z": -20
+   },
+   {
+    "id": 101,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -10
+   },
+   {
+    "id": 102,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 55,
+    "z": 46
+   },
+   {
+    "id": 103,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 72,
+    "z": -17
+   },
+   {
+    "id": 104,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -10
+   },
+   {
+    "id": 105,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 11,
+    "z": 60
+   },
+   {
+    "id": 106,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 107,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -76,
+    "z": -2
+   },
+   {
+    "id": 108,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 21,
+    "z": 60
+   },
+   {
+    "id": 109,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -63,
+    "z": -9
+   },
+   {
+    "id": 110,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -70,
+    "z": -2
+   },
+   {
+    "id": 111,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 33,
+    "z": 53
+   },
+   {
+    "id": 112,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -59,
+    "z": -10
+   },
+   {
+    "id": 113,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -65,
+    "z": -5
+   },
+   {
+    "id": 114,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 41,
+    "z": 50
+   },
+   {
+    "id": 115,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 61,
+    "z": -10
+   },
+   {
+    "id": 116,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -63,
+    "z": -7
+   },
+   {
+    "id": 117,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 51
+   },
+   {
+    "id": 118,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 67,
+    "z": -10
+   },
+   {
+    "id": 119,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -63,
+    "z": -8
+   },
+   {
+    "id": 120,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 3,
+    "z": 63
+   },
+   {
+    "id": 121,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -71,
+    "z": -1
+   },
+   {
+    "id": 122,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -69,
+    "z": 9
+   },
+   {
+    "id": 123,
+    "sp": "deer",
+    "role": "wild",
+    "st": "idle",
+    "x": 10,
+    "z": 61
+   },
+   {
+    "id": 124,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -70,
+    "z": 1
+   },
+   {
+    "id": 125,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 10
+   },
+   {
+    "id": 126,
+    "sp": "deer",
+    "role": "wild",
+    "st": "idle",
+    "x": 20,
+    "z": 61
+   },
+   {
+    "id": 127,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -2
+   },
+   {
+    "id": 128,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 10
+   },
+   {
+    "id": 129,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 31,
+    "z": 60
+   },
+   {
+    "id": 130,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -60,
+    "z": -5
+   },
+   {
+    "id": 131,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 10
+   },
+   {
+    "id": 132,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 40,
+    "z": 60
+   },
+   {
+    "id": 133,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 70,
+    "z": -2
+   },
+   {
+    "id": 134,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": 20
+   },
+   {
+    "id": 135,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 60
+   },
+   {
+    "id": 136,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 80,
+    "z": 0
+   },
+   {
+    "id": 137,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 20
+   },
+   {
+    "id": 138,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 2,
+    "z": 70
+   },
+   {
+    "id": 139,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -67,
+    "z": 3
+   },
+   {
+    "id": 140,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 20
+   },
+   {
+    "id": 141,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 17,
+    "z": 69
+   },
+   {
+    "id": 142,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -60,
+    "z": 8
+   },
+   {
+    "id": 143,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 30
+   },
+   {
+    "id": 144,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 27,
+    "z": 64
+   },
+   {
+    "id": 145,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -66,
+    "z": 12
+   },
+   {
+    "id": 146,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": 30
+   }
+  ]
+ },
+ "海岸": {
+  "stats": {
+   "follow": null,
+   "camera": "free",
+   "at": [
+    -44,
+    25,
+    -119
+   ],
+   "year": 10,
+   "tick": 3600,
+   "speed": 0,
+   "ship": null,
+   "phase": 0.16,
+   "calls": 68,
+   "triangles": 169198,
+   "deer": 45,
+   "wolf": 47,
+   "rabbit": 54,
+   "folk": 0,
+   "trees": 75,
+   "grass": 5893,
+   "assets": {
+    "deer": true,
+    "belltree": true,
+    "settlement": true,
+    "flora": true,
+    "wolf": true,
+    "rabbit": true
+   }
+  },
+  "huts": [
+   {
+    "x": -14,
+    "y": 6.023030850537916,
+    "z": -8,
+    "ry": 1.4288992721907328
+   },
+   {
+    "x": 12,
+    "y": 12.823038408780988,
+    "z": -12,
+    "ry": -1.1071487177940904
+   },
+   {
+    "x": -4,
+    "y": 10.744230614102555,
+    "z": -20,
+    "ry": 0.27829965900511133
+   }
+  ],
+  "props": [
+   {
+    "name": "slipway",
+    "at": [
+     [
+      -10,
+      1.7054471969727838,
+      53.5
+     ]
+    ]
+   },
+   {
+    "name": "hut",
+    "at": [
+     [
+      -14,
+      6.023030850537916,
+      -8
+     ],
+     [
+      12,
+      12.823038408780988,
+      -12
+     ],
+     [
+      -4,
+      10.744230614102555,
+      -20
+     ]
+    ]
+   },
+   {
+    "name": "stepping_stone",
+    "at": [
+     [
+      -11.909792354812565,
+      6.232242703040954,
+      -7.782211111394544
+     ],
+     [
+      -11.29460945518027,
+      6.280827699919323,
+      -7.492297331108059
+     ],
+     [
+      -10.620029585928302,
+      6.470215494894737,
+      -7.618162338159265
+     ],
+     [
+      10.157479986540173,
+      12.935068493041047,
+      -10.989297274170093
+     ],
+     [
+      9.486659593290238,
+      12.81609869259143,
+      -10.877493875295105
+     ],
+     [
+      9.003668910150282,
+      12.694029525590626,
+      -10.39003105620015
+     ],
+     [
+      -3.34616371560424,
+      10.004262879263049,
+      -18.002777400186062
+     ],
+     [
+      -3.359899771999109,
+      9.74838808786433,
+      -17.322842608640048
+     ],
+     [
+      -2.9697957703848323,
+      9.459988883940524,
+      -16.758290690810938
+     ]
+    ]
+   },
+   {
+    "name": "lantern_post",
+    "at": [
+     [
+      -7,
+      6.785277854062346,
+      -7
+     ],
+     [
+      3,
+      9.501465960496844,
+      -7
+     ],
+     [
+      13,
+      13.30010253053903,
+      -7
+     ],
+     [
+      -7,
+      5.80422426041759,
+      3
+     ],
+     [
+      3,
+      10.064526042646081,
+      3
+     ]
+    ]
+   },
+   {
+    "name": "megalith",
+    "at": [
+     [
+      -12,
+      5.908929644006715,
+      6
+     ],
+     [
+      16,
+      13.091960594389873,
+      2
+     ]
+    ]
+   },
+   {
+    "name": "stone_wall",
+    "at": [
+     [
+      -20,
+      6.265579589610868,
+      -2
+     ],
+     [
+      20,
+      11.749572437529192,
+      -4
+     ]
+    ]
+   },
+   {
+    "name": "woven_screen",
+    "at": [
+     [
+      -10,
+      8.053845396849944,
+      -12
+     ],
+     [
+      9,
+      13.009854972325268,
+      -7
+     ]
+    ]
+   },
+   {
+    "name": "stone_wall_corner",
+    "at": [
+     [
+      -22,
+      5.437535919187825,
+      -18
+     ]
+    ]
+   }
+  ],
+  "breakdown": {
+   "other": {
+    "drawn": 11923,
+    "inView": 11509,
+    "shadow": 1836,
+    "beyond30": 10963,
+    "beyond60": 10777,
+    "instances": 391
+   },
+   "terrain": {
+    "drawn": 45000,
+    "inView": 45000,
+    "shadow": 0,
+    "beyond30": 45000,
+    "beyond60": 45000,
+    "instances": 1
+   },
+   "water": {
+    "drawn": 10020,
+    "inView": 10020,
+    "shadow": 0,
+    "beyond30": 10020,
+    "beyond60": 10020,
+    "instances": 1
+   },
+   "grass": {
+    "drawn": 11786,
+    "inView": 11190,
+    "shadow": 0,
+    "beyond30": 11786,
+    "beyond60": 11154,
+    "instances": 5893
+   },
+   "belltree": {
+    "drawn": 13877,
+    "inView": 13877,
+    "shadow": 26904,
+    "beyond30": 13877,
+    "beyond60": 13877,
+    "instances": 75
+   },
+   "forest": {
+    "drawn": 8,
+    "inView": 6,
+    "shadow": 1900,
+    "beyond30": 8,
+    "beyond60": 8,
+    "instances": 4
+   },
+   "settlement": {
+    "drawn": 14654,
+    "inView": 14654,
+    "shadow": 10781,
+    "beyond30": 14654,
+    "beyond60": 14654,
+    "instances": 27
+   },
+   "creatures": {
+    "drawn": 20496,
+    "inView": 17444,
+    "shadow": 0,
+    "beyond30": 20496,
+    "beyond60": 20496,
+    "instances": 121
+   }
+  },
+  "terrainDigest": 1444896288,
+  "agents": [
+   {
+    "id": 1,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -1
+   },
+   {
+    "id": 2,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -70,
+    "z": 10
+   },
+   {
+    "id": 3,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -50,
+    "z": -41
+   },
+   {
+    "id": 4,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -60,
+    "z": -31
+   },
+   {
+    "id": 5,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -34
+   },
+   {
+    "id": 6,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -46,
+    "z": -42
+   },
+   {
+    "id": 7,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": -20
+   },
+   {
+    "id": 8,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -58,
+    "z": -54
+   },
+   {
+    "id": 9,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -20
+   },
+   {
+    "id": 10,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -42,
+    "z": -55
+   },
+   {
+    "id": 11,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -34
+   },
+   {
+    "id": 12,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 32,
+    "z": 52
+   },
+   {
+    "id": 13,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 50,
+    "z": -60
+   },
+   {
+    "id": 14,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 15,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 41,
+    "z": 50
+   },
+   {
+    "id": 16,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -50,
+    "z": -43
+   },
+   {
+    "id": 17,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 18,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 31,
+    "z": 60
+   },
+   {
+    "id": 19,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -49,
+    "z": -61
+   },
+   {
+    "id": 20,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 21,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 40,
+    "z": 60
+   },
+   {
+    "id": 22,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -43,
+    "z": -54
+   },
+   {
+    "id": 23,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -80,
+    "z": 0
+   },
+   {
+    "id": 24,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 60
+   },
+   {
+    "id": 25,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -31,
+    "z": -51
+   },
+   {
+    "id": 26,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -1
+   },
+   {
+    "id": 27,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -52,
+    "z": -51
+   },
+   {
+    "id": 28,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 43,
+    "z": -50
+   },
+   {
+    "id": 29,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -4
+   },
+   {
+    "id": 30,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -50,
+    "z": -54
+   },
+   {
+    "id": 31,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 45,
+    "z": -47
+   },
+   {
+    "id": 32,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": 10
+   },
+   {
+    "id": 33,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": -52,
+    "z": -57
+   },
+   {
+    "id": 34,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 50,
+    "z": -58
+   },
+   {
+    "id": 35,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": 10
+   },
+   {
+    "id": 36,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": -45,
+    "z": -54
+   },
+   {
+    "id": 37,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -51,
+    "z": -42
+   },
+   {
+    "id": 38,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -70,
+    "z": 20
+   },
+   {
+    "id": 39,
+    "sp": "deer",
+    "role": "wild",
+    "st": "idle",
+    "x": -40,
+    "z": -51
+   },
+   {
+    "id": 40,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -50,
+    "z": -41
+   },
+   {
+    "id": 41,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": 20
+   },
+   {
+    "id": 42,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -32,
+    "z": -51
+   },
+   {
+    "id": 43,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -41,
+    "z": -41
+   },
+   {
+    "id": 44,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -60,
+    "z": -50
+   },
+   {
+    "id": 45,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": -53,
+    "z": -38
+   },
+   {
+    "id": 46,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -34,
+    "z": -48
+   },
+   {
+    "id": 47,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -50,
+    "z": -50
+   },
+   {
+    "id": 48,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": -50,
+    "z": -41
+   },
+   {
+    "id": 49,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 41,
+    "z": -41
+   },
+   {
+    "id": 50,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -56,
+    "z": -34
+   },
+   {
+    "id": 51,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -42,
+    "z": -42
+   },
+   {
+    "id": 52,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 51,
+    "z": -37
+   },
+   {
+    "id": 53,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -50,
+    "z": -41
+   },
+   {
+    "id": 54,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -36,
+    "z": -49
+   },
+   {
+    "id": 55,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 61,
+    "z": -33
+   },
+   {
+    "id": 56,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -44,
+    "z": -44
+   },
+   {
+    "id": 57,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -65,
+    "z": -36
+   },
+   {
+    "id": 58,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -65,
+    "z": -28
+   },
+   {
+    "id": 59,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -36,
+    "z": -52
+   },
+   {
+    "id": 60,
+    "sp": "deer",
+    "role": "wild",
+    "st": "idle",
+    "x": -60,
+    "z": -31
+   },
+   {
+    "id": 61,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -58,
+    "z": -28
+   },
+   {
+    "id": 62,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -30
+   },
+   {
+    "id": 63,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -51,
+    "z": -32
+   },
+   {
+    "id": 64,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -51,
+    "z": -31
+   },
+   {
+    "id": 65,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -60,
+    "z": -31
+   },
+   {
+    "id": 66,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -45,
+    "z": -39
+   },
+   {
+    "id": 67,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -44,
+    "z": -38
+   },
+   {
+    "id": 68,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -34
+   },
+   {
+    "id": 69,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -42,
+    "z": -41
+   },
+   {
+    "id": 70,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -40,
+    "z": -40
+   },
+   {
+    "id": 71,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -46,
+    "z": -42
+   },
+   {
+    "id": 72,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -67,
+    "z": -31
+   },
+   {
+    "id": 73,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 44,
+    "z": -38
+   },
+   {
+    "id": 74,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -44,
+    "z": -44
+   },
+   {
+    "id": 75,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": -60,
+    "z": -23
+   },
+   {
+    "id": 76,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 51,
+    "z": -31
+   },
+   {
+    "id": 77,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": -20
+   },
+   {
+    "id": 78,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -58,
+    "z": -21
+   },
+   {
+    "id": 79,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 60,
+    "z": -31
+   },
+   {
+    "id": 80,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": -20
+   },
+   {
+    "id": 81,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": -51,
+    "z": -32
+   },
+   {
+    "id": 82,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 70,
+    "z": -30
+   },
+   {
+    "id": 83,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -20
+   },
+   {
+    "id": 84,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 41,
+    "z": 42
+   },
+   {
+    "id": 85,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -66,
+    "z": -24
+   },
+   {
+    "id": 86,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -54,
+    "z": -34
+   },
+   {
+    "id": 87,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 49,
+    "z": 36
+   },
+   {
+    "id": 88,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -63,
+    "z": -16
+   },
+   {
+    "id": 89,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -45,
+    "z": -42
+   },
+   {
+    "id": 90,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 32,
+    "z": 51
+   },
+   {
+    "id": 91,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -56,
+    "z": -20
+   },
+   {
+    "id": 92,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 93,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 39,
+    "z": 45
+   },
+   {
+    "id": 94,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -50,
+    "z": -30
+   },
+   {
+    "id": 95,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 96,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 41,
+    "z": 42
+   },
+   {
+    "id": 97,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": 56,
+    "z": -20
+   },
+   {
+    "id": 98,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 99,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 50,
+    "z": 43
+   },
+   {
+    "id": 100,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 61,
+    "z": -20
+   },
+   {
+    "id": 101,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 102,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 54,
+    "z": 48
+   },
+   {
+    "id": 103,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 74,
+    "z": -15
+   },
+   {
+    "id": 104,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -10
+   },
+   {
+    "id": 105,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 11,
+    "z": 58
+   },
+   {
+    "id": 106,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -10
+   },
+   {
+    "id": 107,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -75,
+    "z": -3
+   },
+   {
+    "id": 108,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 21,
+    "z": 58
+   },
+   {
+    "id": 109,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -65,
+    "z": -8
+   },
+   {
+    "id": 110,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": -1
+   },
+   {
+    "id": 111,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 32,
+    "z": 52
+   },
+   {
+    "id": 112,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -56,
+    "z": -10
+   },
+   {
+    "id": 113,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -64,
+    "z": -4
+   },
+   {
+    "id": 114,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 41,
+    "z": 50
+   },
+   {
+    "id": 115,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 60,
+    "z": -11
+   },
+   {
+    "id": 116,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -62,
+    "z": -6
+   },
+   {
+    "id": 117,
+    "sp": "deer",
+    "role": "wild",
+    "st": "idle",
+    "x": 50,
+    "z": 51
+   },
+   {
+    "id": 118,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 64,
+    "z": -10
+   },
+   {
+    "id": 119,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": -7
+   },
+   {
+    "id": 120,
+    "sp": "deer",
+    "role": "wild",
+    "st": "enter",
+    "x": 2,
+    "z": 61
+   },
+   {
+    "id": 121,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -69,
+    "z": -2
+   },
+   {
+    "id": 122,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "walk",
+    "x": -68,
+    "z": 8
+   },
+   {
+    "id": 123,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 11,
+    "z": 61
+   },
+   {
+    "id": 124,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -69,
+    "z": 3
+   },
+   {
+    "id": 125,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": 10
+   },
+   {
+    "id": 126,
+    "sp": "deer",
+    "role": "wild",
+    "st": "idle",
+    "x": 20,
+    "z": 61
+   },
+   {
+    "id": 127,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": -1
+   },
+   {
+    "id": 128,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": 10
+   },
+   {
+    "id": 129,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 31,
+    "z": 60
+   },
+   {
+    "id": 130,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "enter",
+    "x": -58,
+    "z": -4
+   },
+   {
+    "id": 131,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": 10
+   },
+   {
+    "id": 132,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 40,
+    "z": 60
+   },
+   {
+    "id": 133,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": 70,
+    "z": -4
+   },
+   {
+    "id": 134,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "graze",
+    "x": -70,
+    "z": 20
+   },
+   {
+    "id": 135,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 50,
+    "z": 60
+   },
+   {
+    "id": 136,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "idle",
+    "x": 80,
+    "z": 0
+   },
+   {
+    "id": 137,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": 20
+   },
+   {
+    "id": 138,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 4,
+    "z": 70
+   },
+   {
+    "id": 139,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -67,
+    "z": 3
+   },
+   {
+    "id": 140,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "enter",
+    "x": -61,
+    "z": 20
+   },
+   {
+    "id": 141,
+    "sp": "deer",
+    "role": "wild",
+    "st": "walk",
+    "x": 19,
+    "z": 69
+   },
+   {
+    "id": 142,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -60,
+    "z": 6
+   },
+   {
+    "id": 143,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -70,
+    "z": 30
+   },
+   {
+    "id": 144,
+    "sp": "deer",
+    "role": "wild",
+    "st": "graze",
+    "x": 28,
+    "z": 63
+   },
+   {
+    "id": 145,
+    "sp": "wolf",
+    "role": "wild",
+    "st": "walk",
+    "x": -65,
+    "z": 10
+   },
+   {
+    "id": 146,
+    "sp": "rabbit",
+    "role": "wild",
+    "st": "idle",
+    "x": -61,
+    "z": 30
+   }
+  ]
+ }
+}
