@@ -24,25 +24,33 @@ import os
 import re
 import subprocess
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from cf_auth import (
+    CLOUDFLARE_API,
+    RUNBOOK,
+    AuthTarget,
+    HttpGet,
+    OAuthFile,
+    Runner,
+    Secret,
+    check_auth,
+    default_oauth_file,
+    read_keychain_token,
+    redact,
+    scrub_env,
+    subprocess_run,
+    urllib_get,
+    verify_d1,
+    wrangler_env,
+)
+from cf_auth import AuthError as DeployError
 from check_free_tier import parse_jsonc
 
 WRANGLER = ("pnpm", "exec", "wrangler")
-CLOUDFLARE_API = "https://api.cloudflare.com/client/v4"
 LFS_POINTER = b"version https://git-lfs"
-RUNBOOK = "docs/operations/deploy-runbook.md"
-
-# 継いだ環境から外す資格情報の接頭辞。どの子プロセスにも、手元に残った別アカウントの値を渡さない
-SCRUBBED_PREFIXES = ("CLOUDFLARE_", "CF_", "WRANGLER_")
-# Cloudflare の API トークンの形。これに合わない値は、header に載せる前に (値を出さずに) 断る
-TOKEN_SHAPE = re.compile(r"[A-Za-z0-9_-]{30,}")
-SUBPROCESS_TIMEOUT_S = 900
 
 CONFIG_KEYS = frozenset(
     {
@@ -67,39 +75,6 @@ SMOKE_EXPECTS = frozenset({"ok", "json"})
 
 class ConfigError(Exception):
     pass
-
-
-class DeployError(Exception):
-    pass
-
-
-class Secret:
-    """値を str・repr・f-string に出さない入れ物。値は reveal() でだけ取り出す。"""
-
-    __slots__ = ("_value",)
-
-    def __init__(self, value: str) -> None:
-        if not value:
-            raise DeployError("トークンが空")
-        self._value = value
-
-    def reveal(self) -> str:
-        return self._value
-
-    def __repr__(self) -> str:
-        return "Secret(***)"
-
-    __str__ = __repr__
-
-
-def redact(text: str, secret: Secret | None) -> str:
-    """値そのものと、repr・URL の形に化けた値を伏せる。"""
-    if not secret:
-        return text
-    value = secret.reveal()
-    for form in {value, repr(value)[1:-1], urllib.parse.quote(value, safe="")}:
-        text = text.replace(form, "***")
-    return text
 
 
 @dataclass(frozen=True)
@@ -253,34 +228,6 @@ def is_lfs_pointer(head: bytes) -> bool:
     return head.startswith(LFS_POINTER)
 
 
-def scrub_env(env: Mapping[str, str]) -> dict[str, str]:
-    return {k: v for k, v in env.items() if not k.startswith(SCRUBBED_PREFIXES)}
-
-
-def wrangler_env(
-    env: Mapping[str, str], token: Secret, account_id: str
-) -> dict[str, str]:
-    return {
-        **scrub_env(env),
-        "CLOUDFLARE_API_TOKEN": token.reveal(),
-        "CLOUDFLARE_ACCOUNT_ID": account_id,
-        "WRANGLER_SEND_METRICS": "false",
-        # repo の .env が API の宛先を変えても、トークンを Cloudflare の外へ送らない
-        "CLOUDFLARE_API_BASE_URL": CLOUDFLARE_API,
-    }
-
-
-@dataclass(frozen=True)
-class Result:
-    returncode: int
-    stdout: str
-    stderr: str
-
-
-Runner = Callable[[Sequence[str], Mapping[str, str], Path], Result]
-HttpGet = Callable[[str, Mapping[str, str]], tuple[int, bytes]]
-
-
 @dataclass(frozen=True)
 class Deps:
     run: Runner
@@ -289,6 +236,11 @@ class Deps:
     print: Callable[[str], None]
     base_env: Mapping[str, str]
     cwd: Path
+    # 端末の OAuth のファイルの秘密でない欄 (照らすだけ)。試験では読まない
+    oauth_file: Callable[[], tuple[Path, OAuthFile | None]] = lambda: (
+        Path("(読まない)"),
+        None,
+    )
 
 
 @dataclass(frozen=True)
@@ -317,12 +269,18 @@ def _wrangler_step(name: str, *args: str, kind: str = "run") -> Step:
 def plan(config: Config, *, check: bool) -> list[Step]:
     steps = [
         Step(
+            "auth",
+            "auth",
+            f"資格情報の照合: 端末の OAuth を照らし (使わない)、Keychain の {config.keychain_service}"
+            " が有るかを見る (値は読まない。whoami は打たない)",
+        ),
+        Step(
             "preflight",
             "preflight",
             f"作業の木が綺麗か・git fetch {config.remote} {config.branch} の後に HEAD の木が"
             f" {config.remote}/{config.branch} と同じか・{', '.join(config.lfs_dirs)} の"
             f" {', '.join(config.lfs_suffixes)} が LFS のポインタでないか",
-        )
+        ),
     ]
     if check:
         steps.append(_run_step("check", ("pnpm", "run", "check")))
@@ -440,71 +398,18 @@ def preflight(config: Config, deps: Deps, *, allow_branch: bool) -> None:
 
 
 def read_token(config: Config, deps: Deps) -> Secret:
-    account = _keychain_account(config, deps)
-    argv = (
-        "security",
-        "find-generic-password",
-        "-s",
+    return read_keychain_token(
         config.keychain_service,
-        "-a",
-        account,
-        "-w",
+        _keychain_account(config, deps),
+        deps.run,
+        deps.base_env,
+        deps.cwd,
     )
-    result = deps.run(argv, scrub_env(deps.base_env), deps.cwd)
-    where = f"Keychain の service {config.keychain_service} / account {account}"
-    if result.returncode == 44:  # errSecItemNotFound
-        raise DeployError(f"{where} の項目が無い (人が一度だけ置く: {RUNBOOK} の H12)")
-    if result.returncode != 0:
-        raise DeployError(
-            f"{where} を読めない (security の終了 {result.returncode}。許可の問いを断った・Keychain が閉じているなど)"
-        )
-    value = result.stdout.strip()
-    if not TOKEN_SHAPE.fullmatch(value):
-        raise DeployError(
-            f"{where} の値が API トークンの形 (英数字・_・- で 30 字以上) でない。値は出さない。"
-            f" 入れ直す: {RUNBOOK} の 4"
-        )
-    return Secret(value)
 
 
 def verify_account(config: Config, token: Secret, http_get: HttpGet) -> None:
     """wrangler を起こす前に、トークンが config のアカウントに届くかを Cloudflare の API で確かめる。"""
-    headers = {"Authorization": f"Bearer {token.reveal()}", "User-Agent": "deploy.py"}
-    for name, expected in config.d1.items():
-        query = urllib.parse.urlencode({"name": name})
-        url = f"{CLOUDFLARE_API}/accounts/{config.account_id}/d1/database?{query}"
-        status, body = http_get(url, headers)
-        try:
-            payload = json.loads(body)
-        except ValueError:
-            payload = {}
-        if not isinstance(payload, dict):
-            payload = {}
-        if status != 200 or not payload.get("success"):
-            errors = payload.get("errors") or []
-            codes = ", ".join(
-                f"{e.get('code')} {e.get('message', '')}".strip()
-                for e in errors
-                if isinstance(e, Mapping)
-            )
-            raise DeployError(
-                redact(
-                    f"トークンで account {config.account_id} の D1 を読めない (HTTP {status}"
-                    f"{', ' + codes if codes else ''})。別のアカウントのトークンか、権限が足りない。"
-                    f" wrangler は起こしていない ({RUNBOOK} の 1)",
-                    token,
-                )
-            )
-        found = [
-            d.get("uuid")
-            for d in payload.get("result") or []
-            if isinstance(d, Mapping) and d.get("name") == name
-        ]
-        if expected not in found:
-            raise DeployError(
-                f"account {config.account_id} の D1 {name} の id が {found or '無し'} で、"
-                f"wrangler.jsonc の {expected} と違う。配る先のアカウントを確かめる"
-            )
+    verify_d1(config.account_id, config.d1, token, http_get)
 
 
 def smoke(config: Config, http_get: HttpGet) -> list[str]:
@@ -547,6 +452,28 @@ def deploy(config: Config, deps: Deps, *, check: bool, allow_branch: bool) -> No
             say(f"== {step.name}: {step.describe}")
             touched_remote = touched_remote or step.name.startswith("migrations-apply")
             match step.kind:
+                case "auth":
+                    report = check_auth(
+                        AuthTarget(
+                            config.account_id,
+                            config.d1,
+                            config.keychain_service,
+                            config.keychain_account,
+                        ),
+                        run=deps.run,
+                        http_get=deps.http_get,
+                        env=deps.base_env,
+                        cwd=deps.cwd,
+                        oauth_file=deps.oauth_file,
+                        whoami=False,
+                        verify=False,
+                    )
+                    for line in report.lines:
+                        say(line)
+                    if not report.ready:
+                        raise DeployError(
+                            f"トークンの道がまだ使えない: {report.problem}"
+                        )
                 case "preflight":
                     preflight(config, deps, allow_branch=allow_branch)
                 case "token":
@@ -633,43 +560,6 @@ def dry_run(config: Config, deps: Deps, *, check: bool) -> None:
         deps.print(f"  {n:2}. {step.name}: {step.describe}")
 
 
-def _subprocess_run(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> Result:
-    p = subprocess.run(
-        list(argv),
-        env=dict(env),
-        cwd=cwd,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=SUBPROCESS_TIMEOUT_S,
-    )
-    return Result(p.returncode, p.stdout, p.stderr)
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Authorization を載せた要求が、よその host へ転送されないようにする。"""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(
-            req.full_url, code, "redirect は辿らない", headers, fp
-        )
-
-
-_OPENER = urllib.request.build_opener(_NoRedirect)
-
-
-def _urllib_get(url: str, headers: Mapping[str, str]) -> tuple[int, bytes]:
-    request = urllib.request.Request(url, headers=dict(headers), method="GET")
-    try:
-        with _OPENER.open(request, timeout=30) as response:
-            return response.status, response.read()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()
-    except urllib.error.URLError as e:
-        raise DeployError(f"{url.split('?')[0]} に届かない: {e.reason}") from None
-
-
 def _read_head(path: Path) -> bytes:
     with path.open("rb") as f:
         return f.read(len(LFS_POINTER))
@@ -697,12 +587,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(raw[1:] if raw[:1] == ["--"] else raw)
 
     deps = Deps(
-        run=_subprocess_run,
-        http_get=_urllib_get,
+        run=subprocess_run,
+        http_get=urllib_get,
         read_head=_read_head,
         print=print,
         base_env=dict(os.environ),
         cwd=args.root,
+        oauth_file=default_oauth_file(os.environ),
     )
     try:
         config = load_config(args.config or args.root / "deploy.config.json", args.root)

@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 import mod
+from cf_auth import Result, parse_oauth_file
 
 ID_A = "a" * 64
 ID_B = "0123456789abcdef" * 4
@@ -23,10 +24,24 @@ POLICY = mod.REPO / "worker" / "src" / "policy.ts"
 HIDDEN_AT = 1_790_388_000_000  # 2026-09-26T02:00:00Z (epoch ms)
 
 
-def run_main(argv, run=subprocess.run):
+TOKEN = "tok_SECRET_value_1234567890abcdefghijklmn"
+ACCOUNT = "14c725d39e9cf53743be403ab146174f"
+DB_ID = "4b9db893-5306-4a01-9eb9-4926c2b34d17"
+REMOTE_ENV = {
+    "PATH": "/usr/bin",
+    "CLOUDFLARE_API_TOKEN": TOKEN,
+    "CLOUDFLARE_ACCOUNT_ID": ACCOUNT,
+}
+
+
+def fake_remote_env(say):
+    return dict(REMOTE_ENV)
+
+
+def run_main(argv, run=subprocess.run, remote_env=fake_remote_env):
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = mod.main(argv, run=run)
+        code = mod.main(argv, run=run, remote_env=remote_env)
     return code, out.getvalue(), err.getvalue()
 
 
@@ -131,6 +146,150 @@ class CommandLineTest(unittest.TestCase):
         code, _, err = run_main(["--remote", "hide", ID_A], run=failing)
         self.assertEqual(code, 1)
         self.assertIn("no such table: chronicles", err)
+
+
+class KeychainRunner:
+    """cf_auth の Runner の形 (argv, env, cwd)。security への答えを決める。"""
+
+    def __init__(self, exists=0):
+        self.calls = []
+        self.exists = exists
+
+    def __call__(self, argv, env, cwd):
+        self.calls.append((tuple(argv), dict(env)))
+        if argv[0] != "security":
+            raise AssertionError(f"思わぬ呼び出し: {argv}")
+        if argv[-1] == "-w":
+            return Result(0, TOKEN + "\n", "")
+        return Result(self.exists, "", "")
+
+
+class D1Api:
+    def __init__(self, status=200):
+        self.calls = []
+        self.status = status
+
+    def __call__(self, url, headers):
+        self.calls.append(url)
+        if self.status != 200:
+            body = {"success": False, "errors": [{"code": 7403}]}
+        else:
+            body = {
+                "success": True,
+                "result": [{"name": "biotope-harbor", "uuid": DB_ID}],
+            }
+        return self.status, json.dumps(body).encode()
+
+
+def real_remote_env(keychain, api):
+    def remote_env(say):
+        return mod.remote_env(
+            say,
+            run=keychain,
+            http_get=api,
+            base_env={
+                "PATH": "/usr/bin",
+                "USER": "yasushi",
+                "CLOUDFLARE_API_TOKEN": "ambient-other-account",
+            },
+            oauth_file=lambda: (
+                Path("/x/default.toml"),
+                parse_oauth_file('oauth_token = "OAUTH_SENTINEL"\nscopes = []\n'),
+            ),
+        )
+
+    return remote_env
+
+
+def never_run(*args, **kwargs):
+    raise AssertionError("wrangler を呼んではいけない")
+
+
+def budget_rows(seen):
+    def run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout='[{"results": [{"day": "2026-10-10", "bucket": "publish", "used": 1}]}]',
+            stderr="",
+        )
+
+    return run
+
+
+class RemoteAuthTest(unittest.TestCase):
+    """--remote は Keychain のトークンを環境で wrangler にだけ渡す。端末の OAuth は使わない (M26-16)。"""
+
+    def test_token_reaches_wrangler_only_through_the_env(self):
+        seen = []
+        keychain, api = KeychainRunner(), D1Api()
+        code, out, err = run_main(
+            ["--remote", "budget"],
+            run=budget_rows(seen),
+            remote_env=real_remote_env(keychain, api),
+        )
+        self.assertEqual(code, 0, err)
+        [(argv, kwargs)] = seen
+        self.assertNotIn(TOKEN, " ".join(argv))
+        self.assertEqual(kwargs["env"]["CLOUDFLARE_API_TOKEN"], TOKEN)
+        self.assertEqual(kwargs["env"]["CLOUDFLARE_ACCOUNT_ID"], ACCOUNT)
+        self.assertNotIn("ambient-other-account", kwargs["env"].values())
+        self.assertIn(f"/accounts/{ACCOUNT}/d1/database", api.calls[0])
+        self.assertIn("使う道: Keychain のトークン", err)
+        self.assertIn("出港 1/2,000", out)
+        self.assertNotIn(TOKEN, out + err)
+        self.assertNotIn("OAUTH_SENTINEL", out + err)
+
+    def test_missing_keychain_item_stops_before_wrangler(self):
+        keychain = KeychainRunner(exists=44)
+        code, _, err = run_main(
+            ["--remote", "budget"],
+            run=never_run,
+            remote_env=real_remote_env(keychain, D1Api()),
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("H11", err)
+        self.assertIn("止める", err)
+        self.assertFalse([a for a, _ in keychain.calls if a[-1] == "-w"])
+
+    def test_token_of_another_account_stops_before_wrangler(self):
+        code, _, err = run_main(
+            ["--remote", "hide", ID_A],
+            run=never_run,
+            remote_env=real_remote_env(KeychainRunner(), D1Api(status=403)),
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("7403", err)
+
+    def test_wrangler_error_text_is_redacted(self):
+        def leaking(argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 1, stdout="", stderr=f"bad {TOKEN}"
+            )
+
+        code, out, err = run_main(["--remote", "hide", ID_A], run=leaking)
+        self.assertEqual(code, 1)
+        self.assertNotIn(TOKEN, out + err)
+        self.assertIn("bad ***", err)
+
+    def test_remote_refuses_another_wrangler_config(self):
+        # 照合は deploy.config.json の D1 で行うので、別の設定の D1 には当てない
+        with self.assertRaises(SystemExit) as caught:
+            run_main(["--remote", "--config", "/tmp/x.jsonc", "budget"], run=never_run)
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_local_never_asks_for_a_token(self):
+        def no_token(say):
+            raise AssertionError("--local でトークンを読んではいけない")
+
+        seen = []
+        code, _, err = run_main(
+            ["--local", "budget"], run=budget_rows(seen), remote_env=no_token
+        )
+        self.assertEqual(code, 0, err)
+        [(_, kwargs)] = seen
+        self.assertIsNone(kwargs.get("env"))
 
 
 class PolicySyncTest(unittest.TestCase):
