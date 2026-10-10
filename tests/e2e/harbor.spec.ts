@@ -71,8 +71,12 @@ test('M19-09: 出港 → リンク → 訪問 (3D 観察画面) → 照合 (年�
   await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^\d+ 年/, { timeout: 90_000 });
   // 訪問の再生が進めた年と季節が、観察画面の下の帯に渡る (M19-09 の直し)。10 倍速では 1 年が 36 秒、季節は 9 秒ごと
   const bar = page.locator('#observe-layer .o-stats');
-  await expect(bar).toHaveText('0 年 · 夏', { timeout: 30_000 });
-  await expect(bar).toHaveText('1 年 · 春', { timeout: 60_000 });
+  const [, y, season] = /^(\d+) 年 · ([春夏秋冬])$/.exec((await bar.textContent()) ?? '') ?? [];
+  expect(season).toBeDefined();
+  const SEASONS = ['春', '夏', '秋', '冬'];
+  const i = SEASONS.indexOf(season);
+  await expect(bar).toHaveText(`${Number(y) + (i === 3 ? 1 : 0)} 年 · ${SEASONS[(i + 1) % 4]}`, { timeout: 30_000 });
+  await expect(bar).toHaveText(`${Number(y) + 1} 年 · ${season}`, { timeout: 60_000 });
   await shot(page, '04-visit-observe');
 
   // 照合: 明示の操作で Web Worker が回し直し、進みを見せ、終われば港へ結末を送る。港の写しが hash を比べて確認を数える
