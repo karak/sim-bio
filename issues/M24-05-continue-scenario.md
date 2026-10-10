@@ -9,6 +9,7 @@ evidence:
   - tests/unit/persist.lastStage.test.ts (印の読み書きと壊れた印 9 行、scenarioProgressOf、continueTargetOf の表 13 行)
   - tests/unit/ui.titleMenu.test.ts (石板の続きの「続きから」(M24-05): 要約の文、titleChoiceOf の表 5 行)
   - tests/e2e/title.spec.ts (M24-05: 石板を進めてタイトルへ → 続きから、M24-04 の判定の出た石板の試験の末尾で続きにしないこと)
+  - tests/unit/persist.lastStage.test.ts (印は見守り手ごと 2 本 (2026-10-10 の決定))、commit f50a82b・a1e7df5
   - src/persist/lastStage.ts、src/ui/titleMenu.ts (titleChoiceOf)、src/ui/Title.ts、src/main.ts (enterFromTitle・markStage)、src/persist/scenarioSave.ts (onSaved)
 ---
 
@@ -30,7 +31,7 @@ M24-01 の「続きから」は自由モードの自動の枠だけを見る。�
 
 - [x] 印の読み書きと「続きから」の行き先を純粋な関数にし、表の単体試験 (自由だけ・石板だけ・両方で新しい方・判定の出た石板・壊れた印)。先に赤
 - [x] E2E: 石板を少し進めてタイトルへ → 「続きから」が石板の題を言い、Enter で同じ年から続く
-- [ ] `pnpm run check`・通しの E2E
+- [x] `pnpm run check`・通しの E2E
 
 ## 作業ログ
 
@@ -58,3 +59,14 @@ M24-01 の「続きから」は自由モードの自動の枠だけを見る。�
 - 印は見守り手ごと (開発の `?player=`、置き場の DB を分ける) に分けていない。「タイトルへ」が素の `/` へ移るので、タイトルはいつも既定の見守り手の置き場と印を読む (M24-04 の開いた問いと一緒に決める)
 - 「続きから」が石板を指すとき、自動の枠 (自由モード) の続きはタイトルからは開けない (ロードの板は M24-02)。操作画面の石板の選択の「自由モード」からは開ける
 - src/ui/Title.ts の PENDING_TEXT の new「いまは「続きから」で島へ入れます」は、続きからが石板を指すときは自由モードの島へ入れない。文を変えるか (既存の文なので承認が要る)、M24-02 で板の中身ができるのを待つか
+
+### 2026-10-10 (開いた問いの決定と実装)
+
+- ユーザーの決定 1: 印は見守り手 (`?player=`) ごとに分ける。「タイトルへ」は `?player=` と `?dev=1` を残す (M24-04)
+- ユーザーの決定 2: 新規ゲームの変わった振る舞い (自動の枠が無ければ、石板の続きがあっても seed 42 の自由モードの島で始める) はこのままでよい
+- ユーザーの決定 3: 新規ゲームの準備中の板の文は「新しい島の始め方 (いまの島を残すかの確かめ) は準備中です。」だけにする (2 つ目の文を外す)
+- 先に赤を見た: 印の試験が `expected { stage: 'scenario', …(2) } to deeply equal { stage: 'free', at: 100 }` (見守り手の印が既定の印を上書きした)
+- 鍵: 見守り手が無ければ前からの `biotope.last-stage`、あれば置き場の DB の名前 (`biotope-island@<名前>`) と同じく `biotope.last-stage@<名前>`。`readLastStage` / `writeLastStage` が見守り手の名を引数に取り、main.ts は `dev?.player?.name` を渡す (名の形が通らない見守り手は開発の側が捨てるので、DB と同じく既定の鍵になる)
+- 板の文の E2E は tests/e2e/title.spec.ts の M24-04 (2026-10-10 の決定) の 1 本の中 (自動の枠があるときの新規ゲームの板)
+- 結果は M24-04 の同じ日の節
+
