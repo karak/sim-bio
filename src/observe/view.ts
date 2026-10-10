@@ -1,11 +1,7 @@
 import {
-  CanvasTexture,
   Color,
   CylinderGeometry,
-  DirectionalLight,
-  Fog,
   Group,
-  HemisphereLight,
   IcosahedronGeometry,
   BoxGeometry,
   Box3,
@@ -13,17 +9,10 @@ import {
   Matrix4,
   Mesh,
   Object3D,
-  PCFShadowMap,
-  PerspectiveCamera,
   Raycaster,
   Quaternion,
-  Scene,
-  SRGBColorSpace,
-  Texture,
   Vector3,
-  WebGLRenderer,
 } from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { WorldSnapshot } from '../simulation/types';
 import type { TimelineEvent } from '../scenario/ScenarioRunner';
 import { createNoticeBand } from './notice';
@@ -32,12 +21,11 @@ import { mulberry32 } from '../simulation/rng';
 import { CELL_M, ELEV_M, createTerrainField, createTerrainMesh, groundLayers, wearTerrain, type Worn } from './render/terrain';
 import { createWater } from './render/water';
 import { createGrass } from './render/grass';
-import { createGrade } from './render/grade';
 import { createToonMaterial, rimLight } from './render/toon';
 import { findNode, loadGlb } from './render/assets';
 import { glow } from './render/bake';
 import { culledProps, instanceProps, lodProps, type CulledProps, type LodProps } from './render/instancer';
-import { HUT_NEAR_M, HUT_NEAR_SPREAD, PROP_NEAR_M, hutPlacements, shadowNodeOf } from './settlementLayout';
+import { HUT_NEAR_SPREAD, hutPlacements, shadowNodeOf } from './settlementLayout';
 import { createCreatureView } from './render/creatures';
 import { createShipView } from './render/ship';
 import { createMotes } from './render/motes';
@@ -48,65 +36,18 @@ import { createShotCamera, frameBlocked, inFoliage, type AvoidZone } from './ren
 import { triangleBreakdown } from './render/breakdown';
 import { terrainDigest } from '../render/inspect';
 import type { ObserveDebug, ObserveInspect, ObserveStats } from './inspect';
-import { installShadowOnly } from './render/shadowOnly';
 import { bakeImpostor } from './render/impostor';
 import { directorContext, initialDirector, stepDirector, type Shot } from './director';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from './scenes';
-import { AtmospherePass, createSky } from './render/atmosphere';
 import { createDynamicResolution } from './render/dynamicResolution';
 import { DAY_CYCLE_S, daylightAt, phaseAt } from './daylight';
 import { extractArea, landmarks, observeCenter } from './area';
 import { K_DEFAULT, BUDGET_PER_SECOND, folkRuleFor, reconcile, targetCounts } from './population';
 import { applyPlan, stepAgents, type AgentWorld } from './agents';
 import type { ViewState } from './view/state';
+import { AREA_R, OPT, params, WINDOW } from './view/options';
+import { createComposite, createStage, disposeStage } from './view/stage';
 
-/**
- * M22-02 デフォルメ試作 (observe.html)。空の舟 25 年目 (舟は肋の段) の保存から、集落の周り半径 8 セルを組んで見る。
- * 本体は読むだけ。個体の動きは試作用の単純な徘徊で、M22-04 の個体層に置き換える。
- * URL: ?deer=300&trees=200&near=40&grass=20000&grade=1&bloom=1&shadow=1
- * (個体層をつないだ後: deer は区域の鹿の目標頭数。K を密度の合計から逆算する。0 なら本体の密度 × K_DEFAULT のまま。near は使わない)
- * (M22-06: ship は舟の進み (0〜120、無ければ保存の値)、launched=1 で飛び立った舟、forest は森の木の上限本数)
- * (M22-08: depart=1 で開いてすぐ舟が飛び去る。sink は海面を何 m 上げて見せるか (沈降の試し)。auto=0 で自動カメラを切る (shot を指定したときも切る)。speed は本体の速さ (0 / 1 / 10、1 = 1 秒に 1 tick)。freeze=1 は本体も止める)
- * (M22-07: air=0 で空気の層と昼夜を切る。time は始まりの時刻 (0 = 夜明け、0.3 = 正午、0.8 = 深夜)、day は 1 周の秒数、freeze=1 で時刻を止める)
- * (M23-06: far は鐘樹の成木と森の木をインポスター (板) に替える距離 (m)。0 で切る)
- * (M23-08: cfar は動物を遠い段 (群れ LOD を削った形) に替える距離 (m、個体ごとに ±10%)。0 で切る)
- * (M23-09: hut は小屋を遠距離版 hut_lod1 に替える距離 (m、カメラの高さも入れた距離、小屋ごとに ±10% 揺らす)。0 で切る (いつも近い形))
- * (M23-07: msaa は場面の MSAA の段 (0 / 2 / 4)、pr はピクセル比の上限、airres は空気の層を場面の何分の 1 で描くか (1 か 2、既定 2)、
- *  dynres=0 で動的な解像度 (コマが 60 fps の予算を続けて超えたときだけ合成の倍率を下げる。ピクセル比 2 で 0.5、1 で 0.7 まで) を切る)
- */
-const params = new URLSearchParams(location.search);
-const num = (k: string, d: number) => Number(params.get(k) ?? d);
-const flag = (k: string) => params.get(k) !== '0';
-const OPT = {
-  deer: num('deer', 0),
-  trees: num('trees', 140),
-  near: num('near', 40),
-  cfar: num('cfar', 50),
-  // (草の磨き上げ: 房を 36 三角形に減らした分、25,000 から 30,000 房に増やして草の絨毯を密にする)
-  grass: num('grass', 30000),
-  grade: flag('grade'),
-  bloom: flag('bloom'),
-  shadow: flag('shadow'),
-  forest: num('forest', 80),
-  ship: params.has('ship') ? num('ship', 0) : null,
-  launched: params.get('launched') === '1',
-  depart: params.get('depart') === '1',
-  speed: num('speed', 1),
-  sink: num('sink', 0),
-  auto: params.get('auto') !== '0' && !params.has('shot'),
-  air: flag('air'),
-  time: num('time', 0.16),
-  day: num('day', DAY_CYCLE_S),
-  freeze: params.get('freeze') === '1',
-  far: num('far', 60),
-  hut: num('hut', HUT_NEAR_M),
-  // (M23-09 の 3 回目で追加) 小屋でない集落の部品 (灯り柱・石垣・立石・船台・衝立) を遠距離版 <名前>_lod1 に替える距離 (m)。0 で切る
-  prop: num('prop', PROP_NEAR_M),
-  msaa: num('msaa', 4),
-  pr: num('pr', 2),
-  airScale: (num('airres', 2) === 1 ? 1 : 2) as 1 | 2,
-  dynres: flag('dynres'),
-};
 /**
  * (遠距離版の追加で追加) 作り直した芽・株・下草を遠距離版に替える距離 (m)。どれも近い形の 1〜2 割の三角形で、切り替わりの距離では数画素の違い。
  * 羊歯は FERN_BEYOND_M より先をさらに遠い版 (12 三角形) にする (林の画で遠距離版 120 三角形が 555 株見え、6.7 万三角形あった)
@@ -115,26 +56,7 @@ const SEEDLING_NEAR_M = 25;
 const STUMP_NEAR_M = 35;
 const UNDER_NEAR_M: Record<string, number> = { fern: 22, flower_patch: 25, moongrass_tuft_seed: 25 };
 const FERN_BEYOND_M = 45;
-/** 区域 (半径 8) の外に、地面を 4 セル分の縁まで作る */
-const AREA_R = 8;
-const WINDOW = 12;
 const DEPART_S = 70;
-
-function skyTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 4;
-  c.height = 256;
-  const g = c.getContext('2d')!;
-  const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, '#7FA9C9');
-  grad.addColorStop(0.55, '#CFE0E4');
-  grad.addColorStop(1, '#F3E3C4');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 4, 256);
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  return t;
-}
 
 function placeholderTree(kind: 'mature' | 'sapling' | 'seedling' | 'stump'): Group {
   const g = new Group();
@@ -247,50 +169,8 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
   const field = createTerrainField(s, home, WINDOW);
 
   const canvas = host.canvas;
-  // (M23-07 で変更: 画面 (canvas) の MSAA を切る。描画はすべて合成 (grade.ts) を通り、MSAA は場面の描画先が持つ。画面の MSAA は最後の全画面の 1 枚にしか掛からず、解決の分だけ重かった)
-  const renderer = new WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-  // (M23-07 で変更: ピクセル比の上限は OPT.pr)
-  renderer.setPixelRatio(Math.min(OPT.pr, window.devicePixelRatio));
-  renderer.shadowMap.enabled = OPT.shadow;
-  renderer.shadowMap.type = PCFShadowMap;
-  // (M23-04) 影の描画だけに出す粗い代わりの形 (鐘樹の成木・小屋・近くの動物)。本の描画の形は castShadow = false にする
-  const shadowOnly = installShadowOnly(renderer.shadowMap);
-  const scene = new Scene();
-  scene.background = skyTexture();
-  // 霧の色は空の地平の帯に合わせ、水面の端 (区域の外の遠景) を地平に溶かす
-  scene.fog = new Fog(new Color('#D9E4E2'), 80, 320);
-  // (M22-07: 空気の層を使うときは、空は昼夜で変わる球、霧は後段の霞と靄が受け持つ)
-  const sky = OPT.air ? createSky() : null;
-  if (sky) {
-    scene.background = null;
-    scene.fog = null;
-    scene.add(sky.mesh);
-  }
-  // (M22-07: 空気の層で水面の果て 1.5 km まで霞ませるので、遠くの切り捨てを 800 m から 2 km に)
-  const camera = new PerspectiveCamera(42, 1, 0.2, 2000);
-  camera.position.set(-26, field.heightAt(-26, 44) + 6, 44);
-  const controls = new OrbitControls(camera, canvas);
-  controls.target.set(2, field.heightAt(2, 0) + 3, 0);
-  controls.enableDamping = true;
-  controls.maxPolarAngle = Math.PI / 2 - 0.08;
-  controls.minDistance = 4;
-  controls.maxDistance = 160;
-
-  const hemi = new HemisphereLight(new Color('#D7E8F2'), new Color('#6F7A4E'), 1.1);
-  scene.add(hemi);
-  const sun = new DirectionalLight(new Color('#FFE3B6'), 2.4);
-  sun.position.set(-60, 70, 40);
-  sun.castShadow = OPT.shadow;
-  sun.shadow.mapSize.set(2048, 2048);
-  const sc = sun.shadow.camera;
-  sc.left = -100;
-  sc.right = 100;
-  sc.top = 100;
-  sc.bottom = -100;
-  sc.far = 300;
-  sun.shadow.bias = -0.0005;
-  sun.shadow.normalBias = 0.6;
-  scene.add(sun);
+  const stage = createStage(canvas, field);
+  const { renderer, shadowOnly, scene, sky, camera, controls, hemi, sun } = stage;
 
   status.textContent = '地形を組んでいます…';
   const terrain = createTerrainMesh(s, field);
@@ -674,26 +554,13 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
     onSnapshot(clock.snapshot());
   };
 
-  // (M23-07 で変更: 空気の層は既定で場面の半分の大きさで描く (OPT.airScale))
-  const air = OPT.air ? new AtmospherePass(camera, sun, OPT.airScale) : null;
-  // (M23-07 で変更: 場面の MSAA の段を渡す)
-  const grade = createGrade(renderer, scene, camera, air ? [air] : [], { msaa: OPT.msaa });
+  const { air, grade, resize } = createComposite(stage, canvas);
   // 調整用 (M22-07): 開発者ツールから空気の層の uniform と時刻を触る
   // 試験の口 (M25-09): window に書かず inspect() で返す。src/dev/probe.ts が開発・受入のビルドだけ window に繋ぐ
   let lastStats: ObserveStats | null = null;
   let lastDebug: ObserveDebug | null = null;
   const airInsp: ObserveInspect['air'] = { air, sun, camera, controls, scene, renderer, heightAt: field.heightAt };
-  grade.setEnabled({ grade: OPT.grade, bloom: OPT.bloom });
-  const resize = () => {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    grade.setSize(w, h);
-  };
-  window.addEventListener('resize', resize);
-  resize();
+  status.textContent = '';
   status.textContent = '';
 
   // 美観チェック用のカメラの寄せ先 (自動カメラ M22-08 までの仮)。群れ・狼は今いる個体の重心へ寄る
@@ -1058,19 +925,7 @@ export async function createObservationView(host: ObserveHost): Promise<Observat
       clearTimeout(presetTimer);
       running = false;
       cancelAnimationFrame(handle);
-      window.removeEventListener('resize', resize);
-      controls.dispose();
-      scene.traverse((o) => {
-        const m = o as Mesh;
-        m.geometry?.dispose();
-        for (const mat of Array.isArray(m.material) ? m.material : m.material ? [m.material] : []) {
-          for (const v of Object.values(mat)) if (v && (v as Texture).isTexture) (v as Texture).dispose();
-          mat.dispose();
-        }
-      });
-      (scene.background as Texture | null)?.dispose?.();
-      renderer.dispose();
-      renderer.forceContextLoss();
+      disposeStage(stage, resize);
     },
     cameraMode() {
       if (state.director.mode === 'auto') return 'auto';
