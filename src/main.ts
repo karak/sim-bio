@@ -6,8 +6,7 @@ import { createSceneView, type SceneView } from './render/SceneView';
 import { buildAssetTable } from './render/assetTable';
 import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
-import { createScenarioRunner, type ScenarioRunner } from './scenario/ScenarioRunner';
-import { stepByYear } from './scenario/stepByYear';
+import { createScenarioRunner } from './scenario/ScenarioRunner';
 import type { ScenarioDef } from './scenario/types';
 import type { Command } from './simulation/types';
 import { TOWER_COST } from './simulation/weatherTower';
@@ -22,12 +21,11 @@ import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
 import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
-import { checkScenarioSave, createScenarioAutosave, type ScenarioAutosave } from './persist/scenarioSave';
+import { checkScenarioSave, createScenarioAutosave } from './persist/scenarioSave';
 import { continueTargetOf, readLastStage, scenarioProgressOf, writeLastStage, type ScenarioProgress } from './persist/lastStage';
 import { putPendingSlot, slotSaveOf, takePendingSlot, type SlotSave } from './persist/slotSave';
-import type { Chronicle } from './chronicle/chronicle';
-import { recordChronicle, type ChronicleRecorder } from './chronicle/recorder';
-import type { InterveneResult, RunnerState } from './scenario/ScenarioRunner';
+import { recordChronicle } from './chronicle/recorder';
+import type { RunnerState } from './scenario/ScenarioRunner';
 import { SIM_VERSION } from './simulation/version';
 import { digestOf } from './chronicle/digest';
 import { createPlayback } from './chronicle/playback';
@@ -38,6 +36,7 @@ import { markEntered, putOpenTitle, takeTabMarks } from './persist/tabMarks';
 import { askOf, type Risky } from './app/confirmAsk';
 import { scenarioConfigOf } from './app/worldConfig';
 import { restoreIsland } from './app/restore';
+import { sessionOf } from './app/session';
 import { atOf, bootPlanOf, bootRouteOf, bootSeedOf, DEFAULT_SEED, newWorldSeed, planOp, runPlan, searchFor, seedSearchFor, titleHrefOf, type Effect, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
@@ -136,14 +135,14 @@ async function boot(): Promise<void> {
   const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
   const { resumed, fromSlot } = await restoreIsland(booted.restore, { localSave, store, head, log, persistLog, seed: seeded.seed, pending });
-  let world = resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log });
+  const session = sessionOf(resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log }), !!visitId);
   // 枠から開いた自由モードの島は、読込と同じくその場で自動の枠に書く
-  if (fromSlot) localSave.replaced(world.serialize());
+  if (fromSlot) localSave.replaced(session.world.serialize());
 
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const app = document.getElementById('app');
   if (!app) throw new Error('#app missing');
-  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(world.snapshot().species), size: world.snapshot().size, now: dev?.clock });
+  let view: SceneView = createSceneView(canvas, { assets: buildAssetTable(session.world.snapshot().species), size: session.world.snapshot().size, now: dev?.clock });
   /** やり直しの効かない操作の確かめ (M21-04)。何を確かめるかは askOf が決め、確かめの要らない操作はそのまま通す */
   const confirm = createConfirm(app);
   const confirmed = (r: Risky): Promise<boolean> => {
@@ -154,26 +153,19 @@ async function boot(): Promise<void> {
   let spawnArmed: string | null = null;
   /** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
   let towerArmed = false;
-  let selected: number | null = null;
-
-  let runner: ScenarioRunner | null = null;
-  /** シナリオ中の介入の年代記 (M19-06)。runner と一緒に作り、runner.intervene を包む */
-  let recorder: ChronicleRecorder<InterveneResult> | null = null;
-  /** 石板の途中の島の自動保存 (M19-14)。runner と一緒に作る */
-  let scenarioAutosave: ScenarioAutosave | null = null;
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
-  const saveChronicle = () => scenarioAutosave?.flush();
+  const saveChronicle = () => session.scenarioAutosave?.flush();
   /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
   const intervene = (c: Command): boolean => {
     if (visitId) return false;
-    if (!recorder) {
-      world.dispatch(c);
+    if (!session.recorder) {
+      session.world.dispatch(c);
       return true;
     }
-    const result = recorder.dispatch(c);
+    const result = session.recorder.dispatch(c);
     if (result.ok) saveChronicle();
     else {
-      const snap = world.snapshot();
+      const snap = session.world.snapshot();
       log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'cmd.rejected', reason: result.reason, cmd: c });
       if (result.reason === 'budget') tablet.flash();
     }
@@ -182,40 +174,38 @@ async function boot(): Promise<void> {
 
   /** 今の島の seed を HUD に出し、自由モードなら URL の seed= も揃える (M26-10)。初めて開いた 42 の島だけは URL を変えない */
   const showSeed = (always: boolean) => {
-    hud.setSeed(world.seed);
+    hud.setSeed(session.world.seed);
     if (scenario) return;
-    if (always || seeded.seed !== null || world.seed !== DEFAULT_SEED) history.replaceState(null, '', `${location.pathname}${seedSearchFor(location.search, world.seed)}${location.hash}`);
+    if (always || seeded.seed !== null || session.world.seed !== DEFAULT_SEED) history.replaceState(null, '', `${location.pathname}${seedSearchFor(location.search, session.world.seed)}${location.hash}`);
   };
   const replaceWorld = (next: World) => {
-    const shown = world.snapshot();
-    world = next;
-    const { size, species: nextSpecies } = world.snapshot();
+    const shown = session.world.snapshot();
+    session.world = next;
+    const { size, species: nextSpecies } = session.world.snapshot();
     // 描き分けの表は種から作るので、大きさか種の並びが変われば作り直す
     if (size !== shown.size || nextSpecies.map((d) => d.id).join() !== shown.species.map((d) => d.id).join()) {
       view.dispose();
       view = createSceneView(canvas, { assets: buildAssetTable(nextSpecies), size, now: dev?.clock });
     }
-    selected = null;
-    localSave.replaced(world.serialize());
+    session.selected = null;
+    localSave.replaced(session.world.serialize());
     showSeed(true);
   };
   /** 枠とファイルの包み (M19-17)。石板の中では島・runner の状態・年代記の 3 つ */
   const slotSave = (): SlotSave =>
-    scenario && runner && recorder
-      ? { stage: 'scenario', scenarioId: scenario.id, save: world.serialize(), runner: runner.save(), chronicle: recorder.current() }
-      : { stage: 'free', save: world.serialize() };
-  /** 石板を今の島で始め直す (M19-17)。枠を読んだとき (枠の runner の状態と年代記から) と、石板を初めからにしたとき。石板を開いたときに作る */
-  let restartScenario: (from: { runner: RunnerState; chronicle: Chronicle } | null) => void = () => {};
+    scenario && session.runner && session.recorder
+      ? { stage: 'scenario', scenarioId: scenario.id, save: session.world.serialize(), runner: session.runner.save(), chronicle: session.recorder.current() }
+      : { stage: 'free', save: session.world.serialize() };
   const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
-  const at = () => atOf(!!visitId, head, runner?.verdict().status ?? null);
+  const at = () => atOf(!!visitId, head, session.runner?.verdict().status ?? null);
   /** 確かめを受けた後に 1 つ行う。false なら残りを行わない */
   const perform = async (e: Effect): Promise<boolean> => {
     switch (e.kind) {
       case 'new_world':
-        replaceWorld(World.create({ ...config, seed: newWorldSeed(at(), config.seed, world.seed, drawSeed) }, { log }));
+        replaceWorld(World.create({ ...config, seed: newWorldSeed(at(), config.seed, session.world.seed, drawSeed) }, { log }));
         return true;
       case 'restart':
-        restartScenario(e.from);
+        session.restartScenario(e.from);
         return true;
       case 'replace': {
         let restored: World;
@@ -242,7 +232,7 @@ async function boot(): Promise<void> {
         return true;
       case 'flush':
         // 移る前に、今の島と石板の続きを書き切る (M19-17)。訪問ではどちらも何も書かない
-        await Promise.all([localSave.flush(() => world.serialize()), saveChronicle()]);
+        await Promise.all([localSave.flush(() => session.world.serialize()), saveChronicle()]);
         return true;
       case 'go':
         location.search = searchFor(location.search, e.scenarioId, { keepVisit: e.keepVisit });
@@ -260,15 +250,13 @@ async function boot(): Promise<void> {
   /** やり直しの効かない操作 (M21-04)。確かめと行き先は planOp が決め、ここは確かめてから effects を順に行うだけ */
   const run = (op: Op) => runPlan(planOp(op, at(), titleOf), confirm, perform);
 
-  /** 直近に知らせた見ている種。石板を始め直したとき (restartScenario) に新しい runner へ渡し直す */
-  let viewing: string | null = null;
   // いま地図で見ている種 (M21-02 D5)。変わったら石板の告知に反映し、ログに残す (e2e が HUD からの通知を確かめる)
   const viewedSpecies = createViewedSpecies((id, opts) => {
-    viewing = id;
-    if (!runner) return;
-    runner.setViewedSpecies(id, opts);
-    const snap = world.snapshot();
-    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: runner.def.id, id, acknowledge: opts.acknowledge });
+    session.viewing = id;
+    if (!session.runner) return;
+    session.runner.setViewedSpecies(id, opts);
+    const snap = session.world.snapshot();
+    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: session.runner.def.id, id, acknowledge: opts.acknowledge });
   });
   const hud = createHud(app, {
     onCommand: intervene,
@@ -316,9 +304,9 @@ async function boot(): Promise<void> {
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
   /** 受け取った漂着 (M19-10) を浜のセルに放つ。石板では放流の値段を積荷の種の数だけ先に確かめ、足りなければ 1 つも放たない */
   const landCargo = (d: DrawnCargo): LandResult => {
-    const s = world.snapshot();
+    const s = session.world.snapshot();
     const place = at();
-    const power = runner?.budget()?.power;
+    const power = session.runner?.budget()?.power;
     const spawnCost = scenario?.budget?.costs.spawn;
     const gate = { finished: place.stage === 'scenario' && place.finished, budget: power !== undefined && spawnCost !== undefined ? { power, spawnCost } : undefined };
     const landing = planLanding(d, { elevation: s.layers.elevation, size: s.size }, gate, speciesNames);
@@ -327,7 +315,7 @@ async function boot(): Promise<void> {
     if (!landing.commands.every(intervene)) return 'refused';
     hud.addMarker(s.year, landing.marker, '#8FEADF');
     // 積荷は浜の 3×3 に着くので、島の総数ではほとんど動かない (M19-15)。着いた浜のセルを選び、周辺の密度の推移で見せる
-    selected = landing.cell;
+    session.selected = landing.cell;
     hud.showCell(landing.cell, s);
     return 'ok';
   };
@@ -341,23 +329,17 @@ async function boot(): Promise<void> {
     scenarioId: scenario && !visitId ? scenario.id : null,
     speciesNames,
     land: visitId ? null : landCargo,
-    log: (level, event, extra) => persistLog(level, event, world.snapshot().tick, extra),
+    log: (level, event, extra) => persistLog(level, event, session.world.snapshot().tick, extra),
     player: dev?.player,
     guard: {
       ask: confirmed,
       leave: (href) => void run({ kind: 'visit', href }),
     },
   });
-  /** 判定の前の石板の島の進め方。訪問では港から年代記が届くまで止め、届いたら記録の tick で打ち直す (M19-09) */
-  let scenarioStep: (n?: number) => void = visitId
-    ? () => {}
-    : (n) => {
-        if (runner) stepByYear(world, runner, n);
-      };
   void localSave.list().then((list) => list.forEach(hud.setSlot));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'hidden') return;
-    localSave.flush(() => world.serialize());
+    localSave.flush(() => session.world.serialize());
     saveChronicle();
     flushViaBeacon();
   });
@@ -371,31 +353,31 @@ async function boot(): Promise<void> {
     buttonHost: document.getElementById('speed-row') ?? undefined,
   });
   // 試験の口 (M25-09): 開発・受入のビルドだけ。SceneView は島を作り直すので、読むたびに今の view を引く
-  probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect(), tick: () => world.snapshot().tick, advance: (n) => loop.advance(n) });
+  probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect(), tick: () => session.world.snapshot().tick, advance: (n) => loop.advance(n) });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
-    { step: (n) => (runner?.verdict().status === 'running' ? scenarioStep(n) : world.step(n)), snapshot: () => world.snapshot() },
+    { step: (n) => (session.runner?.verdict().status === 'running' ? session.scenarioStep(n) : session.world.step(n)), snapshot: () => session.world.snapshot() },
     {
       // グラフの点は年の境目ごとに積む (M25-02)。フレームで拾うと、境目から何 tick 過ぎた島を写すかが回ごとに違う
       ticksPerYear: config.ticksPerYear,
       onYear: (s) => hud.recordYear(s),
       onFrame: (s) => {
-        localSave.onTick(s.tick, () => world.serialize());
-        scenarioAutosave?.onTick(s.tick);
+        localSave.onTick(s.tick, () => session.world.serialize());
+        session.scenarioAutosave?.onTick(s.tick);
         // 観察画面の間は地図を描かないので、種を選んでいても見ていないとみなす
         viewedSpecies.setObserving(observe.active());
-        observe.push(s, runner?.timeline());
+        observe.push(s, session.runner?.timeline());
         // 選んだセルを 3D の島の上でも示す (M22-10)。選びを解けば (selected = null) 消える
-        view.setSelected(selected);
+        view.setSelected(session.selected);
         if (!observe.active()) view.update(s);
         hud.update(s);
         // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)
-        hud.setNextMeteor(runner ? runner.nextMeteorYear() : null);
-        if (selected !== null) hud.showCell(selected, s);
-        if (runner) {
-          const verdict = runner.update(s);
-          const budgetInfo = runner.budget();
-          tablet.update(runner.yearOf(s), verdict, budgetInfo, runner.warnings(), runner.timeline(), runner.prayer(), runner.milestones());
+        hud.setNextMeteor(session.runner ? session.runner.nextMeteorYear() : null);
+        if (session.selected !== null) hud.showCell(session.selected, s);
+        if (session.runner) {
+          const verdict = session.runner.update(s);
+          const budgetInfo = session.runner.budget();
+          tablet.update(session.runner.yearOf(s), verdict, budgetInfo, session.runner.warnings(), session.runner.timeline(), session.runner.prayer(), session.runner.milestones());
           const costs = scenario?.budget?.costs;
           hud.setAffordable(
             budgetInfo && costs
@@ -414,72 +396,72 @@ async function boot(): Promise<void> {
     },
   );
   if (scenario) {
-    const newRunner = (restored?: RunnerState) => createScenarioRunner(dev?.scenarioDef(scenario) ?? scenario, world, {
+    const newRunner = (restored?: RunnerState) => createScenarioRunner(dev?.scenarioDef(scenario) ?? scenario, session.world, {
       ticksPerYear: config.ticksPerYear,
       onVerdict: (v) => {
         loop.setSpeed(0);
         saveChronicle();
-        const chronicle = recorder?.current();
+        const chronicle = session.recorder?.current();
         const after = afterVerdictOf(v.status, { visiting: !!visitId, forced: !!dev?.shortcut, chronicle: !!chronicle });
         // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
-        const hold = after.hold ? exportCargo(world.snapshot()) : undefined;
+        const hold = after.hold ? exportCargo(session.world.snapshot()) : undefined;
         tablet.showVerdict(v, hold);
         // 空の舟の積荷 (M19-10) は持ち出しと同じ瞬間の snapshot から作り、港に流す
         const cargo = after.harbor?.cargo && hold ? cargoOfHold(hold) : null;
         if (chronicle && after.harbor) {
-          void digestOf(world.snapshot(), after.harbor.status).then((digest) => {
+          void digestOf(session.world.snapshot(), after.harbor.status).then((digest) => {
             harbor.offerPublish({ chronicle, digest });
             harbor.settle({ chronicle, digest }, cargo);
           });
         }
-        log.write({ ts: new Date().toISOString(), tick: world.snapshot().tick, year: world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
+        log.write({ ts: new Date().toISOString(), tick: session.world.snapshot().tick, year: session.world.snapshot().year, level: 'info', event: `scenario.${v.status}`, scenario: scenario.id, reason: v.reason });
       },
       onWarning: (w) => {
-        const snap = world.snapshot();
+        const snap = session.world.snapshot();
         log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.warning', scenario: scenario.id, kind: w.kind, id: w.id, text: w.text });
       },
       onPrayer: (e) => {
-        const snap = world.snapshot();
+        const snap = session.world.snapshot();
         log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.prayer', scenario: scenario.id, phase: e.phase, kind: e.prayer });
       },
       onPowerExhausted: () => {
         tablet.flash();
-        const snap = world.snapshot();
+        const snap = session.world.snapshot();
         log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'warn', event: 'scenario.power.exhausted', scenario: scenario.id });
       },
     }, restored);
-    runner = newRunner(resumed?.runner);
-    let scenarioRunner = runner;
-    recorder = visitId ? null : recordChronicle(
-      { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => world.snapshot() },
+    session.runner = newRunner(resumed?.runner);
+    let scenarioRunner = session.runner;
+    session.recorder = visitId ? null : recordChronicle(
+      { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => session.world.snapshot() },
       { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
       () => scenarioRunner.totalsByYear(),
     );
     // 石板の途中の島の自動保存 (M19-14) は、記録する島 (自分の島) だけ。訪問している他人の島を自分の続きとして書かない
-    const scenarioRecorder = recorder;
+    const scenarioRecorder = session.recorder;
     if (scenarioRecorder) {
       if (resumed?.chronicle) scenarioRecorder.resume(resumed.chronicle);
-      scenarioAutosave = createScenarioAutosave({
+      session.scenarioAutosave = createScenarioAutosave({
         store,
         scenarioId: scenario.id,
         every: AUTOSAVE_TICKS,
         log: persistLog,
-        from: world.snapshot().tick,
-        capture: () => ({ save: world.serialize(), runner: scenarioRunner.save(), chronicle: scenarioRecorder.current() }),
+        from: session.world.snapshot().tick,
+        capture: () => ({ save: session.world.serialize(), runner: scenarioRunner.save(), chronicle: scenarioRecorder.current() }),
         onSaved: markStage,
       });
     }
     // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る
-    scenarioRunner.update(world.snapshot());
+    scenarioRunner.update(session.world.snapshot());
     // 枠から開いた石板は、その場で石板の続きに書く (開き直してもその時点から)
     if (fromSlot) void saveChronicle();
-    restartScenario = (from) => {
-      runner = scenarioRunner = newRunner(from?.runner);
+    session.restartScenario = (from) => {
+      session.runner = scenarioRunner = newRunner(from?.runner);
       // HUD のレイヤーは始め直しても変わらないので、見ている種を新しい runner にも知らせる。枠から戻した告知は読んでいないので既読にしない
-      scenarioRunner.setViewedSpecies(viewing, { acknowledge: false });
+      scenarioRunner.setViewedSpecies(session.viewing, { acknowledge: false });
       // 記録器は runner を scenarioRunner 越しに包むので、命令の列だけを枠の年代記 (初めからなら空) に差し替える
       scenarioRecorder?.resume(from?.chronicle ?? { ...scenarioRecorder.current(), commands: [] });
-      scenarioRunner.update(world.snapshot());
+      scenarioRunner.update(session.world.snapshot());
       void saveChronicle();
       const verdict = scenarioRunner.verdict();
       if (verdict.status === 'running') tablet.hideVerdict();
@@ -491,7 +473,7 @@ async function boot(): Promise<void> {
     if (visitId) {
       void harbor.visitChronicle().then((c) => {
         if (!c) return;
-        scenarioStep = createPlayback(world, scenarioRunner, c.commands).step;
+        session.scenarioStep = createPlayback(session.world, scenarioRunner, c.commands).step;
         document.getElementById('speed-10')?.click();
         requestAnimationFrame(() => void observe.enter());
       });
@@ -519,7 +501,7 @@ async function boot(): Promise<void> {
     if (cell === null) return;
     if (spawnArmed) {
       const id = spawnArmed;
-      const s = world.snapshot();
+      const s = session.world.snapshot();
       // 1 セルだけだと見えにくいので半径 1 (3×3 相当) に放つ。1 コマンドなので値段も 1 回分。海セルは World 側で無視される
       const ok = intervene(spawnClick(id, cell));
       if (ok) {
@@ -531,30 +513,30 @@ async function boot(): Promise<void> {
     }
     if (armed) {
       const kind = armed;
-      const s = world.snapshot();
+      const s = session.world.snapshot();
       const ok = intervene(disasterClick(kind, cell));
       if (ok) hud.addMarker(s.year, kind, '#E07A55');
       hud.setArmed(null);
       return;
     }
     if (towerArmed) {
-      const s = world.snapshot();
+      const s = session.world.snapshot();
       const ok = intervene({ type: 'build_tower', cell });
       if (ok) hud.addMarker(s.year, '気象塔', '#7FB3E0');
       hud.setTowerArmed(false);
       return;
     }
-    selected = cell;
-    hud.showCell(cell, world.snapshot());
+    session.selected = cell;
+    hud.showCell(cell, session.world.snapshot());
   });
 
   dev?.mount(app, {
     scenario: !!scenario,
     capture: () => {
-      const save = world.serialize();
+      const save = session.world.serialize();
       localSave.flush(() => save);
       saveChronicle();
-      return { save, chronicle: recorder?.current() ?? null };
+      return { save, chronicle: session.recorder?.current() ?? null };
     },
   });
   if (dev?.paused) document.getElementById('speed-0')?.click();
