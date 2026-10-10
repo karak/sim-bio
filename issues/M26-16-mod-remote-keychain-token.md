@@ -35,4 +35,5 @@ evidence:
 ## 作業ログ
 
 - 2026-10-10: 起票 (ユーザーの決定 A)。
-- 2026-10-10: 実装。deploy.py のトークン・環境・D1 の照合を scripts/cf_auth.py に移し、mod.py の `remote_env` が M26-17 の照合 (`check_auth`、whoami なし、値を読んで照合) を通ってから wrangler の環境を作る。account と D1 の id は deploy.config.json と wrangler.jsonc から読む (`--config` で別の wrangler の設定を渡しても、照合は deploy.config.json の値で行う)。
+- 2026-10-10: 実装。deploy.py のトークン・環境・D1 の照合を scripts/cf_auth.py に移し、mod.py の `remote_env` が M26-17 の照合 (`check_auth`、whoami なし、値を読んで照合) を通ってから wrangler の環境を作る。account と D1 の id は deploy.config.json と wrangler.jsonc から読む 。
+- 2026-10-10: 別 agent (sonnet) の読むだけのレビュー。`--remote --config` は照合した D1 と違う D1 に当たりうるので断る (終了 2)。照合の中で security・wrangler を起こせない・時間切れのときは traceback でなく「止める」の報告にする。whoami が落ちたときは「ログインしていない」と言わない。macOS でも `XDG_CONFIG_HOME` を先に見る。

@@ -295,6 +295,11 @@ def main(
     args = parser.parse_args(argv)
     if args.persist_to and args.remote:
         parser.error("--persist-to は --local のときだけ")
+    if args.config and args.remote:
+        # --remote の照合は deploy.config.json と wrangler.jsonc の D1 で行う。別の設定の D1 には当てない
+        parser.error(
+            "--config は --local のときだけ (--remote は wrangler.jsonc の D1)"
+        )
     if args.op == "delete" and not args.yes:
         print(f"消すと戻せない。消すなら --yes を付ける: {args.id}", file=sys.stderr)
         return 2
@@ -306,7 +311,11 @@ def main(
         except (AuthError, ConfigError) as error:
             print(f"--remote を止めた: {error}", file=sys.stderr)
             return 1
-    token = Secret(env["CLOUDFLARE_API_TOKEN"]) if env else None
+    token = (
+        Secret(env["CLOUDFLARE_API_TOKEN"])
+        if env and env.get("CLOUDFLARE_API_TOKEN")
+        else None
+    )
     try:
         if args.op == "budget":
             rows = execute(target, budget_sql(args.days), run, env)

@@ -257,6 +257,8 @@ def wrangler_auth_file(
     legacy = home / ".wrangler"
     if is_dir(legacy):
         base = legacy
+    elif env.get("XDG_CONFIG_HOME"):
+        base = Path(env["XDG_CONFIG_HOME"]) / ".wrangler"
     elif platform == "darwin":
         base = home / "Library" / "Preferences" / ".wrangler"
     else:
@@ -310,7 +312,13 @@ def _oauth_lines(
     target: AuthTarget, path: Path, file: OAuthFile | None, seen: Whoami | None
 ) -> list[str]:
     lines = [f"端末の wrangler の OAuth ({path}):"]
-    logged_in = seen.logged_in if seen else bool(file and file.logged_in)
+    whoami_asked = seen is not None
+    in_file = bool(file and file.logged_in)
+    if seen is not None and not seen.logged_in and in_file:
+        # whoami の失敗 (網・延ばしの失敗) を、ログインしていないとは言わない
+        seen = None
+        lines.append("  whoami が答えない (ファイルには OAuth が有る)")
+    logged_in = seen.logged_in if seen else in_file
     if not logged_in:
         lines.append("  ログインしていない")
     else:
@@ -320,7 +328,9 @@ def _oauth_lines(
             else ""
         )
         lines.append(f"  ログイン: 済{expires}")
-        if seen is None:
+        if seen is None and whoami_asked:
+            lines.append("  アカウント: 分からない")
+        elif seen is None:
             lines.append(
                 "  アカウント: 見ていない (whoami は端末の OAuth を延ばして書き換えるので、"
                 "pnpm run cf:auth でだけ見る)"
@@ -340,11 +350,22 @@ def _oauth_lines(
     return lines
 
 
+def _run_safely(
+    run: Runner, argv: Sequence[str], env: Mapping[str, str], cwd: Path
+) -> Result:
+    """起こせない・時間切れも、例外ではなく失敗の Result にする (照合を traceback で終えない)。"""
+    try:
+        return run(argv, env, cwd)
+    except (OSError, subprocess.SubprocessError) as e:
+        return Result(-1, "", f"{argv[0]} を起こせない: {type(e).__name__}")
+
+
 def _keychain_problem(found: Result, where: str) -> str | None:
     if found.returncode == KEYCHAIN_NOT_FOUND:
         return f"{where} の項目が無い。人が一度だけ作って置く ({RUNBOOK} の H11・H12)"
     if found.returncode != 0:
-        return f"{where} を見られない (security の終了 {found.returncode})"
+        detail = f"。{found.stderr}" if found.returncode < 0 else ""
+        return f"{where} を見られない (security の終了 {found.returncode}{detail})"
     return None
 
 
@@ -370,7 +391,7 @@ def check_auth(
     seen = None
     if whoami:
         who_env = {**scrub_env(env), "WRANGLER_SEND_METRICS": "false"}
-        seen = parse_whoami(run(WHOAMI, who_env, cwd))
+        seen = parse_whoami(_run_safely(run, WHOAMI, who_env, cwd))
     lines += _oauth_lines(target, path, file, seen)
     if "CLOUDFLARE_API_TOKEN" in env:
         lines.append("環境の CLOUDFLARE_API_TOKEN は使わない (子プロセスから外す)")
@@ -384,7 +405,8 @@ def check_auth(
     else:
         where = _keychain_where(target.keychain_service, account)
         lines.append("Keychain のトークン:")
-        found = run(
+        found = _run_safely(
+            run,
             (
                 "security",
                 "find-generic-password",
@@ -405,8 +427,8 @@ def check_auth(
                     target.keychain_service, account, run, env, cwd
                 )
                 verify_d1(target.account_id, target.d1, token, http_get)
-            except AuthError as e:
-                problem = redact(str(e), token)
+            except (AuthError, OSError, subprocess.SubprocessError) as e:
+                problem = redact(str(e) or type(e).__name__, token)
                 token = None
             else:
                 ids = ", ".join(f"{n} {i}" for n, i in target.d1.items())

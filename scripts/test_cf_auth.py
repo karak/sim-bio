@@ -153,6 +153,18 @@ class OAuthFileTest(unittest.TestCase):
             Path("/x/.wrangler/config/default.toml"),
         )
 
+    def test_xdg_config_home_wins_on_macos_too(self):
+        # wrangler の xdg-app-paths は、どの OS でも XDG_CONFIG_HOME を先に見る
+        self.assertEqual(
+            wrangler_auth_file(
+                Path("/home/u"),
+                {"XDG_CONFIG_HOME": "/x"},
+                "darwin",
+                is_dir=lambda p: False,
+            ),
+            Path("/x/.wrangler/config/default.toml"),
+        )
+
 
 class WhoamiTest(unittest.TestCase):
     def test_parses_accounts_and_scopes(self):
@@ -251,6 +263,24 @@ class CheckAuthTest(unittest.TestCase):
         report, _, _, text = run_check(runner, oauth=OAuthFile(False, (), None))
         self.assertTrue(report.ready)
         self.assertIn("ログインしていない", text)
+
+    def test_whoami_failure_is_not_reported_as_logged_out(self):
+        runner = FakeRunner(
+            {("pnpm", "exec", "wrangler", "whoami"): Result(1, "", "network")}
+        )
+        report, _, _, text = run_check(runner)
+        self.assertTrue(report.ready)
+        self.assertNotIn("ログインしていない", text)
+        self.assertIn("whoami が答えない", text)
+
+    def test_runner_failure_stops_with_a_report_not_a_traceback(self):
+        def broken(argv, env, cwd):
+            raise FileNotFoundError(argv[0])
+
+        report, _, _, text = run_check(broken)
+        self.assertFalse(report.ready)
+        self.assertIn("止める", text)
+        self.assertIn("security", text)
 
     def test_whoami_sees_only_the_machine_oauth(self):
         _, runner, _, _ = run_check()

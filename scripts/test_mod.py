@@ -273,6 +273,12 @@ class RemoteAuthTest(unittest.TestCase):
         self.assertNotIn(TOKEN, out + err)
         self.assertIn("bad ***", err)
 
+    def test_remote_refuses_another_wrangler_config(self):
+        # 照合は deploy.config.json の D1 で行うので、別の設定の D1 には当てない
+        with self.assertRaises(SystemExit) as caught:
+            run_main(["--remote", "--config", "/tmp/x.jsonc", "budget"], run=never_run)
+        self.assertEqual(caught.exception.code, 2)
+
     def test_local_never_asks_for_a_token(self):
         def no_token(say):
             raise AssertionError("--local でトークンを読んではいけない")
