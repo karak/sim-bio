@@ -1,11 +1,14 @@
 ---
 id: M27-01
 title: アーキテクチャの柵 (層の向き・循環・大きさのラチェット)
-status: in_progress
+status: review
 milestone: M27
 plan: docs/design/2026-10-10-architecture-review.md#6-所見と推奨優先順
 depends_on: []
-evidence: []
+evidence:
+  - "7785c6a test(arch): tests/unit/architecture.test.ts と eslint.config.js の layering() (直す前の赤: 循環 19 本・main.ts 623 行・boot 568 行)"
+  - "tests/unit/architecture.test.ts 'src の層の間に、値の import の循環が無い' ほか 7 本 (M27-02・03 の後に全部通過)"
+  - "柵の確かめ (2026-10-10 16:05): src/scenario/_fence.ts に ../ui/Hud の import を置くと eslint が no-restricted-imports 1 件、src/harbor/_fence.ts に ../ui/clicks を置くと循環の試験が赤 (app → harbor → ui → app ほか 12 本)。どちらも消して戻した"
 ---
 
 # アーキテクチャの柵
@@ -21,8 +24,13 @@ evidence: []
 
 ## 受入基準
 
-- [ ] 柵を入れた直後は、循環 (chronicle↔harbor・harbor↔persist・harbor↔ui・app↔ui) と main.ts の行数で赤になる (直す前の赤を作業ログに残す)
-- [ ] M27-02・03 の後に `pnpm run check` が通る
-- [ ] 柵が本物であること: 試しに `src/scenario` から `../ui/Hud` を import すると lint が落ち、`src/harbor` から `../ui/clicks` を import すると循環の試験が落ちる (作業ログに結果)
+- [x] 柵を入れた直後は、循環 (chronicle↔harbor・harbor↔persist・harbor↔ui・app↔ui) と main.ts の行数で赤になる (直す前の赤を作業ログに残す)
+- [x] M27-02・03 の後に `pnpm run check` が通る
+- [x] 柵が本物であること: 試しに `src/scenario` から `../ui/Hud` を import すると lint が落ち、`src/harbor` から `../ui/clicks` を import すると循環の試験が落ちる (作業ログに結果)
 
 ## 作業ログ
+
+- 2026-10-10 15:35 柵を書いて赤を見た: 循環 19 本 (chronicle↔harbor・harbor↔persist・harbor↔ui・app↔ui の組み合わせ)、lint 10 件、main.ts 623 行、boot 568 行。赤のまま 7785c6a にコミット (直す順を読めるように)
+- 16:05 M27-02 の後、柵が本物かを確かめた (上の evidence)。
+- 層の向きは eslint (CI と編集中に落ちる、いちばん強い仕組み) に、循環と大きさは試験に置いた。import の辺は TypeScript の AST から取り、`import type` と全部 type の named import は循環の数えから外す (core ↔ simulation の型だけの辺を許すため)。
+- 大きさの表はラチェット。下げたら表を書き換える (M27-04 で view.ts の 1074 行・createObservationView の 836 行を既定へ戻す)。
