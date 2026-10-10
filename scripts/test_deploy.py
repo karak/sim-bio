@@ -4,11 +4,11 @@ import json
 import unittest
 from pathlib import Path
 
+from cf_auth import Result
 from deploy import (
     ConfigError,
     DeployError,
     Deps,
-    Result,
     Secret,
     deploy,
     dry_run,
