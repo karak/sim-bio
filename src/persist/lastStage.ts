@@ -9,9 +9,14 @@ export type LastStage = Stage & { at: number };
 
 const KEY = 'biotope.last-stage';
 
-export function readLastStage(storage: Pick<Storage, 'getItem'>): LastStage | null {
+/** 見守り手 (開発の ?player=、M19-16) ごとの鍵 (2026-10-10 の決定)。置き場の DB の名前と同じく @<名前> を足し、見守り手が無ければ既定の鍵 */
+function keyOf(player: string | undefined): string {
+  return player === undefined ? KEY : `${KEY}@${player}`;
+}
+
+export function readLastStage(storage: Pick<Storage, 'getItem'>, player?: string): LastStage | null {
   try {
-    const raw = storage.getItem(KEY);
+    const raw = storage.getItem(keyOf(player));
     return raw === null ? null : lastStageOf(JSON.parse(raw));
   } catch {
     return null;
@@ -19,10 +24,10 @@ export function readLastStage(storage: Pick<Storage, 'getItem'>): LastStage | nu
 }
 
 /** 書けない置き場 (使えない localStorage) では何もしない。印が無ければ「続きから」は自動の枠だけを見る */
-export function writeLastStage(storage: Pick<Storage, 'setItem'>, stage: Stage, at: number): void {
+export function writeLastStage(storage: Pick<Storage, 'setItem'>, stage: Stage, at: number, player?: string): void {
   const mark: LastStage = stage.stage === 'scenario' ? { stage: 'scenario', scenarioId: stage.scenarioId, at } : { stage: 'free', at };
   try {
-    storage.setItem(KEY, JSON.stringify(mark));
+    storage.setItem(keyOf(player), JSON.stringify(mark));
   } catch {
     // 印は無くても遊べる (続きからが自動の枠だけになる)
   }

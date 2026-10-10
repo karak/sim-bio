@@ -88,7 +88,7 @@ async function boot(): Promise<void> {
     // 置き場が答えなくてもタイトルは出す (続きからを出さないだけ)
     const listed = store ? store.list().catch((e: unknown) => (titleLog('warn', 'persist.list.failed', { error: String(e) }), [])) : Promise.resolve([]);
     // (M24-05) 最後に遊んだ舞台の印が石板なら、その石板の続きも同じ打ち切りの内で読む
-    const mark = readLastStage(localStorage);
+    const mark = readLastStage(localStorage, dev?.player?.name);
     const progressed = mark?.stage === 'scenario' ? scenarioProgressFor(mark.scenarioId) : Promise.resolve(null);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<[[], null]>(
@@ -135,7 +135,7 @@ async function boot(): Promise<void> {
   const visitId = booted.visitId;
   /** 最後に遊んだ舞台の印 (M24-05)。舞台に入った時と自動保存の時に書く。訪問 (他人の島) では書かない */
   const markStage = () => {
-    if (!visitId) writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now());
+    if (!visitId) writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now(), dev?.player?.name);
   };
   markStage();
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>

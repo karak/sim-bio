@@ -48,6 +48,24 @@ describe('最後に遊んだ舞台の印 (M24-05、localStorage)', () => {
   });
 });
 
+describe('印は見守り手ごと (M24-05、2026-10-10 の決定、開発の ?player=)', () => {
+  it('見守り手の印は別の鍵に置き、既定の見守り手の印と混ざらない', () => {
+    const s = fakeStorage();
+    writeLastStage(s, { stage: 'free' }, 100);
+    writeLastStage(s, { stage: 'scenario', scenarioId: 'test-quick' }, 200, 'a');
+    expect(readLastStage(s)).toEqual({ stage: 'free', at: 100 });
+    expect(readLastStage(s, 'a')).toEqual({ stage: 'scenario', scenarioId: 'test-quick', at: 200 });
+    expect(readLastStage(s, 'b')).toBeNull();
+    // 置き場の DB の名前 (biotope-island@<名前>) と同じく、既定の鍵に @<名前> を足す
+    expect([...s.items.keys()].sort()).toEqual([KEY, `${KEY}@a`]);
+  });
+  it('見守り手が無ければ既定の鍵 (前からの印をそのまま読む)', () => {
+    const s = fakeStorage();
+    s.items.set(KEY, '{"stage":"free","at":5}');
+    expect(readLastStage(s, undefined)).toEqual({ stage: 'free', at: 5 });
+  });
+});
+
 describe('石板の続きの要約 scenarioProgressOf (M24-05)', () => {
   it('年は石板の初めの tick から数える (石板の板の年と同じ)。判定が出ていれば finished', () => {
     const save = { tick: 360 * 3 + 100 + 20, config: { ticksPerYear: 360 } };
