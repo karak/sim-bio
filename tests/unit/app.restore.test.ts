@@ -70,7 +70,7 @@ describe('起動の島の戻し方 restoreIsland (M27-03)', () => {
 
   it('枠の包みは今の舞台と照らす。違う舞台の枠は戻さず投げる (読む側の loadSlot が受け止める)', async () => {
     const { deps } = setup({ slot: { stage: 'free', save: freeSave(20) } });
-    await expect(restoreIsland(ORDER, deps)).rejects.toThrow();
+    await expect(restoreIsland(ORDER, deps)).rejects.toThrow('stage free, here scenario');
   });
 
   it('石板の頭が無ければ (自由モード・訪問) 石板の続きは読まずに次へ', async () => {

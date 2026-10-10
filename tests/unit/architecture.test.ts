@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, dirname, resolve } from 'node:path';
+import { FORBIDDEN } from '../../layering.config.mjs';
 
 /**
  * アーキテクチャの柵 (M27-01、docs/design/2026-10-10-architecture-review.md §6 R1・R2)。
  * 設計書 2026-09-19 §4「依存の向きは一方向」と「main.ts は配線のみ」を、文書でなく試験で守る。
- * 層ごとの import の可否は eslint.config.js の no-restricted-imports が見る (ここでは循環と大きさだけを見る)。
+ * 層ごとの import の可否は eslint.config.js の no-restricted-imports が静的な import について見る。ここでは同じ表 (layering.config.mjs) を
+ * 動的 import と深い相対パスにも当て、循環と大きさを見る。
  * 大きさの上限は「今より増やさない」ラチェット。下げるときはこの表を書き換える (M27-03・M27-04)
  */
 
@@ -114,11 +116,11 @@ const LONG_FUNCTION = 150;
 /** ファイルの行数の上限。既定を超えるものだけ名指しで上限を置く (今の行数。減らしたら下げる) */
 const FILE_LINES = { default: 700, 'src/observe/view.ts': 1074, 'src/simulation/World.ts': 985 } as const;
 /** main.ts は配線だけ (設計書 §4)。M27-03 で部品を src/app へ出してからこの値にする */
-const MAIN_LINES = 300;
+const MAIN_LINES = 265;
 /** 150 行を超えてよい関数と、その上限 (今の長さ)。表に無い関数が 150 行を超えたら落ちる */
 const LONG_FUNCTIONS: Record<string, Record<string, number>> = {
   'src/observe/view.ts': { createObservationView: 836 },
-  'src/main.ts': { boot: 250 },
+  'src/main.ts': { boot: 225 },
   'src/ui/Hud.ts': { createHud: 447 },
   'src/scenario/ScenarioRunner.ts': { createScenarioRunner: 424 },
   'src/observe/render/motes.ts': { createMotes: 365, update: 187 },
@@ -134,6 +136,11 @@ const LONG_FUNCTIONS: Record<string, Record<string, number>> = {
 describe('アーキテクチャの柵 (M27-01): 依存の向き', () => {
   it('src の層の間に、値の import の循環が無い (設計書 2026-09-19 §4「依存の向きは一方向」)', () => {
     expect(cycles(layerGraph())).toEqual([]);
+  });
+
+  it('層の向きは動的 import と深い相対パスでも守る (eslint は静的な import しか見ない)', () => {
+    const bad = EDGES.filter((e) => !e.typeOnly && e.spec.startsWith('.') && (FORBIDDEN[layerOf(e.from)] ?? []).includes(layerOf(e.to))).map((e) => `${rel(e.from)} → ${e.spec}`);
+    expect(bad).toEqual([]);
   });
 
   it('three.js を読むのは render と observe だけ (World・UI・保存・港は描画ライブラリを知らない)', () => {

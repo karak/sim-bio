@@ -95,8 +95,32 @@ describe('確かめを受けた後の効果 createEffects (M27-03)', () => {
     expect(assign.calls).toEqual(['assign /?visit=abc']);
     const title = setup();
     await title.effects.perform({ kind: 'to_title' });
-    expect(title.calls.at(-1)).toBe('assign /?player=ann');
-    expect(title.calls.slice(0, -1).some((c) => c.startsWith('setItem '))).toBe(true);
+    expect(title.calls).toEqual(['removeItem biotope-entered-stage', 'setItem biotope-open-title', 'assign /?player=ann']);
+  });
+
+  it('put_pending は移って読む枠を sessionStorage に置き、save_slot は今の島の包みを枠へ書く', async () => {
+    const { effects, calls } = setup();
+    expect(await effects.perform({ kind: 'put_pending', slot: 'manual-2' })).toBe(true);
+    expect(await effects.perform({ kind: 'save_slot', slot: 'manual-3' })).toBe(true);
+    expect(calls).toEqual(['setItem biotope-pending-slot', 'saveSlot manual-3']);
+  });
+
+  it('showSeed は seed を HUD に出す。URL の seed= は、初めて開いた既定の島 (42、seed= 無し) だけ揃えない。石板では URL を触らない', () => {
+    const quiet = setup();
+    quiet.effects.showSeed(false);
+    expect(quiet.calls).toEqual(['setSeed 42']);
+    const always = setup();
+    always.effects.showSeed(true);
+    expect(always.calls).toEqual(['setSeed 42', 'replace ?player=ann&scenario=sinking&seed=42']);
+    const fromUrl = setup({ seed: 42 });
+    fromUrl.effects.showSeed(false);
+    expect(fromUrl.calls).toEqual(['setSeed 42', 'replace ?player=ann&scenario=sinking&seed=42']);
+    const other = setup({ session: sessionOf(World.create({ ...config, seed: 7 }, { log: createMemorySink() }), false) });
+    other.effects.showSeed(false);
+    expect(other.calls).toEqual(['setSeed 7', 'replace ?player=ann&scenario=sinking&seed=7']);
+    const inScenario = setup({ scenario: { id: 'sinking' } as EffectsDeps['scenario'] });
+    inScenario.effects.showSeed(true);
+    expect(inScenario.calls).toEqual(['setSeed 42']);
   });
 
   it('flush は手元の島と石板の続きの両方を書き終えるまで待つ', async () => {

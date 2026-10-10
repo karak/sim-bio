@@ -98,7 +98,12 @@ describe('介入の入口 createIntervene (M27-03)', () => {
     expect(intervene(cmd)).toBe(true);
     result = { ok: false, reason: 'budget' };
     expect(intervene(cmd)).toBe(false);
+    result = { ok: false, reason: 'finished' };
+    expect(intervene(cmd)).toBe(false);
     expect(calls).toEqual(['save', 'flash']);
-    expect(log.records.map((r) => [r.event, r.reason])).toEqual([['cmd.rejected', 'budget']]);
+    expect(log.records.map((r) => [r.event, r.reason])).toEqual([
+      ['cmd.rejected', 'budget'],
+      ['cmd.rejected', 'finished'],
+    ]);
   });
 });
