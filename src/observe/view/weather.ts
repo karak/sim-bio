@@ -70,8 +70,8 @@ export function createWeather({ host, nowMs, canvas, field, stage: { hemi }, air
   // 知らせの帯 (M22-08): 石板の警告・祈り・結末を、画面の上に控えめに出して 8 秒で消す
   // (M22-08 の手直しで変更: 帯の DOM・見た目・寿命は notice.ts へ移した。石板の銘板の見た目にし、続けて来た知らせは待たせて順に出す)
   const band = createNoticeBand(canvas.parentElement ?? document.body, () => host.names ?? {});
-  const notice = (e: TimelineEvent) => band.push(e);
   // 調整用: 開発者ツールから知らせを出す (__probe.observe.notice({ year, kind: 'prayer', phase: 'issued', prayer: 'wolves' }))
+  const notice = (e: TimelineEvent) => band.push(e);
   const fx = (dt: number) => {
     band.step(nowMs());
     if (lampsTarget === 0 && state.snap.ship && state.snap.civ && state.snap.civ.stage >= 5) lampsTarget = 1;

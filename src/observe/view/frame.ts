@@ -49,7 +49,7 @@ export function createFrameLoop(input: FrameInput): FrameLoop {
   const { creatures } = herd;
   const { fx } = weather;
   // 本体の時間 (M22-08): 速度 speed のとき実時間 1 秒に speed tick 進める (操作画面と同じ。1 年 = 360 tick)。
-  // 進んだら区域の密度から目標頭数を引き直す。目印 (船台・林) は最初に決めたまま動かさない (船台は着工の年に決めて動かさない)
+  // 進んだら区域の密度から目標頭数を引き直す (view.ts の onSnapshot が agentLayer の retarget を呼ぶ)。目印 (船台・林) は最初に決めたまま動かさない (船台は着工の年に決めて動かさない)
   let simAcc = 0;
   const clock = host.clock;
   const advance = (dt: number) => {

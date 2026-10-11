@@ -58,7 +58,7 @@ const SHOTS: Shot[] = [
   },
   { name: '02-settlement', path: '/observe.html?shot=集落&time=0.12&freeze=1', wait: 9000 },
   { name: '03-slipway', path: '/observe.html?shot=船台&time=0.2&freeze=1&ship=100', wait: 9000 },
-  // 飛び立ち: 自動カメラが船台の後ろの高い所から、外海へ去る舟を追う (src/observe/view.ts の departCam)
+  // 飛び立ち: 自動カメラが船台の後ろの高い所から、外海へ去る舟を追う (src/observe/view/camera.ts の departCam)
   { name: '04-departure', path: '/observe.html?depart=1&time=0.62&freeze=1', wait: 16000 },
   { name: '05-night', path: '/observe.html?shot=集落&time=0.8&freeze=1', wait: 9000 },
   { name: '06-deer', path: '/observe.html?shot=群れ&time=0.14&freeze=1', wait: 9000 },
