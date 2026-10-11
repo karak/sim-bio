@@ -3,7 +3,7 @@
 今のコードの構造を、C4(C1 Context / C2 Container / C3 Component)と層の依存図で描いた、保守する文書。
 評価(ドライバ・ビューポイント・パースペクティブ・所見)は日付つきのレビュー `docs/design/2026-10-10-architecture-review.md` に、柵の方針は ADR `docs/decisions/0002-architecture-fence.md` に、柵の一覧は `fitness-functions.md` にある。この文書は「今どう組まれているか」だけを持つ。
 
-- 対象: feat/m27-05 の **e479219**(feat/m19 886c5e9 に M27-05 の段 6(e03da61)を足した状態。段 3(3a26ff3、`simulation/commands.ts`)は別の枝で取り込み待ち)。§8 に M27-05 の残りの段で変わる所を書く。
+- 対象: feat/m27-05 の **9fa690b**(M27-05 の 7 段すべて取り込み済み)。§8 に M27-05 で変わった所の要約を書く。
 - 図は mermaid の `flowchart` + classDef。人・外部システム・コンテナの名前は Cloudflare の設計書 09-26 §4 と同じ。C1・C2・港の C3 はレビュー 10-10 のものを再掲し、クライアントの C3 と層の依存は M27(柵・循環の解消・main.ts と view.ts の部品化)の後の形に描き直した。
 - 層の依存図(§5)は手で描かない。`node tools/layer-graph.ts` が TypeScript の AST から出す(値の辺は実線、型だけの辺は破線)。許可の表に無い辺があれば非 0 で終わる。
 - 構造の言明には、それを守る柵の ID(`fitness-functions.md` の FF-xx)を添える。柵の無い言明は「文書だけの約束」なので、そう書く。
@@ -90,16 +90,16 @@ flowchart TB
   assets["静的配信<br/>[/data/*.json, glb]"]:::ext
 
   subgraph spa["ゲームクライアント [コンテナ]"]
-    main["入口(配線だけ)<br/>src/main.ts(262 行、boot 1 関数)<br/>JSON と置き場を開く → 起動の行き先 → 島を戻す → 部品を順に組む → loop を回す"]:::entry
-    app["配置と効果(DOM を知らない app 層)<br/>src/app<br/>place(Op → Plan → Effect、At、bootRouteOf)/ confirmAsk(Ask)/ worldConfig / restore / session / effects(perform、Nav)/ intervene(介入・漂着)/ scenarioSession(石板の組み立て)/ title / frame(毎フレームの配り)"]:::comp
+    main["入口(配線だけ)<br/>src/main.ts(261 行、boot 1 関数)<br/>JSON と置き場を開く → 起動の行き先 → 島を戻す → 部品を順に組む → loop を回す"]:::entry
+    app["配置と効果(DOM を知らない app 層)<br/>src/app<br/>place(Op → Plan → Effect、At、bootRouteOf)/ stage(Stage: free / scenario / visit。起動が 1 つ作り、各部品が受ける)/ confirmAsk(Ask)/ worldConfig / restore / session / effects(perform、Nav)/ intervene(介入・漂着)/ scenarioSession(石板の組み立て)/ title / frame(毎フレームの配り)"]:::comp
     runner["時間ループ<br/>src/core<br/>runner(rAF 積算、速度 0/1/10/100/1000、1 フレーム ≤ 200 tick、年の境目で onYear)/ parse(Parsed&lt;T&gt;)/ season / log(LogSink: console・memory・http)"]:::comp
-    world["本体 World(純粋・決定論)<br/>src/simulation<br/>World: create / restore / dispatch / step / snapshot / serialize。地形・気候・植生・個体群・生気・文明・信仰・塔・舟。seed + mulberry32、SIM_VERSION。commands(放流・災害の作り方、段 3)"]:::pure
+    world["本体 World(純粋・決定論)<br/>src/simulation<br/>World: create / restore / dispatch / step / snapshot / serialize。地形・気候・植生・個体群・生気・文明・信仰・塔・舟。seed + mulberry32、SIM_VERSION。commands(放流・災害の作り方)"]:::pure
     scen["石板 ScenarioRunner<br/>src/scenario<br/>年ごとに update: 予定命令・力・警告・年表・判定。stepByYear で境目を揃える。describe(出来事の文)"]:::pure
     chron["年代記<br/>src/chronicle<br/>chronicle(型と parseChronicle)/ recorder(dispatch を包む)/ digest(SHA-256)/ playback / replay(Web Worker)"]:::comp
     harbor["港のクライアントと契約<br/>src/harbor<br/>contract・wire(Worker と共有)/ client(createHarbor、閉港を普段に)/ store(outbox の port)/ cargo / dock(判定の後の港の仕事)/ links / turnstile"]:::comp
     persist["保存<br/>src/persist<br/>islandStore(IndexedDB の口)/ localSave / scenarioSave / slotSave / harborStore / autosave(90 tick)/ lastStage / tabMarks"]:::comp
     render["俯瞰の 3D<br/>src/render<br/>SceneView(three.js)。layerToColors / scatter / rebuild(純粋)、assetTable、cellHighlight"]:::comp
-    ui["画面(DOM)<br/>src/ui<br/>Hud / Tablet / Title・titleMenu / confirm / Harbor・HarborVisit / mapClick・press(地図の押し)/ clicks(出港の 1 クリック)/ graph・timeSeries / viewedSpecies"]:::comp
+    ui["画面(DOM)<br/>src/ui<br/>Hud(持っているチップを Chip | null で 1 つ持ち、速さは loop を追う)/ Tablet / Title・titleMenu / confirm / Harbor・HarborVisit / mapClick・press(地図の押し)/ clicks(出港の 1 クリック)/ graph・timeSeries / viewedSpecies"]:::comp
     obs["観察画面(遅延バンドル)<br/>src/observe<br/>entry(view を動的 import)/ view + view/*(§7)/ render/*(three.js の描き手)/ agents・director・daylight・area(純粋)/ prototype(試作のページ、入口)"]:::comp
     dev["開発の口(本番に無い)<br/>src/dev(動的 import)<br/>session(?dev=・?player=・近道)/ probe(__probe)/ panel / snapshot"]:::comp
   end
@@ -139,9 +139,14 @@ flowchart TB
 |---|---|
 | `simulation`・`core`・`scenario` は DOM・three.js・fetch を知らない。`simulation` の外部パッケージは `simplex-noise` だけ | FF-04・FF-05・FF-27 |
 | 層の向きは一方向で、循環が無い(M27-02 で `harbor ↔ ui`・`chronicle ↔ harbor`・`harbor ↔ persist`・`app ↔ ui` を解いた) | FF-01・FF-02・FF-03 |
-| `main.ts` は配線だけ(265 行以下、`boot` 225 行以下)。規則は `src/app` の純粋な部品に置く | FF-07・FF-09 |
+| `main.ts` は配線だけ(261 行以下、`boot` 218 行以下)。規則は `src/app` の純粋な部品に置く | FF-07・FF-09 |
 | `Chronicle` の型と `parseChronicle` は `chronicle/` が持ち、港の wire(`harbor/contract`)はそれを読む | FF-01(harbor → chronicle の向き) |
-| 命令の作り方(放流の半径・量、災害の半径)は `simulation/commands.ts` が 1 つ持ち、UI・積荷・台本が同じ入口を通る(M21-01) | FF-30(段 3) |
+| 命令の作り方(放流の半径・量、災害の半径)は `simulation/commands.ts` が 1 つ持ち、UI・積荷・台本が同じ入口を通る(M21-01) | FF-30 |
+| 舞台(自由・石板・訪問)の真偽は起動が `Stage` の union で 1 つ作り、部品は `stage` を受ける。`visiting` の真偽を部品が自分で引かない | FF-28(「訪問かどうか (visiting) を引くのは舞台 (Stage) の射影 1 か所だけ」) |
+| `Session` は { world, selected, scenario, viewing } で、石板の組は `session.scenario: ScenarioSession \| null` に置く。`() => {}` の仮の値を置かない | FF-29(「Session に仮の値 (() => {}) が無い」) |
+| 持っているチップ(災害・放流・気象塔)は HUD が `Chip \| null` 1 つで持ち、main.ts は写さず `hud.chip()` を読む | FF-31(「main.ts は HUD の手 (災害・放流・気象塔のチップ) を写さない」) |
+| 速さの正は `core/runner` の loop に置き、HUD が追う。app・main.ts は DOM の id (`speed-N`) を押さない | FF-32(「速さを変えるのに DOM の id (speed-N) を押さない」) |
+| 港の手元の置き場(`open*Store`)は入口が島の置き場と同じ DB で開き、`mountHarbor` に渡す | FF-33(「置き場 (open*Store) を開くのは入口 (main.ts) だけ」) |
 | 観察画面は `observe/entry` が `view` を動的 import する遅延バンドルで、`ui`・`harbor`・`persist`・`chronicle`・`app` を読まない | FF-01・FF-02(`ALLOWED.observe`) |
 | 開発の口は `dev/` にまとめ、入口だけが動的 import する。本番の bundle に印が無い | FF-10・FF-26(`ALLOWED` で dev を読めるのは entry だけ) |
 
@@ -293,8 +298,8 @@ flowchart BT
 
 | 対象 | 上限 | 柵 |
 |---|---|---|
-| ファイル | 既定 700 行。例外は `FILE_LINES`(`src/main.ts` 265、`src/simulation/World.ts` 985) | FF-07・FF-08 |
-| 関数の本体 | 既定 150 行。例外は `LONG_FUNCTIONS` の 12 件(`boot` 225、`createHud` 447、`createScenarioRunner` 424、`createMotes` 365 ほか)。下げたら表も下げる | FF-09 |
+| ファイル | 既定 700 行。例外は `FILE_LINES`(`src/main.ts` 261、`src/simulation/World.ts` 985) | FF-07・FF-08 |
+| 関数の本体 | 既定 150 行。例外は `LONG_FUNCTIONS` の 12 件(`boot` 218、`createHud` 447、`createScenarioRunner` 424、`createMotes` 365 ほか)。下げたら表も下げる | FF-09 |
 
 ## 6. 入口の配線(`src/main.ts` の `boot` の順)
 
@@ -306,16 +311,16 @@ flowchart TB
   classDef pure fill:#d4edda,stroke:#3c763d,color:#000
 
   s1["1. ログの sink と開発の口<br/>createAppLogSink、dev/session(?dev=・?player=)、dev/probe"]:::step
-  s2["2. 読み込み(並列)<br/>/data の JSON 3 つ、openIslandStore(IndexedDB)"]:::step
+  s2["2. 読み込み(並列)<br/>/data の JSON 3 つ、openIslandStore と openHarborStore(IndexedDB。港の置き場は島の置き場と同じ DB 名で、開けなければ memory store)"]:::step
   s3["3. 起動の行き先<br/>bootRouteOf(URL・移る途中の枠・タブの印)→ タイトル or 舞台<br/>app/title: enterFromTitle"]:::pure
-  s4["4. 舞台と島の設定<br/>scenario / visitId、bootSeedOf、scenarioConfigOf、markStage(最後に遊んだ舞台)"]:::pure
+  s4["4. 舞台と島の設定<br/>bootSeedOf、scenarioConfigOf、stage = stageOf(booted)(free / scenario / visit の union)、markStage(最後に遊んだ舞台)"]:::pure
   s5["5. 島を戻す<br/>app/restore: 枠 → 石板の続き → 自動の続き → 新しい島。sessionOf(world)"]:::step
   s6["6. 地図と確かめ<br/>createSceneView(three.js)、createConfirm(DOM)"]:::step
-  s7["7. 介入と効果<br/>createIntervene(自由・石板・訪問の道)、createEffects(perform、Nav)、run = runPlan(planOp(op, at()))"]:::pure
-  s8["8. 画面<br/>createHud、createTablet、mountHarbor(港の口)、createObserveEntry(観察画面の入口)"]:::step
-  s9["9. 時間ループ<br/>createRunner(step: 石板なら scenarioStep、onYear → HUD の点、onFrame → app/frame)"]:::step
-  s10["10. 石板の組み立て(石板のときだけ)<br/>createScenarioSession: runner・記録器・自動保存・始め直し・訪問の再生"]:::step
-  s11["11. 地図の押しと開発の板<br/>mountMapClick(チップ → 命令)、dev.mount、loop.start()"]:::step
+  s7["7. 介入と効果<br/>createIntervene({ session, stage })(舞台で道を 1 つ選ぶ)、at = atOf(stage, ...)、createEffects(perform、Nav)、run = runPlan(planOp(op, at()))"]:::pure
+  s8["8. 画面<br/>createHud(speed: () => loop.getSpeed()、onArm)、createTablet、mountHarbor(stage・config・store を受ける)、createObserveEntry(buttonHost: hud.speedRow)"]:::step
+  s9["9. 時間ループ<br/>createRunner(step: 石板なら session.scenario.step、onYear → HUD の点、onFrame → app/frame)"]:::step
+  s10["10. 石板の組み立て(自由モード以外)<br/>session.scenario = createScenarioSession({ stage, loop, harbor, observe, ... }): runner・記録器・自動保存・始め直し・訪問の再生"]:::step
+  s11["11. 地図の押しと開発の板<br/>mountMapClick(hud.chip() → 命令)、dev.mount、loop.start()"]:::step
 
   s1 --> s2 --> s3 --> s4 --> s5 --> s6 --> s7 --> s8 --> s9 --> s10 --> s11
 ```
@@ -345,19 +350,22 @@ M27-04 で 1 関数 836 行の `createObservationView` を 12 の部品に分け
 
 描く物が同じことは特性試験(FF-25、3 視点の `inspect()` を fixture に留める)と計測の台(FF-23)で守る。
 
-## 8. M27-05 で変わる所(進行中)
+## 8. M27-05 で変わった所(済み)
 
-票 `issues/M27-05-stage-union-and-command-layer.md`。柵は先に置いてある(FF-28〜FF-33、`tests/unit/architecture.test.ts` の describe「アーキテクチャの柵 (M27-05)」)。取り込んだら、この文書の §3・§6 を直す。
+票 `issues/M27-05-stage-union-and-command-layer.md`(status: review)。7 段すべてを feat/m27-05 に取り込み済み。柵は FF-26〜FF-33(`tests/unit/architecture.test.ts` の describe「アーキテクチャの柵 (M27-05)」)。
 
-| 段 | 変わる所 |
-|---|---|
-| 1 | 起動が舞台 `Stage`(free / scenario / visit)を 1 つ作り、各部品は `stage` を受ける。`visiting` の真偽を引くのは射影 1 か所だけ |
-| 2 | `Session.scenario: ScenarioSession \| null`。介入の道(島へ・記録器へ・受けない)は舞台ごとに 1 つ |
-| 3 | 命令の作り方を `simulation/commands.ts` へ(別の枝で済み、取り込み待ち) |
-| 4 | 持っているチップは HUD が `Chip \| null` 1 つで持ち、main.ts は写しを持たない |
-| 5 | 速さの正は `core/runner` に置き、HUD が追う(DOM の id を押さない) |
-| 6 | 層の表を許可の形に(済み、§5) |
-| 7 | 港の置き場は入口が開いて `mountHarbor` に渡す |
+| 段 | 変わった所 | コミット |
+|---|---|---|
+| 0 | 柵 6 本を先に赤で置いた | 6f0e945 |
+| 1 | 起動が舞台 `Stage`(free / scenario / visit)を 1 つ作り、各部品は `stage` を受ける | 6b6db6d |
+| 2 | `Session.scenario: ScenarioSession \| null`。介入の道は舞台ごとに 1 つ | d75f08e |
+| 3 | 命令の作り方を `simulation/commands.ts` へ | 3a26ff3 |
+| 4 | 持っているチップは HUD が `Chip \| null` 1 つで持つ | 6942945 |
+| 5 | 速さの正は `core/runner` に置き、HUD が追う | a8058b4 |
+| 6 | 層の表を許可の形に(§5) | e03da61 |
+| 7 | 港の置き場は入口が開いて `mountHarbor` に渡す | 9fa690b |
+
+経緯と確かめ、古くなった注釈の候補は票の作業ログにある。
 
 ## 9. 更新の手順
 

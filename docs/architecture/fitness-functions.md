@@ -15,9 +15,9 @@
 | FF-04 | 描画ライブラリを本体・UI・保存・港に入れない(G1) | `three` / `three/*` を import する層 | 層の集合 | `{observe, render}` と一致 | check(unit)+ lint | 同上 「three.js を読むのは render と observe だけ」、`eslint.config.js` の simulation の塊 |
 | FF-05 | 本体の依存を最小に保つ(G1、設計書 §2 #8) | `src/simulation/**` が読む外部パッケージ | パッケージの集合 | `{simplex-noise}` と一致 | check(unit) | 同上 「simulation が読む外部パッケージは simplex-noise だけ」 |
 | FF-06 | Worker に本体・UI・保存を持ち込まない(C2、Q9) | `worker/src/**` が読む `src/` の層 | 層の集合 | `{chronicle, core, harbor}` と一致 | check(unit) | 同上 「worker が src から読むのは…」 |
-| FF-07 | main.ts を配線だけに保つ(設計書 §4、R2) | `src/main.ts` | 行数(改行の数) | ≤ 265 | check(unit) | 同上 `FILE_LINES['src/main.ts']` |
+| FF-07 | main.ts を配線だけに保つ(設計書 §4、R2) | `src/main.ts` | 行数(改行の数) | ≤ 261 | check(unit) | 同上 `FILE_LINES['src/main.ts']` |
 | FF-08 | ファイルの肥大を止める(R2、Development) | `src/**`・`worker/src/**` の各ファイル | 行数 | 既定 ≤ 700。例外は表 `FILE_LINES` の今の値以下(`simulation/World.ts` 985) | check(unit) | 同上 「ファイルは上限の内」 |
-| FF-09 | 関数の肥大を止める(R2) | 全関数の本体(宣言・式・アロー・メソッド) | 本体の行数 | 既定 ≤ 150。例外は表 `LONG_FUNCTIONS` の今の値以下(`boot` 225 ほか 11 件。`createObservationView` は M27-04 で 126 行) | check(unit) | 同上 「本体 150 行を超える関数は表のものだけ」 |
+| FF-09 | 関数の肥大を止める(R2) | 全関数の本体(宣言・式・アロー・メソッド) | 本体の行数 | 既定 ≤ 150。例外は表 `LONG_FUNCTIONS` の今の値以下(`boot` 218 ほか 11 件。`createObservationView` は M27-04 で 126 行) | check(unit) | 同上 「本体 150 行を超える関数は表のものだけ」 |
 | FF-26 | 知らない層を置かせない。層の表は許可の形(M27-05 段 6、G1・R1) | `src/**`・`worker/src/**` の全ファイルの層(ディレクトリ名。入口は `ENTRY` の名指し、worker の JSON は assets) | 表 `ALLOWED` に無い層の集合 | 空 | check(unit) | `layering.config.mjs` の `ALLOWED`・`ENTRY`、`tests/unit/architecture.test.ts` 「知らない層は置けない」 |
 | FF-27 | 層ごとに読んでよい外部パッケージを表で決める(G1、FF-04・05 を表に寄せた) | 各層の相対でない import(TypeScript の AST) | 表 `PACKAGES[層]` に無いパッケージの辺の数 | 0 件 | check(unit)+ lint(three だけ) | `layering.config.mjs` の `PACKAGES`、同上 「層ごとに読んでよい外部パッケージは表のものだけ」、`eslint.config.js` の `forbidden()` |
 | FF-28 | 舞台(自由・石板・訪問)の真偽を部品が自分で引かない(M27-05 段 1、R2) | `src/app/**`・`src/ui/**`・`src/main.ts` の識別子 `visiting`(AST。文字列・コメントは除く) | 使うファイルの数 | ≤ 1(舞台 `Stage` の射影だけ) | check(unit) | 同上 「訪問かどうか (visiting) を引くのは舞台 (Stage) の射影 1 か所だけ」 |
