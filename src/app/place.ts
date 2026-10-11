@@ -48,7 +48,7 @@ export type Effect =
 
 export type Plan = { ask: Ask | null; effects: readonly Effect[] };
 
-/** 今いる舞台を、訪問か・石板の頭・石板の判定 (runner が無ければ null) から決める */
+/** 今いる場 (At) を、舞台 (Stage)・石板の頭・石板の判定 (runner が無ければ null) から決める */
 export function atOf(stage: Stage, head: ChronicleHead | null, status: ScenarioStatus | null): At {
   if (stage.kind === 'visit') return { stage: 'visit' };
   return head ? { stage: 'scenario', head, finished: status !== null && status !== 'running' } : { stage: 'free' };

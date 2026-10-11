@@ -7,7 +7,7 @@ import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
 /**
  * 途中で閉じて開き直す確かめ (M19-14) の島。石板の年数と島の大きさを縮め、文明の集落は島の中心に置き、予定の命令のセルは縮めた島の同じ位置へ写す
  * (石板のセルの番号は石板の島の大きさ、多くは size 64 の番号なので)。
- * 種の上書き・seed・気候・輝石の倍率・文明の初期状態は main.ts の ?scenario の組み立てと同じにする
+ * 種の上書き・seed・気候・輝石の倍率・文明の初期状態は app/worldConfig.ts (scenarioConfigOf) の ?scenario の組み立てと同じにする
  */
 export const RESUME_SIZE = 32;
 

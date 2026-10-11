@@ -5,7 +5,7 @@ import type { Command, DisasterKind } from '../simulation/types';
 /**
  * 年代記の契約 (M19-06、設計書 2026-09-26-cloudflare-architecture.md §5.1・§5.2)。
  * 港の契約 (M19-07) が src/harbor/contract.ts へ移すまで、ここに置く。依存は core/parse と本体の型だけにしてある
- * M19-07 で chronicle/contract.ts から harbor/chronicle.ts へ移した。呼び手も移し、古い口は残していない (年代記は港でクライアントと Worker が共有する単位なので)。
+ * M19-07 で chronicle/contract.ts から harbor/chronicle.ts へ移し、M27-02 で chronicle/chronicle.ts へ戻した (harbor が chronicle を読む向きにし、逆は無い)。呼び手も移し、古い口は残していない (年代記は港でクライアントと Worker が共有する単位なので)。
  * 港に出すときの約束 (カタログ・id・積荷・要求と応答) は harbor/contract.ts に置く。ここは手元 (記録・保存・再生) でも使う年代記の形だけ
  */
 

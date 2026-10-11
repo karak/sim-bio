@@ -54,7 +54,7 @@ const sinkingOps = (r: ScenarioRunner, s: WorldSnapshot) => ({
     let bi = -1;
     let bv = -1;
     for (let i = 0; i < s.layers.elevation.length; i++) if (s.layers.populations.wolf[i] > bv) { bv = s.layers.populations.wolf[i]; bi = i; }
-    // UI の疫病の半径 (DISASTER_RADIUS.plague = 4) に合わせる (M10R-07 で一時 6 にしたが谷の波なら 4 で足りるので戻した)
+    // UI の 1 クリックの疫病の半径 (simulation/commands.ts の DISASTER_RADIUS.plague = 4) に合わせる (M10R-07 で一時 6 にしたが谷の波なら 4 で足りるので戻した)
     r.intervene(disasterClick('plague', bi));
   },
 });
@@ -287,7 +287,7 @@ const NO_ANSWER_HOME = 2063;
 const VEIN_HOME = 1770;
 /** 儀式: 集落に苔を放つ (4)。同じ種類の介入を 3 年ごとに続けると信仰が上がる (狼の祈りの応えにはならない) */
 const ritual = (r: ScenarioRunner, home: number) => r.intervene(spawnClick('moss', home));
-/** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered)。半径 4 は UI の DISASTER_RADIUS.plague と同じ (M10R-07 で 6 を試したが、谷の波なら 4 で足りるので戻した) */
+/** 集落の疫病 (24)。狼の祈りへの応え (祈りが出ていれば answered)。半径 4 は UI の 1 クリック (simulation/commands.ts の DISASTER_RADIUS.plague) と同じ (M10R-07 で 6 を試したが、谷の波なら 4 で足りるので戻した) */
 const plagueHome = (r: ScenarioRunner, home: number) => { if (r.power() >= 24) r.intervene(disasterClick('plague', home)); };
 /** 狼の波が落ちる北の谷 (schedule と同じセル、M10R-07)。集落 2063 から 13 セル */
 const NO_ANSWER_VALLEY = 1366;

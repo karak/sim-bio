@@ -57,3 +57,4 @@ evidence:
   - 文書: docs/design/2026-09-26-cloudflare-architecture.md:463 の表が年代記の型を src/harbor/chronicle.ts と書く。過去の issue の作業ログの道は記録なので残した。
   - 依頼にあった docs/design/2026-10-10-architecture-review.md はこの worktree にも履歴にも無かった。この票の表を仕様として進めた。
 - 2026-10-11: ユーザーが票の審査で承認 (done)。
+- 2026-10-11: 上の古いコメント 5 件をユーザーの承認で今の置き場に書き換えた (chronicle.ts は M27-02 で戻した経緯を足した。store.ts は port と実装 persist/harborStore.ts を書いた)。文書 cloudflare-architecture.md:463 は書いた時点の記述を残して今の置き場を添えた。

@@ -9,7 +9,7 @@ import { parseChronicle, type ReplayOutcome, type TimedCommand } from './chronic
 import { digestOf } from './digest';
 
 /**
- * 回し直す島。石板と、その石板の島の WorldConfig (main.ts が ?scenario から組み立てるものと同じ)。
+ * 回し直す島。石板と、その石板の島の WorldConfig (app/worldConfig.ts の scenarioConfigOf が ?scenario から組み立てるものと同じ)。
  * Worker へは structured clone で渡すので、関数を持たないデータにしてある
  */
 export type ReplayIsland = { def: ScenarioDef; config: WorldConfig };

@@ -14,7 +14,7 @@ import type { Stage } from './stage';
 
 export type InterveneDeps = {
   session: Session;
-  /** 他人の島を訪れている (M19-09)。介入を受けない */
+  /** 今いる舞台。訪問 (他人の島、M19-09) では介入を受けない */
   stage: Stage;
   log: LogSink;
   saveChronicle: () => Promise<void> | undefined;

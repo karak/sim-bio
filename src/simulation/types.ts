@@ -73,12 +73,12 @@ export type WorldConfig = {
    * 火の山として使うセル (M8-08)。省略時は World が標高最大の陸セルを既定にする。
    * 標高最大セルは LAPSE (標高による気温低下) で冷えすぎ、噴火を重ねても炎蜥蜴の適温 (30℃〜) に
    * 届かないことが M8-09 の校正で分かったため、シナリオ側で暖かい低地セルを指定できるようにした
-   * (main.ts が scenario.start.volcanoCell を解決してここに入れる)
+   * (app/worldConfig.ts の scenarioConfigOf が scenario.start.volcanoCell を解決してここに入れる)
    */
   volcanoCell?: number;
   /**
    * 輝石の倍率 (M10-02)。seed から生成した輝石に掛ける (省略時 1)。「迎撃の塔」の脈を薄くして、掘り尽くしが効くようにする
-   * 舞台装置 (main.ts が scenario.start.crystalScale を解決してここに入れる)。restore でも config から同じ値で再生成される
+   * 舞台装置 (app/worldConfig.ts の scenarioConfigOf が scenario.start.crystalScale を解決してここに入れる)。restore でも config から同じ値で再生成される
    */
   crystalScale?: number;
 };

@@ -8,18 +8,16 @@ import { IDLE, pressStep, type PressInput } from './press';
  * 地図のクリック (M27-03)。押しとドラッグを分け (press.ts)、持っているチップ (災害・放流・気象塔) があればそのセルへの命令にして HUD に目印を置き、無ければセルを選ぶ
  */
 
-/** HUD で持ったチップ。main.ts が HUD の手から書き、次の島のクリックで使う */
-/** 気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る */
-
 export type MapClickDeps = {
   /** 画面の点のセル。地図は作り直されるので、クリックのたびに今の地図に引く */
   pickCell: (x: number, y: number) => number | null;
   session: Session;
   intervene: (c: Command) => boolean;
+  /** 持っているチップ (災害・放流・気象塔) は HUD が 1 つで持つ (M27-05)。次の島のクリックで使い、setChip(null) で放す */
   hud: Pick<Hud, 'addMarker' | 'chip' | 'setChip' | 'showCell'>;
 };
 
-/** 持っているチップが出す命令と、HUD の目印の文と色、チップを放す手。何も持っていなければ null */
+/** 持っているチップが出す命令と、HUD の目印の文と色 (放すのは呼び手が hud.setChip(null) で) */
 function armedOf(chip: Chip, s: WorldSnapshot, cell: number): { cmd: Command; label: string; color: string } {
   switch (chip.kind) {
     case 'spawn': {

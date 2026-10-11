@@ -88,11 +88,9 @@ export type HudHandlers = {
   onSlotLoad(slot: SlotId): void;
   // (M19-17 で変更: 石板の中では「石板を初めから」。今の続きを捨てて Year 0 から)
   onNewIsland(): void;
-  /** 「タイトルへ」(M24-04)。確かめと行き先は main.ts の planOp (title) が決める。訪問でも押せる */
+  /** 「タイトルへ」(M24-04)。確かめと行き先は app/place.ts の planOp (title) が決める。訪問でも押せる */
   onTitle(): void;
-  /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
-  /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
-  /** 気象塔チップを押した (次に島をクリックした場所に build_tower を送る) / 解除した (M10-01) */
+  /** チップを持った (次に島をクリックした場所に災害を落とす・種を放つ・build_tower を送る、M10-01) / 放した (null)。入口は火山のヒントにだけ使う (M27-05) */
   onArm(chip: Chip | null): void;
 };
 
@@ -106,7 +104,7 @@ export type Hud = {
   showCell(cell: number | null, s: WorldSnapshot): void;
   addMarker(x: number, label: string, color: string): void;
   chip(): Chip | null;
-  /** 気象塔チップの武装状態を外から揃える (M10-01) */
+  /** 持っているチップを外から揃える (地図のクリックで使ったら null。M10-01 の気象塔から 3 種に、M27-05) */
   setChip(chip: Chip | null): void;
   /** 星の力で買えるかどうか。false のチップは薄く見せる (押せるが runner が弾く) */
   setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean; tower: boolean }): void;
@@ -218,13 +216,13 @@ export function createHud(
   const local = new TimeSeries((LOCAL_YEARS * 360) / LOCAL_SAMPLE_TICKS);
   let localCell: number | null = null;
   let shipEnabled = true;
-  /** 迎撃で取り消せる次の予定隕石の年 (M21-02 D4)。main.ts が毎フレーム setNextMeteor で揃える。自由モードでは常に null */
+  /** 迎撃で取り消せる次の予定隕石の年 (M21-02 D4)。app/frame.ts の onFrame が毎フレーム setNextMeteor で揃える。自由モードでは常に null */
   let nextMeteor: number | null = null;
   let localLastTick = -1;
   const markers: GraphMarker[] = [];
   let lines: GraphLine[] = [];
   let lastYear = -1;
-  /** 気象塔チップを持っているか (M10-01)。災害・種パレットと排他 */
+  /** 持っているチップ (災害・放流・気象塔のどれか 1 つ、M10-01・M27-05)。値が 1 つなので三者は排他 */
   let chip: Chip | null = null;
   // 種チップの表示モード: 密度そのまま or 住みやすさ (適合度)。選択中の種があるときだけ layer に効く
   let layerMode: 'density' | 'suit' = 'density';
@@ -294,7 +292,7 @@ export function createHud(
     $('rain-scale-v').textContent = '×' + v.toFixed(2);
     h.onCommand({ type: 'set_climate', rainScale: v });
   });
-  // 気象塔チップ (M10-01): 災害・種パレットと同じ「武装 → 次のクリックで発火」の流儀。三者は排他 (どれか 1 つだけ武装できる)
+  // チップ (M10-01 の気象塔から 3 種に、M27-05): 「持つ → 次のクリックで発火」の流儀。値が 1 つなので三者は排他 (どれか 1 つだけ持てる)
   const setChip = (next: Chip | null) => {
     chip = next;
     const id = next && chipId(next);
@@ -363,7 +361,7 @@ export function createHud(
   });
   $('slot-load').addEventListener('click', () => h.onSlotLoad(selectedSlot()));
   $('new-island').addEventListener('click', () => {
-    // (M21-04 で変更: 確かめは main.ts の onNewIsland が確かめのダイアログ (confirm.ts) で。文は confirmAsk.ts)
+    // (M21-04 で変更: 確かめは main.ts の onNewIsland が確かめのダイアログ (ui/confirm.ts) で。文は app/confirmAsk.ts)
     h.onNewIsland();
   });
   $('to-title').addEventListener('click', () => h.onTitle());
@@ -482,7 +480,7 @@ export function createHud(
       $('edict-resume').classList.toggle('on', !stopped);
     }
     // 迎撃 (M10-02): 星になって工事が始まったら行を出す。備蓄が足りるまでは沈める (unaffordable)
-    // 撃つ星が無ければ行ごと畳む (M21-02 D4): nextMeteor は main.ts が setNextMeteor で毎フレーム揃える
+    // 撃つ星が無ければ行ごと畳む (M21-02 D4): nextMeteor は app/frame.ts の onFrame が setNextMeteor で毎フレーム揃える
     const worksEl = $('hud-works');
     worksEl.hidden = !s.civ?.works || nextMeteor === null;
     if (s.civ?.works) {

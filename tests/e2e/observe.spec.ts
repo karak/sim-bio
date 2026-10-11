@@ -23,7 +23,7 @@ test('observe view: enter from Sky Ship, 100x drops to 10x, the view follows the
   const tick = () => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe.observe!.stats()!.tick);
   const t0 = await tick();
   await expect.poll(tick, { timeout: 10_000 }).toBeGreaterThan(t0);
-  // 下の帯が時間の流れとカメラを示し、帯の速さは操作画面の速さのボタンを押す
+  // 下の帯が時間の流れとカメラを示し、帯の速さの札は loop に言い、操作画面の速さの札が追う (M27-05)
   const bar = page.getByRole('toolbar', { name: '観察画面' });
   await expect(bar.locator('.o-live')).toHaveText(/^観察中(自動カメラ|自由カメラ|個体を追って)/);
   await expect(bar.getByRole('button', { name: '10x' })).toHaveClass(/on/);

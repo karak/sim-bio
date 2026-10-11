@@ -19,7 +19,7 @@ const running: At = { stage: 'scenario', head, finished: false };
 const finished: At = { stage: 'scenario', head, finished: true };
 const visit: At = { stage: 'visit' };
 
-/** main.ts と同じ組み立ての石板を n tick 進め、介入を 1 つ受けた枠の包み */
+/** app/scenarioSession.ts と同じ組み立ての石板を n tick 進め、介入を 1 つ受けた枠の包み */
 function scenarioSlot(n: number): Extract<SlotSave, { stage: 'scenario' }> {
   const world = World.create(island.config, { log: createMemorySink() });
   const runner = createScenarioRunner(island.def, world, { ticksPerYear: island.config.ticksPerYear });

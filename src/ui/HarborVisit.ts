@@ -14,7 +14,7 @@ export type Visit = { id: ChronicleId; island: ReplayIsland };
 
 /**
  * 訪問の板 (M19-09)。観察画面の上にも出す。港から年代記を引き、この島で回し直せる (同じ版・同じ石板・同じ seed) なら返す。
- * ほかは板に理由を出して null (main.ts は島を進めない)
+ * ほかは板に理由を出して null (app/scenarioSession.ts の訪問の再生は島を進めない)
  */
 export async function mountVisit(app: HTMLElement, ready: Promise<HarborContext>, visit: Visit): Promise<Chronicle | null> {
   const body = el('div', { class: 'harbor-visit-body' }, el('p', { class: 'harbor-line' }, '港から年代記を引いている…'));

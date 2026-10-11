@@ -20,7 +20,7 @@ type Click = { tick: number; command: Command };
 type Closed = { save: SaveData; runner: RunnerState; chronicle: Chronicle };
 type Island = { world: World; runner: ScenarioRunner; recorder: ChronicleRecorder<InterveneResult> };
 
-/** main.ts と同じ組み立て: 島・runner・記録器を作り、クリックより前に tick 0 (開き直したらその tick) の評価を済ませる */
+/** app/scenarioSession.ts と同じ組み立て: 島・runner・記録器を作り、クリックより前に tick 0 (開き直したらその tick) の評価を済ませる */
 function open(island: ReplayIsland, closed?: Closed): Island {
   const log = { log: createMemorySink() };
   const world = closed ? World.restore(closed.save, log) : World.create(island.config, log);

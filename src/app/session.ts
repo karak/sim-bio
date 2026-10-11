@@ -13,7 +13,7 @@ export type Session = {
   selected: number | null;
   /** 石板の手。自由モードでは null。石板を開くとき (createScenarioSession) に作り、main.ts が置く */
   scenario: ScenarioSession | null;
-  /** 直近に知らせた見ている種。石板を始め直したとき (restartScenario) に新しい runner へ渡し直す */
+  /** 直近に知らせた見ている種。石板を始め直したとき (scenario.restart) に新しい runner へ渡し直す */
   viewing: string | null;
 };
 

@@ -28,7 +28,7 @@ const head = { simVersion: SIM_VERSION, scenarioId: island.def.id, seed: island.
 type Click = { atTick: number; command: Command };
 
 /**
- * main.ts と同じ組み立てでライブに遊ぶ: 生成の直後に tick 0 の評価、rAF の runner が stepByYear で進め、onFrame が毎フレーム update、
+ * app/scenarioSession.ts と同じ組み立てでライブに遊ぶ: 生成の直後に tick 0 の評価、rAF の runner が stepByYear で進め、onFrame (app/frame.ts) が毎フレーム update、
  * onVerdict が速度を 0 にする。クリックは s.tick が atTick に達した最初のフレームの後に、記録器の dispatch を通して打つ
  */
 async function playLive(speed: Speed, intervals: readonly number[], clicks: readonly Click[]) {

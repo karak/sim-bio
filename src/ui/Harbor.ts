@@ -58,12 +58,12 @@ export type HarborUiDeps = {
   config: WorldConfig;
   /** 種 id → 表示名。積荷の中身に使う */
   speciesNames: Readonly<Record<string, string>>;
-  /** 漂着を島の浜に放つ (M19-10)。訪問では null (浜の漂着を出さない) */
+  /** 漂着を島の浜に放つ (M19-10)。訪問では介入の門が断って refused になる (浜の漂着を出さない) */
   land: (d: DrawnCargo) => LandResult;
   log: HarborLog;
   /** 手元の置き場。入口 (main.ts) が島の置き場と同じ DB で開いて渡す */
   store: HarborStore;
-  /** 開発用の見守り手 (M19-16)。手元の置き場の DB の名前と、港への要求に添える名乗りの header。本番では無い */
+  /** 開発用の見守り手 (M19-16)。港への要求に添える名乗りの header (置き場の DB の名前は入口が開くときに使い、ここには来ない)。本番では無い */
   player?: { headers: Readonly<Record<string, string>> };
   /** やり直しの効かない操作の確かめ (M21-04)。取り下げは ask を経て、訪れる札は leave (判定の出た島なら確かめてから移る) を経る */
   guard: HarborGuard;
@@ -78,7 +78,7 @@ const TOAST_MS = 6000;
 type Ctx = HarborContext & { guard: HarborGuard };
 type Ready = Ctx & { store: HarborStore };
 
-/** 訪問の道 (?scenario=…&visit=…) で開いたとき。island は照合の再生に渡す、main.ts が組んだその石板の島 */
+/** 訪問の道 (?scenario=…&visit=…) で開いたとき。island は照合の再生に渡す、舞台 (Stage) の石板と入口の config から組むその石板の島 */
 const visitOf = (stage: Extract<Stage, { kind: 'visit' }>, config: WorldConfig): Visit => ({ id: stage.id, island: { def: stage.def, config } });
 
 /** 自分の島の石板。判定の後に閉じた島 (M19-14 の直し) を港の板から出港できるようにする。自由モードと訪問では null */
