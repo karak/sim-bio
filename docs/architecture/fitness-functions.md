@@ -9,8 +9,8 @@
 
 | ID | 目的(守るドライバ) | 測定対象 | 指標 | 合格基準 | 実行 | 置き場 |
 |---|---|---|---|---|---|---|
-| FF-01 | 層の向きを一方向に保つ(設計書 09-19 §4、G1・G2) | `src/<層>/**` と `worker/src/**` の静的な import | 読んではいけない層への相対 import の数(表 `FORBIDDEN`、深さ 1〜3) | 0 件 | check(lint) | `layering.config.mjs`、`eslint.config.js` の `no-restricted-imports` |
-| FF-02 | 同上を、eslint が見ない動的 import と深い相対パスにも当てる | `src/**`・`worker/src/**` の全 import(TypeScript の AST。`import type` は除く) | `FORBIDDEN` に当たる辺の数 | 0 件 | check(unit) | `tests/unit/architecture.test.ts` 「層の向きは動的 import と深い相対パスでも守る」 |
+| FF-01 | 層の向きを一方向に保つ(設計書 09-19 §4、G1・G2) | `src/<層>/**` と `worker/src/**` の静的な import | 読んではいけない層への相対 import の数(表 `ALLOWED` の裏返し、深さ 1〜3) | 0 件 | check(lint) | `layering.config.mjs`、`eslint.config.js` の `no-restricted-imports` |
+| FF-02 | 同上を、eslint が見ない動的 import と深い相対パスにも当てる | `src/**`・`worker/src/**` の全 import(TypeScript の AST。`import type` も見る) | `ALLOWED` に無い辺の数 | 0 件 | check(unit) | `tests/unit/architecture.test.ts` 「層の向きは動的 import と深い相対パスでも守る」 |
 | FF-03 | 周辺モジュールの循環を再発させない(R1) | src の層の間の値の import(型だけの辺と、entry・dev からの辺は除く) | 閉路の数 | 0 本 | check(unit) | 同上 「src の層の間に、値の import の循環が無い」 |
 | FF-04 | 描画ライブラリを本体・UI・保存・港に入れない(G1) | `three` / `three/*` を import する層 | 層の集合 | `{observe, render}` と一致 | check(unit)+ lint | 同上 「three.js を読むのは render と observe だけ」、`eslint.config.js` の simulation の塊 |
 | FF-05 | 本体の依存を最小に保つ(G1、設計書 §2 #8) | `src/simulation/**` が読む外部パッケージ | パッケージの集合 | `{simplex-noise}` と一致 | check(unit) | 同上 「simulation が読む外部パッケージは simplex-noise だけ」 |
