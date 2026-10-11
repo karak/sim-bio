@@ -1,7 +1,7 @@
 ---
 id: M26-17
 title: 手順書とスクリプトの最初に、資格情報の照合 (端末の OAuth を照らし、使う道を言う) を入れる
-status: review
+status: done
 milestone: M26
 plan: docs/operations/deploy-runbook.md
 depends_on: [M26-16]
@@ -37,10 +37,11 @@ evidence:
 - [x] トークンが別のアカウントのものなら止める (`test_token_for_another_account_stops`)
 - [x] deploy.py の最初の段と mod.py --remote の最初で同じ関数 (`check_auth`) を呼ぶ。どちらも whoami は打たない
 - [x] deploy-runbook.md の最初の手順にし、cloudflare-deploy.md から指す
-- [ ] (人) Keychain にトークンを置いてから `! pnpm run cf:auth` が「使う道: Keychain のトークン」で終了 0 になるのを見る
+- [x] (人) Keychain にトークンを置いてから `! pnpm run cf:auth` が「使う道: Keychain のトークン」で終了 0 になるのを見る
 
 ## 作業ログ
 
 - 2026-10-10: 起票 (ユーザーの決定 B)。
 - 2026-10-10: 実装。OAuth のファイルは、macOS では `~/Library/Preferences/.wrangler/config/default.toml` (`~/.wrangler` の dir があればそちら。wrangler 4.141 の getGlobalConfigPath と同じ)。`wrangler whoami --json` は期限の切れた OAuth を延ばしてファイルを書き換える (この Mac で expiration_time が変わるのを見た) ので、cf:auth でだけ打つ (`--no-whoami` で外せる)。deploy.py は最初の段で Keychain の項目の有る無しだけを見て、値を読むのは今までどおり `pnpm run check` の後。手順書の「0. 前提の値」の番号は変えず、その前に「最初に」の節を足した。
 - 2026-10-10: ユーザーの決定。cf:auth も既定では whoami を打たない (別のアカウントの OAuth のファイルを延ばして書き換えるため)。`--whoami` を付けたときだけ打つ。既定はファイルの scopes・期限だけを読み、アカウントは「分からない」と出す。`--no-whoami` は外した (1 日だけの旗で、既定と同じになったため)。
+- 2026-10-11: ユーザーが `! pnpm run cf:auth` を通した (Keychain の項目が有り、account 14c725d3… に届き D1 の id が合う。「使う道: Keychain のトークン」)。done
