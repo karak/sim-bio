@@ -1,7 +1,7 @@
 ---
 id: M26-12
 title: 手元からの配備 (Keychain のトークンで scripts/deploy.py) を使えるようにする
-status: blocked
+status: review
 milestone: M26
 plan: docs/operations/deploy-runbook.md
 depends_on: []
@@ -38,3 +38,4 @@ evidence: []
 - 2026-10-06: 起票 (保留)。
 - 2026-10-10: 4 の決定。`scripts/mod.py --remote` は Keychain の道にした (M26-16)。手順書とスクリプトの最初に資格情報の照合 `pnpm run cf:auth` を入れた (M26-17)。
 - 2026-10-11: ユーザーの決定「保留のままでいい」。H11・H12 (Keychain の sim-bio-local-deploy) は作らない。配備は GitHub Actions の deploy.yml だけ。手元の `pnpm run cf:auth`・`pnpm run deploy`・`mod.py --remote` はトークンが無いので落ちる (承知の上)
+- 2026-10-11: H11・H12 をユーザーが済ませた (Keychain の sim-bio-local-deploy)。`pnpm run cf:auth` 通過 (account 14c725d3… に届き、D1 biotope-harbor の id が合う。使う道: Keychain のトークン)。保留を解く
