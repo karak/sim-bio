@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, dirname, resolve } from 'node:path';
-import { FORBIDDEN } from '../../layering.config.mjs';
+import { ALLOWED, ENTRY, PACKAGES } from '../../layering.config.mjs';
 
 /**
  * アーキテクチャの柵 (M27-01、docs/design/2026-10-10-architecture-review.md §6 R1・R2)。
@@ -18,10 +18,11 @@ const rel = (f: string) => relative(ROOT, f).replace(/\\/g, '/');
 /** src の下のディレクトリを層にまとめる。core/log は core、observe/render は observe。入口 (main.ts・観察画面の試作) は何でも読んでよい */
 function layerOf(file: string): string {
   const r = rel(file);
-  if (r === 'src/main.ts' || r === 'src/observe/prototype.ts') return 'entry';
+  if (ENTRY.includes(r)) return 'entry';
   if (r.startsWith('worker/src/')) return 'worker';
-  const m = /^src\/([a-z]+)\//.exec(r);
-  return m ? m[1] : 'root';
+  if (r.startsWith('assets/')) return 'assets';
+  const m = /^src\/([^/]+)\//.exec(r);
+  return m ? m[1] : r;
 }
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -61,8 +62,13 @@ function edgesOf(file: string): Edge[] {
 }
 
 const EDGES = FILES.flatMap(edgesOf);
+/** このリポジトリの中を指す辺 (型だけの辺も) */
+const INTERNAL_EDGES = EDGES.filter((e) => e.spec.startsWith('.'));
 /** 値の辺のうち、このリポジトリの中を指すもの */
-const VALUE_EDGES = EDGES.filter((e) => !e.typeOnly && e.spec.startsWith('.'));
+const VALUE_EDGES = INTERNAL_EDGES.filter((e) => !e.typeOnly);
+
+/** 外部パッケージの名前 (three/addons/… は three、@scope/name はそのまま) */
+const packageOf = (spec: string) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
 
 const LONG_FUNCTION = 150;
 
@@ -139,18 +145,28 @@ describe('アーキテクチャの柵 (M27-01): 依存の向き', () => {
   });
 
   it('層の向きは動的 import と深い相対パスでも守る (eslint は静的な import しか見ない)', () => {
-    const bad = VALUE_EDGES.filter((e) => (FORBIDDEN[layerOf(e.from)] ?? []).includes(layerOf(e.to))).map((e) => `${rel(e.from)} → ${e.spec}`);
+    const bad = INTERNAL_EDGES.filter((e) => layerOf(e.from) !== layerOf(e.to) && !(ALLOWED[layerOf(e.from)] ?? []).includes(layerOf(e.to))).map((e) => `${rel(e.from)} → ${e.spec}`);
     expect(bad).toEqual([]);
   });
 
+  it('知らない層は置けない: 表 (ALLOWED) に無いディレクトリ・src 直下のファイル・表に名指しの無い入口は落ちる (M27-05 段 6)', () => {
+    const unknown = [...new Set(FILES.map(layerOf))].filter((layer) => !(layer in ALLOWED)).sort();
+    expect(unknown).toEqual([]);
+  });
+
   it('three.js を読むのは render と observe だけ (World・UI・保存・港は描画ライブラリを知らない)', () => {
-    const users = [...new Set(EDGES.filter((e) => e.spec === 'three' || e.spec.startsWith('three/')).map((e) => layerOf(e.from)))].sort();
-    expect(users).toEqual(['observe', 'render']);
+    const users = [...new Set(EDGES.filter((e) => packageOf(e.spec) === 'three').map((e) => layerOf(e.from)))].sort();
+    expect(users).toEqual(Object.keys(PACKAGES).filter((layer) => PACKAGES[layer].includes('three')).sort());
   });
 
   it('simulation が読む外部パッケージは simplex-noise だけ', () => {
     const pkgs = [...new Set(EDGES.filter((e) => layerOf(e.from) === 'simulation' && !e.spec.startsWith('.')).map((e) => e.spec))].sort();
-    expect(pkgs).toEqual(['simplex-noise']);
+    expect(pkgs).toEqual([...PACKAGES.simulation].sort());
+  });
+
+  it('層ごとに読んでよい外部パッケージは表 (PACKAGES) のものだけ (M27-05 段 6)', () => {
+    const bad = EDGES.filter((e) => !e.spec.startsWith('.') && !(PACKAGES[layerOf(e.from)] ?? []).includes(packageOf(e.spec))).map((e) => `${rel(e.from)} → ${e.spec}`);
+    expect(bad).toEqual([]);
   });
 
   it('worker が src から読むのは契約 (harbor)・年代記 (chronicle)・core だけ (本体・UI・保存を Worker に持ち込まない)', () => {
