@@ -11,7 +11,7 @@ import { suitability } from '../../src/simulation/vegetation';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { LOAD_RADIUS } from '../../src/simulation/civilizationLoad';
 import { timberAround, SHIP_FOREST_MIN } from '../../src/simulation/ship';
-import { disasterClick, spawnClick } from '../../src/ui/clicks';
+import { disasterClick, spawnClick } from '../../src/simulation/commands';
 import { extractArea } from '../../src/observe/area';
 import { detectScenes, sceneFrame, type SceneEvent, type SceneFrame } from '../../src/observe/scenes';
 

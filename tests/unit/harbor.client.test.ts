@@ -4,7 +4,8 @@ import { digestOf } from '../../src/chronicle/digest';
 import { chronicleId, type CargoId, type ChronicleId, type InscriptionId, type TurnstileToken, type WithdrawKey } from '../../src/harbor/contract';
 import { writeRefusal, type WireRequest } from '../../src/harbor/wire';
 import { createHarbor, RECOUNT_BACKOFF_MS, type HumanAnswer } from '../../src/harbor/client';
-import { createMemoryHarborStore, type HarborStore } from '../../src/persist/harborStore';
+import { createMemoryHarborStore } from '../../src/persist/harborStore';
+import type { HarborStore } from '../../src/harbor/store';
 import { catalogFrom, createFakeHarbor, DUMMY_TOKEN, type FakeReply } from '../fixtures/fakeHarbor';
 import { FIXTURE_CHRONICLE, FIXTURE_CHRONICLE_ID } from '../fixtures/chronicle';
 

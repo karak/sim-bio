@@ -222,7 +222,7 @@ describe('settlement.glb の小屋の 3 つの形 (M23-09 のやり直し)', () 
     expect(shadowNodeOf('hut')).toBe('hut_shadow');
     const props = ['lantern_post', 'megalith', 'slipway', 'stone_wall', 'stone_wall_corner', 'woven_screen'];
     for (const name of props) expect(shadowNodeOf(name)).toBe(`${name}_lod1`);
-    // 空の舟 25 年目の集落の置き場所の数 (view.ts の place)。敷石は小屋ごとに 3 枚で、遠距離版が無いので自分の形で落とす
+    // 空の舟 25 年目の集落の置き場所の数 (view/settlementBuild.ts の placeSettlement)。敷石は小屋ごとに 3 枚で、遠距離版が無いので自分の形で落とす
     const placed: Record<string, number> = { hut: 3, lantern_post: 5, megalith: 2, slipway: 1, stone_wall: 2, stone_wall_corner: 1, woven_screen: 2 };
     const steps = HUT_OFFSETS.length * 3 * nodeOf('stepping_stone').triangles;
     const shadow = Object.entries(placed).reduce((t, [name, n]) => t + n * nodeOf(shadowNodeOf(name)).triangles, steps);

@@ -1,5 +1,5 @@
 import { isObject } from '../core/parse';
-import { parseChronicle, type Chronicle, type ChronicleHead } from '../harbor/chronicle';
+import { parseChronicle, type Chronicle, type ChronicleHead } from '../chronicle/chronicle';
 import type { RunnerState } from '../scenario/ScenarioRunner';
 import type { SaveData } from '../simulation/types';
 import { checkScenarioSave } from './scenarioSave';

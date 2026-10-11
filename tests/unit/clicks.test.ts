@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { disasterClick, spawnClick } from '../../src/ui/clicks';
+import { disasterClick, spawnClick } from '../../src/simulation/commands';
 
 describe('UI の 1 クリック (M21-01)', () => {
   it('放流は環 1・0.5、疫病は環 4', () => {

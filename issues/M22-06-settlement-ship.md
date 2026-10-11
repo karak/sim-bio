@@ -1,7 +1,7 @@
 ---
 id: M22-06
 title: 集落と舟(5 段階・飛び立ち)
-status: review
+status: done
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-02]
@@ -25,6 +25,9 @@ M22-02
 - [ ] 帆を失うと灯りが消え工事が止まる
 
 ## 作業ログ
+- 2026-10-11: ユーザーが票の審査で保留。メモ「審査台なりで確認できるようにして」
+- 2026-10-11: 受入の確かめを issues/uat/M22-06.md に(未チェックの AC ごとに判定すること・画・計測・判定の空欄)。画は審査台の回 .claude/localreview/m22-uat-20261011-1106/(id m22-uat-20261011-1106/M22-06-*)
+- 2026-10-11: ユーザーが票の審査で承認 (done)。メモ「審査台 (2026-10-11) より: 舟・船台・集落・段階と飛び立ち・帆を失う、5 項目とも合格」
 
 ## 船台の場所の論点整理(2026-09-23、ユーザーの問いへの回答)
 
@@ -106,7 +109,7 @@ M22-02
 - 試験: `tests/unit/observe.hutLod.test.ts` の三角形の数を新しい形に合わせた(hut 27,142・hut_lod1 2,540・部品の近い形と遠距離版)。関係する単体試験 5 ファイル 30 件(hutLod・settlementLayout・bake・shadowOnly・breakdown)と `npx playwright test tests/e2e/observe.spec.ts` 4 件が通る。vitest の通しは回していない。
 - 確かめていないこと: 夜の見た目、ユーザーの審査台での判断、M4 以外の GPU での fps。北側の苔はノードの +Y(小屋では奥)に寄せているので、置いた向きによっては世界の北と一致しない。
 - 2026-09-26 12:28 手元の審査台での判断(s1-settlement、12ddb43)不合格「L字の石垣の苔はもう少し薄く、散在するように。あとはOKとします 苔の向きは既知の問題として許容。記録すること 影やLODといった軽量化をタスクに積むこと」
-  - [x] L 字の石垣の苔を薄く、散在させる(ほかは OK) → settle2(下の作業ログ、`docs/design/qa/observe/settle2-corner.png`)。審査待ち
+  - [x] L 字の石垣の苔を薄く、散在させる(ほかは OK) → settle2(下の作業ログ、`docs/design/qa/observe/settle2-corner.png`)。合格(2026-09-27 審査台 s2-corner)
   - [x] 既知の問題として許容(記録): 苔を寄せる「北側」は部品のローカルの +Y で決めていて、置いた向きによっては世界の北と一致しない
   - [x] 軽量化をタスクに積んだ → issues/M23-10-settlement-shadow-lod.md
 

@@ -1,7 +1,7 @@
 ---
 id: M24-01
 title: タイトル画面 (ロゴ・背景のデモ・メニューの枠)
-status: review
+status: done
 milestone: M24
 plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-00]
@@ -61,4 +61,4 @@ M24-00 の遷移図と W/F に沿って、起動したときにタイトル画�
 - 受入: SAV-001・HBR-005 の「もし」の文をタイトルを経る形に直した (ユーザーの承認 2026-10-04 19:20)。SAV-001 の covered_by に title.spec の続きからの試験を足した。`uv run scripts/acceptance.py check` は ok
 - レビュー: 別の agent (sonnet、読むだけ)。直したもの: 板の間もメニューが押せて板が重なる (inert に)、一覧が答えないとタイトルが出ない (一覧を 2 s で打ち切り、間に合えば timer を消す)、背の低い画面で上にはみ出す (max-height 480 の型)、空白で二重に決める恐れ (空白は button の既定に任せる)、reduced-motion と板の inert の E2E を足した
 - 審査台: `.claude/localreview/m24-01-20261004-1950/index.html` (前後の 1280×720・390×844、止めた画、板)。ユーザーの審査: 未
-
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

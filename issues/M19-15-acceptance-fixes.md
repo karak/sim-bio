@@ -1,7 +1,7 @@
 ---
 id: M19-15
 title: 受入試験(2026-09-27)で見つかった港まわりの不具合
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: []
@@ -99,3 +99,4 @@ None (can start immediately)
 #### テストが落ちた・揺れたもの(直していない)
 
 - 機械の負荷が高い(load average 40 前後、ほかの agent が同時に回している)間の並列の通しで、`persist.spec.ts`「M19-05: 手動の枠に保存し…」(速さの札が安定せず click が切れる)、`harbor.spec.ts`「M19-09: 港を全部閉じても…」(網の失敗が 2〜6 秒かかり、既定の 5 秒の expect を越える)が落ちた。後者は、この直しを外した turnstile.ts でも同じに落ちることを確かめた(負荷による揺れで、この直しの回帰ではない)。1 worker の通しは下
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

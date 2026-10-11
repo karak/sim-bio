@@ -1,4 +1,4 @@
-import type { Digest, ReplayOutcome } from '../harbor/chronicle';
+import type { Digest, ReplayOutcome } from '../chronicle/chronicle';
 import type { LandResult } from '../harbor/cargo';
 import type { DrawResult, PublishResult } from '../harbor/client';
 import type { Cargo, ChronicleCard } from '../harbor/contract';

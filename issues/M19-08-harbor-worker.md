@@ -1,7 +1,7 @@
 ---
 id: M19-08
 title: 港の Worker と D1(ルート・日次予算・閉港の返事・Cron)
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-07, M19-02]
@@ -141,3 +141,4 @@ M19-07, M19-02
   - `pnpm exec wrangler login` のあと `pnpm exec wrangler d1 create biotope-harbor` で DB を作り、`wrangler.jsonc` の `database_id` の仮の値(`00000000-0000-0000-0000-000000000000`)を本物に置き換える
   - Turnstile の widget を作り(hostname は `biotope-island.<サブドメイン>.workers.dev`)、`pnpm exec wrangler secret put TURNSTILE_SECRET_KEY` と `pnpm exec wrangler secret put SENDER_SECRET`(乱数)を対話で置く
   - 配備のワークフロー(`deploy.yml`)は、`wrangler deploy` の前に `wrangler d1 migrations apply biotope-harbor --remote` を当てる。配ったあと、Observability で CPU Time、Rate Limiting の 429、`harbor.cron.stats` の行を確かめる
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

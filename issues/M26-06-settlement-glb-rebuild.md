@@ -1,7 +1,7 @@
 ---
 id: M26-06
 title: settlement.glb を main の 90b2031 (石垣の苔を薄く) の script から作り直して量子化する
-status: review
+status: done
 milestone: M26
 plan: null
 depends_on: [M23-10]
@@ -44,3 +44,4 @@ main を feat/m19 に取り込んだ merge (e7b0b88) で、`tools/blender/observ
   - 前後の画: `.claude/localreview/m26-06-20261004-1237/` (集落・群れ・海岸、前後)。集落 (OBS-002-1) と群れ (-2) の画は前後で同じ画素 (md5 一致、L 字の石垣が写っていない)。海岸 (-3) だけ変わる。承認はユーザー待ち。
   - feat/m19 を取り込み後: `pnpm run check` 通過 (vitest 1244 通過)、E2E observe.spec.ts + observeEntry.spec.ts 7 通過、shots.spec.ts -g OBS-002 通過。
 - 2026-10-04 18:57: ユーザーが審査台で回を全部合格にした。今の基準画は各画の最新の回と同じ (sha256 で照合)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

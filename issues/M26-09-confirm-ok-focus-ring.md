@@ -1,7 +1,7 @@
 ---
 id: M26-09
 title: 確かめのダイアログで押した OK にも focus の輪が一瞬出る
-status: review
+status: done
 milestone: M26
 plan: null
 depends_on: [M25-15]
@@ -38,3 +38,4 @@ M25-15 で `src/ui/hud.css:88` の `.confirm-actions .chip:focus-visible` を `:
 - 2026-10-04: 起票 (ユーザーの決定「focus は直す」)。
 - 2026-10-04: 落ちる試験 (M26-09、マウスで OK を押している間の outline) を足して赤を確かめた。`focusWithRing` (script の focus に class `confirm-ring` を付け、blur で外す) と CSS を `.chip.confirm-ring, .chip:focus-visible` に絞って緑。confirm.spec 8 件・CNF-002・check が通る。
 - 2026-10-04: 別 agent のレビューを受け、blur で activeElement がその札のままなら (窓の focus 喪失) 輪を残すようにし、Tab で移る試験を足した。confirm.spec 9 件・CNF-002 緑。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

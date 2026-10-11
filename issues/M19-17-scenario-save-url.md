@@ -1,7 +1,7 @@
 ---
 id: M19-17
 title: シナリオ中の保存・読込・初期化と URL・ゲームの状態の一貫性(仕様の見直し)
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-14]
@@ -59,3 +59,4 @@ M19-14
   - 残り: 判定の板(#verdict)は画面全体を覆うので、判定の後に HUD の「枠へ保存」を押す道が画面に無い。コードは判定の後の保存・読込を受ける。板を閉じる手段は M21-04 か別チケットで。
   - E2E: tests/e2e/scenarioSave.spec.ts 8 件、persist.spec.ts・harbor.spec.ts は 1 worker で全件通る。全体を 5 workers で流すと、重い機械の上で港の出港の待ち(5 秒)と 60 秒の上限に掛かるものが 5 件出た(harbor.spec.ts:144 は M19-17 の前から時間ぎりぎり)。同じ 5 件は 1 worker で通る。全体を 1 worker で流すと 57 件すべて通る(12.4 分、490ef43)。
 - 2026-09-27: feat/m19(M19-15・M19-16)を merge した(915f931)。createHud の options を 1 つにし(speeds と石板の名前)、開発用の石板の差し替え(dev.scenarioDef)を枠の読込で作り直す runner にも通す。知らない石板の URL で消すのは scenario と visit だけで、player・dev・shortcut は残す。tests/unit/dev.snapshot.test.ts を枠の包みに合わせた。merge の後に pnpm run check(vitest 109 files・1034 tests、worker 66 tests、scripts 42 tests)と、E2E 全体を 1 worker で 66 件すべて通した(12.6 分)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

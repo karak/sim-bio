@@ -1,7 +1,7 @@
 ---
 id: M19-12
 title: 課金にしない構成検査と運用スクリプト
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-02]
@@ -78,3 +78,4 @@ M19-02
     - Workers AI の理由の文を、docs で言える範囲(手元の開発でも遠隔で動く)に直した。7ccef19
     - 作業の途中で M19-07 が feat/m19 に入り、`src/harbor/contract.ts` の `parseChronicleId` が `^[0-9a-f]{64}$`(小文字だけ)と決まった。mod.py は大文字を小文字に直して受けていたので、同じ形に揃えた(境界の規則を 1 つにする)。9ccfbb6。この worktree は fe69dbf のままで、M19-07 は取り込んでいない(src に触れないため)
   - **見送り**: `triggers.crons` の本数(無料は 5 本/アカウント。アカウント単位なので 1 つの設定では数えきれない)。D1 の保存量(400 MB の栓)を `budget` で見ること(Cron の集計の形が M19-08 で決まってから)。`--remote` の実地の確かめ(配備の許可のあと)
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

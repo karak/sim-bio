@@ -9,7 +9,7 @@ import { stepByYear } from '../../src/scenario/stepByYear';
 import { SIM_VERSION } from '../../src/simulation/version';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, SpeciesDef, WorldConfig } from '../../src/simulation/types';
-import { disasterClick, spawnClick } from '../../src/ui/clicks';
+import { disasterClick, spawnClick } from '../../src/simulation/commands';
 import { runChronicle } from '../../src/chronicle/replay';
 
 /**

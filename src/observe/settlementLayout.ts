@@ -9,7 +9,7 @@
  * 炉の位置は夜の灯りの溜まり (motes.ts) を置くのに使う。
  */
 
-/** 集落の中心からの小屋の位置 (m)。広場と戸口への道 (view.ts の worn) もこの点へ引く */
+/** 集落の中心からの小屋の位置 (m)。広場と戸口への道 (view/layout.ts の worn) もこの点へ引く */
 export const HUT_OFFSETS: readonly (readonly [number, number])[] = [
   [-14, -8],
   [12, -12],
@@ -48,7 +48,7 @@ export const shadowNodeOf = (name: string): string => (name === 'hut' ? 'hut_sha
 export const HEARTH_M = 0.3;
 /** 高さを合わせる戸口の外の点 (中心から m) */
 export const DOOR_M = 1.8;
-/** 地面から沈める深さ (m)。他の集落の部品 (view.ts の place) と同じ */
+/** 地面から沈める深さ (m)。他の集落の部品 (view/settlementBuild.ts の placeSettlement) と同じ */
 export const SINK_M = 0.15;
 /** 戸口の外に合わせて上げる高さの上限 (m)。土台 (1 m) が浮かないように */
 export const MAX_LIFT_M = 0.8;

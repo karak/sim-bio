@@ -1,7 +1,7 @@
 ---
 id: M19-16
 title: 受入試験を AI が確かめられる仕組み(状態の受け渡し・複数の見守り手・テストの近道)
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: []
@@ -74,3 +74,4 @@ None (can start immediately)
 - Cloudflare の E2E(`E2E_PORT=8796 pnpm run test:e2e:cloudflare`、bae580a): 6 件すべて通る。うち M19-16 の「手元の 3 人の見守り手」は本番のビルド(開発用の手段の無いもの)を wrangler dev に配り、3 つの context が `x-dev-sender` を名乗る
 - 既存コメントの削除なし: `git diff feat/m19...HEAD -U0 | grep -E '^-\s*(//|\*|/\*)'` は空
 - 途中で、前の回の vite dev(5231)が残って `reuseExistingServer` に拾われ、harbor.spec が落ち続けた。止めて別のポートで回し直した
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

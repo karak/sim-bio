@@ -1,7 +1,7 @@
 ---
 id: M25-05
 title: 正本の手順ごとの checks と judge を足し、acceptance.py check で縛る
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-01]
@@ -43,3 +43,4 @@ ADR 0001 の段 4。正本の【見た目】【読みやすさ】【手触り】
 - 2026-10-01: 起票 (ADR 0001 の段 4)
 - 2026-10-01: 実装 (feat/m25-05)。steps の 3 つ目に {checks, judge} を持てるようにし、check が札 (【見た目】【読みやすさ】【手触り】) の付いた active の手順を縛る。lens の名前は lens.ts の LENSES (legible) と照らす。page は items の marks と delegated の marks に出す。正本に 20 手順の marks を足した (読みやすさは checks の legible、見た目・手触りは judge の human。llm は M25-06 で pnpm run judge ができてから付け替える)。レビューは codex の認証切れのため別モデルの読むだけのレビュアー。指摘のうち LENSES を行頭に固定・空の judge を不正として扱う・delegated の marks の試験を反映。target は空でないことだけ見る (shotsOf の名前との照合は M25-06 の課題)。
 - 2026-10-01: 検証。test:scripts 91 件・typecheck・lint・lint:py・vitest 1197 件・worker 66 件は通った。E2E は shots.spec.ts の 4 件 (ACCEPTANCE_DIR を scratchpad に向けた) が通った。全件 (90 件) は、ほかの agent の負荷 (load average 20〜30) で 30 分に 13 件しか進まず、途中で止めた (13 件までは赤なし)。全件は親で回す。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

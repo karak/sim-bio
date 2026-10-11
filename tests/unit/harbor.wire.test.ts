@@ -14,7 +14,7 @@ import {
   type TurnstileToken,
   type WithdrawKey,
 } from '../../src/harbor/contract';
-import type { Chronicle, TimedCommand } from '../../src/harbor/chronicle';
+import type { Chronicle, TimedCommand } from '../../src/chronicle/chronicle';
 import { bodyLimitOf, MAX_BODY_BYTES, readRefusal, readRequest, readResponse, writeRefusal, writeRequest, writeResponse, type Refusal, type WireRequest } from '../../src/harbor/wire';
 import { FIXTURE_CHRONICLE, FIXTURE_CHRONICLE_ID } from '../fixtures/chronicle';
 

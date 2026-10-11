@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeEvent } from '../../src/ui/Tablet';
+import { describeEvent } from '../../src/scenario/describe';
 
 const names = { deer: '鹿' };
 const alive = { status: 'alive', reason: 'x' } as const;

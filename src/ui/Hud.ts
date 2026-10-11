@@ -91,12 +91,13 @@ export type HudHandlers = {
   /** 「タイトルへ」(M24-04)。確かめと行き先は main.ts の planOp (title) が決める。訪問でも押せる */
   onTitle(): void;
   /** 災害ボタンを押した (次に島をクリックした場所に落とす) / 解除した */
-  onDisasterArm(kind: DisasterKind | null): void;
   /** 種パレットで種を選んだ (次に島をクリックした場所に放つ) / 解除した */
-  onSpawnArm(speciesId: string | null): void;
   /** 気象塔チップを押した (次に島をクリックした場所に build_tower を送る) / 解除した (M10-01) */
-  onTowerArm(active: boolean): void;
+  onArm(chip: Chip | null): void;
 };
+
+/** 持っているチップ。次に島をクリックした場所への命令になる。HUD が 1 つだけ持つので、災害・放流・気象塔は互いに排他 */
+export type Chip = { kind: 'disaster'; disaster: DisasterKind } | { kind: 'spawn'; speciesId: string } | { kind: 'tower' };
 
 export type Hud = {
   update(s: WorldSnapshot): void;
@@ -104,10 +105,9 @@ export type Hud = {
   recordYear(s: WorldSnapshot): void;
   showCell(cell: number | null, s: WorldSnapshot): void;
   addMarker(x: number, label: string, color: string): void;
-  setArmed(kind: DisasterKind | null): void;
-  setSpawnArmed(speciesId: string | null): void;
+  chip(): Chip | null;
   /** 気象塔チップの武装状態を外から揃える (M10-01) */
-  setTowerArmed(active: boolean): void;
+  setChip(chip: Chip | null): void;
   /** 星の力で買えるかどうか。false のチップは薄く見せる (押せるが runner が弾く) */
   setAffordable(a: { spawn: boolean; disaster: boolean; climate: boolean; tower: boolean }): void;
   /** 舟の行を出すか (M10-04)。逃がす条件 (escape) の無い石板では「舟を作れ」が気を散らすので隠す。自由モードでは出す */
@@ -122,6 +122,8 @@ export type Hud = {
   setSlot(s: SlotSummary): void;
   // (M19-17 で変更: 石板の中も受け付ける。false は訪問 (他人の島) だけで、枠への保存も止める)
   setReplaceable(on: boolean): void;
+  /** 速さの札の列。観察画面の入口 (M19-18) をこの列の端に置く */
+  readonly speedRow: HTMLElement;
 };
 
 /** セル時系列: サンプリング間隔 (tick)、保持年数、平均を取る半径 */
@@ -145,6 +147,9 @@ const DISASTERS: { kind: DisasterKind; label: string }[] = [
   { kind: 'plague', label: '疫病' },
 ];
 
+/** チップの札の DOM の id */
+const chipId = (c: Chip): string => (c.kind === 'disaster' ? `disaster-${c.disaster}` : c.kind === 'spawn' ? `spawn-${c.speciesId}` : 'tower-chip');
+
 /** 枠の一覧の 1 行 (M19-17)。石板の枠は石板の名前と石板の年で出す */
 export function slotLabel(slot: SlotId, s: SlotSummary | undefined, titles: Record<string, string>): string {
   if (!s) return `${SLOT_NAMES[slot]} · 空き`;
@@ -157,7 +162,7 @@ export function slotLabel(slot: SlotId, s: SlotSummary | undefined, titles: Reco
 export function createHud(
   root: HTMLElement,
   h: HudHandlers,
-  { speeds = SPEEDS, scenarioTitles = {}, inScenario = false }: { speeds?: readonly Speed[]; scenarioTitles?: Record<string, string>; inScenario?: boolean } = {},
+  { speed, speeds = SPEEDS, scenarioTitles = {}, inScenario = false }: { speed: () => Speed; speeds?: readonly Speed[]; scenarioTitles?: Record<string, string>; inScenario?: boolean },
 ): Hud {
   root.insertAdjacentHTML(
     'beforeend',
@@ -219,10 +224,8 @@ export function createHud(
   const markers: GraphMarker[] = [];
   let lines: GraphLine[] = [];
   let lastYear = -1;
-  let armed: DisasterKind | null = null;
-  let spawnArmed: string | null = null;
   /** 気象塔チップを持っているか (M10-01)。災害・種パレットと排他 */
-  let towerArmed = false;
+  let chip: Chip | null = null;
   // 種チップの表示モード: 密度そのまま or 住みやすさ (適合度)。選択中の種があるときだけ layer に効く
   let layerMode: 'density' | 'suit' = 'density';
   let activeSpeciesId: string | null = null;
@@ -235,10 +238,18 @@ export function createHud(
     $('layer-mode-density').classList.toggle('on', layerMode === 'density');
     $('layer-mode-suit').classList.toggle('on', layerMode === 'suit');
   };
+  /** 光らせている速さの札。速さの正は loop で、HUD は変わった時だけ札を付け替える */
+  let shownSpeed: Speed = 1;
+  const followSpeed = () => {
+    const now = speed();
+    if (now === shownSpeed) return;
+    shownSpeed = now;
+    setOn('speed-row', `speed-${now}`);
+  };
   for (const s of speeds) {
     $(`speed-${s}`).addEventListener('click', () => {
       h.onSpeed(s);
-      setOn('speed-row', `speed-${s}`);
+      followSpeed();
     });
   }
   for (const l of LAYERS) {
@@ -284,35 +295,22 @@ export function createHud(
     h.onCommand({ type: 'set_climate', rainScale: v });
   });
   // 気象塔チップ (M10-01): 災害・種パレットと同じ「武装 → 次のクリックで発火」の流儀。三者は排他 (どれか 1 つだけ武装できる)
-  const setTowerArmed = (v: boolean) => {
-    towerArmed = v;
-    $('tower-chip').classList.toggle('armed', v);
-    $('tower-hint').hidden = !v;
-    h.onTowerArm(v);
-  };
-  const setSpawnArmed = (id: string | null) => {
-    spawnArmed = id;
-    for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('armed', b.id === `spawn-${id}`);
-    if (id !== null && towerArmed) setTowerArmed(false);
-    h.onSpawnArm(id);
-  };
-  const setArmed = (k: DisasterKind | null) => {
-    armed = k;
-    for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('armed', d.kind === k);
+  const setChip = (next: Chip | null) => {
+    chip = next;
+    const id = next && chipId(next);
+    $('tower-chip').classList.toggle('armed', id === 'tower-chip');
+    $('tower-hint').hidden = id !== 'tower-chip';
+    for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('armed', b.id === id);
+    for (const d of DISASTERS) $(`disaster-${d.kind}`).classList.toggle('armed', `disaster-${d.kind}` === id);
     // 火山チップを持っているときだけ、火山セルへの誘導ヒントを出す (M8-08)
-    $('volcano-hint').hidden = k !== 'volcano';
-    if (k !== null && spawnArmed !== null) setSpawnArmed(null);
-    if (k !== null && towerArmed) setTowerArmed(false);
-    h.onDisasterArm(k);
+    $('volcano-hint').hidden = id !== 'disaster-volcano';
+    h.onArm(next);
   };
-  $('tower-chip').addEventListener('click', () => {
-    const next = !towerArmed;
-    if (next && armed !== null) setArmed(null);
-    if (next && spawnArmed !== null) setSpawnArmed(null);
-    setTowerArmed(next);
-  });
+  /** 持っている札をもう一度押すと放す */
+  const toggleChip = (next: Chip) => setChip(chip && chipId(chip) === chipId(next) ? null : next);
+  $('tower-chip').addEventListener('click', () => toggleChip({ kind: 'tower' }));
   for (const d of DISASTERS) {
-    $(`disaster-${d.kind}`).addEventListener('click', () => setArmed(armed === d.kind ? null : d.kind));
+    $(`disaster-${d.kind}`).addEventListener('click', () => toggleChip({ kind: 'disaster', disaster: d.kind }));
   }
   // 勅令 (M9-03): 石板の言葉として dispatch する (力は要らない。信仰の門は World 側)
   $('edict-stop').addEventListener('click', () => h.onCommand({ type: 'civ_edict', edict: 'stop_mining' }));
@@ -349,7 +347,7 @@ export function createHud(
       slotSelect.options[i].textContent = slotLabel(slot, slots.get(slot), scenarioTitles);
     });
     const slot = selectedSlot();
-    const controls = slotControlsOf({ visiting: !replaceable, slot, filled: slots.has(slot) });
+    const controls = slotControlsOf({ own: replaceable, slot, filled: slots.has(slot) });
     $<HTMLButtonElement>('slot-save').disabled = !controls.save;
     $<HTMLButtonElement>('slot-load').disabled = !controls.load;
     const loadInput = $<HTMLInputElement>('load-input');
@@ -425,11 +423,7 @@ export function createHud(
       .map((d) => `<button id="spawn-${d.id}" class="chip"><i class="swatch" style="background:${d.color}"></i>${d.name}</button>`)
       .join('');
     for (const d of spawnableSpecies) {
-      $(`spawn-${d.id}`).addEventListener('click', () => {
-        const next = spawnArmed === d.id ? null : d.id;
-        if (next !== null && armed !== null) setArmed(null);
-        setSpawnArmed(next);
-      });
+      $(`spawn-${d.id}`).addEventListener('click', () => toggleChip({ kind: 'spawn', speciesId: d.id }));
     }
   };
 
@@ -454,6 +448,7 @@ export function createHud(
   };
 
   const update = (s: WorldSnapshot) => {
+    followSpeed();
     ensureSpecies(s);
     if (localCell !== null && s.tick % LOCAL_SAMPLE_TICKS === 0 && s.tick !== localLastTick) {
       localLastTick = s.tick;
@@ -574,9 +569,8 @@ export function createHud(
       markers.push({ x, label, color });
       redraw();
     },
-    setArmed,
-    setSpawnArmed,
-    setTowerArmed,
+    chip: () => chip,
+    setChip,
     setShipEnabled: (on) => {
       shipEnabled = on;
       if (!on) $('hud-ship').hidden = true;
@@ -603,5 +597,6 @@ export function createHud(
       replaceable = on;
       renderSlots();
     },
+    speedRow: $('speed-row'),
   };
 }

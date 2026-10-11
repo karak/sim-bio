@@ -1,7 +1,7 @@
 import { isObject, under, type ParseError, type Parsed } from '../core/parse';
-import type { HarborStore, Outbound } from '../persist/harborStore';
-import { visitHref } from '../ui/clicks';
-import type { Chronicle, Digest } from './chronicle';
+import type { HarborStore, Outbound } from './store';
+import { visitHref } from './links';
+import type { Chronicle, Digest } from '../chronicle/chronicle';
 import {
   chronicleId,
   parseCargo,

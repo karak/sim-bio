@@ -1,7 +1,7 @@
 ---
 id: M26-16
 title: scripts/mod.py --remote を deploy.py と同じ Keychain のトークンの道にする
-status: review
+status: done
 milestone: M26
 plan: docs/operations/deploy-runbook.md
 depends_on: [M26-12]
@@ -30,10 +30,11 @@ evidence:
 - [x] Keychain の項目が無ければ、値を読まず wrangler も起こさずに止まり、H11・H12 を指す (`test_missing_keychain_item_stops_before_wrangler`)
 - [x] `--local` はトークンを読まない (`test_local_never_asks_for_a_token`)
 - [x] deploy.py の試験はそのまま通る (部品は scripts/cf_auth.py)
-- [ ] (人) Keychain にトークンを置いてから `! uv run scripts/mod.py --remote budget` を 1 回通す (M26-12 の H11・H12 の後)
+- [x] (人) Keychain にトークンを置いてから `! uv run scripts/mod.py --remote budget` を 1 回通す (M26-12 の H11・H12 の後)
 
 ## 作業ログ
 
 - 2026-10-10: 起票 (ユーザーの決定 A)。
 - 2026-10-10: 実装。deploy.py のトークン・環境・D1 の照合を scripts/cf_auth.py に移し、mod.py の `remote_env` が M26-17 の照合 (`check_auth`、whoami なし、値を読んで照合) を通ってから wrangler の環境を作る。account と D1 の id は deploy.config.json と wrangler.jsonc から読む 。
 - 2026-10-10: 別 agent (sonnet) の読むだけのレビュー。`--remote --config` は照合した D1 と違う D1 に当たりうるので断る (終了 2)。照合の中で security・wrangler を起こせない・時間切れのときは traceback でなく「止める」の報告にする。whoami が落ちたときは「ログインしていない」と言わない。macOS でも `XDG_CONFIG_HOME` を先に見る。
+- 2026-10-11: ユーザーが `! uv run scripts/mod.py --remote budget` を通した (照合の後「2026-10-05  合計 1/45,000 (0%)  一覧 1/20,000 (0%)」)。done

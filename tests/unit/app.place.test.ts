@@ -162,11 +162,12 @@ describe('タイトルへ戻る planOp title (M24-04)', () => {
 
 describe('今いる舞台と、確かめてから行う順 (M21-07)', () => {
   it('atOf (M21-07): 訪問なら訪問、石板なら判定が出ているか (runner が無ければ出ていない)、ほかは自由モード', () => {
-    expect(atOf(true, head, 'dead')).toEqual({ stage: 'visit' });
-    expect(atOf(false, head, 'running')).toEqual({ stage: 'scenario', head, finished: false });
-    expect(atOf(false, head, null)).toEqual({ stage: 'scenario', head, finished: false });
-    for (const status of ['alive', 'dead', 'escaped'] as const) expect(atOf(false, head, status)).toEqual({ stage: 'scenario', head, finished: true });
-    expect(atOf(false, null, null)).toEqual({ stage: 'free' });
+    const def = island.def;
+    expect(atOf({ kind: 'visit', id: visitId, def }, head, 'dead')).toEqual({ stage: 'visit' });
+    expect(atOf({ kind: 'scenario', def }, head, 'running')).toEqual({ stage: 'scenario', head, finished: false });
+    expect(atOf({ kind: 'scenario', def }, head, null)).toEqual({ stage: 'scenario', head, finished: false });
+    for (const status of ['alive', 'dead', 'escaped'] as const) expect(atOf({ kind: 'scenario', def }, head, status)).toEqual({ stage: 'scenario', head, finished: true });
+    expect(atOf({ kind: 'free' }, null, null)).toEqual({ stage: 'free' });
   });
 
   it('runPlan (M21-07): 確かめを断れば何もせず、受ければ effects を並びどおりに行い、失敗した所で残りをやめる', async () => {
@@ -298,11 +299,11 @@ describe('訪問中の「もう一度」 planOp retry (M26-08)', () => {
 describe('枠の札 slotControlsOf (M21-07)', () => {
   it('slotControlsOf (M21-07): 訪問では枠への保存・読込・ファイルの読込・新しい島を押せず、自動の枠へは保存できない', () => {
     const why = '訪れている島は差し替えられない (他人の島)';
-    expect(slotControlsOf({ visiting: true, slot: 'manual-1', filled: true })).toEqual({ save: false, load: false, file: false, newIsland: false, why });
-    expect(slotControlsOf({ visiting: true, slot: 'auto', filled: true })).toEqual({ save: false, load: false, file: false, newIsland: false, why });
-    expect(slotControlsOf({ visiting: false, slot: 'auto', filled: true })).toEqual({ save: false, load: true, file: true, newIsland: true, why: '' });
-    expect(slotControlsOf({ visiting: false, slot: 'manual-1', filled: false })).toEqual({ save: true, load: false, file: true, newIsland: true, why: '' });
-    expect(slotControlsOf({ visiting: false, slot: 'manual-1', filled: true })).toEqual({ save: true, load: true, file: true, newIsland: true, why: '' });
+    expect(slotControlsOf({ own: false, slot: 'manual-1', filled: true })).toEqual({ save: false, load: false, file: false, newIsland: false, why });
+    expect(slotControlsOf({ own: false, slot: 'auto', filled: true })).toEqual({ save: false, load: false, file: false, newIsland: false, why });
+    expect(slotControlsOf({ own: true, slot: 'auto', filled: true })).toEqual({ save: false, load: true, file: true, newIsland: true, why: '' });
+    expect(slotControlsOf({ own: true, slot: 'manual-1', filled: false })).toEqual({ save: true, load: false, file: true, newIsland: true, why: '' });
+    expect(slotControlsOf({ own: true, slot: 'manual-1', filled: true })).toEqual({ save: true, load: true, file: true, newIsland: true, why: '' });
   });
 });
 

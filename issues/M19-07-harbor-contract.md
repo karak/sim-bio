@@ -1,7 +1,7 @@
 ---
 id: M19-07
 title: 港の契約(クライアントと Worker が共有する parse と型)
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-06]
@@ -79,3 +79,4 @@ M19-06
   - `ROUTES` の表は 130 行ほどで、本文の要る 4 つの道が `isObject` を繰り返す。道ごとに読む鍵が違い、まとめると readRequest に分岐が増えるだけなので残す
   - `writeResponse` は JSON.stringify に kind を足しただけだが、kind が値の型を `HarborResponses[K]` に結ぶので、型の門として残す
 - 大きさ: chronicle.ts 157 行、contract.ts 182 行、wire.ts 290 行
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

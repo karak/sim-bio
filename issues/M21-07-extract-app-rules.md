@@ -1,7 +1,7 @@
 ---
 id: M21-07
 title: main.ts と港の画面の判断を純粋な関数に出し、手動と E2E の組み合わせを表の単体試験に移す
-status: review
+status: done
 milestone: M21
 plan: docs/design/2026-09-29-acceptance-redesign.md
 depends_on: [M21-06]
@@ -103,6 +103,7 @@ evidence: ["c55034a src/app/place.ts src/harbor/dock.ts src/harbor/cargo.ts src/
   - tests/e2e/confirm.spec.ts「M21-04: 判定の前の石板から石板を選び直すのは確かめない (続きは書き切ってから移り、戻れば続きから)」。表の「石板を選ぶ × 走っている石板」と同じ。ただし、書き切ってから戻ると続きから開くことは、ここで見ている → M25-17 (2026-10-04) で消した。続きから開くことは M26-02 の E2E と表が見る
   - tests/e2e/harbor.spec.ts「M19-10: 星の力が足りなければ積荷を受け取らず (1 種も放たない)、控えも残さない」。planLanding の budget と、harbor.client.test の「島が受け取れなかった…控えを残さず」で見ている → M25-17 で残すと決めた (控えを残さないのは保存の副作用で、表が覆わない)
   - 残すもの: scenarioSave.spec の「訪問 (他人の島) では…押せない」(slotControlsOf を Hud が当てる配線)、「知らない石板の URL…」(URL の書き換えと記録の配線)、devtools.spec の近道 (開発の板の配線)
+- 2026-10-11: ユーザーが票の審査で承認 (done)。
 
 ## 分かっている限り
 

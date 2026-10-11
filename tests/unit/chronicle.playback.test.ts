@@ -8,7 +8,7 @@ import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
 import { digestOf } from '../../src/chronicle/digest';
 import { createPlayback } from '../../src/chronicle/playback';
-import type { Chronicle } from '../../src/harbor/chronicle';
+import type { Chronicle } from '../../src/chronicle/chronicle';
 import { FIXTURE_CHRONICLE, FIXTURE_HASH, fixtureIsland } from '../fixtures/chronicle';
 
 const island = fixtureIsland({
