@@ -26,7 +26,7 @@ evidence: []
 
 ## Acceptance criteria
 
-- [ ] 手元から 1 回配り、版の id と smoke (`/` 200、`/api/v1/chronicles` JSON) を作業ログに書く
+- [x] 手元から 1 回配り、版の id と smoke (`/` 200、`/api/v1/chronicles` JSON) を作業ログに書く
 - [ ] 端末の OAuth に頼る他の道の扱いが決まっている
 
 ## Blocked by
@@ -39,3 +39,4 @@ evidence: []
 - 2026-10-10: 4 の決定。`scripts/mod.py --remote` は Keychain の道にした (M26-16)。手順書とスクリプトの最初に資格情報の照合 `pnpm run cf:auth` を入れた (M26-17)。
 - 2026-10-11: ユーザーの決定「保留のままでいい」。H11・H12 (Keychain の sim-bio-local-deploy) は作らない。配備は GitHub Actions の deploy.yml だけ。手元の `pnpm run cf:auth`・`pnpm run deploy`・`mod.py --remote` はトークンが無いので落ちる (承知の上)
 - 2026-10-11: H11・H12 をユーザーが済ませた (Keychain の sim-bio-local-deploy)。`pnpm run cf:auth` 通過 (account 14c725d3… に届き、D1 biotope-harbor の id が合う。使う道: Keychain のトークン)。保留を解く
+- 2026-10-11: ユーザーの許可で main (8052830、PR #8 まで) を手元から配った (AI の端末からは auto mode が止めたので、ユーザーが `! pnpm run deploy`)。Keychain のトークンで照合 → build → 無料枠の検査 違反なし → マイグレーション 無し → deploy。版 ad1e5e74-8d3a-4b48-b51f-7a270cde7136 (前は f8ee7c1a)。smoke: `/` ok・`/api/v1/chronicles` JSON、すべて通った。残りは「端末の OAuth に頼る他の道の扱い」
