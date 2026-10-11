@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { World } from '../../src/simulation/World';
 import { SEA_LEVEL } from '../../src/simulation/terrain';
-import { SPAWN_RADIUS } from '../../src/harbor/cargo';
+import { SPAWN_RADIUS } from '../../src/simulation/commands';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
 import type { ScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';

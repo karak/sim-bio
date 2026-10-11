@@ -1,7 +1,7 @@
 import type { Command, DisasterKind, WorldSnapshot } from '../simulation/types';
 import type { Session } from '../app/session';
 import type { Hud } from './Hud';
-import { disasterClick, spawnClick } from './clicks';
+import { disasterClick, spawnClick } from '../simulation/commands';
 import { IDLE, pressStep, type PressInput } from './press';
 
 /**
