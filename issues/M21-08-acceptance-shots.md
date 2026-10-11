@@ -33,7 +33,7 @@ E2E はもうその画面に着いている(harbor.spec・cellHighlight.spec・c
 - [x] 撮るもの: 港の知らせと板の文(閉港・出港のリンク・回避率の行)、漂着の目印と浜のセルの密度、確かめの板(新しい島・枠の上書き・判定の出た島を離れる)、選んだセル(遠いカメラ・寄ったカメラ・丘に隠れたセル)
 - [x] 撮る前に、画に写すものが見えていることを内容で確かめる(文は toHaveText、目印は HUD の中の文)。見えないまま撮った画を人に見せない
 - [x] `ACCEPTANCE_DIR` が無いと skip になり、`pnpm run test:e2e` の数と時間を変えない
-- [ ] `pnpm run shots && pnpm run acceptance:page` の後、受入の画面に画が並ぶ。人の 1 周の分が減ったら TUR の行の steps と minutes を直す
+- [ ] 撮る手順は審査台で基準画を承認し (`pnpm run shots:update`)、llm の手順は `pnpm run judge` で判じる。人の 1 周の分が減ったら TUR の行の steps と minutes を直す
 
 ## 作業ログ
 
@@ -53,7 +53,7 @@ E2E はもうその画面に着いている(harbor.spec・cellHighlight.spec・c
 
 ## 分かっている限り
 
-- 受入の画面の index.html (git の外) は `.imgs` の CSS だけで、項目の shots を描かない。描く行を足すまで、items.json に画があっても画面には並ばない
+- 受入の画面の index.html (git の外) は `it.shots` を描く (179〜184 行)。画が並ばないのは、撮る行が `auto` だから (M25-01 から)
 - 人の 1 周の TUR-001・TUR-002 の steps と minutes はまだ直していない (直しの案はユーザーの判断待ち)
 - 開発の板 (?dev=1) は HUD の「新しい島」を覆う (Playwright の押しが開発の板に取られた)。開発のときだけ
 - 島をドラッグで回すと、離した所のセルが選ばれる (canvas の click)。選んだセルが回すたびに動く

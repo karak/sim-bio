@@ -7,7 +7,7 @@ import { shouldCompareBaselines } from './baseline';
 /**
  * 観察画面の特性試験 (M27-04 の安全網)。view.ts を分ける前の inspect() の読みを fixture に留め、分けた後も同じであることを見る。
  * コマを手で進める (tests/driver/frames.ts) ので、同じ手順なら同じ数になる。fps・解像度の倍率は実時間に依るので外す。
- * 更新は OBSERVE_FIXTURE=update で撮り直す。基準画と同じく、手元の Mac だけで比べる (CI は撮るだけ)
+ * 更新は OBSERVE_FIXTURE=update で撮り直す。基準画と同じく、手元の Mac だけで比べる (CI では回さない)
  */
 const FIXTURE = 'tests/e2e/fixtures/observe-characterization.json';
 const UPDATE = process.env.OBSERVE_FIXTURE === 'update';
