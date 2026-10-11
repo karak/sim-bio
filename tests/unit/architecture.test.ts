@@ -176,3 +176,99 @@ describe('アーキテクチャの柵 (M27-01): 大きさのラチェット', ()
     expect(over).toEqual([]);
   });
 });
+
+/** 識別子 (変数・引数・プロパティの名前。文字列とコメントは除く) name を使うファイル */
+function filesUsingIdentifier(name: string, files: readonly string[]): string[] {
+  return files.filter((f) => {
+    let hit = false;
+    const visit = (n: ts.Node) => {
+      if (hit) return;
+      if (ts.isIdentifier(n) && n.text === name) hit = true;
+      else ts.forEachChild(n, visit);
+    };
+    visit(SOURCES.get(f)!);
+    return hit;
+  }).map(rel);
+}
+
+/** `{ type: '<kind>' , ... }` の object literal を書くファイル (命令を組む所) */
+function filesBuildingLiteral(kinds: readonly string[], files: readonly string[]): string[] {
+  return files.filter((f) => {
+    let hit = false;
+    const visit = (n: ts.Node) => {
+      if (hit) return;
+      if (ts.isPropertyAssignment(n) && ts.isIdentifier(n.name) && n.name.text === 'type' && ts.isStringLiteral(n.initializer) && kinds.includes(n.initializer.text)) hit = true;
+      else ts.forEachChild(n, visit);
+    };
+    visit(SOURCES.get(f)!);
+    return hit;
+  }).map(rel);
+}
+
+/** 文字列 (テンプレートの先頭も) に needle を含むファイル */
+function filesWithString(needle: string, files: readonly string[]): string[] {
+  return files.filter((f) => {
+    let hit = false;
+    const visit = (n: ts.Node) => {
+      if (hit) return;
+      if ((ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateHead(n)) && n.text.includes(needle)) hit = true;
+      else ts.forEachChild(n, visit);
+    };
+    visit(SOURCES.get(f)!);
+    return hit;
+  }).map(rel);
+}
+
+/** 置き場を開く呼び (openIslandStore・openHarborStore など open*Store) を書くファイル */
+function filesCallingOpenStore(files: readonly string[]): string[] {
+  return files.filter((f) => {
+    let hit = false;
+    const visit = (n: ts.Node) => {
+      if (hit) return;
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && /^open[A-Z]\w*Store$/.test(n.expression.text)) hit = true;
+      else ts.forEachChild(n, visit);
+    };
+    visit(SOURCES.get(f)!);
+    return hit;
+  }).map(rel);
+}
+
+const APP_UI = FILES.filter((f) => ['app', 'ui', 'entry'].includes(layerOf(f)) && rel(f) !== 'src/observe/prototype.ts');
+const inLayer = (...layers: string[]) => FILES.filter((f) => layers.includes(layerOf(f)));
+
+describe('アーキテクチャの柵 (M27-05): 舞台・命令・合成の置き場', () => {
+  it('訪問かどうか (visiting) を引くのは舞台 (Stage) の射影 1 か所だけ。app・ui・main.ts の部品は舞台を受け、真偽を自分で引かない', () => {
+    expect(filesUsingIdentifier('visiting', APP_UI).length).toBeLessThanOrEqual(1);
+  });
+
+  it('Session に仮の値 (() => {}) が無い。石板の手 (runner・記録器・始め直し・進め方) は 1 つの値として石板を開くときに作る', () => {
+    const session = FILES.find((f) => rel(f) === 'src/app/session.ts')!;
+    const empties: string[] = [];
+    const visit = (n: ts.Node) => {
+      if (ts.isArrowFunction(n) && ts.isBlock(n.body) && n.body.statements.length === 0) empties.push(n.getText());
+      ts.forEachChild(n, visit);
+    };
+    visit(SOURCES.get(session)!);
+    expect(empties).toEqual([]);
+  });
+
+  it('放流・災害の命令 (spawn_species・disaster) を組むのは simulation だけ (年代記の読み手は JSON を命令に直す境界なので除く)。ui・harbor・台本は simulation の作り方を読む', () => {
+    const outside = FILES.filter((f) => !['simulation', 'chronicle', 'dev'].includes(layerOf(f)));
+    expect(filesBuildingLiteral(['spawn_species', 'disaster'], outside)).toEqual([]);
+  });
+
+  it('main.ts は HUD の手 (災害・放流・気象塔のチップ) を写さない。持っているチップは HUD が 1 つで持つ', () => {
+    const main = FILES.filter((f) => rel(f) === 'src/main.ts');
+    const copied = ['armed', 'spawnArmed', 'towerArmed', 'chips'].filter((id) => filesUsingIdentifier(id, main).length > 0);
+    expect(copied).toEqual([]);
+  });
+
+  it('速さを変えるのに DOM の id (speed-N) を押さない (app と main.ts は loop に言い、HUD が追う)', () => {
+    expect(filesWithString('speed-', [...inLayer('app'), ...FILES.filter((f) => rel(f) === 'src/main.ts')])).toEqual([]);
+  });
+
+  it('置き場 (open*Store) を開くのは入口 (main.ts) だけ。ui・app の部品は開いた置き場を受ける (合成は入口の外に出さない)', () => {
+    const notEntry = FILES.filter((f) => !['entry', 'dev', 'persist'].includes(layerOf(f)));
+    expect(filesCallingOpenStore(notEntry)).toEqual([]);
+  });
+});
