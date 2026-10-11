@@ -20,7 +20,7 @@ export type Restored = { world: World; runner?: RunnerState; chronicle?: Chronic
 export type RestoreDeps = {
   localSave: Pick<LocalSave, 'loadSlot' | 'resume'>;
   store: IslandStore | null;
-  /** 石板の島の頭。自由モードと訪問では null */
+  /** 石板の島の頭。自由モードでは null。訪問でも石板の頭が来るが、訪問では戻す並び (order) が空なので効かない */
   head: ChronicleHead | null;
   log: LogSink;
   persistLog: SaveLog;
