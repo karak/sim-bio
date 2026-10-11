@@ -21,9 +21,9 @@ PR #4 (M21-02 D5、2026-09-30 マージ) のマージ後レビュー (2026-10-11
 - 予定の告知は、その種のレイヤーを見ている間に発火すると、石板に出ない (`src/scenario/ScenarioRunner.ts` の `fireDue`、「その種のレイヤーを見ている間の告知は最初から出さない」)。
 - この扱いは PR #4 で意図して入れたもの。チップを押す必要が無いので告知を出さない、という考え方。
 - ただし、告知はチップだけではなく、台詞そのものを運んでいる。`ScheduledCommand` の型の説明 (`src/scenario/types.ts`) では、「星が気づいて動く猶予を知らせる舞台装置の台詞」としている。
-- 抑止された時、台詞を読める場所は年表だけになる。`everyYears` のある text 付きの予定は、年表に text を積み (`fireDue`)、石板の年表はそれをそのまま出す (`src/ui/Tablet.ts` の `case 'scheduled'`)。
+- 抑止された時、台詞を読める場所は年表だけになる。`everyYears` のある text 付きの予定は、年表に text を積み (`fireDue`)、石板の年表はそれをそのまま出す (`src/scenario/describe.ts` の `case 'scheduled'`)。
 
-## 影響範囲 (main 8052830 の `assets/data/scenarios.json`)
+## 影響範囲 (main 300a8e4 の `assets/data/scenarios.json`)
 
 | シナリオ | 予定 | 影響 |
 |---|---|---|
