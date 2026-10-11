@@ -233,7 +233,7 @@ describe('石板と確かめのダイアログを組む (M21-09、M21-04 の慎�
     document.body.append(root);
     const confirm = createConfirm(root);
     const done: Effect[] = [];
-    const at = atOf(false, head, finished ? 'dead' : 'running');
+    const at = atOf({ kind: 'scenario', def }, head, finished ? 'dead' : 'running');
     const tablet = createTablet(root, [def, other], def, (id) => void runPlan(planOp({ kind: 'select', scenarioId: id }, at, (x) => x), confirm, async (e) => (done.push(e), true)), names, undefined, fakeEnv().env);
     return { root, tablet, done };
   }

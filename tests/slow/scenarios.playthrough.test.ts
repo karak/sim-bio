@@ -12,7 +12,7 @@ import { SEA_LEVEL } from '../../src/simulation/terrain';
 import { INTERCEPT_NEED } from '../../src/simulation/works';
 import { LOAD_RADIUS } from '../../src/simulation/civilizationLoad';
 import { timberAround, SHIP_FOREST_MIN } from '../../src/simulation/ship';
-import { disasterClick, spawnClick } from '../../src/ui/clicks';
+import { disasterClick, spawnClick } from '../../src/simulation/commands';
 
 /**
  * 5 本のシナリオを「放置」と「台本どおりの介入」で回し、

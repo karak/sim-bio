@@ -7,10 +7,11 @@ import { buildAssetTable } from './render/assetTable';
 import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
 import type { ScenarioDef } from './scenario/types';
-import { mountMapClick, type Chips } from './ui/mapClick';
+import { mountMapClick } from './ui/mapClick';
 import { createObserveEntry } from './observe/entry';
 import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
+import { createMemoryHarborStore, openHarborStore } from './persist/harborStore';
 import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
 import { writeLastStage } from './persist/lastStage';
@@ -29,6 +30,7 @@ import { createIntervene, createLandCargo } from './app/intervene';
 import { createScenarioSession } from './app/scenarioSession';
 import { createTitle } from './app/title';
 import { createOnFrame } from './app/frame';
+import { stageOf } from './app/stage';
 import { atOf, bootRouteOf, bootSeedOf, planOp, runPlan, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
@@ -42,13 +44,19 @@ async function boot(): Promise<void> {
   const devTools = DEVTOOLS_BUILT ? await import('./dev/session') : null;
   const dev = devTools ? devTools.devSessionOf(new URLSearchParams(location.search)) : null;
   const probe = DEVTOOLS_BUILT ? await import('./dev/probe') : null;
-  const [base, species, scenarios, store] = await Promise.all([
+  const warnAtBoot = (event: string, e: unknown) => log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event, error: String(e) });
+  const [base, species, scenarios, store, harborStore] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
     fetch('/data/scenarios.json').then((r) => r.json() as Promise<ScenarioDef[]>),
     openIslandStore({ indexedDB, now: Date.now, dbName: dev?.dbName }).catch((e: unknown) => {
-      log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.unavailable', error: String(e) });
+      warnAtBoot('persist.unavailable', e);
       return null;
+    }),
+    // 港の手元の置き場 (M19-09) は島の置き場と同じ DB 名で開く。名前を変えると預けた年代記が迷子になる
+    openHarborStore({ indexedDB, dbName: dev?.dbName }).catch((e: unknown) => {
+      warnAtBoot('harbor.store.unavailable', e);
+      return createMemoryHarborStore();
     }),
   ]);
   const nav: Nav = {
@@ -82,11 +90,10 @@ async function boot(): Promise<void> {
   if (seeded.search !== null) nav.replace(seeded.search);
   const config = scenarioConfigOf(base, species, scenario);
   // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
-  const visitId = booted.visitId;
-  const visiting = !!visitId;
+  const stage = stageOf(booted);
   /** 最後に遊んだ舞台の印 (M24-05)。舞台に入った時と自動保存の時に書く。訪問 (他人の島) では書かない */
   const markStage = () => {
-    if (!visitId) writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now(), dev?.player?.name);
+    if (stage.kind !== 'visit') writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now(), dev?.player?.name);
   };
   markStage();
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
@@ -118,12 +125,11 @@ async function boot(): Promise<void> {
     const ask = askOf(r);
     return ask ? confirm(ask) : Promise.resolve(true);
   };
-  const chips: Chips = { armed: null, spawnArmed: null, towerArmed: false };
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
-  const saveChronicle = () => session.scenarioAutosave?.flush();
-  const intervene = createIntervene({ session, visiting, log, saveChronicle, flash: () => tablet.flash() });
+  const saveChronicle = () => session.scenario?.autosave?.flush();
+  const intervene = createIntervene({ session, stage, log, saveChronicle, flash: () => tablet.flash() });
   const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
-  const at = () => atOf(visiting, head, session.runner?.verdict().status ?? null);
+  const at = () => atOf(stage, head, session.scenario?.runner.verdict().status ?? null);
   const { perform, slotSave, showSeed } = createEffects({
     session, scenario, config, seed: seeded.seed, at, drawSeed, log, persistLog, store, localSave, saveChronicle, storage: sessionStorage, nav,
     remakeView: (size, species) => {
@@ -138,10 +144,11 @@ async function boot(): Promise<void> {
   // いま地図で見ている種 (M21-02 D5)。変わったら石板の告知に反映し、ログに残す (e2e が HUD からの通知を確かめる)
   const viewedSpecies = createViewedSpecies((id, opts) => {
     session.viewing = id;
-    if (!session.runner) return;
-    session.runner.setViewedSpecies(id, opts);
+    const runner = session.scenario?.runner;
+    if (!runner) return;
+    runner.setViewedSpecies(id, opts);
     const snap = session.world.snapshot();
-    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: session.runner.def.id, id, acknowledge: opts.acknowledge });
+    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: runner.def.id, id, acknowledge: opts.acknowledge });
   });
   const hud = createHud(app, {
     onCommand: intervene,
@@ -160,17 +167,8 @@ async function boot(): Promise<void> {
     },
     onNewIsland: () => void run({ kind: 'new_island' }),
     onTitle: () => void run({ kind: 'title' }),
-    onDisasterArm: (k) => {
-      chips.armed = k;
-      view.setVolcanoHint(k === 'volcano');
-    },
-    onSpawnArm: (id) => {
-      chips.spawnArmed = id;
-    },
-    onTowerArm: (v) => {
-      chips.towerArmed = v;
-    },
-  }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visiting });
+    onArm: (c) => view.setVolcanoHint(c?.kind === 'disaster' && c.disaster === 'volcano'),
+  }, { speed: () => loop.getSpeed(), speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: stage.kind === 'scenario' });
 
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
   const tablet = createTablet(
@@ -185,7 +183,7 @@ async function boot(): Promise<void> {
       if (scenario) void run({ kind: 'retry', scenarioId: scenario.id });
     },
   );
-  hud.setReplaceable(!visiting);
+  hud.setReplaceable(stage.kind !== 'visit');
   showSeed(false);
   const landCargo = createLandCargo({ session, scenario, at, speciesNames, intervene, flash: () => tablet.flash(), hud });
   const harbor = mountHarbor(app, {
@@ -194,11 +192,12 @@ async function boot(): Promise<void> {
     simVersion: SIM_VERSION,
     baseUrl: import.meta.env.VITE_HARBOR_URL,
     sitekey: import.meta.env.VITE_TURNSTILE_SITEKEY,
-    visit: visitId && scenario ? { id: visitId, island: { def: scenario, config } } : null,
-    scenarioId: scenario && !visiting ? scenario.id : null,
+    stage,
+    config,
     speciesNames,
-    land: visiting ? null : landCargo,
+    land: landCargo,
     log: (level, event, extra) => persistLog(level, event, session.world.snapshot().tick, extra),
+    store: harborStore,
     player: dev?.player,
     guard: {
       ask: confirmed,
@@ -217,15 +216,15 @@ async function boot(): Promise<void> {
     names: speciesNames,
     getSpeed: () => loop.getSpeed(),
     now: dev?.clock,
-    setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
+    setSpeed: (s) => loop.setSpeed(s),
     // (M19-18) 入口は左上の時間の箱の速さの列の端 (上の真ん中の石板に覆われない)
-    buttonHost: document.getElementById('speed-row') ?? undefined,
+    buttonHost: hud.speedRow,
   });
   // 試験の口 (M25-09): 開発・受入のビルドだけ。SceneView は島を作り直すので、読むたびに今の view を引く
   probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect(), tick: () => session.world.snapshot().tick, advance: (n) => loop.advance(n) });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
-    { step: (n) => (session.runner?.verdict().status === 'running' ? session.scenarioStep(n) : session.world.step(n)), snapshot: () => session.world.snapshot() },
+    { step: (n) => (session.scenario?.runner.verdict().status === 'running' ? session.scenario.step(n) : session.world.step(n)), snapshot: () => session.world.snapshot() },
     {
       // グラフの点は年の境目ごとに積む (M25-02)。フレームで拾うと、境目から何 tick 過ぎた島を写すかが回ごとに違う
       ticksPerYear: config.ticksPerYear,
@@ -233,15 +232,15 @@ async function boot(): Promise<void> {
       onFrame: createOnFrame({ session, scenario, localSave, viewedSpecies, observe, view: () => view, hud, tablet }),
     },
   );
-  if (scenario) {
-    createScenarioSession({
-      session, config, visiting, def: dev?.scenarioDef(scenario) ?? scenario, forced: !!dev?.shortcut, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe,
+  if (stage.kind !== 'free') {
+    session.scenario = createScenarioSession({
+      session, config, stage, def: dev?.scenarioDef(stage.def) ?? stage.def, forced: !!dev?.shortcut, log, persistLog, store, markStage, resumed, fromSlot, loop, tablet, harbor, observe,
     });
   }
 
   // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す
   hud.setShipEnabled(!scenario || !!scenario.escape);
-  mountMapClick(canvas, { pickCell: (x, y) => view.pickCell(x, y), session, chips, intervene, hud });
+  mountMapClick(canvas, { pickCell: (x, y) => view.pickCell(x, y), session, intervene, hud });
 
   dev?.mount(app, {
     scenario: !!scenario,
@@ -249,10 +248,10 @@ async function boot(): Promise<void> {
       const save = session.world.serialize();
       localSave.flush(() => save);
       saveChronicle();
-      return { save, chronicle: session.recorder?.current() ?? null };
+      return { save, chronicle: session.scenario?.recorder?.current() ?? null };
     },
   });
-  if (dev?.paused) document.getElementById('speed-0')?.click();
+  if (dev?.paused) loop.setSpeed(0);
   loop.start();
 }
 

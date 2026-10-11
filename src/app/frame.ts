@@ -46,18 +46,18 @@ export function createOnFrame(deps: FrameDeps): (s: WorldSnapshot) => void {
   return (s) => {
     const view = deps.view();
     localSave.onTick(s.tick, () => session.world.serialize());
-    session.scenarioAutosave?.onTick(s.tick);
+    session.scenario?.autosave?.onTick(s.tick);
     // 観察画面の間は地図を描かないので、種を選んでいても見ていないとみなす
     viewedSpecies.setObserving(observe.active());
-    observe.push(s, session.runner?.timeline());
+    observe.push(s, session.scenario?.runner.timeline());
     // 選んだセルを 3D の島の上でも示す (M22-10)。選びを解けば (selected = null) 消える
     view.setSelected(session.selected);
     if (!observe.active()) view.update(s);
     hud.update(s);
     // 迎撃の行を畳む判定 (M21-02 D4) に使う。自由モードでは runner が無いので常に null (行は常に隠れる)
-    hud.setNextMeteor(session.runner?.nextMeteorYear() ?? null);
+    hud.setNextMeteor(session.scenario?.runner.nextMeteorYear() ?? null);
     if (session.selected !== null) hud.showCell(session.selected, s);
-    const runner = session.runner;
+    const runner = session.scenario?.runner;
     if (!runner) {
       hud.setAffordable(ALL_AFFORDABLE);
       return;
