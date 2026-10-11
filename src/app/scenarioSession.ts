@@ -1,7 +1,7 @@
 import type { LogSink } from '../core/log/types';
 import type { Chronicle, Digest } from '../chronicle/chronicle';
 import { digestOf } from '../chronicle/digest';
-import { createPlayback } from '../chronicle/playback';
+import { createPlayback, type Playback } from '../chronicle/playback';
 import { recordChronicle } from '../chronicle/recorder';
 import { cargoOfHold } from '../harbor/cargo';
 import type { Cargo } from '../harbor/contract';
@@ -17,7 +17,7 @@ import { exportCargo, type Cargo as Hold } from '../simulation/ship';
 import type { WorldConfig } from '../simulation/types';
 import { SIM_VERSION } from '../simulation/version';
 import type { Restored } from './restore';
-import type { Session } from './session';
+import type { ScenarioSession, Session } from './session';
 import type { Stage } from './stage';
 
 /**
@@ -38,7 +38,6 @@ export type ScenarioSessionDeps = {
   persistLog: SaveLog;
   store: IslandStore | null;
   markStage: () => void;
-  saveChronicle: () => Promise<void> | undefined;
   resumed: Restored | null;
   fromSlot: boolean;
   loop: { setSpeed(speed: 0): void };
@@ -51,25 +50,20 @@ export type ScenarioSessionDeps = {
   observe: { enter(): Promise<void> };
 };
 
-export function createScenarioSession(deps: ScenarioSessionDeps): void {
-  const { session, config, stage, def, forced, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
+export function createScenarioSession(deps: ScenarioSessionDeps): ScenarioSession {
+  const { session, config, stage, def, forced, log, persistLog, store, markStage, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
   const scenario = def;
   /** 今の島の tick・年を添えた石板のログ */
   const note = (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => {
     const snap = session.world.snapshot();
     log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level, event, scenario: scenario.id, ...extra });
   };
-  session.scenarioStep = stage.kind === 'visit'
-    ? () => {}
-    : (n) => {
-        if (session.runner) stepByYear(session.world, session.runner, n);
-      };
   const newRunner = (restored?: RunnerState) => createScenarioRunner(def, session.world, {
     ticksPerYear: config.ticksPerYear,
     onVerdict: (v) => {
       loop.setSpeed(0);
       saveChronicle();
-      const chronicle = session.recorder?.current();
+      const chronicle = recorder?.current();
       const after = afterVerdictOf(v.status, { stage: stage.kind, forced, chronicle: !!chronicle });
       // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
       const hold = after.hold ? exportCargo(session.world.snapshot()) : undefined;
@@ -91,37 +85,36 @@ export function createScenarioSession(deps: ScenarioSessionDeps): void {
       note('warn', 'scenario.power.exhausted', {});
     },
   }, restored);
-  session.runner = newRunner(resumed?.runner);
-  let scenarioRunner = session.runner;
-  session.recorder = stage.kind === 'visit' ? null : recordChronicle(
+  let scenarioRunner = newRunner(resumed?.runner);
+  const recorder = stage.kind === 'visit' ? null : recordChronicle(
     { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => session.world.snapshot() },
     { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
     () => scenarioRunner.totalsByYear(),
   );
+  if (recorder && resumed?.chronicle) recorder.resume(resumed.chronicle);
   // 石板の途中の島の自動保存 (M19-14) は、記録する島 (自分の島) だけ。訪問している他人の島を自分の続きとして書かない
-  const scenarioRecorder = session.recorder;
-  if (scenarioRecorder) {
-    if (resumed?.chronicle) scenarioRecorder.resume(resumed.chronicle);
-    session.scenarioAutosave = createScenarioAutosave({
-      store,
-      scenarioId: scenario.id,
-      every: AUTOSAVE_TICKS,
-      log: persistLog,
-      from: session.world.snapshot().tick,
-      capture: () => ({ save: session.world.serialize(), runner: scenarioRunner.save(), chronicle: scenarioRecorder.current() }),
-      onSaved: markStage,
-    });
-  }
+  const autosave = recorder
+    ? createScenarioAutosave({
+        store,
+        scenarioId: scenario.id,
+        every: AUTOSAVE_TICKS,
+        log: persistLog,
+        from: session.world.snapshot().tick,
+        capture: () => ({ save: session.world.serialize(), runner: scenarioRunner.save(), chronicle: recorder.current() }),
+        onSaved: markStage,
+      })
+    : null;
+  const saveChronicle = () => autosave?.flush();
   // 年代記の再生 (runChronicle) と同じく、クリックより前に tick 0 の評価を済ませる。最初のフレームを待つと、その前のクリックが年 0 の予定より先に入る
   scenarioRunner.update(session.world.snapshot());
   // 枠から開いた石板は、その場で石板の続きに書く (開き直してもその時点から)
   if (fromSlot) void saveChronicle();
-  session.restartScenario = (from) => {
-    session.runner = scenarioRunner = newRunner(from?.runner);
+  const restart: ScenarioSession['restart'] = (from) => {
+    scenarioRunner = newRunner(from?.runner);
     // HUD のレイヤーは始め直しても変わらないので、見ている種を新しい runner にも知らせる。枠から戻した告知は読んでいないので既読にしない
     scenarioRunner.setViewedSpecies(session.viewing, { acknowledge: false });
     // 記録器は runner を scenarioRunner 越しに包むので、命令の列だけを枠の年代記 (初めからなら空) に差し替える
-    scenarioRecorder?.resume(from?.chronicle ?? { ...scenarioRecorder.current(), commands: [] });
+    recorder?.resume(from?.chronicle ?? { ...recorder.current(), commands: [] });
     scenarioRunner.update(session.world.snapshot());
     void saveChronicle();
     const verdict = scenarioRunner.verdict();
@@ -131,12 +124,24 @@ export function createScenarioSession(deps: ScenarioSessionDeps): void {
       tablet.showVerdict(verdict);
     }
   };
+  /** 訪問の再生。港から年代記が届くまで null で、その間は島を進めない */
+  let playback: Playback | null = null;
+  const step = stage.kind === 'visit' ? (n?: number) => playback?.step(n) : (n?: number) => stepByYear(session.world, scenarioRunner, n);
   if (stage.kind === 'visit') {
     void harbor.visitChronicle().then((c) => {
       if (!c) return;
-      session.scenarioStep = createPlayback(session.world, scenarioRunner, c.commands).step;
+      playback = createPlayback(session.world, scenarioRunner, c.commands);
       document.getElementById('speed-10')?.click();
       requestAnimationFrame(() => void observe.enter());
     });
   }
+  return {
+    get runner() {
+      return scenarioRunner;
+    },
+    recorder,
+    autosave,
+    restart,
+    step,
+  };
 }

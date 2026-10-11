@@ -120,10 +120,10 @@ async function boot(): Promise<void> {
   };
   const chips: Chips = { armed: null, spawnArmed: null, towerArmed: false };
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
-  const saveChronicle = () => session.scenarioAutosave?.flush();
+  const saveChronicle = () => session.scenario?.autosave?.flush();
   const intervene = createIntervene({ session, stage, log, saveChronicle, flash: () => tablet.flash() });
   const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
-  const at = () => atOf(stage, head, session.runner?.verdict().status ?? null);
+  const at = () => atOf(stage, head, session.scenario?.runner.verdict().status ?? null);
   const { perform, slotSave, showSeed } = createEffects({
     session, scenario, config, seed: seeded.seed, at, drawSeed, log, persistLog, store, localSave, saveChronicle, storage: sessionStorage, nav,
     remakeView: (size, species) => {
@@ -138,10 +138,11 @@ async function boot(): Promise<void> {
   // いま地図で見ている種 (M21-02 D5)。変わったら石板の告知に反映し、ログに残す (e2e が HUD からの通知を確かめる)
   const viewedSpecies = createViewedSpecies((id, opts) => {
     session.viewing = id;
-    if (!session.runner) return;
-    session.runner.setViewedSpecies(id, opts);
+    const runner = session.scenario?.runner;
+    if (!runner) return;
+    runner.setViewedSpecies(id, opts);
     const snap = session.world.snapshot();
-    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: session.runner.def.id, id, acknowledge: opts.acknowledge });
+    log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level: 'info', event: 'scenario.viewed_species', scenario: runner.def.id, id, acknowledge: opts.acknowledge });
   });
   const hud = createHud(app, {
     onCommand: intervene,
@@ -225,7 +226,7 @@ async function boot(): Promise<void> {
   probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect(), tick: () => session.world.snapshot().tick, advance: (n) => loop.advance(n) });
   const loop = createRunner(
     // シナリオの判定の後は、速度を戻せば今までどおり島を回す (判定の年の境目より先は年表・判定に効かない)
-    { step: (n) => (session.runner?.verdict().status === 'running' ? session.scenarioStep(n) : session.world.step(n)), snapshot: () => session.world.snapshot() },
+    { step: (n) => (session.scenario?.runner.verdict().status === 'running' ? session.scenario.step(n) : session.world.step(n)), snapshot: () => session.world.snapshot() },
     {
       // グラフの点は年の境目ごとに積む (M25-02)。フレームで拾うと、境目から何 tick 過ぎた島を写すかが回ごとに違う
       ticksPerYear: config.ticksPerYear,
@@ -234,8 +235,8 @@ async function boot(): Promise<void> {
     },
   );
   if (stage.kind !== 'free') {
-    createScenarioSession({
-      session, config, stage, def: dev?.scenarioDef(stage.def) ?? stage.def, forced: !!dev?.shortcut, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe,
+    session.scenario = createScenarioSession({
+      session, config, stage, def: dev?.scenarioDef(stage.def) ?? stage.def, forced: !!dev?.shortcut, log, persistLog, store, markStage, resumed, fromSlot, loop, tablet, harbor, observe,
     });
   }
 
@@ -249,7 +250,7 @@ async function boot(): Promise<void> {
       const save = session.world.serialize();
       localSave.flush(() => save);
       saveChronicle();
-      return { save, chronicle: session.recorder?.current() ?? null };
+      return { save, chronicle: session.scenario?.recorder?.current() ?? null };
     },
   });
   if (dev?.paused) document.getElementById('speed-0')?.click();

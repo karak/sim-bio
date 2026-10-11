@@ -10,7 +10,7 @@ import { createIntervene, createLandCargo } from '../../src/app/intervene';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import type { ChronicleRecorder } from '../../src/chronicle/recorder';
 import type { InterveneResult } from '../../src/scenario/ScenarioRunner';
-import { sessionOf } from '../../src/app/session';
+import { sessionOf, type ScenarioSession } from '../../src/app/session';
 import type { At } from '../../src/app/place';
 
 // 5×5 の島: 真ん中の 3×3 が陸、周りが海 (harbor.cargo.test.ts と同じ)
@@ -25,7 +25,7 @@ function setup(o: { at: At; scenario?: ScenarioDef; power?: number; accept?: boo
   const calls: string[] = [];
   const sent: Command[] = [];
   const session = sessionOf({ snapshot: () => snap } as unknown as World);
-  if (o.power !== undefined) session.runner = { budget: () => ({ power: o.power }) } as unknown as ScenarioRunner;
+  if (o.power !== undefined) session.scenario = { runner: { budget: () => ({ power: o.power }) } as unknown as ScenarioRunner } as ScenarioSession;
   const land = createLandCargo({
     session,
     scenario: o.scenario ?? null,
@@ -93,8 +93,9 @@ describe('介入の入口 createIntervene (M27-03)', () => {
     const log = createMemorySink();
     const session = sessionOf(world([]));
     let result: InterveneResult = { ok: true };
-    session.recorder = { dispatch: () => result } as unknown as ChronicleRecorder<InterveneResult>;
     const intervene = createIntervene({ session, stage: { kind: 'scenario', def: priced }, log, saveChronicle: () => void calls.push('save'), flash: () => calls.push('flash') });
+    // main.ts は介入の入口を作った後に石板の手を置くので、入口は呼ばれた時に読む
+    session.scenario = { recorder: { dispatch: () => result } as unknown as ChronicleRecorder<InterveneResult> } as ScenarioSession;
     expect(intervene(cmd)).toBe(true);
     result = { ok: false, reason: 'budget' };
     expect(intervene(cmd)).toBe(false);

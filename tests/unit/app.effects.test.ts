@@ -4,7 +4,7 @@ import { createMemorySink } from '../../src/core/log/memorySink';
 import type { SaveData } from '../../src/simulation/types';
 import type { SaveLog } from '../../src/persist/localSave';
 import { createEffects, type EffectsDeps } from '../../src/app/effects';
-import { sessionOf } from '../../src/app/session';
+import { sessionOf, type ScenarioSession } from '../../src/app/session';
 import { testConfig } from './helpers';
 
 const config = testConfig({ size: 16 });
@@ -121,6 +121,28 @@ describe('確かめを受けた後の効果 createEffects (M27-03)', () => {
     const inScenario = setup({ scenario: { id: 'sinking' } as EffectsDeps['scenario'] });
     inScenario.effects.showSeed(true);
     expect(inScenario.calls).toEqual(['setSeed 42']);
+  });
+
+  it('restart は石板の手に渡す。石板の無い自由モードでは何もしない (M27-05)', async () => {
+    const free = setup();
+    expect(await free.effects.perform({ kind: 'restart', from: null })).toBe(true);
+    const { effects, session } = setup();
+    const restarted: unknown[] = [];
+    session.scenario = { restart: (from) => void restarted.push(from) } as ScenarioSession;
+    expect(await effects.perform({ kind: 'restart', from: null })).toBe(true);
+    expect(restarted).toEqual([null]);
+  });
+
+  it('save_slot の包みは、石板の手 (runner・年代記) があれば石板の 3 つ、無ければ自由モードの島だけ (M27-05)', async () => {
+    const free = setup();
+    expect(free.effects.slotSave()).toEqual({ stage: 'free', save: free.session.world.serialize() });
+    const { effects, session } = setup({ scenario: { id: 'sinking' } as EffectsDeps['scenario'] });
+    expect(effects.slotSave()).toEqual({ stage: 'free', save: session.world.serialize() });
+    session.scenario = {
+      runner: { save: () => 'runner' },
+      recorder: { current: () => 'chronicle' },
+    } as unknown as ScenarioSession;
+    expect(effects.slotSave()).toEqual({ stage: 'scenario', scenarioId: 'sinking', save: session.world.serialize(), runner: 'runner', chronicle: 'chronicle' });
   });
 
   it('flush は手元の島と石板の続きの両方を書き終えるまで待つ', async () => {

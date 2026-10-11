@@ -66,10 +66,12 @@ export function createEffects(deps: EffectsDeps) {
     showSeed(true);
   };
   /** 枠とファイルの包み (M19-17)。石板の中では島・runner の状態・年代記の 3 つ */
-  const slotSave = (): SlotSave =>
-    scenario && session.runner && session.recorder
-      ? { stage: 'scenario', scenarioId: scenario.id, save: session.world.serialize(), runner: session.runner.save(), chronicle: session.recorder.current() }
+  const slotSave = (): SlotSave => {
+    const sc = session.scenario;
+    return scenario && sc?.recorder
+      ? { stage: 'scenario', scenarioId: scenario.id, save: session.world.serialize(), runner: sc.runner.save(), chronicle: sc.recorder.current() }
       : { stage: 'free', save: session.world.serialize() };
+  };
   /** 確かめを受けた後に 1 つ行う。false なら残りを行わない */
   const perform = async (e: Effect): Promise<boolean> => {
     switch (e.kind) {
@@ -77,7 +79,7 @@ export function createEffects(deps: EffectsDeps) {
         replaceWorld(World.create({ ...config, seed: newWorldSeed(deps.at(), config.seed, session.world.seed, deps.drawSeed) }, { log }));
         return true;
       case 'restart':
-        session.restartScenario(e.from);
+        session.scenario?.restart(e.from);
         return true;
       case 'replace': {
         let restored: World;

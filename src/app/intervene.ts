@@ -25,13 +25,15 @@ export type InterveneDeps = {
 /** プレイヤーの介入はここを通す (シナリオ中は回数を数え、力が足りなければ弾く) */
 export function createIntervene(deps: InterveneDeps): (c: Command) => boolean {
   const { session, log, saveChronicle } = deps;
-  return (c) => {
-    if (deps.stage.kind === 'visit') return false;
-    if (!session.recorder) {
-      session.world.dispatch(c);
-      return true;
-    }
-    const result = session.recorder.dispatch(c);
+  const toIsland = (c: Command) => {
+    session.world.dispatch(c);
+    return true;
+  };
+  // 石板の手は main.ts が介入の入口を作った後に置くので、呼ばれた時に引く
+  const record = (c: Command) => {
+    const recorder = session.scenario?.recorder;
+    if (!recorder) return toIsland(c);
+    const result = recorder.dispatch(c);
     if (result.ok) saveChronicle();
     else {
       const snap = session.world.snapshot();
@@ -40,6 +42,14 @@ export function createIntervene(deps: InterveneDeps): (c: Command) => boolean {
     }
     return result.ok;
   };
+  switch (deps.stage.kind) {
+    case 'free':
+      return toIsland;
+    case 'scenario':
+      return record;
+    case 'visit':
+      return () => false;
+  }
 }
 
 export type LandCargoDeps = {
@@ -59,7 +69,7 @@ export function createLandCargo(deps: LandCargoDeps): (d: DrawnCargo) => LandRes
   return (d) => {
     const s = session.world.snapshot();
     const place = at();
-    const power = session.runner?.budget()?.power;
+    const power = session.scenario?.runner.budget()?.power;
     const spawnCost = scenario?.budget?.costs.spawn;
     const gate = { finished: place.stage === 'scenario' && place.finished, budget: power !== undefined && spawnCost !== undefined ? { power, spawnCost } : undefined };
     const landing = planLanding(d, { elevation: s.layers.elevation, size: s.size }, gate, speciesNames);
