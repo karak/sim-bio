@@ -1,5 +1,5 @@
 import { fail, isObject, type Parsed } from '../core/parse';
-import type { Chronicle } from '../harbor/chronicle';
+import type { Chronicle } from '../chronicle/chronicle';
 import type { SaveData } from '../simulation/types';
 import { SIM_VERSION } from '../simulation/version';
 

@@ -1,7 +1,7 @@
 ---
 id: M19-04
 title: 決定論の刻み(年の境目で step を切る)と golden replay
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: []
@@ -178,3 +178,4 @@ codex は使えなかった。auth が切れており、`codex exec --sandbox da
   - `src/ui/Tablet.ts` のチップを出さないようにすると、`toBeVisible` で落ちた。
   - 委譲リスナーから `onShowSpecies` を呼ばないようにすると、最後の `toHaveClass(/on/)` で落ちた。
   - どちらも確かめた後に戻した。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

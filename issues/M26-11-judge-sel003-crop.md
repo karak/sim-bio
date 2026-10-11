@@ -1,7 +1,7 @@
 ---
 id: M26-11
 title: judge の SEL-003/3 は、選んだセルの辺りを切り抜いた画に当てる (全体の画では帯が 25 px で読めない)
-status: review
+status: done
 milestone: M26
 plan: null
 depends_on: []
@@ -35,3 +35,4 @@ evidence:
 
 - 2026-10-04: 起票 (judge の再実行の結果から。切り抜きの試しは scratchpad の sel3-crop320.png)。
 - 2026-10-04: 実装 (review)。tests/driver/crop.ts の cropRectAround (320x240・画の内に寄せる) を shots が使い、SEL-003 の 3 枚に `SEL-003-<n>-セルの辺り.png` を足す (位置は probe の selection().view.screen)。名前は画の形に合わないので shots_of には数えない。judge は新しい docs/acceptance/crops.json (手順 -> 切り抜きの名前) で SEL-003/3 だけを切り抜きへ向け、画素の基準・承認済みの画は全体の画のものを見る。rubrics.json は変えていない。切り抜きが無いと呼ぶ前に止まる (全体の画へ黙って戻さない)。SEL-003/2・4 は問いが画面の縁の板・画全体を見るので全体のまま。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

@@ -1,7 +1,7 @@
 ---
 id: M19-11
 title: 予言ごとの回避率
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-08]
@@ -33,3 +33,4 @@ M19-08
 - 石板を終えたら判定の要約と一緒に 1 回だけ数える(`harbor.settle`、同じ年代記は手元の控えで二度数えない)。回避率は港が返す数(finished・avoided)から画面で割り、石板と判定の板に出す。閉港のときは出さない。順位は作らない。
 - M19-10 と同じ worktree・同じコミット群(6f63e63・fc03159)。
 - 2026-09-27 受入試験(.claude/acceptance、http://localhost:5392): a-avoidance 保留「「沈む欠片」を試した。介入なしで流したため、島は滅びたとなった。結果、Nは0%。 / このシナリオにも、test用の成功にたどり着ける機能がほしい。また、時間がかかるので、その場合は1000xもありにしてほしい。」 → 直しは M19-15・M19-16・M19-17、登録は M21-04・M22-10
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

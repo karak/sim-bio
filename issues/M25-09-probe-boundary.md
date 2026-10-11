@@ -1,7 +1,7 @@
 ---
 id: M25-09
 title: 本番の bundle に入った試験の口 (__scene*・__observe*) を開発のビルドに閉じ、inspect() と probe の型にする
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: []
@@ -45,3 +45,4 @@ docs/operations/acceptance.md は「開発・受入のビルドだけにあり�
 
 - 2026-10-01: 起票 (ADR 0001 の外の票 外-1)
 - 2026-10-01: 実装。SceneView・観察画面は inspect() を返し、window.__probe は src/dev/probe.ts だけ (main.ts と observe/prototype.ts が DEVTOOLS_BUILT の下で動的 import)。E2E・bench・readme-shots は __probe に直した。codex は認証切れのため、読むだけの別モデルのレビュアーで代えた (型の穴と試験の弱さを直した)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

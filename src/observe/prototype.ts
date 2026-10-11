@@ -5,7 +5,7 @@ import { createObservationView } from './view';
 
 /**
  * 観察画面の試作のページ (observe.html)。空の舟 25 年目の保存を読み、観察画面が自分で本体の時間を進める。
- * 観察画面そのものは view.ts (操作画面からも同じものに入る)。URL の指定は view.ts の先頭に書いてある。
+ * 観察画面そのものは view.ts (操作画面からも同じものに入る)。URL の指定は view/options.ts に書いてある。
  */
 async function boot(): Promise<void> {
   const el = (id: string) => document.getElementById(id)!;

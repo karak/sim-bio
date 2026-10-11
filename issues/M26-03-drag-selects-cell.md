@@ -1,7 +1,7 @@
 ---
 id: M26-03
 title: カメラのドラッグでポインタの下のセルが選ばれる
-status: review
+status: done
 milestone: M26
 plan: null
 depends_on: []
@@ -41,3 +41,4 @@ ADR 0001 の付録 B で見つけた製品の欠陥。島の画面でカメラ�
 - 2026-10-04: 起票 (2026-10-02 の一覧の 5)。
 - 2026-10-04: 実装 (review)。src/ui/press.ts の純粋な状態遷移 (しきい値 6 px、pointerId 照合、2 本目の指はつまみ扱い、キャンセルは選ばない、同じ指の down 重なりは押し直し) を main.ts の canvas の pointer から呼び、ドラッグだった次の click を選びにしない。別モデルの読むだけのレビューで取りこぼしの指摘を受け修正。
 - 2026-10-04: ユーザーの決定でしきい値を 6 → 10 px (比較ページ compare-d-20261004-1339 で 3/6/10 px を試した)。単体「しきい値は 10 px …」(直す前に赤)、E2E cellHighlight・uncovered・verdict・confirm 24/24。src/ui/press.ts:4 のコメントの「6 px」は承認待ち。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。メモ「コメント修正も承認」。press.ts:4 の注は e527214 (2026-10-04) で既に 10 px。

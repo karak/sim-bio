@@ -1,7 +1,7 @@
 ---
 id: M19-13
 title: パッケージ管理を npm から pnpm へ移す(worktree ごとの node_modules)
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-04, M19-05]
@@ -94,3 +94,5 @@ M19-04, M19-05(動いている agent と node_modules が重ならないよう�
 - 動いている agent の worktree で親の node_modules へ symlink を張っているものは、その agent が終わってから外す。新しい worktree では `pnpm install --frozen-lockfile`。
 - メモリ `feedback-remove-merged-worktrees.md` の「node_modules の symlink は先に rm で外し」と、引き継ぎの手順を pnpm の形に直す。
 - CI を回すには push が要る(ユーザーの許可待ち)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。メモ「git-pushをこの後実施し、CI結果を検証すること」
+- 2026-10-11: ユーザーのメモどおり push して CI を確かめた。PR #9 (feat/m19 → main) の CI は 1 回目に 2 本赤 (harbor.spec の季節の飛び・M27-04 の特性試験の 360 秒越え)、e1ed1af で直して通過 (run 38135633262、35 分)。

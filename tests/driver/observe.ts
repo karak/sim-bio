@@ -3,7 +3,7 @@ import type { Probe } from '../../src/dev/probe';
 import { advanceTo } from './island';
 import { installFrames, stepFrames } from './frames';
 
-/** 観察画面の撮る視点 (tools/bench-observe.ts の 6 画から 3 つ。src/observe/view.ts の presets と同じ距離・高さ・向き) */
+/** 観察画面の撮る視点 (tools/bench-observe.ts の 6 画から 3 つ。src/observe/view/camera.ts の presets と同じ距離・高さ・向き) */
 export const OBSERVE_VIEWS = ['集落', '群れ', '海岸'] as const;
 export type ObserveView = (typeof OBSERVE_VIEWS)[number];
 

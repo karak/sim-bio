@@ -1,7 +1,7 @@
 ---
 id: M24-04
 title: 操作画面 (自由モード・石板・訪問) から「タイトルへ」戻る
-status: review
+status: done
 milestone: M24
 plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-01]
@@ -67,4 +67,4 @@ evidence:
 - E2E: `?player=e2e-title&dev=1&seed=42` で進めて「タイトルへ」→ 検索語は `?player=e2e-title&dev=1`、続きからはその見守り手の島の年、印は `biotope.last-stage@e2e-title` にだけある、Enter で戻った島に 1000x の札がある
 - 結果: `pnpm run check` (単体 1361 件・worker 66 件・scripts 286 件) 通過。通しの E2E (`E2E_PORT=5461`、1 回で通し) は 115 件通過・6 件飛ばし (shots.spec の基準画、ACCEPTANCE_DIR が無いときは飛ばす)・落ち 0・揺れ 0、5.7 分
 - レビュー: 別の agent (sonnet、読むだけ)。確信の高い指摘は無し。低い指摘: 空の `?player=` は `/?player=` で残る (開発の側が名を捨てるので害は無い、直していない)
-
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

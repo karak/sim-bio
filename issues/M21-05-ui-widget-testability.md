@@ -1,7 +1,7 @@
 ---
 id: M21-05
 title: UI 部品 (ウィジェット) を単体で試せる作りにする (ドラッグを含む)
-status: review
+status: done
 milestone: M21
 depends_on: [M19-18]
 evidence: ["0182196 src/ui/movable.ts tests/unit/ui.movable.test.ts", "eb2d528 tests/unit/ui.movable.dom.test.ts package.json", "afee59f tests/e2e/uncovered.ts tests/e2e/uncovered.spec.ts tests/e2e/observeEntry.spec.ts tests/e2e/confirm.spec.ts"]
@@ -62,6 +62,7 @@ evidence: ["0182196 src/ui/movable.ts tests/unit/ui.movable.test.ts", "eb2d528 t
 - ドラッグの状態遷移 (0182196): 前の makeMovable は、動かす先の translate を書いてから取っ手の矩形を測って寄せていた。moveStep は「今の位置で測った矩形」を動かす先へずらしてから寄せる (translate はただずらすだけなので同じ値になる)。makeMovable は出来事のたびに今の位置のまま測り、moveStep を呼び、translate を書き、save なら覚えへ書く。キーは handled のときだけ既定の動きを止める (前と同じ)。二本目の指の押下は前と同じく今のドラッグを奪う
 - 試験を先に書いて落ちることを見てから実装した (moveStep・readOffset・writeOffset が無く 16 件落ちた)。部品の試験は makeMovable の env を足した後に書いたので、落ちることは変異で見た: 覚えへ書くのを止めると 7 件のうち 5 件が落ちる
 - 確かめた数 (2026-09-28、afee59f の上): pnpm run check は vitest 112 files・1084 tests、worker 5 files・66 tests、scripts 42 tests。E2E は CI=1・1 worker・E2E_PORT=5441 で 3 回に分けた: uncovered 2・verdict 2 (4 件、1.4 分)、observeEntry 3・confirm 6・smoke 24 (33 件、3.7 分)、harbor 15 (15 件、4.7 分)。計 52 件すべて通る
+- 2026-10-11: ユーザーが票の審査で承認 (done)。
 
 ## 分かっている限り
 

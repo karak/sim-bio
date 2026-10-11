@@ -1,7 +1,7 @@
 ---
 id: M26-08
 title: 訪問中に判定の板の「もう一度」を押すと visit を残して同じ訪問を開き直す
-status: review
+status: done
 milestone: M26
 plan: null
 depends_on: [M26-02]
@@ -38,3 +38,4 @@ M26-02 で `searchFor` が visit を落とすようにした。判定の板の�
 
 - 2026-10-04: 起票 (ユーザーの決定「visit を残す」)。
 - 2026-10-04: 実装 (1ade935)。判定の板の「もう一度」を Op `retry` に分け、go の effect に keepVisit を付けて searchFor が visit を残す。確かめと flush は select と同じ (訪問では確かめず、何も書かない)。石板を一覧から選ぶ select は visit を落とすまま。Tablet は onRetry を省略すると onSelect と同じ動き (既存の試験はそのまま通る)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

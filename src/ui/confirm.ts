@@ -1,5 +1,5 @@
 import { el } from './el';
-import type { Ask } from './confirmAsk';
+import type { Ask } from '../app/confirmAsk';
 
 /**
  * 確かめのダイアログ (M21-04)。やり直しの効かない操作はどれもここを通す (window.confirm は使わない)。

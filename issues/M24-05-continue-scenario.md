@@ -1,7 +1,7 @@
 ---
 id: M24-05
 title: タイトルの「続きから」に石板の続きも出す (最後に遊んだ舞台の印)
-status: review
+status: done
 milestone: M24
 plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-01]
@@ -69,4 +69,4 @@ M24-01 の「続きから」は自由モードの自動の枠だけを見る。�
 - 鍵: 見守り手が無ければ前からの `biotope.last-stage`、あれば置き場の DB の名前 (`biotope-island@<名前>`) と同じく `biotope.last-stage@<名前>`。`readLastStage` / `writeLastStage` が見守り手の名を引数に取り、main.ts は `dev?.player?.name` を渡す (名の形が通らない見守り手は開発の側が捨てるので、DB と同じく既定の鍵になる)
 - 板の文の E2E は tests/e2e/title.spec.ts の M24-04 (2026-10-10 の決定) の 1 本の中 (自動の枠があるときの新規ゲームの板)
 - 結果は M24-04 の同じ日の節
-
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

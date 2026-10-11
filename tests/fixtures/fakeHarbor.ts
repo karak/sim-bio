@@ -1,5 +1,5 @@
 import { sha256Hex } from '../../src/chronicle/digest';
-import type { Chronicle } from '../../src/harbor/chronicle';
+import type { Chronicle } from '../../src/chronicle/chronicle';
 import { chronicleId, type ChronicleCard, type ChronicleId, parseCargoId, type DrawnCargo, type HarborCatalog } from '../../src/harbor/contract';
 import { readRequest, writeRefusal, writeResponse, type Refusal, type WireRequest } from '../../src/harbor/wire';
 

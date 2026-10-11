@@ -1,7 +1,7 @@
 ---
 id: M19-06
 title: 年代記の記録と再生(Web Worker)
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: [M19-04]
@@ -88,3 +88,4 @@ M19-04
   - 受入の証明は年代記で行う: 途中で保存して戻した島を最後まで回した Digest が、閉じずに回した Digest と一致する。
   - 先に確かめること: `World.restore` の続きが、閉じずに回した島と最後の桁まで一致するか(`civYearKeys` などの年の中の状態が SaveData に無い)。一致しなければ、年の境目でだけ書く案を試す(年の中に溜まる状態が境目で空になるかも確かめる)。
   - M19-05 の「SaveData に runner の状態を足す案より、予言との矛盾が起きない」は、再生の所要時間が分かる前の見立て。状態を持ち出しても、年代記の Digest の一致で矛盾が無いことを示せる。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

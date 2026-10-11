@@ -1,7 +1,7 @@
 ---
 id: M26-07
 title: 観察画面が島の入れ替え (新しい島・枠や file の読み込み) の後も最初の島を見せる
-status: review
+status: done
 milestone: M26
 plan: null
 depends_on: [M26-05]
@@ -37,3 +37,4 @@ M26-05 (島の画面の地形が同じ tick で作り直されない) の調べ�
 
 - 2026-10-04: 起票 (M26-05 の agent の報告から)。
 - 2026-10-04: 実装 (feat/m26-07)。島の同一性 (layers.elevation) が替われば観察画面を捨てて組み直す (view.dispose で listener・素材・context を解放)。観察画面の inspect に terrainDigest を追加。別 agent のレビューで、grade の uniform の共有・失敗した組みの再試行・assets/foliage の cache の WeakMap 化・preset の timer を直した。check・observe/observeEntry/sceneIdle/sameTickIsland/freeIslandSeed/observeIslandSwap の E2E (14 件)・shots (6 件、OBS-002 含む) 通過。基準画の変更なし。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

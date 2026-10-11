@@ -1,7 +1,7 @@
 ---
 id: M25-10
 title: 港の札が #cell-info の行の札 (生気 / 枯死・輝石・草) を覆う
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: []
@@ -40,3 +40,4 @@ ADR 0001 の「この ADR の外で起こす票」。設計に依らない製品
 
 - 2026-10-01: 起票 (ADR 0001 の外の票 外-2)
 - 2026-10-01: 試験を先に足した (行の札を左端・右端・上端・下端・真ん中の 5 点で全行見る。自由モード・石板・判定の板の 3 画面で、直す前は生気 / 枯死・輝石・草が港の札に覆われて赤)。直しは .hud-bl の left を 12px → 44px にして、板を港の札 (幅 36px) の右へ寄せた。レビューは codex が認証切れのため読むだけの別モデルの reviewer で代え、全行を見る・判定の待ちを 90 s にする・注を規則の前に置くを取り込んだ。前後の画は .claude/localreview/m25-10/。check 緑 (vitest 1157)、E2E 90 件 (全件では低 fps で observe 2 件・scenarioSave 1 件が落ちたが、その 2 ファイルの再実行は 12 件緑)
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

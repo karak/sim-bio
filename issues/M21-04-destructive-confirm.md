@@ -1,7 +1,7 @@
 ---
 id: M21-04
 title: やり直しの効かない操作は確認のダイアログを経る
-status: review
+status: done
 milestone: M21
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: []
@@ -75,3 +75,4 @@ None (can start immediately)
 - src/ui/clicks.ts は変えていない。確かめは命令(Command)を変えず、通し実行の台本は新しい島・読込・枠へ保存・舞台の移りを使わない
 - 古くなったが消していない記述: docs/design/2026-09-27-scenario-save-url.md §4「`確` は確かめのダイアログを通す。今の「新しい島」と同じ `window.confirm` で作り、M21-04(やり直しの効かない操作の確かめ)で揃える。」(window.confirm はもう使わない)。src/ui/Hud.ts の「// 自動の枠をその場で上書きするので、押し間違いで島を失わないよう確かめる」は、確かめる所が main.ts へ移った(すぐ下に「(M21-04 で変更: …)」を足した)
 - 確かめた数(2026-09-28、fe5e8ee の上): pnpm run check は vitest 110 files・1046 tests、worker 66 tests、scripts 42 tests。E2E は 1 worker で confirm 6・persist 6・scenarioSave 8・verdict 2・devtools 3 の 25 件と、harbor・smoke・observe・observeEntry・chronicle・logsink の 51 件、計 76 件すべて通る。tests/slow は確かめが命令と台本に関わらないので回していない。check の 1 回目は E2E と並べて回したとき worker のテストが 2 つの unhandled error で落ち、単独で回し直すと 66 件通った(負荷による揺れと見ている)
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

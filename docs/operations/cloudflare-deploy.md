@@ -43,9 +43,9 @@ wrangler を前提にした、初回の配備と配ったあとの確かめの�
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
 | H4 | 人(済 2026-09-27、widget `biotope-island`、site key `0x4AAAAAAFFM5qcR0ciWH4Br`。Hostname・Managed は API で確かめた) | Turnstile の widget を 1 つ作る。Hostname に `biotope-island.dev-sim-bio.workers.dev`、Widget Mode は Managed。**site key**(公開してよい)と **secret key**(秘密)が出る | ダッシュボード → Turnstile → Add widget |
-| H5 | 人(済 2026-09-27、初回の配備の secrets file で) | Turnstile の secret key を Worker に置く。値は対話の入力で渡し、チャットにもファイルにも書かない | `! pnpm exec wrangler secret put TURNSTILE_SECRET_KEY` |
-| A5 | AI(済 2026-09-27、初回の配備の secrets file で。人の端末で作った) | 送り手の HMAC の鍵(乱数)を作って Worker に置く。値は画面にも出さずパイプで渡す | `openssl rand -base64 32 \| pnpm exec wrangler secret put SENDER_SECRET` |
-| A6 | AI | 2 つの secret の名前が置かれたことを確かめる(値は出ない) | `pnpm exec wrangler secret list` |
+| H5 | 人(済 2026-09-27、初回の配備の secrets file で) | Turnstile の secret key を Worker に置く。値は対話の入力で渡し、チャットにもファイルにも書かない | `! pnpm run cf secret put TURNSTILE_SECRET_KEY` |
+| A5 | AI(済 2026-09-27、初回の配備の secrets file で。人の端末で作った) | 送り手の HMAC の鍵(乱数)を作って Worker に置く。値は画面にも出さずパイプで渡す | `openssl rand -base64 32 \| pnpm run cf secret put SENDER_SECRET` |
+| A6 | AI | 2 つの secret の名前が置かれたことを確かめる(値は出ない) | `pnpm run cf secret list` |
 
 **初回は `secret put` では置けない**(2026-09-27 に確かめた)。`wrangler.jsonc` が 2 つの secret を要るものとして宣言しているので、Worker がまだ無いと配備が「required secrets have not been set」で止まり、`secret put` も Worker が無いので使えない。初回は A12a の形で、secret を一時ファイルに書いて `wrangler deploy --secrets-file` で配り、すぐ消す。2 回目からの鍵の差し替えは H5・A5 の `secret put` でよい。
 
@@ -90,8 +90,8 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 | # | 誰 | 作業 | コマンド・画面 |
 |---|---|---|---|
 | A13 | AI | 画面と港が答えるか | `curl -sI https://biotope-island.dev-sim-bio.workers.dev/` と `curl -s https://biotope-island.dev-sim-bio.workers.dev/api/v1/chronicles` |
-| A14 | AI | ログが流れるか(画面を開いた人の操作に合わせて見る)。この Mac では deploy-runbook.md の 6 の形でトークンを環境で渡す(端末の OAuth で打つと 7403) | `pnpm exec wrangler tail biotope-island --format pretty` |
-| A15 | AI | D1 に行が入るか(出港のあと)。この Mac では deploy-runbook.md の 6 の形でトークンを環境で渡す(端末の OAuth で打つと 7403) | `uv run scripts/mod.py --remote budget` と `pnpm exec wrangler d1 execute biotope-harbor --remote --command "SELECT COUNT(*) FROM chronicles"` |
+| A14 | AI | ログが流れるか(画面を開いた人の操作に合わせて見る)。この Mac では `pnpm run cf` で打つ(端末の OAuth で打つと 7403) | `pnpm run cf tail biotope-island --format pretty` |
+| A15 | AI | D1 に行が入るか(出港のあと)。この Mac では `pnpm run cf` で打つ(端末の OAuth で打つと 7403) | `uv run scripts/mod.py --remote budget` と `pnpm run cf d1 execute biotope-harbor --remote --command "SELECT COUNT(*) FROM chronicles"` |
 | H9 | 人 | 本物の Turnstile で出港 → リンク → 訪問 → 年表を読む を通す。積荷と回避率も見る | ブラウザで `https://biotope-island.dev-sim-bio.workers.dev/?scenario=test-quick` |
 | H10 | 人 | Observability で CPU Time(10 ms の内か)・429 が返るか(Rate Limiting が無料で効くか)・`harbor.cron.stats` の行(毎日 00:10 UTC)を見る | ダッシュボード → Workers & Pages → biotope-island → Observability |
 
@@ -100,5 +100,5 @@ feat/m21(観察画面)と合わせる順は別に決める。合わせるとき�
 | 場面 | 誰 | コマンド |
 |---|---|---|
 | 荒らしを隠す・戻す・消す | AI(許可を得て) | `uv run scripts/mod.py --remote hide <id>` / `--remote restore <id>` / `--remote delete <id> --yes` |
-| 配った版を 1 つ戻す | AI(許可を得て) | `pnpm exec wrangler deployments list` → `pnpm exec wrangler rollback <version-id>` |
+| 配った版を 1 つ戻す | AI(許可を得て) | `pnpm run cf deployments list` → `pnpm run cf rollback <version-id>` |
 | 港を止めたい(静的アセットは残す) | 人 | ダッシュボードで Worker のルートを外すか、`wrangler.jsonc` の `run_worker_first` を空にして配り直す |

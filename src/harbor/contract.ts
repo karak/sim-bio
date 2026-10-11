@@ -1,6 +1,6 @@
 import { canonicalJson, sha256Hex } from '../chronicle/digest';
 import { fail, isFiniteNumber, isInt, isObject, under, type Parsed } from '../core/parse';
-import { MAX_AMOUNT, MAX_SPECIES, parseChronicle, type Chronicle, type ChronicleHead, type Digest } from './chronicle';
+import { MAX_AMOUNT, MAX_SPECIES, parseChronicle, type Chronicle, type ChronicleHead, type Digest } from '../chronicle/chronicle';
 
 /**
  * 港の契約 (M19-07、設計書 2026-09-26-cloudflare-architecture.md §5.1・§5.2・§6.3)。クライアントと Worker が同じこのファイルを import する。

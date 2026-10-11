@@ -1,6 +1,6 @@
 import { canonicalJson } from '../../src/chronicle/digest';
 import { isObject, type ParseError } from '../../src/core/parse';
-import { parseChronicle, type Chronicle, type Digest } from '../../src/harbor/chronicle';
+import { parseChronicle, type Chronicle, type Digest } from '../../src/chronicle/chronicle';
 import { parseCard, parseCargo, parseCargoId, parseCursor, type BrowseCursor, type Cargo, type CargoId, type ChronicleCard, type ChronicleId, type HarborCatalog, type InscriptionId } from '../../src/harbor/contract';
 import type { ClosedReason } from '../../src/harbor/wire';
 import type { Budget, Bucket } from './policy';

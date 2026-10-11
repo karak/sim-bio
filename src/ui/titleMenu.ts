@@ -1,4 +1,6 @@
 import type { Continuation } from '../persist/lastStage';
+import type { TitleChoice } from '../app/title';
+export type { TitleChoice };
 
 /** タイトルのメニューの 1 行 (M24-01)。note は「続きから」の下に小さく添える要約 */
 export type TitleItemId = 'continue' | 'new' | 'load' | 'harbor' | 'config';
@@ -28,9 +30,6 @@ export function titleMenuOf(continuation: Continuation | null): TitleMenu {
   ];
   return continuation ? { items: [{ id: 'continue', label: '続きから', note: continueNoteOf(continuation) }, ...rest], focus: 0 } : { items: rest, focus: 0 };
 }
-
-/** タイトルで選んだもの (M24-01)。scenario は石板の続き (M24-05、?scenario=<id> の道で resumeScenario が戻す) */
-export type TitleChoice = { kind: 'free' } | { kind: 'scenario'; scenarioId: string };
 
 /**
  * メニューの行を決めたときの行き先。panel は中身がまだ無い板 (M24-02・M24-03 で作る)。

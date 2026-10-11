@@ -30,7 +30,7 @@ import { createServer, type ViteDevServer } from 'vite';
 import { summarizeBench, type BenchBreakdownRow, type BenchResult, type BenchShot } from './bench-observe-compare.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-/** 寄せ先の 6 画 (src/observe/view.ts の presets と同じ名前・順) */
+/** 寄せ先の 6 画 (src/observe/view/camera.ts の presets と同じ名前・順) */
 const SHOTS = ['集落', '船台', '群れ', '林', '狼', '海岸'] as const;
 /** 空の舟 25 年目の保存を、朝 (time=0.12) で時刻と本体を止め (freeze=1)、舟を肋材の段 (ship=60) にし、自動カメラを切る (auto=0) */
 const PAGE = '/observe.html?time=0.12&freeze=1&ship=60&auto=0';
@@ -45,7 +45,7 @@ const SAMPLE_GAP_MS = 600;
 /**
  * ページの時計を台のものに差し替える (ページの読み込みの前に入れる)。performance.now は台が進めるまで止まり、
  * requestAnimationFrame はためておいて __benchStep(コマ数) で 1 コマずつ呼ぶ。観察画面が時間に使うのはこの 2 つだけ
- * (src/observe の view.ts・render/instancer.ts)。保存・素材の読み込み (fetch・画像) は時計に依らず進む
+ * (src/observe の view.ts の nowMs と view/frame.ts・render/instancer.ts)。保存・素材の読み込み (fetch・画像) は時計に依らず進む
  */
 function installFrameStepper(frameMs: number): void {
   let now = 0;

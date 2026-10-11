@@ -1,7 +1,7 @@
 ---
 id: M22-01
 title: デザインボード(キービジュアルと基準画)
-status: review
+status: done
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: []
@@ -26,6 +26,7 @@ None (can start immediately)
 - [x] 採用した絵を assets/textures/board/{key-visuals,creatures,sheets}/ に PNG(LFS)で置き、README に状態と出どころを書いてコミット
 
 ## 作業ログ
+- 2026-10-11: ユーザーが票の審査で承認 (done)。
 
 ## 作業ログ(2026-09-23)
 
