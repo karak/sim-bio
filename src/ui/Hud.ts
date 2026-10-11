@@ -349,7 +349,7 @@ export function createHud(
       slotSelect.options[i].textContent = slotLabel(slot, slots.get(slot), scenarioTitles);
     });
     const slot = selectedSlot();
-    const controls = slotControlsOf({ visiting: !replaceable, slot, filled: slots.has(slot) });
+    const controls = slotControlsOf({ own: replaceable, slot, filled: slots.has(slot) });
     $<HTMLButtonElement>('slot-save').disabled = !controls.save;
     $<HTMLButtonElement>('slot-load').disabled = !controls.load;
     const loadInput = $<HTMLInputElement>('load-input');

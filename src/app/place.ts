@@ -7,6 +7,7 @@ import type { RunnerState } from '../scenario/ScenarioRunner';
 import type { ScenarioDef, ScenarioStatus } from '../scenario/types';
 import type { SaveData } from '../simulation/types';
 import { askOf, type Ask } from './confirmAsk';
+import type { Stage } from './stage';
 
 /**
  * 島の置き場の判断 (M21-07)。操作の確かめと行き先・起動の舞台と戻し方・枠の札を押せるかを、DOM と置き場から離して決める。
@@ -48,8 +49,8 @@ export type Effect =
 export type Plan = { ask: Ask | null; effects: readonly Effect[] };
 
 /** 今いる舞台を、訪問か・石板の頭・石板の判定 (runner が無ければ null) から決める */
-export function atOf(visiting: boolean, head: ChronicleHead | null, status: ScenarioStatus | null): At {
-  if (visiting) return { stage: 'visit' };
+export function atOf(stage: Stage, head: ChronicleHead | null, status: ScenarioStatus | null): At {
+  if (stage.kind === 'visit') return { stage: 'visit' };
   return head ? { stage: 'scenario', head, finished: status !== null && status !== 'running' } : { stage: 'free' };
 }
 
@@ -201,8 +202,8 @@ function visitIdOf(params: URLSearchParams, scenario: Pick<ScenarioDef, 'id'> | 
 /** save は枠へ保存、load は枠の読込、file はファイルの読込、newIsland は新しい島 (石板を初めから)。why は押せないわけ */
 export type SlotControls = { save: boolean; load: boolean; file: boolean; newIsland: boolean; why: string };
 
-export function slotControlsOf(at: { visiting: boolean; slot: SlotId; filled: boolean }): SlotControls {
-  const own = !at.visiting;
+export function slotControlsOf(at: { own: boolean; slot: SlotId; filled: boolean }): SlotControls {
+  const { own } = at;
   return { save: own && at.slot !== 'auto', load: own && at.filled, file: own, newIsland: own, why: own ? '' : '訪れている島は差し替えられない (他人の島)' };
 }
 

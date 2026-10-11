@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { afterVerdictOf, cardActionsOf, finishedScopeOf, type VerdictAt } from '../../src/harbor/dock';
 
-const own: VerdictAt = { visiting: false, forced: false, chronicle: true };
+const own: VerdictAt = { stage: 'scenario', forced: false, chronicle: true };
 const ended = ['alive', 'dead', 'escaped'] as const;
 
 describe('判定の後に港へ出すもの afterVerdictOf (M21-07)', () => {
   it('afterVerdictOf (M21-07): 近道・訪問・年代記の無い島の判定は港へ出さない (出港・回避率・積荷のどれも)', () => {
     for (const status of ended) {
       expect(afterVerdictOf(status, own).harbor, `${status} の自分の島`).not.toBeNull();
-      for (const at of [{ ...own, forced: true }, { ...own, visiting: true }, { ...own, chronicle: false }]) {
+      for (const at of [{ ...own, forced: true }, { ...own, stage: 'visit' as const }, { ...own, chronicle: false }]) {
         expect(afterVerdictOf(status, at), `${status} ${JSON.stringify(at)}`).toEqual({ hold: status === 'escaped', harbor: null });
       }
     }
@@ -26,13 +26,13 @@ describe('港の口と石碑の札 (M21-07)', () => {
   const quick = { id: 'test-quick', title: '試し読み' };
   const sinking = { id: 'sinking', title: '沈む欠片' };
   it('finishedScopeOf (M21-07): 石板ではその石板の島だけ、自由モードではどの石板の判定の出た島も並べ、訪問では並べない', () => {
-    expect(finishedScopeOf([quick, sinking], { visiting: false, scenarioId: 'sinking' })).toEqual([{ def: sinking, label: 'この石板で最後に判定の出た島' }]);
-    expect(finishedScopeOf([quick, sinking], { visiting: false, scenarioId: null })).toEqual([
+    expect(finishedScopeOf([quick, sinking], { stage: 'scenario', scenarioId: 'sinking' })).toEqual([{ def: sinking, label: 'この石板で最後に判定の出た島' }]);
+    expect(finishedScopeOf([quick, sinking], { stage: 'free', scenarioId: null })).toEqual([
       { def: quick, label: '『試し読み』で最後に判定の出た島' },
       { def: sinking, label: '『沈む欠片』で最後に判定の出た島' },
     ]);
-    expect(finishedScopeOf([quick, sinking], { visiting: true, scenarioId: null })).toEqual([]);
-    expect(finishedScopeOf([quick, sinking], { visiting: true, scenarioId: 'sinking' })).toEqual([]);
+    expect(finishedScopeOf([quick, sinking], { stage: 'visit', scenarioId: null })).toEqual([]);
+    expect(finishedScopeOf([quick, sinking], { stage: 'visit', scenarioId: 'sinking' })).toEqual([]);
   });
 
   it('cardActionsOf (M21-07): 取り下げは自分が出港した島だけ、訪れるは同じ版の島だけ、通報はどの島にも出す', () => {

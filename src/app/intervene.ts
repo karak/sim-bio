@@ -5,6 +5,7 @@ import { planLanding, type LandResult } from '../harbor/cargo';
 import type { DrawnCargo } from '../harbor/contract';
 import type { At } from './place';
 import type { Session } from './session';
+import type { Stage } from './stage';
 
 /**
  * プレイヤーの介入の入口 (M27-03)。自由モードは島へそのまま、石板では年代記の記録器を通し、訪問では受けない。
@@ -14,7 +15,7 @@ import type { Session } from './session';
 export type InterveneDeps = {
   session: Session;
   /** 他人の島を訪れている (M19-09)。介入を受けない */
-  visiting: boolean;
+  stage: Stage;
   log: LogSink;
   saveChronicle: () => Promise<void> | undefined;
   /** 石板を短く揺らして、力が足りないことを知らせる */
@@ -25,7 +26,7 @@ export type InterveneDeps = {
 export function createIntervene(deps: InterveneDeps): (c: Command) => boolean {
   const { session, log, saveChronicle } = deps;
   return (c) => {
-    if (deps.visiting) return false;
+    if (deps.stage.kind === 'visit') return false;
     if (!session.recorder) {
       session.world.dispatch(c);
       return true;

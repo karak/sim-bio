@@ -11,6 +11,8 @@ import type { ScenarioDef } from '../scenario/types';
 import { publishClick } from './clicks';
 import { visitHref } from '../harbor/links';
 import type { Risky } from '../app/confirmAsk';
+import type { Stage } from '../app/stage';
+import type { WorldConfig } from '../simulation/types';
 import { el } from './el';
 import { mountVisit, type HarborContext, type Visit } from './HarborVisit';
 import {
@@ -52,14 +54,13 @@ export type HarborUiDeps = {
   /** 港の API の置き場。無ければ常に閉港 */
   baseUrl?: string;
   sitekey?: string;
-  /** 訪問の道 (?scenario=…&visit=…) で開いたとき。island は照合の再生に渡す、main.ts が組んだその石板の島 */
-  visit: Visit | null;
-  /** 自分の島の石板。判定の後に閉じた島 (M19-14 の直し) を港の板から出港できるようにする。自由モードと訪問では null */
-  scenarioId: string | null;
+  stage: Stage;
+  /** 訪問の島の設定。照合の再生に渡す */
+  config: WorldConfig;
   /** 種 id → 表示名。積荷の中身に使う */
   speciesNames: Readonly<Record<string, string>>;
   /** 漂着を島の浜に放つ (M19-10)。訪問では null (浜の漂着を出さない) */
-  land: ((d: DrawnCargo) => LandResult) | null;
+  land: (d: DrawnCargo) => LandResult;
   log: HarborLog;
   /** 開発用の見守り手 (M19-16)。手元の置き場の DB の名前と、港への要求に添える名乗りの header。本番では無い */
   player?: { dbName: string; headers: Readonly<Record<string, string>> };
@@ -75,6 +76,12 @@ const TOAST_MS = 6000;
 
 type Ctx = HarborContext & { guard: HarborGuard };
 type Ready = Ctx & { store: HarborStore };
+
+/** 訪問の道 (?scenario=…&visit=…) で開いたとき。island は照合の再生に渡す、main.ts が組んだその石板の島 */
+const visitOf = (stage: Extract<Stage, { kind: 'visit' }>, config: WorldConfig): Visit => ({ id: stage.id, island: { def: stage.def, config } });
+
+/** 自分の島の石板。判定の後に閉じた島 (M19-14 の直し) を港の板から出港できるようにする。自由モードと訪問では null */
+const ownScenarioOf = (stage: Stage): string | null => (stage.kind === 'scenario' ? stage.def.id : null);
 
 export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   const titleOf = (scenarioId: string) => deps.scenarios.find((d) => d.id === scenarioId)?.title ?? scenarioId;
@@ -135,7 +142,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   };
 
   const finishedSlot = el('div', { class: 'harbor-finished', hidden: '' });
-  const finishedScope = finishedScopeOf(deps.scenarios, { visiting: deps.visit !== null, scenarioId: deps.scenarioId });
+  const finishedScope = finishedScopeOf(deps.scenarios, { stage: deps.stage.kind, scenarioId: ownScenarioOf(deps.stage) });
   /** 判定の出た最後の島 (手元に残したもの)。判定の板を閉じた後・開き直した後も、ここから港へ出せる */
   const showFinished = async () => {
     const ctx = await ready;
@@ -153,7 +160,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     'aside',
     { class: 'harbor-stone harbor-drawer', id: 'harbor-drawer', 'aria-label': '港', hidden: '' },
     el('header', { class: 'harbor-head' }, el('h2', { class: 'harbor-title' }, '港'), el('p', { class: 'harbor-sub' }, '流れ着いた島の年代記'), close),
-    deps.land && driftSection(ready, deps.speciesNames, deps.land),
+    deps.stage.kind !== 'visit' && driftSection(ready, deps.speciesNames, deps.land),
     finishedSlot,
     drawerState,
     list,
@@ -188,7 +195,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   more.addEventListener('click', () => void loadPage(false));
 
   app.append(dock, drawer, toast, human);
-  if (deps.visit) app.classList.add('harbor-visiting');
+  if (deps.stage.kind === 'visit') app.classList.add('harbor-visiting');
 
   // 預けた年代記の送り直し: 起動の後と 1 時間ごと。起動は待たない
   const resend = async () => {
@@ -224,7 +231,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
         if (cargo) say(castText(await ctx.harbor.castCargo(cargo)));
       });
     },
-    visitChronicle: () => (deps.visit ? mountVisit(app, ready, deps.visit) : Promise.resolve(null)),
+    visitChronicle: () => (deps.stage.kind === 'visit' ? mountVisit(app, ready, visitOf(deps.stage, deps.config)) : Promise.resolve(null)),
   };
 }
 

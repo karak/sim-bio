@@ -18,6 +18,7 @@ import type { WorldConfig } from '../simulation/types';
 import { SIM_VERSION } from '../simulation/version';
 import type { Restored } from './restore';
 import type { Session } from './session';
+import type { Stage } from './stage';
 
 /**
  * 石板の組み立て (M27-03)。runner・介入の年代記・石板の途中の島の自動保存を作って Session に置き、判定の後の港の仕事と、石板を始め直す手順と、訪問の再生を繋ぐ。
@@ -28,7 +29,7 @@ export type ScenarioSessionDeps = {
   session: Session;
   config: WorldConfig;
   /** 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない */
-  visiting: boolean;
+  stage: Exclude<Stage, { kind: 'free' }>;
   /** 石板の定義。開発用の近道 (M19-16) では打ち切る年を縮めた定義 (URL だけで決まる) */
   def: ScenarioDef;
   /** 開発用の近道で判定を打ち切った (M19-16) */
@@ -51,14 +52,14 @@ export type ScenarioSessionDeps = {
 };
 
 export function createScenarioSession(deps: ScenarioSessionDeps): void {
-  const { session, config, visiting, def, forced, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
+  const { session, config, stage, def, forced, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
   const scenario = def;
   /** 今の島の tick・年を添えた石板のログ */
   const note = (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => {
     const snap = session.world.snapshot();
     log.write({ ts: new Date().toISOString(), tick: snap.tick, year: snap.year, level, event, scenario: scenario.id, ...extra });
   };
-  session.scenarioStep = visiting
+  session.scenarioStep = stage.kind === 'visit'
     ? () => {}
     : (n) => {
         if (session.runner) stepByYear(session.world, session.runner, n);
@@ -69,7 +70,7 @@ export function createScenarioSession(deps: ScenarioSessionDeps): void {
       loop.setSpeed(0);
       saveChronicle();
       const chronicle = session.recorder?.current();
-      const after = afterVerdictOf(v.status, { visiting, forced, chronicle: !!chronicle });
+      const after = afterVerdictOf(v.status, { stage: stage.kind, forced, chronicle: !!chronicle });
       // 持ち出し (M10-03): escaped が確定した瞬間の snapshot から書き出す (石板のダウンロードボタンが使う)
       const hold = after.hold ? exportCargo(session.world.snapshot()) : undefined;
       tablet.showVerdict(v, hold);
@@ -92,7 +93,7 @@ export function createScenarioSession(deps: ScenarioSessionDeps): void {
   }, restored);
   session.runner = newRunner(resumed?.runner);
   let scenarioRunner = session.runner;
-  session.recorder = visiting ? null : recordChronicle(
+  session.recorder = stage.kind === 'visit' ? null : recordChronicle(
     { dispatch: (c) => scenarioRunner.intervene(c), snapshot: () => session.world.snapshot() },
     { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed },
     () => scenarioRunner.totalsByYear(),
@@ -130,7 +131,7 @@ export function createScenarioSession(deps: ScenarioSessionDeps): void {
       tablet.showVerdict(verdict);
     }
   };
-  if (visiting) {
+  if (stage.kind === 'visit') {
     void harbor.visitChronicle().then((c) => {
       if (!c) return;
       session.scenarioStep = createPlayback(session.world, scenarioRunner, c.commands).step;

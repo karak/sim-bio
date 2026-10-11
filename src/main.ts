@@ -29,6 +29,7 @@ import { createIntervene, createLandCargo } from './app/intervene';
 import { createScenarioSession } from './app/scenarioSession';
 import { createTitle } from './app/title';
 import { createOnFrame } from './app/frame';
+import { stageOf } from './app/stage';
 import { atOf, bootRouteOf, bootSeedOf, planOp, runPlan, type Op } from './app/place';
 
 /** 開発用の手段 (M19-16、src/dev) を入れるか。ビルドで定数に畳まれ、本番のビルドでは動的 import ごと消える */
@@ -82,11 +83,10 @@ async function boot(): Promise<void> {
   if (seeded.search !== null) nav.replace(seeded.search);
   const config = scenarioConfigOf(base, species, scenario);
   // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
-  const visitId = booted.visitId;
-  const visiting = !!visitId;
+  const stage = stageOf(booted);
   /** 最後に遊んだ舞台の印 (M24-05)。舞台に入った時と自動保存の時に書く。訪問 (他人の島) では書かない */
   const markStage = () => {
-    if (!visitId) writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now(), dev?.player?.name);
+    if (stage.kind !== 'visit') writeLastStage(localStorage, scenario ? { stage: 'scenario', scenarioId: scenario.id } : { stage: 'free' }, Date.now(), dev?.player?.name);
   };
   markStage();
   const persistLog = (level: 'info' | 'warn', event: string, tick: number, extra: Record<string, unknown> = {}) =>
@@ -121,9 +121,9 @@ async function boot(): Promise<void> {
   const chips: Chips = { armed: null, spawnArmed: null, towerArmed: false };
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
   const saveChronicle = () => session.scenarioAutosave?.flush();
-  const intervene = createIntervene({ session, visiting, log, saveChronicle, flash: () => tablet.flash() });
+  const intervene = createIntervene({ session, stage, log, saveChronicle, flash: () => tablet.flash() });
   const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
-  const at = () => atOf(visiting, head, session.runner?.verdict().status ?? null);
+  const at = () => atOf(stage, head, session.runner?.verdict().status ?? null);
   const { perform, slotSave, showSeed } = createEffects({
     session, scenario, config, seed: seeded.seed, at, drawSeed, log, persistLog, store, localSave, saveChronicle, storage: sessionStorage, nav,
     remakeView: (size, species) => {
@@ -170,7 +170,7 @@ async function boot(): Promise<void> {
     onTowerArm: (v) => {
       chips.towerArmed = v;
     },
-  }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: !!scenario && !visiting });
+  }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: stage.kind === 'scenario' });
 
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
   const tablet = createTablet(
@@ -185,7 +185,7 @@ async function boot(): Promise<void> {
       if (scenario) void run({ kind: 'retry', scenarioId: scenario.id });
     },
   );
-  hud.setReplaceable(!visiting);
+  hud.setReplaceable(stage.kind !== 'visit');
   showSeed(false);
   const landCargo = createLandCargo({ session, scenario, at, speciesNames, intervene, flash: () => tablet.flash(), hud });
   const harbor = mountHarbor(app, {
@@ -194,10 +194,10 @@ async function boot(): Promise<void> {
     simVersion: SIM_VERSION,
     baseUrl: import.meta.env.VITE_HARBOR_URL,
     sitekey: import.meta.env.VITE_TURNSTILE_SITEKEY,
-    visit: visitId && scenario ? { id: visitId, island: { def: scenario, config } } : null,
-    scenarioId: scenario && !visiting ? scenario.id : null,
+    stage,
+    config,
     speciesNames,
-    land: visiting ? null : landCargo,
+    land: landCargo,
     log: (level, event, extra) => persistLog(level, event, session.world.snapshot().tick, extra),
     player: dev?.player,
     guard: {
@@ -233,9 +233,9 @@ async function boot(): Promise<void> {
       onFrame: createOnFrame({ session, scenario, localSave, viewedSpecies, observe, view: () => view, hud, tablet }),
     },
   );
-  if (scenario) {
+  if (stage.kind !== 'free') {
     createScenarioSession({
-      session, config, visiting, def: dev?.scenarioDef(scenario) ?? scenario, forced: !!dev?.shortcut, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe,
+      session, config, stage, def: dev?.scenarioDef(stage.def) ?? stage.def, forced: !!dev?.shortcut, log, persistLog, store, markStage, saveChronicle, resumed, fromSlot, loop, tablet, harbor, observe,
     });
   }
 

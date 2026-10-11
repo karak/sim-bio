@@ -5,7 +5,7 @@ import { SPAWN_RADIUS } from '../../src/harbor/cargo';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
 import type { ScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
-import type { CargoId } from '../../src/harbor/contract';
+import type { CargoId, ChronicleId } from '../../src/harbor/contract';
 import { createIntervene, createLandCargo } from '../../src/app/intervene';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import type { ChronicleRecorder } from '../../src/chronicle/recorder';
@@ -81,9 +81,9 @@ describe('介入の入口 createIntervene (M27-03)', () => {
 
   it('訪問では受けない。自由モードは島へそのまま送る', () => {
     const dispatched: Command[] = [];
-    const visiting = createIntervene({ session: sessionOf(world(dispatched)), visiting: true, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
-    expect(visiting(cmd)).toBe(false);
-    const free = createIntervene({ session: sessionOf(world(dispatched)), visiting: false, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
+    const visit = createIntervene({ session: sessionOf(world(dispatched)), stage: { kind: 'visit', id: 'ab'.repeat(32) as ChronicleId, def: priced }, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
+    expect(visit(cmd)).toBe(false);
+    const free = createIntervene({ session: sessionOf(world(dispatched)), stage: { kind: 'free' }, log: createMemorySink(), saveChronicle: () => undefined, flash: () => {} });
     expect(free(cmd)).toBe(true);
     expect(dispatched).toEqual([cmd]);
   });
@@ -94,7 +94,7 @@ describe('介入の入口 createIntervene (M27-03)', () => {
     const session = sessionOf(world([]));
     let result: InterveneResult = { ok: true };
     session.recorder = { dispatch: () => result } as unknown as ChronicleRecorder<InterveneResult>;
-    const intervene = createIntervene({ session, visiting: false, log, saveChronicle: () => void calls.push('save'), flash: () => calls.push('flash') });
+    const intervene = createIntervene({ session, stage: { kind: 'scenario', def: priced }, log, saveChronicle: () => void calls.push('save'), flash: () => calls.push('flash') });
     expect(intervene(cmd)).toBe(true);
     result = { ok: false, reason: 'budget' };
     expect(intervene(cmd)).toBe(false);
