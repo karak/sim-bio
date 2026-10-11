@@ -15,6 +15,7 @@ const island = resumeIsland('test-quick', 5);
 /** 石板の手を組む。置き場への書き込みと、港から届く訪問の年代記 (arrive で渡す) を残す */
 function setup(o: { visit?: boolean; fromSlot?: boolean } = {}) {
   const saved: number[] = [];
+  const speeds: number[] = [];
   const store = { saveScenario: async (_id: string, s: { save: { tick: number } }) => void saved.push(s.save.tick) } as unknown as IslandStore;
   let arrive: (c: Chronicle | null) => void = () => undefined;
   const session = sessionOf(World.create(island.config, { log: createMemorySink() }));
@@ -30,7 +31,7 @@ function setup(o: { visit?: boolean; fromSlot?: boolean } = {}) {
     markStage: () => undefined,
     resumed: null,
     fromSlot: o.fromSlot ?? false,
-    loop: { setSpeed: () => undefined },
+    loop: { setSpeed: (s) => void speeds.push(s) },
     tablet: { showVerdict: () => undefined, hideVerdict: () => undefined, flash: () => undefined },
     harbor: {
       offerPublish: () => undefined,
@@ -40,7 +41,7 @@ function setup(o: { visit?: boolean; fromSlot?: boolean } = {}) {
     observe: { enter: async () => undefined },
   };
   const scenario = createScenarioSession(deps);
-  return { session, scenario, saved, arrive: (c: Chronicle | null) => arrive(c) };
+  return { session, scenario, saved, speeds, arrive: (c: Chronicle | null) => arrive(c) };
 }
 
 const head = { simVersion: SIM_VERSION, scenarioId: island.def.id, seed: island.config.seed };
@@ -74,6 +75,14 @@ describe('石板の手 createScenarioSession (M27-05)', () => {
     await new Promise((r) => setTimeout(r, 0));
     scenario.step(5);
     expect(session.world.snapshot().tick).toBe(5);
+  });
+
+  it('訪問の年代記が届いたら、loop に 10x を言う (HUD の札は loop を追う)', async () => {
+    const { speeds, arrive } = setup({ visit: true });
+    expect(speeds).toEqual([]);
+    arrive({ ...head, v: 1, commands: [] } as unknown as Chronicle);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(speeds).toEqual([10]);
   });
 
   it('訪問で港が年代記を返さなければ、島は止まったまま', async () => {

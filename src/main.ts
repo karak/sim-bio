@@ -161,7 +161,7 @@ async function boot(): Promise<void> {
     onNewIsland: () => void run({ kind: 'new_island' }),
     onTitle: () => void run({ kind: 'title' }),
     onArm: (c) => view.setVolcanoHint(c?.kind === 'disaster' && c.disaster === 'volcano'),
-  }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: stage.kind === 'scenario' });
+  }, { speed: () => loop.getSpeed(), speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: stage.kind === 'scenario' });
 
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
   const tablet = createTablet(
@@ -208,9 +208,9 @@ async function boot(): Promise<void> {
     names: speciesNames,
     getSpeed: () => loop.getSpeed(),
     now: dev?.clock,
-    setSpeed: (s) => document.getElementById(`speed-${s}`)?.click(),
+    setSpeed: (s) => loop.setSpeed(s),
     // (M19-18) 入口は左上の時間の箱の速さの列の端 (上の真ん中の石板に覆われない)
-    buttonHost: document.getElementById('speed-row') ?? undefined,
+    buttonHost: hud.speedRow,
   });
   // 試験の口 (M25-09): 開発・受入のビルドだけ。SceneView は島を作り直すので、読むたびに今の view を引く
   probe?.installProbe(window, { scene: () => view.inspect(), observe: () => observe.inspect(), tick: () => session.world.snapshot().tick, advance: (n) => loop.advance(n) });
@@ -243,7 +243,7 @@ async function boot(): Promise<void> {
       return { save, chronicle: session.scenario?.recorder?.current() ?? null };
     },
   });
-  if (dev?.paused) document.getElementById('speed-0')?.click();
+  if (dev?.paused) loop.setSpeed(0);
   loop.start();
 }
 

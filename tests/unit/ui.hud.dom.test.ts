@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { getByRole } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { createHud, type Chip, type HudHandlers } from '../../src/ui/Hud';
+import type { Speed } from '../../src/core/runner';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import { resumeIsland } from '../fixtures/resumeIsland';
@@ -24,9 +25,13 @@ function mount() {
   const root = document.createElement('div');
   document.body.append(root);
   const onArm = vi.fn<(c: Chip | null) => void>();
+  /** loop の速さ。札を押すと onSpeed で loop に言い、HUD は loop の速さを追う */
+  const loop = { speed: 1 as Speed };
   const handlers = {
     onCommand: () => undefined,
-    onSpeed: () => undefined,
+    onSpeed: (s: Speed) => {
+      loop.speed = s;
+    },
     onLayer: () => undefined,
     onSave: () => ({}) as ReturnType<HudHandlers['onSave']>,
     onLoad: () => undefined,
@@ -36,11 +41,11 @@ function mount() {
     onTitle: () => undefined,
     onArm,
   } satisfies HudHandlers;
-  const hud = createHud(root, handlers);
+  const hud = createHud(root, handlers, { speed: () => loop.speed });
   const snap = World.create(island.config, { log: createMemorySink() }).snapshot();
   hud.update(snap);
   const firstSpawn = snap.species.find((d) => d.spawnable !== false)!;
-  return { root, hud, onArm, firstSpawn };
+  return { root, hud, onArm, firstSpawn, loop, snap };
 }
 
 const armed = (root: HTMLElement) => [...root.querySelectorAll('.armed')].map((b) => b.id);
@@ -101,5 +106,33 @@ describe('HUD の持っているチップ (M27-05 段 4)', () => {
     expect(armed(root)).toEqual([]);
     expect(hint(root, 'volcano-hint')).toBe(true);
     expect(onArm).toHaveBeenLastCalledWith(null);
+  });
+});
+
+const lit = (root: HTMLElement) => [...root.querySelectorAll('#speed-row .on')].map((b) => b.id);
+
+describe('HUD の速さの札は loop の速さを追う (M27-05 段 5)', () => {
+  it('札を押すと loop に言い、光る札は loop の速さになる', async () => {
+    const { root, loop } = mount();
+    expect(lit(root)).toEqual(['speed-1']);
+    await userEvent.setup().click(getByRole(root, 'button', { name: '100x' }));
+    expect(loop.speed).toBe(100);
+    expect(lit(root)).toEqual(['speed-100']);
+  });
+
+  it('札を押さずに loop の速さが変わっても (判定・観察画面・訪問)、次の update で光る札を揃える', () => {
+    const { root, hud, loop, snap } = mount();
+    loop.speed = 0;
+    expect(lit(root)).toEqual(['speed-1']);
+    hud.update(snap);
+    expect(lit(root)).toEqual(['speed-0']);
+    loop.speed = 10;
+    hud.update(snap);
+    expect(lit(root)).toEqual(['speed-10']);
+  });
+
+  it('観察画面の入口を置く速さの列を出す', () => {
+    const { root, hud } = mount();
+    expect(hud.speedRow).toBe(root.querySelector('#speed-row'));
   });
 });

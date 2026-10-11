@@ -122,6 +122,8 @@ export type Hud = {
   setSlot(s: SlotSummary): void;
   // (M19-17 で変更: 石板の中も受け付ける。false は訪問 (他人の島) だけで、枠への保存も止める)
   setReplaceable(on: boolean): void;
+  /** 速さの札の列。観察画面の入口 (M19-18) をこの列の端に置く */
+  readonly speedRow: HTMLElement;
 };
 
 /** セル時系列: サンプリング間隔 (tick)、保持年数、平均を取る半径 */
@@ -160,7 +162,7 @@ export function slotLabel(slot: SlotId, s: SlotSummary | undefined, titles: Reco
 export function createHud(
   root: HTMLElement,
   h: HudHandlers,
-  { speeds = SPEEDS, scenarioTitles = {}, inScenario = false }: { speeds?: readonly Speed[]; scenarioTitles?: Record<string, string>; inScenario?: boolean } = {},
+  { speed, speeds = SPEEDS, scenarioTitles = {}, inScenario = false }: { speed: () => Speed; speeds?: readonly Speed[]; scenarioTitles?: Record<string, string>; inScenario?: boolean },
 ): Hud {
   root.insertAdjacentHTML(
     'beforeend',
@@ -236,10 +238,18 @@ export function createHud(
     $('layer-mode-density').classList.toggle('on', layerMode === 'density');
     $('layer-mode-suit').classList.toggle('on', layerMode === 'suit');
   };
+  /** 光らせている速さの札。速さの正は loop で、HUD は変わった時だけ札を付け替える */
+  let shownSpeed: Speed = 1;
+  const followSpeed = () => {
+    const now = speed();
+    if (now === shownSpeed) return;
+    shownSpeed = now;
+    setOn('speed-row', `speed-${now}`);
+  };
   for (const s of speeds) {
     $(`speed-${s}`).addEventListener('click', () => {
       h.onSpeed(s);
-      setOn('speed-row', `speed-${s}`);
+      followSpeed();
     });
   }
   for (const l of LAYERS) {
@@ -438,6 +448,7 @@ export function createHud(
   };
 
   const update = (s: WorldSnapshot) => {
+    followSpeed();
     ensureSpecies(s);
     if (localCell !== null && s.tick % LOCAL_SAMPLE_TICKS === 0 && s.tick !== localLastTick) {
       localLastTick = s.tick;
@@ -586,5 +597,6 @@ export function createHud(
       replaceable = on;
       renderSlots();
     },
+    speedRow: $('speed-row'),
   };
 }

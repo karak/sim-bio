@@ -15,6 +15,7 @@ import { stepByYear } from '../scenario/stepByYear';
 import type { ScenarioDef, Verdict } from '../scenario/types';
 import { exportCargo, type Cargo as Hold } from '../simulation/ship';
 import type { WorldConfig } from '../simulation/types';
+import type { Runner } from '../core/runner';
 import { SIM_VERSION } from '../simulation/version';
 import type { Restored } from './restore';
 import type { ScenarioSession, Session } from './session';
@@ -40,7 +41,7 @@ export type ScenarioSessionDeps = {
   markStage: () => void;
   resumed: Restored | null;
   fromSlot: boolean;
-  loop: { setSpeed(speed: 0): void };
+  loop: Pick<Runner, 'setSpeed'>;
   tablet: { showVerdict(verdict: Verdict, cargo?: Hold): void; hideVerdict(): void; flash(): void };
   harbor: {
     offerPublish(island: { chronicle: Chronicle; digest: Digest }): void;
@@ -131,7 +132,7 @@ export function createScenarioSession(deps: ScenarioSessionDeps): ScenarioSessio
     void harbor.visitChronicle().then((c) => {
       if (!c) return;
       playback = createPlayback(session.world, scenarioRunner, c.commands);
-      document.getElementById('speed-10')?.click();
+      loop.setSpeed(10);
       requestAnimationFrame(() => void observe.enter());
     });
   }
