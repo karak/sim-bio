@@ -1,7 +1,7 @@
 ---
 id: M23-03
 title: 海の分割の作り直し
-status: review
+status: done
 milestone: M23
 plan: docs/design/2026-09-24-observe-perf.md
 depends_on: [M23-01]
@@ -45,3 +45,4 @@ M23-01
 
 - 2026-09-24 20:25 審査台(M22)の「入り江の口の泡の線」(m23-foam、取り下げた 1 回目の案の画で判断)は合格: 「前の設計「水深 0〜0.5 m は泡」のまま」。やり直し(21ebb4d)は泡を陸から 2〜5 m に限り、砂州の泡を消している → ご判断と食い違う。砂州の泡を広い帯でなく細い線として戻す(要確認)
 - 2026-09-24 20:38 審査台(M23) https://claude.ai/artifact/XeQZ8TYQnCqQtAJz8Y1qtt でユーザーの判断: m23-water 合格(メモなし)。入り江の口の泡(m23-foam、M22 の審査台)への返答はまだ
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

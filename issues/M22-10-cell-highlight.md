@@ -1,7 +1,7 @@
 ---
 id: M22-10
 title: 選んだセルを操作画面の 3D の島で示す(境界線の強調と浮かぶ印)
-status: review
+status: done
 milestone: M22
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: []
@@ -62,3 +62,4 @@ None (can start immediately)
 
 - 2026-09-28: ユーザーの判断で、示す先を観察画面から操作画面(SceneView)に改めた(e55a0d2)。帯は 1 px の線 (Line) では遠いと見えないので、幅のある帯の Mesh にし、幅をカメラの距離で変える。地形の面の高さは PlaneGeometry の三角形の割り方どおりに補間し、three の Raycaster と一致することを単体テストで確かめた。
 - 古くなって消していないコメント: なし。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

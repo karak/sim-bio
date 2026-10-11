@@ -48,6 +48,7 @@ E2E はもうその画面に着いている(harbor.spec・cellHighlight.spec・c
 - 確かめた数: `pnpm run check` は vitest 1087 (+3、hiddenFrom)・worker 66・scripts 73 (+6、shots_of・check_shots・page・dir)。`pnpm run shots` は 4 passed (1.8 分、13 枚)。ACCEPTANCE_DIR を scratchpad にして `pnpm run acceptance:page --no-probe` の items.json で、HBR-006・CRG-005・CNF-002・SEL-003 の項目に shots が番号の順に入る
 - `pnpm run test:e2e` (ACCEPTANCE_DIR なし) は 83 件 = 前の 79 件 + shots の 4 件 skip。負荷の高い機械 (load 20〜30) で 2 回とも 3 件ずつ落ちた (confirm・scenarioSave・harbor の別々の 3 件、ダイアログの押しの待ちと時間切れ)。落ちたファイルだけ回し直すと全部通った (38 passed・21 passed)
 - codex はトークンの期限切れで使えなかった (`codex login` のやり直しが要る)。代わりに別のモデル (fable) の agent にレビューさせ、指摘 4 つ (dir が落ちても shots が 0 で通る・落ちた行の古い画が残る・切れた文でも通る・格子の大きさの決め打ち) を直して、再レビューで残りなし
+- 2026-10-11: ユーザーが票の審査で保留。メモ「E2Eの撮影結果と画面はどこにあるんですか？　それなしで判定はできないようにみえます」
 
 ## 分かっている限り
 

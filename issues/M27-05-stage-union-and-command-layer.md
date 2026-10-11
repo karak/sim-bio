@@ -1,7 +1,7 @@
 ---
 id: M27-05
 title: 舞台を 1 つの union にし、命令の作り方を本体の層へ下ろす (/simplify の深さの指摘)
-status: review
+status: done
 milestone: M27
 plan: docs/design/2026-10-10-architecture-review.md#6-所見と推奨優先順
 depends_on: [M27-03]
@@ -62,3 +62,4 @@ evidence:
   - 置き場が変わって指す先がずれた注釈 (承認の後に直す): src/ui/mapClick.ts:11「HUD で持ったチップ。main.ts が HUD の手から書き、次の島のクリックで使う」(Chips 型は無い)、:12「気象塔チップを持っているか (M10-01)。次の島クリックで build_tower を送る」(欄が無く、今は MapClickDeps の JSDoc に見える)、:22「持っているチップが出す命令と、HUD の目印の文と色、チップを放す手。何も持っていなければ null」(放す手も null も返さない)、src/ui/Hud.ts:93-95「災害ボタンを押した…」「種パレットで種を選んだ…」「気象塔チップを押した…」(handler は onArm 1 つ)、:109「気象塔チップの武装状態を外から揃える (M10-01)」(setChip は 3 種)、:227「気象塔チップを持っているか (M10-01)。災害・種パレットと排他」(`let chip` の上)、:297「気象塔チップ (M10-01): 災害・種パレットと同じ「武装 → 次のクリックで発火」の流儀。三者は排他 (どれか 1 つだけ武装できる)」(排他は値が 1 つで成る)、src/main.ts:214「観察画面 (M22-08): … 速さは操作画面の速さの列を押して揃える」(後半が古い)、src/ui/Harbor.ts:66「開発用の見守り手 (M19-16)。手元の置き場の DB の名前と、港への要求に添える名乗りの header。本番では無い」(DB の名前は持たない)、tests/e2e/observe.spec.ts:26「下の帯が時間の流れとカメラを示し、帯の速さは操作画面の速さのボタンを押す」(loop に言う)。
   - 前からある穴 (直していない): `createHud` の `ensureSpecies` が `#spawn-row` を innerHTML で作り直すと、放流のチップを持っている間は `.armed` の光だけ消える (`chip()` は持ったまま)。
 - 2026-10-11 段 1 の確かめ (grep): `grep -rn "visiting" src/app src/ui src/main.ts` は 2 行 (src/ui/Harbor.ts:196 の CSS クラス名 `harbor-visiting` と src/ui/harbor.css:106 のセレクタ)。識別子としての `visiting` は app・ui・main.ts に 0 で、受入基準の「射影 1 か所以下」を満たす (文字列のクラス名は柵 FF-28 の対象外)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。
