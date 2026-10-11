@@ -1,7 +1,7 @@
 ---
 id: M26-12
 title: 手元からの配備 (Keychain のトークンで scripts/deploy.py) を使えるようにする
-status: review
+status: done
 milestone: M26
 plan: docs/operations/deploy-runbook.md
 depends_on: []
@@ -27,7 +27,7 @@ evidence: []
 ## Acceptance criteria
 
 - [x] 手元から 1 回配り、版の id と smoke (`/` 200、`/api/v1/chronicles` JSON) を作業ログに書く
-- [ ] 端末の OAuth に頼る他の道の扱いが決まっている
+- [x] 端末の OAuth に頼る他の道の扱いが決まっている
 
 ## Blocked by
 
@@ -40,3 +40,4 @@ evidence: []
 - 2026-10-11: ユーザーの決定「保留のままでいい」。H11・H12 (Keychain の sim-bio-local-deploy) は作らない。配備は GitHub Actions の deploy.yml だけ。手元の `pnpm run cf:auth`・`pnpm run deploy`・`mod.py --remote` はトークンが無いので落ちる (承知の上)
 - 2026-10-11: H11・H12 をユーザーが済ませた (Keychain の sim-bio-local-deploy)。`pnpm run cf:auth` 通過 (account 14c725d3… に届き、D1 biotope-harbor の id が合う。使う道: Keychain のトークン)。保留を解く
 - 2026-10-11: ユーザーの許可で main (8052830、PR #8 まで) を手元から配った (AI の端末からは auto mode が止めたので、ユーザーが `! pnpm run deploy`)。Keychain のトークンで照合 → build → 無料枠の検査 違反なし → マイグレーション 無し → deploy。版 ad1e5e74-8d3a-4b48-b51f-7a270cde7136 (前は f8ee7c1a)。smoke: `/` ok・`/api/v1/chronicles` JSON、すべて通った。残りは「端末の OAuth に頼る他の道の扱い」
+- 2026-10-11: ユーザーの決定「1」(包む道を 1 本作る)。`pnpm run cf <wrangler の引数>` (scripts/cf.py、試験 test_cf.py 6 件) で、照合の後に Keychain のトークンで wrangler を打つ。login・logout は断る。本物で確かめた: deployments list (ad1e5e74 が 100%)・secret list (SENDER_SECRET・TURNSTILE_SECRET_KEY)・tail (Connected、GET /api/v1/chronicles が流れた)。トークン (Workers Editor biotope-island + D1 Edit) で足りた。文書の書き換えは承認 (①〜⑨)。done
