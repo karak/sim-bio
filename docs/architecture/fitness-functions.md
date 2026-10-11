@@ -18,6 +18,14 @@
 | FF-07 | main.ts を配線だけに保つ(設計書 §4、R2) | `src/main.ts` | 行数(改行の数) | ≤ 265 | check(unit) | 同上 `FILE_LINES['src/main.ts']` |
 | FF-08 | ファイルの肥大を止める(R2、Development) | `src/**`・`worker/src/**` の各ファイル | 行数 | 既定 ≤ 700。例外は表 `FILE_LINES` の今の値以下(`simulation/World.ts` 985) | check(unit) | 同上 「ファイルは上限の内」 |
 | FF-09 | 関数の肥大を止める(R2) | 全関数の本体(宣言・式・アロー・メソッド) | 本体の行数 | 既定 ≤ 150。例外は表 `LONG_FUNCTIONS` の今の値以下(`boot` 225 ほか 11 件。`createObservationView` は M27-04 で 126 行) | check(unit) | 同上 「本体 150 行を超える関数は表のものだけ」 |
+| FF-26 | 知らない層を置かせない。層の表は許可の形(M27-05 段 6、G1・R1) | `src/**`・`worker/src/**` の全ファイルの層(ディレクトリ名。入口は `ENTRY` の名指し、worker の JSON は assets) | 表 `ALLOWED` に無い層の集合 | 空 | check(unit) | `layering.config.mjs` の `ALLOWED`・`ENTRY`、`tests/unit/architecture.test.ts` 「知らない層は置けない」 |
+| FF-27 | 層ごとに読んでよい外部パッケージを表で決める(G1、FF-04・05 を表に寄せた) | 各層の相対でない import(TypeScript の AST) | 表 `PACKAGES[層]` に無いパッケージの辺の数 | 0 件 | check(unit)+ lint(three だけ) | `layering.config.mjs` の `PACKAGES`、同上 「層ごとに読んでよい外部パッケージは表のものだけ」、`eslint.config.js` の `forbidden()` |
+| FF-28 | 舞台(自由・石板・訪問)の真偽を部品が自分で引かない(M27-05 段 1、R2) | `src/app/**`・`src/ui/**`・`src/main.ts` の識別子 `visiting`(AST。文字列・コメントは除く) | 使うファイルの数 | ≤ 1(舞台 `Stage` の射影だけ) | check(unit) | 同上 「訪問かどうか (visiting) を引くのは舞台 (Stage) の射影 1 か所だけ」 |
+| FF-29 | Session に仮の値を置かない(M27-05 段 2) | `src/app/session.ts` の本体の空なアロー関数 `() => {}` | 個数 | 0 | check(unit) | 同上 「Session に仮の値 (() => {}) が無い」 |
+| FF-30 | 命令(放流・災害)の作り方を本体の層に 1 つにする(M27-05 段 3、M21-01) | simulation・chronicle(JSON を命令に直す境界)・dev 以外の `{ type: 'spawn_species' \| 'disaster' }` の object literal | 書くファイルの集合 | 空 | check(unit) | 同上 「放流・災害の命令 (spawn_species・disaster) を組むのは simulation だけ」 |
+| FF-31 | 持っているチップは HUD が 1 つで持つ(M27-05 段 4、R2) | `src/main.ts` の識別子 `armed`・`spawnArmed`・`towerArmed`・`chips` | 使う識別子の集合 | 空 | check(unit) | 同上 「main.ts は HUD の手 (災害・放流・気象塔のチップ) を写さない」 |
+| FF-32 | 速さの正は loop に置き、app が DOM の id で ui の柵を迂回しない(M27-05 段 5) | `src/app/**`・`src/main.ts` の文字列 `speed-` | 含むファイルの集合 | 空 | check(unit) | 同上 「速さを変えるのに DOM の id (speed-N) を押さない」 |
+| FF-33 | 置き場の合成は入口だけ(M27-05 段 7、設計書 §4) | entry・dev・persist 以外の `open*Store()` の呼び | 呼ぶファイルの集合 | 空 | check(unit) | 同上 「置き場 (open*Store) を開くのは入口 (main.ts) だけ」 |
 
 ## 2. 本番の形(開発の口・配布物・費用)
 
