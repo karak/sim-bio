@@ -11,6 +11,7 @@ import { mountMapClick } from './ui/mapClick';
 import { createObserveEntry } from './observe/entry';
 import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
+import { createMemoryHarborStore, openHarborStore } from './persist/harborStore';
 import { createLocalSave } from './persist/localSave';
 import { AUTOSAVE_TICKS } from './persist/autosave';
 import { writeLastStage } from './persist/lastStage';
@@ -43,13 +44,19 @@ async function boot(): Promise<void> {
   const devTools = DEVTOOLS_BUILT ? await import('./dev/session') : null;
   const dev = devTools ? devTools.devSessionOf(new URLSearchParams(location.search)) : null;
   const probe = DEVTOOLS_BUILT ? await import('./dev/probe') : null;
-  const [base, species, scenarios, store] = await Promise.all([
+  const warnAtBoot = (event: string, e: unknown) => log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event, error: String(e) });
+  const [base, species, scenarios, store, harborStore] = await Promise.all([
     fetch('/data/world.default.json').then((r) => r.json() as Promise<Omit<WorldConfig, 'species'>>),
     fetch('/data/species.json').then((r) => r.json() as Promise<SpeciesDef[]>),
     fetch('/data/scenarios.json').then((r) => r.json() as Promise<ScenarioDef[]>),
     openIslandStore({ indexedDB, now: Date.now, dbName: dev?.dbName }).catch((e: unknown) => {
-      log.write({ ts: new Date().toISOString(), tick: 0, year: 0, level: 'warn', event: 'persist.unavailable', error: String(e) });
+      warnAtBoot('persist.unavailable', e);
       return null;
+    }),
+    // 港の手元の置き場 (M19-09) は島の置き場と同じ DB 名で開く。名前を変えると預けた年代記が迷子になる
+    openHarborStore({ indexedDB, dbName: dev?.dbName }).catch((e: unknown) => {
+      warnAtBoot('harbor.store.unavailable', e);
+      return createMemoryHarborStore();
     }),
   ]);
   const nav: Nav = {
@@ -190,6 +197,7 @@ async function boot(): Promise<void> {
     speciesNames,
     land: landCargo,
     log: (level, event, extra) => persistLog(level, event, session.world.snapshot().tick, extra),
+    store: harborStore,
     player: dev?.player,
     guard: {
       ask: confirmed,

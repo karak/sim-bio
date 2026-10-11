@@ -5,7 +5,6 @@ import { chronicleId, type BrowseCursor, type Cargo, type ChronicleCard, type Dr
 import { cardActionsOf, finishedScopeOf } from '../harbor/dock';
 import { inscriptionText, islandName, parseInscriptions, type Inscription } from '../harbor/names';
 import { createTurnstile, TEST_SITEKEY } from '../harbor/turnstile';
-import { createMemoryHarborStore, openHarborStore } from '../persist/harborStore';
 import type { HarborStore } from '../harbor/store';
 import type { ScenarioDef } from '../scenario/types';
 import { publishClick } from './clicks';
@@ -62,8 +61,10 @@ export type HarborUiDeps = {
   /** 漂着を島の浜に放つ (M19-10)。訪問では null (浜の漂着を出さない) */
   land: (d: DrawnCargo) => LandResult;
   log: HarborLog;
+  /** 手元の置き場。入口 (main.ts) が島の置き場と同じ DB で開いて渡す */
+  store: HarborStore;
   /** 開発用の見守り手 (M19-16)。手元の置き場の DB の名前と、港への要求に添える名乗りの header。本番では無い */
-  player?: { dbName: string; headers: Readonly<Record<string, string>> };
+  player?: { headers: Readonly<Record<string, string>> };
   /** やり直しの効かない操作の確かめ (M21-04)。取り下げは ask を経て、訪れる札は leave (判定の出た島なら確かめてから移る) を経る */
   guard: HarborGuard;
 };
@@ -103,10 +104,6 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     toastTimer = setTimeout(() => (toast.hidden = true), TOAST_MS);
   };
 
-  const storeReady = openHarborStore({ indexedDB, dbName: deps.player?.dbName }).catch((e: unknown) => {
-    deps.log('warn', 'harbor.store.unavailable', { error: String(e) });
-    return createMemoryHarborStore();
-  });
   // 碑文のカタログは静的アセット。読めなければ碑文の無いカタログになり、出港は港へ送る前に断る
   const inscriptionsReady = fetch('/data/inscriptions.json')
     .then((r) => r.json() as Promise<unknown>)
@@ -114,7 +111,8 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
       deps.log('warn', 'harbor.inscriptions.unavailable', { error: String(e) });
       return [];
     });
-  const ready: Promise<Ready> = Promise.all([storeReady, inscriptionsReady]).then(([store, inscriptions]) => ({
+  const { store } = deps;
+  const ready: Promise<Ready> = inscriptionsReady.then((inscriptions) => ({
     store,
     inscriptions,
     simVersion: deps.simVersion,
