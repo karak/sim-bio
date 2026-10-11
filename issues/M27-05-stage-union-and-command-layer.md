@@ -63,3 +63,4 @@ evidence:
   - 前からある穴 (直していない): `createHud` の `ensureSpecies` が `#spawn-row` を innerHTML で作り直すと、放流のチップを持っている間は `.armed` の光だけ消える (`chip()` は持ったまま)。
 - 2026-10-11 段 1 の確かめ (grep): `grep -rn "visiting" src/app src/ui src/main.ts` は 2 行 (src/ui/Harbor.ts:196 の CSS クラス名 `harbor-visiting` と src/ui/harbor.css:106 のセレクタ)。識別子としての `visiting` は app・ui・main.ts に 0 で、受入基準の「射影 1 か所以下」を満たす (文字列のクラス名は柵 FF-28 の対象外)。
 - 2026-10-11: ユーザーが票の審査で承認 (done)。
+- 2026-10-11 レビューの note (`harbor/dock.ts` の `StageKind` が `Stage['kind']` と型でつながっていない) をユーザーの指示で直す: `tests/unit/harbor.dock.test.ts` に `expectTypeOf<StageKind>().toEqualTypeOf<Stage['kind']>()` を置き、tsc (`pnpm run typecheck`、tests も見る) が落とす。harbor は app を読めないので src では結べず、試験で結ぶ。どちらかに舞台を足すと落ちることを両方向のわざとの違反で確認 (TS2344)。

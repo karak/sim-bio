@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { afterVerdictOf, cardActionsOf, finishedScopeOf, type VerdictAt } from '../../src/harbor/dock';
+import { describe, it, expect, expectTypeOf } from 'vitest';
+import { afterVerdictOf, cardActionsOf, finishedScopeOf, type StageKind, type VerdictAt } from '../../src/harbor/dock';
+import type { Stage } from '../../src/app/stage';
 
 const own: VerdictAt = { stage: 'scenario', forced: false, chronicle: true };
 const ended = ['alive', 'dead', 'escaped'] as const;
@@ -41,5 +42,11 @@ describe('港の口と石碑の札 (M21-07)', () => {
     expect(cardActionsOf({ simVersion: 'v2' }, { ...at, own: false })).toEqual({ visit: true, withdraw: false, report: true });
     expect(cardActionsOf({ simVersion: 'v1' }, { ...at, own: true })).toEqual({ visit: false, withdraw: true, report: true });
     expect(cardActionsOf({ simVersion: 'v1' }, { ...at, own: false })).toEqual({ visit: false, withdraw: false, report: true });
+  });
+});
+
+describe('舞台の種類 StageKind (M27-05)', () => {
+  it('StageKind は app/stage.ts の Stage の kind と同じ集合 (harbor は app を読めないので別に持つ。舞台を足したら両方に足す。tsc が見る)', () => {
+    expectTypeOf<StageKind>().toEqualTypeOf<Stage['kind']>();
   });
 });
