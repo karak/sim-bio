@@ -1,7 +1,7 @@
 ---
 id: M21-09
 title: 石板 (Tablet) と確かめのダイアログを、部品の試験の型 (M21-05) へ移す
-status: review
+status: done
 milestone: M21
 depends_on: [M21-05, M21-07]
 evidence: ["beabe81 src/ui/Tablet.ts src/ui/confirm.ts tests/unit/ui.tablet.view.test.ts tests/unit/ui.tablet.dom.test.ts tests/unit/ui.confirm.test.ts tests/unit/ui.confirm.dom.test.ts tests/e2e/uncovered.spec.ts"]
@@ -74,6 +74,7 @@ M21-05 と同じ 3 段で移す: (1) 部品の中の状態の移りを純粋な�
 - M21-04 の慎重な確かめ 2 つ (書いてある枠への上書き・判定の出た島での「もう一度」) は、いまの振る舞い (確かめる) のまま試験に書いた。答えで変わる試験は次の 1 件
   - tests/unit/ui.tablet.dom.test.ts「判定の出た石板の島で「もう一度」を押すと「判定の出た島を離れる」を確かめ、やめれば移らず、受ければ書き切って同じ石板へ移る」(「もう一度」の確かめを外すなら、確かめずに flush・go になる)
   - 書いてある枠への上書きは Hud の札 (M21-05 の順の 2 番) なので、この票の試験には入っていない。uncovered.spec.ts の 2 件目は、答えで変わらない「石板を初めから」で確かめのダイアログを開く
+- 2026-10-11: ユーザーが票の審査で承認 (done)。
 
 ## 分かっている限り
 

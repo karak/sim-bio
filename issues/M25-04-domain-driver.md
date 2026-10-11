@@ -1,7 +1,7 @@
 ---
 id: M25-04
 title: E2E のドメインの driver (Island・Harbor・Verdict・Camera) を置き、spec の写しの関数を消す
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-02]
@@ -43,3 +43,4 @@ ADR 0001 の段 4。`routeHarbor` は 5 つの spec に (confirm.spec.ts:20・de
 - 2026-10-01: 移したコメント 6 つ (港の写しの分け合い・Turnstile の代わり・港の API を写しで答える・abortWith・石板を 100 倍速で回す・persist の TICKS_PER_YEAR と shownTick) は文を変えずに driver へ。消したコメントは無い。
 - 2026-10-01: shots.spec.ts の openPaused・advanceTo・settle・tilt・selection・型 (View・Selection) は driver (island.ts・camera.ts) に同じ文で置いた。shots.spec.ts は未変更なので、M25-03 の後にそこの写しを消して driver を呼ぶ (routeHarbor と playToVerdict も)。shotState.spec.ts は openPaused と advanceTo を driver に替えた。
 - 2026-10-01: M25-04b。shots.spec.ts の写しを driver の呼び出しに替えた (playToVerdict は speed 1000・timeout 60 s を渡す薄い呼びだけ残す)。routeHarbor 5 → 1 を満たした。基準画 20 枚はそのまま通った
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

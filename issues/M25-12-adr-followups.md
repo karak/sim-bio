@@ -1,7 +1,7 @@
 ---
 id: M25-12
 title: ADR 0001 の積み残し 5 つ (LLM の pass の失効・空の問い・CSS 変数・AUTOSAVE_TICKS の写し・閾値の例外の注)
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-03, M25-06, M25-07, M25-10, M25-11]
@@ -61,3 +61,4 @@ M25-03・06・07・10 と M21-10 の「ユーザーの判断が要る点」「�
   - 5: ADR に例外の段落を足し (「基準画の閾値」の節の末尾)、決定 4 の行に 1 文を足した。既存の文は変えていない。
   - レビュー (読むだけの opus)。直した: ADR の段落の事実 (確かめ方は toHaveText だけでなく正規表現もある・日付)、O9 を肯定の文に、白い空の試し、StaleTest に「fail は消さない」「人の項目は llm があっても触らない」を足し、試験名を中身に合わせた。直さない: digest にモデル・プロンプトを入れること、`expected` の既定が空のとき今回当てない手順の pass が全部消える (呼び手は main と試験だけで両方渡す)、`--step` の重複指定。
   - 検査: `pnpm run check` exit 0 (vitest 1225・worker 66・scripts 182)。E2E (CI 無し、E2E_PORT=5464) shots・uncovered・confirm の 18 件 passed (5.3 分)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

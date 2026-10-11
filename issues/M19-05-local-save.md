@@ -1,7 +1,7 @@
 ---
 id: M19-05
 title: 手元の保存(IndexedDB、自動保存と手動の枠)
-status: review
+status: done
 milestone: M19
 plan: docs/design/2026-09-26-cloudflare-architecture.md
 depends_on: []
@@ -77,3 +77,4 @@ None (can start immediately)
     - `resume` で自動の枠の読込そのもの(IDB)が失敗した場合、「空」と同じに扱う。まれなので見送った。
 
 - 2026-09-27 受入試験(.claude/acceptance、http://localhost:5392): a-free-resume 合格「スコープ外だが、修正タスク二つ登録 / マウスでセルを選択したときに、3D画面上でどこを選択したかわかるようにしてほしい。例えば、対象セルの境界線をハイライトし、その上部に矢印・ピンなど浮かせておく。 / 「新しい島」「枠から読み込み」その他、やり直しの効かない破壊的変更は確認ダイアログを経由すること」 → 直しは M19-15・M19-16・M19-17、登録は M21-04・M22-10
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

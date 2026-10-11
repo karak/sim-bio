@@ -1,7 +1,7 @@
 ---
 id: M25-13
 title: 訪問の画面の見た目・読みやすさを lens と基準画で見る
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-03, M25-04, M25-08]
@@ -48,3 +48,4 @@ M25-08 で TUR-001・TUR-002 の人の手順が 1 分に縮み、訪問の画面
   - 審査台の回は .claude/localreview/m25-03-20261004-0324/ (shots_update.py が回の名前に m25-03- を固定で付ける。auto mode の拒否で m25-13- への改名はできなかった)。基準画は agent が仮の合格 (scratchpad の verdicts) で写した。**基準画の承認はユーザー待ち**。
   - レビュー (読むだけの opus)。直した: 入る待ちの timeout 60 s、島の名前・碑文・進みの棒の断言、細い帯の閾値。直さない: 画 1・2 の札 (【見た目】) は基準画で見るので残した、TUR-001 の judge に HBR-007 を書かない (既存の行)、from は空。
 - 2026-10-04 18:57: ユーザーが審査台で回を全部合格にした。今の基準画は各画の最新の回と同じ (sha256 で照合)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

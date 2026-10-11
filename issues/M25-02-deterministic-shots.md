@@ -1,7 +1,7 @@
 ---
 id: M25-02
 title: 撮る状態を毎回同じにする (reducedMotion・tick で止める口・グラフの年ごとの点・時計・ピンの ID 描き)
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-09]
@@ -53,3 +53,4 @@ ADR 0001 の段 2。shots を 2 回撮ると 3 つの元で画がずれる (ADR 
   - shots.spec.ts は `reducedMotion: 'reduce'` と `?paused=1` と `advanceTo` で撮る。CRG-005 は放流後 4 tick (狼 0.40・鹿 0.24)、CNF-002 は tick 400 と 760。
   - 読むだけの別モデルのレビュー (codex は認証切れ)。直した: onYear は tick が境目のときだけ呼ぶ、shotState の「進まない」は Day で見る、MARKERS に advanceTo。直さない: 観察画面に `?clock=` を固定して渡すと stats と知らせの帯の時間も止まる (t は撮影で止めたい値なので意図どおり。stats を読む試験は clock を渡さない)、pinMask は地形以外 (集落・塔) の遮蔽を見ない (票の文言は地形の深さ)。
   - 地形に隠れたピンの mask の E2E は書いていない (隠れた角度へ倒す手順が shots.spec.ts の中にあり、共通にしていない。M25-04 の driver の後で足す)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

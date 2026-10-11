@@ -1,7 +1,7 @@
 ---
 id: M21-06
 title: 受入の確かめの正本を jsonl (Gherkin) にし、受入の画面をそこから作る
-status: review
+status: done
 milestone: M21
 plan: docs/design/2026-09-29-acceptance-redesign.md
 depends_on: []
@@ -49,6 +49,7 @@ evidence: ["618cd16 docs/acceptance/scenarios.jsonl scripts/acceptance.py script
 - `pnpm run acceptance:page` で `.claude/acceptance/items.json` を書き直した (前のものは `items.round2-before-sot.json`)。受入の画面を Playwright で開き、項目は TUR-001・TUR-002、旧い判定 (a-publish-visit 保留・r2-publish-visit 合格) が項目の下に出て、任せた 34 件が折り畳みで出ることを見た。リンクはどれも http://localhost:8787 で 200
 - 受入の画面の index.html (git の外) に judge・history・delegated を描く行を足した (前のものは `index.before-sot.html`)。server.mjs と results.json は変えていない
 - 618cd16 だけでは RepoSotTest が落ちる (planned の M21-07 の票が次の 3644598 で入る)。2 つ続けて取り込む
+- 2026-10-11: ユーザーが票の審査で承認 (done)。
 
 ## 分かっている限り
 

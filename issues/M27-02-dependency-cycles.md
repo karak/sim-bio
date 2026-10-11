@@ -1,7 +1,7 @@
 ---
 id: M27-02
 title: 周辺モジュールの循環を解く (年代記の型を chronicle へ、港と app を ui から切る)
-status: review
+status: done
 milestone: M27
 plan: docs/design/2026-10-10-architecture-review.md#58-ディレクトリの依存実測2026-10-10
 depends_on: [M27-01]
@@ -56,3 +56,4 @@ evidence:
     - src/harbor/store.ts の HarborStore の説明「島の置き場 (islandStore) と同じ DB の別の store に置く」(港の側の port に移ったので、persist の実装の話が型の側に残る)
   - 文書: docs/design/2026-09-26-cloudflare-architecture.md:463 の表が年代記の型を src/harbor/chronicle.ts と書く。過去の issue の作業ログの道は記録なので残した。
   - 依頼にあった docs/design/2026-10-10-architecture-review.md はこの worktree にも履歴にも無かった。この票の表を仕様として進めた。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

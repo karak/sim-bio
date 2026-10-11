@@ -1,7 +1,7 @@
 ---
 id: M25-01
 title: 読みやすさの検査 (lens) を shotsOf に入れ、HBR-006 を auto に移す
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: []
@@ -53,3 +53,4 @@ ADR 0001 の段 1。人が「読める」と判じていたものを、機械の
   - 証跡 7: 626f179 (M25-11) を merge した木で `ACCEPTANCE_DIR=<scratchpad> pnpm run shots` (4 件) が緑。
   - レビュー: codex は認証が切れて動かず (access token could not be refreshed)、読むだけの別モデルのレビュアーで代えた。指摘 (幕の下の字の比・auto の行の画と acceptance.py page の衝突・試験の題名と 10 パーセンタイルを固定する試験) は直した。訪問のリンクの欄の末尾まで見えることは、ADR の表どおり許す欄なので検査しない。
   - `pnpm run check`: typecheck・lint・lint:py・vitest 121 files 1197 tests・worker 66・scripts 73 が通る。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

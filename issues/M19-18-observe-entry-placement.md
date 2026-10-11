@@ -1,7 +1,7 @@
 ---
 id: M19-18
 title: 「3D で見る」を時間の箱の端へ移し、集落の無い島でも島の真ん中から観察画面に入れる
-status: review
+status: done
 milestone: M19
 depends_on: [M19-15, M22-08]
 evidence: ["a60992f tests/unit/observe.area.test.ts tests/unit/observe.fx.test.ts tests/e2e/observeEntry.spec.ts tests/e2e/harbor.spec.ts tests/e2e/observe.spec.ts"]
@@ -58,3 +58,4 @@ M19-15, M22-08
 
 - 2026-09-27: ボタンは `#speed-row` の最後の子にし、絶対位置をやめた(石板・判定の板の下敷きにならない。判定の板は pointer-events: none で、板の箱は真ん中)。港の棚(左から開く)はユーザーが開いたときだけ左上に重なる。
 - 古くなったが消していないコメント(ユーザーの承認待ち): src/observe/entry.ts の説明「入れるのは文明の集落があるとき (区域は集落を中心に切り出すので)。」。すぐ下に「(M19-18 で上の規則を変更: …)」を足した。src/observe/area.ts 先頭の「集落 (home) を中心に半径 radius セルを snapshot から切り出す」は、中心が島の真ん中のこともある(extractArea の引数名は home のまま)。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

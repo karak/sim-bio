@@ -1,7 +1,7 @@
 ---
 id: M27-03
 title: main.ts を配線だけにする (再開・効果・介入・積荷・石板の組み立てを src/app へ)
-status: review
+status: done
 milestone: M27
 plan: docs/design/2026-10-10-architecture-review.md#6-所見と推奨優先順
 depends_on: [M27-02]
@@ -64,3 +64,4 @@ evidence:
     - tests/unit/chronicle.test.ts:31・scenario.determinism.test.ts:51「main.ts と同じ組み立て … onFrame が毎フレーム」、persist.scenarioSave.test.ts:28・persist.slotSave.test.ts:16・app.place.test.ts:22・scenario.resume.test.ts:23「main.ts と同じ組み立ての石板」(石板の組み立ては app/scenarioSession.ts、onFrame は app/frame.ts)
     - M27-03 より前から場所の違うもの (この票で動かしていない): src/ui/Hud.ts:91「main.ts の planOp」(planOp は app/place.ts)、src/ui/Hud.ts:368「main.ts の onNewIsland が確かめのダイアログで」
   - タイトル (title.ts) と石板の組み立て (scenarioSession.ts) と onFrame (frame.ts) には単体試験を足していない。E2E title・scenarioSave・verdict・harbor・chronicle・observe が通しで見る。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

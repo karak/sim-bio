@@ -1,7 +1,7 @@
 ---
 id: M25-17
 title: 表の試験が覆う E2E 2 件を間引く
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M21-07]
@@ -60,3 +60,4 @@ evidence:
   - 4 つとも「この操作 1 つ × 受けられない」の配線の観察で、表が覆うのは判断の部分だけなので残した。縮める余地は断言 1 つ (文) だけだが、1 つ減らしても試験の実行は変わらないので縮めない
   - 読むだけのレビュー (opus) の結果: 消した 3 つの断言はどれも覆われている。残す判断も妥当。残す理由に足すもの: 「走っている石板」の舞台を atOf へ渡す配線 (main.ts:197) は、表も M26-02 (訪問の枝) も confirm.spec:171 (判定の出た島だけ) も通さず、harbor.spec の M19-10 が gate の `finished` を通して見る。指摘の引用ずれ (:205 → :204) は直した
   - 検証 (feat/m19 は 7ef5e90 のまま、merge は Already up to date): `pnpm run check` は vitest 1236 件 (todo を除く) が通った。worker の vitest は 1 回目に cloudflare-pool の起動で EPIPE (環境の都合) で止まり、回し直して 66 件が通った。scripts 31 件通った。E2E (CI=1・1 worker・E2E_PORT=5447) の confirm.spec + harbor.spec は 21 件が通った (消す前は 22 件)。`uv run scripts/acceptance.py check` は ok: 45 scenarios
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

@@ -1,7 +1,7 @@
 ---
 id: M27-01
 title: アーキテクチャの柵 (層の向き・循環・大きさのラチェット)
-status: review
+status: done
 milestone: M27
 plan: docs/design/2026-10-10-architecture-review.md#6-所見と推奨優先順
 depends_on: []
@@ -36,3 +36,4 @@ evidence:
 - 大きさの表はラチェット。下げたら表を書き換える (M27-04 で view.ts の 1074 行・createObservationView の 836 行を既定へ戻す)。
 - 17:10 レビュー (読むだけの opus の agent) の指摘を直した: (1) `layering()` の simulation の塊が、前からある three の禁止 (eslint.config.js:11) を後ろから消していた (flat config は同じ rule を後の塊が上書きする)。表を `layering.config.mjs` に 1 つにし、simulation は前からある塊に足す形にした。(2) eslint は動的 import と `../../../` を見ないので、同じ表を architecture.test.ts にも当てた (`層の向きは動的 import と深い相対パスでも守る`)。(3) ラチェットの余りを詰めた (main.ts 300 → 265、boot 250 → 225。今は 261・220)。(4) app.effects・intervene・restore の試験を強めた (to_title の鍵、showSeed の条件 5 つ、budget 以外の弾きでは揺らさない、投げる理由の文)。
 - 確かめ (17:10): `src/app/_fence.ts` の `import('../ui/Hud')` は eslint を通るが試験で赤。`src/simulation/_fence.ts` の `import 'three'` は eslint 1 件。`src/core/log/deep/_fence.ts` の `../../../ui/Hud` は eslint 1 件。どれも消して戻した。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。

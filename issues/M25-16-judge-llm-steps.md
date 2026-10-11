@@ -1,7 +1,7 @@
 ---
 id: M25-16
 title: SEL-003 の 2〜4 と CNF-002 の 2〜3 を judge: "llm" にする
-status: review
+status: done
 milestone: M25
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-05, M25-06, M25-12]
@@ -49,3 +49,4 @@ evidence:
   - results.json には SEL-003 (fail)・CNF-002 (fail) が by llm で書かれた。fail の 2 手順が製品の欠陥か判じ方の問題かは M25-15 が調べる。
 - 2026-10-04 (レビュー後): 別モデルの読むだけのレビューで、SEL-003/3 Q3 の「幅がピンの頭の 4 分の 1 以上」は src/render/cellHighlight.ts の帯の太さ (outlineWidth) とピンの大きさ (markerScale) の比が約 0.21 で常に届かず、製品を見ずに必ず no になる問いと分かった。上の 3×no はこの問いの結果で、製品の欠陥の証拠にはならない。Q3 を「四辺とも淡い琥珀の色として見える」に直し、あわせて SEL-003/3 の Q1・Q4、SEL-003/4 の Q3、SEL-003/2 の Q3 の言い回しを直した。judge は 1 回だけの約束なので回し直していない。上の票は直す前の問いへの票で、次に pnpm run judge が走るときに新しい問いで当て直る。
 - 2026-10-04 (M25-15 への引き継ぎ): CNF-002/2 Q3 の 3×no は、「やめる」の focus の輪が .confirm-actions .chip:focus-visible だけ (src/ui/hud.css) で、撮影が page.click で板を開く (script からの focus には Chromium が :focus-visible を当てない) ため、画に輪が写らない可能性が高い。キーボードで開くか、.confirm-cancel に :focus の見える印を足すかは M25-15 が決める。
+- 2026-10-11: ユーザーが票の審査で承認 (done)。
