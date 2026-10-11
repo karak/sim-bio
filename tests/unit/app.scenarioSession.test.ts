@@ -65,6 +65,18 @@ describe('石板の手 createScenarioSession (M27-05)', () => {
     expect(saved).toEqual([0]);
   });
 
+  it('restart(null) は石板の続きに書き (flush)、命令の列だけを空に戻して年代記の頭は残す', async () => {
+    const { scenario, saved } = setup();
+    scenario.step(3);
+    expect(scenario.recorder?.dispatch({ type: 'set_climate', rainScale: 1.1 }).ok).toBe(true);
+    expect(scenario.recorder?.current().commands).toHaveLength(1);
+    expect(saved).toEqual([]);
+    scenario.restart(null);
+    await Promise.resolve();
+    expect(saved).toEqual([3]);
+    expect(scenario.recorder?.current()).toMatchObject({ ...head, commands: [] });
+  });
+
   it('訪問は年代記も自動保存も持たず、港から年代記が届くまで島を進めず、届いたら再生で進める', async () => {
     const { session, scenario, arrive } = setup({ visit: true });
     expect(scenario.recorder).toBeNull();

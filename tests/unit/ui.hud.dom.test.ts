@@ -97,6 +97,24 @@ describe('HUD の持っているチップ (M27-05 段 4)', () => {
     expect(onArm).toHaveBeenLastCalledWith(null);
   });
 
+  it('同じ種類のチップの持ち替え (火山から隕石、放流の種 A から種 B) は、放さず新しい方を持つ', async () => {
+    const { root, hud, onArm, snap } = mount();
+    const user = userEvent.setup();
+    await user.click(root.querySelector('#disaster-volcano')!);
+    await user.click(root.querySelector('#disaster-meteor')!);
+    expect(hud.chip()).toEqual({ kind: 'disaster', disaster: 'meteor' });
+    expect(armed(root)).toEqual(['disaster-meteor']);
+    expect(onArm).toHaveBeenLastCalledWith({ kind: 'disaster', disaster: 'meteor' });
+
+    const [a, b] = snap.species.filter((d) => d.spawnable !== false);
+    expect(b).toBeDefined();
+    await user.click(root.querySelector(`#spawn-${a.id}`)!);
+    await user.click(root.querySelector(`#spawn-${b.id}`)!);
+    expect(hud.chip()).toEqual({ kind: 'spawn', speciesId: b.id });
+    expect(armed(root)).toEqual([`spawn-${b.id}`]);
+    expect(onArm).toHaveBeenLastCalledWith({ kind: 'spawn', speciesId: b.id });
+  });
+
   it('setChip (地図のクリックで使い終えた時) で外から放すと、見た目も揃え、main.ts に知らせる', async () => {
     const { root, hud, onArm } = mount();
     const user = userEvent.setup();

@@ -176,7 +176,7 @@ describe('アーキテクチャの柵 (M27-01): 依存の向き', () => {
 });
 
 describe('アーキテクチャの柵 (M27-01): 大きさのラチェット', () => {
-  it('ファイルは上限の内 (既定 700 行。main.ts は配線だけなので 265 行。名指しの上限は今の行数で、増やさない)', () => {
+  it('ファイルは上限の内 (既定 700 行。main.ts は配線だけなので 261 行。名指しの上限は今の行数で、増やさない)', () => {
     const over = FILES.map((f) => ({ file: rel(f), lines: lines(f) })).filter((r) => r.lines > (FILE_LINES[r.file] ?? DEFAULT_LINES));
     expect(over).toEqual([]);
   });
@@ -241,7 +241,7 @@ function filesCallingOpenStore(files: readonly string[]): string[] {
     let hit = false;
     const visit = (n: ts.Node) => {
       if (hit) return;
-      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && /^open[A-Z]\w*Store$/.test(n.expression.text)) hit = true;
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && /^(open[A-Z]\w*Store|openDb)$/.test(n.expression.text)) hit = true;
       else ts.forEachChild(n, visit);
     };
     visit(SOURCES.get(f)!);
@@ -254,7 +254,7 @@ const inLayer = (...layers: string[]) => FILES.filter((f) => layers.includes(lay
 
 describe('アーキテクチャの柵 (M27-05): 舞台・命令・合成の置き場', () => {
   it('訪問かどうか (visiting) を引くのは舞台 (Stage) の射影 1 か所だけ。app・ui・main.ts の部品は舞台を受け、真偽を自分で引かない', () => {
-    expect(filesUsingIdentifier('visiting', APP_UI).length).toBeLessThanOrEqual(1);
+    expect(filesUsingIdentifier('visiting', APP_UI)).toEqual([]);
   });
 
   it('Session に仮の値 (() => {}) が無い。石板の手 (runner・記録器・始め直し・進め方) は 1 つの値として石板を開くときに作る', () => {
