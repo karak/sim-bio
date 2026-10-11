@@ -28,6 +28,8 @@ pnpm run cf:auth --whoami  # 端末の OAuth のアカウントも見る(whoami 
 
 `scripts/deploy.py`(3 の控えの道)と `scripts/mod.py --remote` は、同じ照合を最初に行う(どちらも whoami は打たない)。deploy.py はここで Keychain の項目の有る無しだけを見て、値を読むのは `pnpm run check` の後の token の段。mod.py --remote は値を読んで照合し、通ったときだけ wrangler を起こす(照合する D1 は wrangler.jsonc のものなので、--remote には `--config` を付けられない)。主の道(GitHub Actions)は端末に依らないので、照合は要らない。
 
+そのほかの wrangler (ログの `tail`、`d1 execute --remote`、`deployments list`・`rollback`、`secret put`・`secret list`) は `pnpm run cf <wrangler の引数>`(`scripts/cf.py`)で打つ。同じ照合を最初に行い、通ったときだけトークンを wrangler の子プロセスにだけ渡す。入出力は wrangler にそのままつなぐ。`login`・`logout` は打たない。`pnpm exec wrangler` をそのまま打つと端末の OAuth が使われ、7403 で止まる。
+
 ## 0. 前提の値(どれも秘密ではない)
 
 | 名前 | 値 |
@@ -151,16 +153,12 @@ TTL が切れると wrangler は認証の失敗(`code: 10000` など)で止ま�
 ## 6. 戻し方
 
 ```bash
-CLOUDFLARE_API_TOKEN="$(security find-generic-password -s sim-bio-local-deploy -a "$USER" -w)" \
-CLOUDFLARE_ACCOUNT_ID=14c725d39e9cf53743be403ab146174f \
-  pnpm exec wrangler deployments list
+pnpm run cf deployments list
 # 戻したい版の Version ID を選び
-CLOUDFLARE_API_TOKEN="$(security find-generic-password -s sim-bio-local-deploy -a "$USER" -w)" \
-CLOUDFLARE_ACCOUNT_ID=14c725d39e9cf53743be403ab146174f \
-  pnpm exec wrangler rollback <version-id> --message "<戻す訳>"
+pnpm run cf rollback <version-id> --message "<戻す訳>"
 ```
 
-`--message` を付けないと、wrangler が訳を問う。これも OAuth を使わないよう、トークンを環境変数で渡す(値は `$(...)` で直に渡り、画面にも履歴にも残らない)。人の端末で打つ(`!` を付けて)。
+`--message` を付けないと、wrangler が訳を問う。人の端末で打つ(`!` を付けて)。
 
 `wrangler rollback` が戻すのは Worker の版だけ。D1 のマイグレーションは前へしか進まないので、戻した Worker は新しい表の形の上で動く。列を足すだけのマイグレーションなら古い Worker でも動くが、列や表を消す・名前を変えるマイグレーションの後は戻さない(戻すと港が壊れる)。そういうマイグレーションは、Worker の 2 回の配備に分けて入れる(先に新旧どちらの形でも動く Worker、次にマイグレーション)。
 
