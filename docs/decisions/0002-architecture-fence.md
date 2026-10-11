@@ -1,7 +1,7 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-10
-decision-makers: ユーザー (未承認。M27 の取り込みと一緒に読む)
+decision-makers: ユーザー (2026-10-11 に承認。M27-01〜05 の取り込み 19d86b3 の後)
 consulted: レビュー docs/design/2026-10-10-architecture-review.md、読むだけのレビュー agent (opus)
 informed: M27 以降の票を受ける agent
 ---
