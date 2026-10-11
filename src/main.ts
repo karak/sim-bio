@@ -7,7 +7,7 @@ import { buildAssetTable } from './render/assetTable';
 import { createHud } from './ui/Hud';
 import { createTablet } from './ui/Tablet';
 import type { ScenarioDef } from './scenario/types';
-import { mountMapClick, type Chips } from './ui/mapClick';
+import { mountMapClick } from './ui/mapClick';
 import { createObserveEntry } from './observe/entry';
 import { createViewedSpecies } from './ui/viewedSpecies';
 import { openIslandStore } from './persist/islandStore';
@@ -118,7 +118,6 @@ async function boot(): Promise<void> {
     const ask = askOf(r);
     return ask ? confirm(ask) : Promise.resolve(true);
   };
-  const chips: Chips = { armed: null, spawnArmed: null, towerArmed: false };
   /** 年代記は石板ごとに最後の 1 本を置き、島・runner の状態と同じ transaction で書く (persist/scenarioSave.ts)。読むのは続きからの復帰 (M19-14) と港への出港 (M19-09) */
   const saveChronicle = () => session.scenario?.autosave?.flush();
   const intervene = createIntervene({ session, stage, log, saveChronicle, flash: () => tablet.flash() });
@@ -161,16 +160,7 @@ async function boot(): Promise<void> {
     },
     onNewIsland: () => void run({ kind: 'new_island' }),
     onTitle: () => void run({ kind: 'title' }),
-    onDisasterArm: (k) => {
-      chips.armed = k;
-      view.setVolcanoHint(k === 'volcano');
-    },
-    onSpawnArm: (id) => {
-      chips.spawnArmed = id;
-    },
-    onTowerArm: (v) => {
-      chips.towerArmed = v;
-    },
+    onArm: (c) => view.setVolcanoHint(c?.kind === 'disaster' && c.disaster === 'volcano'),
   }, { speeds: dev?.speeds, scenarioTitles: Object.fromEntries(scenarios.map((d) => [d.id, d.title])), inScenario: stage.kind === 'scenario' });
 
   const speciesNames = Object.fromEntries(species.map((d) => [d.id, d.name]));
@@ -242,7 +232,7 @@ async function boot(): Promise<void> {
 
   // 舟の行 (M10-04): 逃がす条件のある石板と自由モードだけ出す
   hud.setShipEnabled(!scenario || !!scenario.escape);
-  mountMapClick(canvas, { pickCell: (x, y) => view.pickCell(x, y), session, chips, intervene, hud });
+  mountMapClick(canvas, { pickCell: (x, y) => view.pickCell(x, y), session, intervene, hud });
 
   dev?.mount(app, {
     scenario: !!scenario,
