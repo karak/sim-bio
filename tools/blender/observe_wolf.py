@@ -1659,6 +1659,7 @@ HIND_LEG = [(0.05, 0.094, 0.160), (0.4, 0.080, 0.130), (0.8, 0.058, 0.090), (1.0
 FRONT_LEG = [(0.05, 0.078, 0.125), (0.45, 0.068, 0.100)] + FRONT_LEG[2:]
 NECK_KEYS = [(-0.27, 0.62, 0.145, 0.205, 0.18)] + NECK_KEYS[1:]
 # 尾: 付け根は細く、中ほどは房で太らせる (芯は細め)、真下寄りに垂らす
+# (6 回目で TAIL6_PATH・TAIL6_RADII に上書き。今の尾は「灰狼の 6 回目」の節)
 TAIL2_PATH = [(0, 0.30, 0.575), (0, 0.395, 0.52), (0, 0.48, 0.43), (0, 0.555, 0.32), (0, 0.61, 0.215)]
 TAIL2_RADII = [0.042, 0.066, 0.074, 0.058, 0.0]
 
@@ -1821,6 +1822,7 @@ def build_chunks(bm, bvh, lod, region):
             dd = ((dt.normalized() if dt.length > 1e-3 else dd) + nrm * CHUNK_OUT[region]).normalized()
             root = loc - nrm * CHUNK_SINK
             # 根元の色は付く面の色 (頬の上は地の毛、下は灰茶)、先は明るい灰茶
+            # (6 回目は chunk_root6・chunk_tip6 が根元と先の色を決める)
             c0 = mix(fur, pale, smoothstep(0.64, 0.58, loc.z)) if region == "cheek" else pale
             c0 = CHUNK_ROOT(region, loc, nrm) if CHUNK_ROOT else c0  # (灰狼の 6 回目で追加) 根元を付く面と同じ色に
             kw = {} if rings is None else {"rings": rings}
