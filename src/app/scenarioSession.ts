@@ -41,7 +41,7 @@ export type ScenarioSessionDeps = {
   markStage: () => void;
   resumed: Restored | null;
   fromSlot: boolean;
-  loop: Pick<Runner, 'setSpeed'>;
+  loop: Pick<Runner, 'setSpeed' | 'getSpeed'>;
   tablet: { showVerdict(verdict: Verdict, cargo?: Hold): void; hideVerdict(): void; flash(): void };
   harbor: {
     offerPublish(island: { chronicle: Chronicle; digest: Digest }): void;
@@ -50,6 +50,9 @@ export type ScenarioSessionDeps = {
   };
   observe: { enter(): Promise<void> };
 };
+
+/** 訪問で 3D 観察画面が描けるのを待つ上限 (M19-19) */
+const OBSERVE_WAIT_MS = 10_000;
 
 export function createScenarioSession(deps: ScenarioSessionDeps): ScenarioSession {
   const { session, config, stage, def, forced, log, persistLog, store, markStage, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
@@ -129,11 +132,18 @@ export function createScenarioSession(deps: ScenarioSessionDeps): ScenarioSessio
   let playback: Playback | null = null;
   const step = stage.kind === 'visit' ? (n?: number) => playback?.step(n) : (n?: number) => stepByYear(session.world, scenarioRunner, n);
   if (stage.kind === 'visit') {
-    void harbor.visitChronicle().then((c) => {
+    void harbor.visitChronicle().then(async (c) => {
       if (!c) return;
+      // 他人の島を 0 年から見せるため、3D 観察画面が描けてから再生を始める (M19-19)。描けない・遅いときは 2D のまま始める
+      const before = loop.getSpeed();
+      const shown = new Promise<'shown' | 'failed'>((resolve) =>
+        requestAnimationFrame(() => observe.enter().then(() => resolve('shown'), () => resolve('failed'))),
+      );
+      const waited = await Promise.race([shown, new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), OBSERVE_WAIT_MS))]);
+      if (waited !== 'shown') note('warn', 'visit.observe-unavailable', { reason: waited, waitMs: OBSERVE_WAIT_MS });
       playback = createPlayback(session.world, scenarioRunner, c.commands);
-      loop.setSpeed(10);
-      requestAnimationFrame(() => void observe.enter());
+      // 待つ間に訪れた人が速さを選んだ (観察画面を閉じて 100x など) なら、それを残す
+      if (loop.getSpeed() === before) loop.setSpeed(10);
     });
   }
   return {

@@ -67,8 +67,9 @@ test('M19-09: 出港 → リンク → 訪問 (3D 観察画面) → 照合 (年�
   await expect(plaque).toContainText('「雨は来た」');
   await expect(plaque.locator('#harbor-visit-ending')).toHaveText('文明の試し読みを 5 年、生き延びた');
   await expect(page.locator('#observe-layer')).toBeVisible({ timeout: 30_000 });
+  // 再生は 3D が描けてから 0 年で始まり、そこで 10 倍速になる (M19-19)
+  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^0 年/, { timeout: 90_000 });
   await expect(page.locator('#speed-10')).toHaveClass(/on/);
-  await expect(page.locator('#observe-layer .o-stats')).toHaveText(/^\d+ 年/, { timeout: 90_000 });
   // 訪問の再生が進めた年と季節が、観察画面の下の帯に渡る (M19-09 の直し)。10 倍速では 1 年が 36 秒、季節は 9 秒ごと
   const bar = page.locator('#observe-layer .o-stats');
   // 低 fps の CI では帯の書き換えが季節を飛ばす (夏 → 冬) ので、季節を通しの数にして進んだことだけを見る
