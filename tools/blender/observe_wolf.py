@@ -1667,6 +1667,7 @@ TAIL2_RADII = [0.046, 0.078, 0.088, 0.068, 0.0]  # (灰狼の 4 回目で追加)
 
 
 RUFF_JAG = 0.4  # (灰狼の 4 回目の見直しで追加) 首の殻の後ろの縁のぎざぎざと後ろへの流れの倍率 (喉の下だけ)
+RUFF_OFF = 0.022  # (灰狼の 6 回目で追加) 首の殻を首から離す量 (後ろの縁で)
 
 
 def build_ruff(bm, lod):
@@ -1685,7 +1686,7 @@ def build_ruff(bm, lod):
         a_, b_ = secs[i], secs[i + 1]
         w = max(0.0, min(1.0, (a_[0] - y) / (a_[0] - b_[0]))) if a_[0] != b_[0] else 0.0
         _, zc, rx, rf, rb = [a_[j] + (b_[j] - a_[j]) * w for j in range(5)]
-        off = 0.004 + 0.022 * smoothstep(0.0, 0.8, t)  # 首から離す
+        off = 0.004 + RUFF_OFF * smoothstep(0.0, 0.8, t)  # 首から離す
         vs = []
         for j in range(n):
             ang_ = 2 * math.pi * j / n + math.pi / 2
@@ -1746,6 +1747,10 @@ CHUNK_CONFORM = {"cheek": True, "chest": True}  # 体の面の外へ押し出す
 CHUNK_RINGS = ((0.0, 1.0, 1.0), (0.45, 0.92, 0.9), (0.78, 0.52, 0.6))
 CHUNK_SHARP = 35
 CHUNK_OUT = {"cheek": 0.42, "chest": 0.35}  # 流れの向きに足す外 (面の法線) への成分
+CHUNK_LIGHT = 0.6  # (灰狼の 6 回目で追加) 先の色: 淡い灰茶から明るい毛 (tip) へ寄せる割合
+TAIL_SHARP = None  # (灰狼の 6 回目で追加) 尾の面を立てる角 (度)。None ならなめらか
+CHUNK_TIP = None  # (灰狼の 6 回目で追加) 先の色を (region, 位置, 法線) から決める関数。None なら light
+CHUNK_ROOT = None  # (灰狼の 6 回目で追加) 根元の色を (region, 位置, 法線) から決める関数。None なら 5 回目の色
 
 
 def chunk(bm, cl, root, nrm, d, L, W, T, curl, c_root, c_tip, n=6, rings=((0.0, 1.0, 1.0), (0.32, 1.0, 1.0), (0.64, 0.74, 0.82), (0.86, 0.42, 0.55)),
@@ -1795,7 +1800,7 @@ def build_chunks(bm, bvh, lod, region):
     n = CHUNK_N if hero else 4
     rings = CHUNK_RINGS if hero else ((0.0, 1.0, 1.0), (0.5, 0.8, 0.85))
     pale, fur = PAL["pale"], PAL["fur"]
-    light = mix(pale, PAL["tip"], 0.6)
+    light = mix(pale, PAL["tip"], CHUNK_LIGHT)
     for (x, y, z), d, L, W, T, curl, hero_only in CHUNKS[region]:
         if hero_only and not hero:
             continue
@@ -1817,8 +1822,10 @@ def build_chunks(bm, bvh, lod, region):
             root = loc - nrm * CHUNK_SINK
             # 根元の色は付く面の色 (頬の上は地の毛、下は灰茶)、先は明るい灰茶
             c0 = mix(fur, pale, smoothstep(0.64, 0.58, loc.z)) if region == "cheek" else pale
+            c0 = CHUNK_ROOT(region, loc, nrm) if CHUNK_ROOT else c0  # (灰狼の 6 回目で追加) 根元を付く面と同じ色に
             kw = {} if rings is None else {"rings": rings}
-            chunk(bm, cl, root, nrm, dd, L, W, T, curl * 0.35, c0, light, n=n, bvh=bvh if CHUNK_CONFORM[region] else None, **kw)
+            tip = CHUNK_TIP(region, loc, nrm) if CHUNK_TIP else light  # (灰狼の 6 回目で追加)
+            chunk(bm, cl, root, nrm, dd, L, W, T, curl * 0.35, c0, tip, n=n, bvh=bvh if CHUNK_CONFORM[region] else None, **kw)
 
 
 CHUNK_WEIGHTS = {
@@ -2304,7 +2311,7 @@ def build_lod2(lod, obj_name, mats):
     bm = bmesh.new()
     build_tail2(bm, lod)
     add(bm, (top_v, top_f), (skin_v, skin_f))
-    parts.append(make_part(obj_name + "_tail", bm, "tail2", [("tail1", 1), ("tail2", 1), ("tail3", 1), ("pelvis", 0.3)], mats))
+    parts.append(make_part(obj_name + "_tail", bm, "tail2", [("tail1", 1), ("tail2", 1), ("tail3", 1), ("pelvis", 0.3)], mats, sharp=TAIL_SHARP))
     for side, s in ((-1, "L"), (1, "R")):
         bm = bmesh.new()
         EAR_FRONT[f"ear_{s}"] = build_ears2(bm, lod, side)
@@ -2844,6 +2851,128 @@ def bake_actions(rig, hero=None):
         pb.location = (0, 0, 0)
         pb.rotation_quaternion = (1, 0, 0, 0)
     return acts
+
+
+# ================================================================ 灰狼の 6 回目 (2026-10-11 審査台 m22-uat-20261011-1106/M22-05-AC1-wolf への判断)
+# 判断「残課題に書いた通り。ほか、胸、頬、尻尾の毛並みのつながりが不自然」。5 回目の塊は、橙の首の上に明るい塊を貼った島に見えた
+# (頬の塊と胸の塊の間に首の横の橙の帯があり、塊の先の色が基準画の胸より明るい)。基準画では、頬の後ろ → 首の横の下半分 → 胸 → 腹が
+# 一続きの淡い灰茶の域で、その上の縁が頬の後ろから肘へ斜めに下がる。6 回目は:
+#  - 淡い域を一つの場 (RUFF6_EDGE、側面の上の縁 z を y の関数に。正面は中ほどほど高い V) にし、胴・首・首の殻・脚の付け根を同じ場で塗る
+#  - 塊は域の縁に沿う一列の裾にする: 頬 2 本 (張り出しを大きく)、首の横 2 本 (新しい、頬と喉を継ぐ)、胸の正面は喉の 3 本だけ (下の 2 本をやめる)
+#  - 塊の根元は付く面と同じ色 (CHUNK_ROOT)、先は淡い灰茶から少しだけ明るく (CHUNK_LIGHT)
+#  - 尾は付け根を尻の背の線の延長に置き、付け根を太く、付け根の塗りを胴の式へつなぐ
+#  - 接地の高さを近 LOD と群れ LOD の両方の一番低い点で合わせる (fall の -0.019 m は群れ LOD だった)
+RUFF6_EDGE = [(-0.62, 0.640), (-0.52, 0.615), (-0.44, 0.565), (-0.36, 0.49), (-0.28, 0.42), (-0.18, 0.35), (0.0, 0.31)]
+RUFF6_V = 0.07     # 正面 (胸の前) で中心ほど縁を上げる量 (正面で V)
+RUFF6_SOFT = 0.022  # 縁のぼかしの半幅
+
+
+def ruff6_w(co, n=None):
+    """淡い灰茶の域の重み (0..1)。側面の上の縁 RUFF6_EDGE より下が 1。胸の前を向く面は中心ほど縁が上がる"""
+    zb = interp(RUFF6_EDGE, co.y)
+    if n is not None:
+        zb += RUFF6_V * smoothstep(-0.2, -0.7, n.y) * smoothstep(0.16, 0.0, abs(co.x))
+    return smoothstep(zb + RUFF6_SOFT, zb - RUFF6_SOFT, co.z)
+
+
+def pale6(n):
+    """淡い域の色。面の向きの明暗は胴と同じ向きで、幅は狭く (上を向く面はわずかに明るく、下を向く面はわずかに陰)"""
+    c = mix(PAL["pale"], mix(PAL["pale"], PAL["tip"], 0.18), smoothstep(0.2, 0.9, n.z))
+    return mix(c, mix(PAL["pale"], PAL["fur_shade"], 0.25), smoothstep(-0.2, -0.8, n.z))
+
+
+def col_body6(part, co, n):
+    return mix(color_for("body", co, n), pale6(n), ruff6_w(co, n))
+
+
+def col_ruff6(part, co, n):
+    """首の殻を胴と同じ式で塗る (5 回目の col_ruff は z 0.62 → 0.50 の横の帯で、首の横の中ほどが橙と灰茶の半々に残った)"""
+    return col_body6(part, co, n)
+
+
+def col_leg6(part, co, n):
+    return mix(col_leg2(part, co, n), col_body6(part, co, n), smoothstep(0.40, 0.52, co.z))
+
+
+def col_tail6(part, co, n):
+    """尾の付け根 (y < 0.42) は胴の式へつなぐ"""
+    return mix(col_tail2(part, co, n), color_for("body", co, n), smoothstep(0.42, 0.33, co.y))
+
+
+def col_head6(part, co, n):
+    """頭の目より後ろ (y > -0.62) の頬の後ろ・耳の下も淡い域で塗る (基準画は頬の後ろの淡い色が耳の付け根の下まで上がる。
+    5 回目は頭の z 0.58 より上が橙のままで、頬の塊の上の縁が橙に貼った板の縁に見えた)。目・眉・鼻づら (y < -0.62) は変えない"""
+    return mix(col_head2(part, co, n), pale6(n), ruff6_w(co) * smoothstep(-0.63, -0.59, co.y))
+
+
+COLOR2["head2"] = col_head6
+COLOR2.update({"body": col_body6, "neck": col_body6, "ruff": col_ruff6, "leg2": col_leg6, "tail2": col_tail6})
+
+
+
+
+def chunk_root6(region, loc, nrm):
+    if region == "tail":
+        return col_tail6("tail2", loc, nrm)
+    return mix(color_for("body", loc, nrm), pale6(nrm), ruff6_w(loc, nrm))
+
+
+def chunk_tip6(region, loc, nrm):
+    """先の色: 首まわりは淡い灰茶を少し明るく。尾は尾の下側の淡い色"""
+    if region == "tail":
+        return mix(PAL["fur"], PAL["pale"], 0.55)
+    return mix(PAL["pale"], PAL["tip"], CHUNK_LIGHT)
+
+
+CHUNK_ROOT, CHUNK_TIP = chunk_root6, chunk_tip6
+CHUNK_LIGHT = 0.22
+CHUNKS = {
+    "cheek": [
+        # 前: 顎の角から外・後ろ下へ (正面で顔の下半分を頭蓋より外へ張る。5 回目より長く広く)
+        ((None, -0.592, 0.572), (0.62, 0.80, -0.50), 0.175, 0.122, 0.046, 0.30, False),
+    ],
+    "neck": [
+        # 頬の後ろ: 顎の角の後ろから首に沿って後ろ下へ (5 回目は外へ立てて、横から板の縁に見えた)
+        ((None, -0.545, 0.590), (0.25, 1.0, -0.60), 0.150, 0.100, 0.036, 0.20, True),
+        # 首の横の上: 頬の後ろの塊の先の下から後ろ下へ
+        ((None, -0.490, 0.555), (0.22, 1.0, -0.70), 0.150, 0.110, 0.036, 0.20, False),
+    ],
+    "chest": [
+        # 喉の列だけ: 両脇は外下へ、中心が長い (正面で V の 3 つの尖り。5 回目の下の胸の列 2 本はやめた)
+        ((0.090, None, 0.480), (0.60, -0.20, -1.0), 0.135, 0.095, 0.040, 0.25, False),
+        ((0.0, None, 0.460), (0.0, -0.30, -1.0), 0.165, 0.120, 0.046, 0.25, False),
+    ],
+}
+CHUNKS["tail"] = [
+    # 尾の下の縁の房: 尾の脇の下寄りから尾に沿って後ろ下へ (基準画の尾の下の縁のぎざぎざ)
+    ((None, 0.440, 0.420), (0.15, 0.55, -0.85), 0.150, 0.085, 0.034, -0.10, False),
+    ((None, 0.510, 0.340), (0.15, 0.50, -0.90), 0.130, 0.072, 0.030, -0.10, True),
+]
+CHUNK_REGIONS = ("cheek", "neck", "chest", "tail")
+CHUNK_CONFORM["tail"] = True
+CHUNK_OUT["tail"] = 0.30
+CHUNK_WEIGHTS["tail"] = lambda co: weights_for(co, [("tail1", 1), ("tail2", 1), ("tail3", 1)])
+CHUNK_SHARP = 60  # 上の稜だけ硬く、両の縁はなめらかに (縁まで硬いと 1 本ずつが破片の板に見えた)
+RUFF_OFF = 0.045  # 首の殻を首の横・喉で厚くし、頬から胸への量を殻で持つ (塊は縁の尖りだけ)
+TAIL_SHARP = FACET  # 尾も胴と同じ角で面を立てる (なめらかな尾が胴の面の立った塗りと別の部品に見えた)
+CHUNK_CONFORM["neck"] = True
+CHUNK_OUT["neck"] = 0.25  # 首の横は寝かせる (立てると板に見える)
+CHUNK_WEIGHTS["neck"] = lambda co: weights_for(co, [("neck2", 0.8), ("neck1", 1.0), ("head", 0.3)])
+
+# 尾: 付け根を尻の背の線 (y 0.33 で z 0.59、0.37 で 0.55) の延長に (尾の上の線 = 中心 + 半径を背の線より 1〜2 cm 上に)。
+# 付け根を太く (5 回目は付け根が細くくびれ、尻の下から別の部品が出て見えた)、先へ細る
+TAIL6_PATH = [(0, 0.27, 0.535), (0, 0.37, 0.479), (0, 0.46, 0.41), (0, 0.545, 0.332), (0, 0.61, 0.22)]
+TAIL6_RADII = [0.100, 0.096, 0.090, 0.068, 0.0]
+TAIL2_PATH, TAIL2_RADII = TAIL6_PATH, TAIL6_RADII
+
+_min_z5 = min_z
+
+
+def min_z(ob):
+    """近 LOD (wolf) を渡されたら群れ LOD (wolf_lod1) も見て、低い方を返す"""
+    z = _min_z5(ob)
+    lod1 = bpy.data.objects.get(ob.name + "_lod1")
+    return min(z, _min_z5(lod1)) if lod1 is not None else z
 
 
 # ---------------------------------------------------------------- 本体

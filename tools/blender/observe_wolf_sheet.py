@@ -160,4 +160,14 @@ if os.path.exists(os.path.join(raw, "head-q34.png")):
                              for v in heads], 320))
         rows.append(row([label(trim(rimg(f"bust-{v}.png")), f"{LB_AFTER} bust {v}") for v in heads], 320))
     stack(rows, gap=10).save(os.path.join(out, f"{PRE}-head.png"))
+# (灰狼の 6 回目で追加) 尻と尾の寄り (tail-*) があれば、基準画の尾 (TAIL_BOX で切る) と前後を <prefix>-tail.png に並べる
+if os.path.exists(os.path.join(raw, "tail-rear34.png")):
+    TAIL_BOX = {"side": (50, 130, 330, 340), "q34": (915, 120, 1100, 300), "run": (700, 470, 960, 600)}
+    tails = ["rear34", "side", "top"]
+    rows = [row([label(REF.crop(b), f"ref tail {k}") for k, b in TAIL_BOX.items()], 300)]
+    if BEFORE and os.path.exists(os.path.join(BEFORE, "tail-rear34.png")):
+        rows.append(row([label(trim(Image.open(os.path.join(BEFORE, f"tail-{v}.png")).convert("RGB")), f"{LB_BEFORE} tail {v}")
+                         for v in tails], 300))
+    rows.append(row([label(trim(rimg(f"tail-{v}.png")), f"{LB_AFTER} tail {v}") for v in tails], 300))
+    stack(rows, gap=10).save(os.path.join(out, f"{PRE}-tail.png"))
 print("sheets written to", out)

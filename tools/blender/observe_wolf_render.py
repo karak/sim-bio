@@ -173,6 +173,11 @@ bust_sel = lambda p: p.y < -0.22 and p.z > 0.30  # noqa: E731
 for k, (az, el) in (("q34", (36, 8)), ("side", (6, 5)), ("front", (90, 5))):
     set_action(None, 0)
     shoot(f"bust-{k}.png", az, el, pad=1.10, sel=bust_sel)
+# (灰狼の 6 回目で追加) 尻と尾の寄り: 背から尾への毛並みのつながりを見るため、腰から尾の先までを枠に入れる
+tail_sel = lambda p: p.y > 0.05 and p.z > 0.15  # noqa: E731
+for k, (az, el) in (("rear34", (218, 10)), ("side", (6, 5)), ("top", (240, 35))):
+    set_action(None, 0)
+    shoot(f"tail-{k}.png", az, el, pad=1.10, sel=tail_sel)
 if ONLY == "views":
     sys.exit(0)
 set_action(None, 0)
