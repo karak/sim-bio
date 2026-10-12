@@ -56,7 +56,7 @@
 | C4 | D1 は無料枠を超えるとクエリが失敗する(2026-09-01 から)。1 データベース 500 MB、1 行 2 MB | [D1 limits](https://developers.cloudflare.com/d1/platform/limits/)、[changelog](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/) |
 | C5 | 本体は版の中でだけ決定論的。係数を変えると、過去の年代記の結末が変わる | コード。年代記に `simVersion` を刻む |
 | C6 | **今の本体はフレームの刻みに依存する**(下の注) | `src/core/runner.ts`・`src/scenario/ScenarioRunner.ts`・`src/main.ts` |
-| C7 | 既存の型に合わせる: `LogSink`/`LogRecord`、`Command`、`SaveData`、`World.dispatch`、`ScenarioRunner.intervene`、`src/ui/clicks.ts`(台本と UI が同じ入口) | コード |
+| C7 | 既存の型に合わせる: `LogSink`/`LogRecord`、`Command`、`SaveData`、`World.dispatch`、`ScenarioRunner.intervene`、`src/ui/clicks.ts` (M27-05 で `src/simulation/commands.ts` へ)(台本と UI が同じ入口) | コード |
 | C8 | Workers と D1 の日次の枠はアカウント単位 | pricing。このゲーム専用の Cloudflare アカウントを使う |
 
 C6 の注(opus の案が見つけ、コードで確かめた):
@@ -460,7 +460,7 @@ in のスコープは issues/M19-04〜12 に起こした(既存の M19-01・02 �
 | 島の名前は年代記の id から作る(seed からではない) | 今の石板はどれも seed 42 で、seed からだと同じ石板の島がみな同じ名前になる | M19-09 |
 | 碑文のカタログは `/data/inscriptions.json` を実行時に読む | Vite は publicDir の JSON を import させない | M19-09 |
 | `PublishResult` の `queued` に id を持たせる。`report` は `not_human`・`slow_down` も返す | outbox の再送で同じ id を示す。通報にも人間確認と回数制限がかかる | M19-09 |
-| 年代記の型は `src/harbor/chronicle.ts`、港の約束は `src/harbor/contract.ts` に分ける | 1 つにすると rename として追えず、既存コメントが削除に見える。記録・保存・再生は港に出さなくても年代記を使う | M19-07 |
+| 年代記の型は `src/harbor/chronicle.ts` (M27-02 で `src/chronicle/chronicle.ts` へ)、港の約束は `src/harbor/contract.ts` に分ける | 1 つにすると rename として追えず、既存コメントが削除に見える。記録・保存・再生は港に出さなくても年代記を使う | M19-07 |
 | シナリオの続きからは、SaveData に本体の数え(memory)を足し、runner の状態(RunnerState)を持ち出す | `World.restore` だけでは閉じた年のうちに食い違った。年代記の回し直しは遅すぎる(§8-3) | M19-14 |
 | 照合は「年表を読む」の明示の操作 | 再生は Chromium の Worker で size 64 の 300 年が 73.6 秒 | M19-06 |
 | Workers Logs の無料の保持は 3 日・1 日 200,000 件 | docs で確かめた(7 日は Paid) | M19-02 |

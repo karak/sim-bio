@@ -8,15 +8,8 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
-  {
-    // シミュレーション層は描画ライブラリに依存させない
-    files: ['src/simulation/**'],
-    rules: { 'no-restricted-imports': ['error', { patterns: forbidden('simulation') }] },
-  },
-  // 層の向き (M27-01)。表は layering.config.mjs (tests/unit/architecture.test.ts も同じ表を読む)。simulation は上の塊に足してある (同じ rule を 2 度書くと後の塊が前を消すため)
-  ...Object.keys(FORBIDDEN)
-    .filter((layer) => layer !== 'simulation')
-    .map((layer) => ({ files: [filesOf(layer)], ignores: ENTRY, rules: { 'no-restricted-imports': ['error', { patterns: forbidden(layer) }] } })),
+  // 層の向き (M27-01)。表は layering.config.mjs (tests/unit/architecture.test.ts も同じ表を読む)。シミュレーション層が描画ライブラリ (three) を読まないのも表 (PACKAGES) から導く
+  ...Object.keys(FORBIDDEN).map((layer) => ({ files: [filesOf(layer)], ignores: ENTRY, rules: { 'no-restricted-imports': ['error', { patterns: forbidden(layer) }] } })),
 );
 
 /** その層が読んではいけない層を、no-restricted-imports の patterns (group と message) に写す */

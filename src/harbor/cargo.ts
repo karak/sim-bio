@@ -8,7 +8,7 @@ import { spawnCommand } from '../simulation/commands';
 /**
  * 空の舟の積荷 (M19-10、設計書 B5・§6.3)。持ち出し (simulation/ship.ts の exportCargo) から港へ流す積荷を作り、
  * 漂着を受け取る島で、積荷の着く浜のセルを決める。どちらも純粋な関数。
- * 受け取った積荷は放流の命令 (ui/clicks.ts の receiveCargoClick) として本体の dispatch の門を通り、年代記に載る
+ * 受け取った積荷は放流の命令 (この cargo.ts の receiveCargoClick。組み方は simulation/commands.ts の spawnCommand) として本体の dispatch の門を通り、年代記に載る
  */
 
 /** 島が積荷を受け取れたか。budget は石板の星の力が足りない、refused は判定の後・訪問など介入を受けない島 */

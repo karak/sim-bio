@@ -21,7 +21,7 @@
 
 **直したほうがよい所見(優先順)**:
 
-1. **周辺モジュールの循環と向き**(Evolution・Development): `harbor → ui/clicks`、`app ↔ ui`、`harbor ↔ persist`、`chronicle ↔ harbor`。`Chronicle` の型が `harbor/` の下にあるのが根で、年代記の意味を「港の wire」に縛っている。§6 の R1。
+1. **周辺モジュールの循環と向き**(Evolution・Development): `harbor → ui/clicks` (M27-05 で `simulation/commands.ts` へ)、`app ↔ ui`、`harbor ↔ persist`、`chronicle ↔ harbor`。`Chronicle` の型が `harbor/` の下にあるのが根で、年代記の意味を「港の wire」に縛っている。§6 の R1。
 2. **合成の根の肥大**(Development): `src/main.ts` は設計書で「配線のみ」だが 623 行・閉包 35 個で、再開・確かめ・介入・訪問・積荷の規則を抱える。`src/observe/view.ts` も 1 関数 835 行。§6 の R2。
 3. **文書とコードのずれ**(Development・Operational): 設計書 09-19 は「保存は JSON ファイルだけ」「E2E はスモーク 1 本」のまま。Cloudflare 09-26 §6.1 の最悪の D1 書き「約 43%」はコードの注(`worker/src/policy.ts:12`)では 88,000 行(88%)。§6 の R3。
 4. **受け入れたリスクの明文化**(Security): confirm・outcomes は人間確認なしで、回避率は送り手あたり 10 回/分まで汚せる。順位を作らない設計なので動機は薄いが、ADR に「受け入れたリスク」として書いておく。§6 の R4。
@@ -73,7 +73,7 @@
 
 | ID | 機能 | 優先度 | 状態 | 証跡 |
 |---|---|---|---|---|
-| F1 | 自由モード: 種を放つ・気候・災害・時間操作(0/1/10/100/1000x) | Must | 満 | `Command` 9 種(`simulation/types.ts`)、`core/runner.ts Speed`、`ui/clicks.ts` |
+| F1 | 自由モード: 種を放つ・気候・災害・時間操作(0/1/10/100/1000x) | Must | 満 | `Command` 9 種(`simulation/types.ts`)、`core/runner.ts Speed`、`ui/clicks.ts` (M27-05 で `simulation/commands.ts` へ) |
 | F2 | 石板: 予定命令・星の力・警告・年表・判定(alive / dead / escaped) | Must | 満 | `ScenarioRunner.update` を年の境目ごとに、`judge.ts`、`warnings.ts`、`tests/slow/scenarios.playthrough`(放置 dead・素朴 dead・配分 alive) |
 | F3 | 文明(7 段階)・信仰・祈り・勅令・気象塔・迎撃・空の舟 | Must | 満 | `simulation/{civilization,faith,prayer,edict,unrest,weatherTower,works,ship}.ts` |
 | F4 | 観察画面(3D、集落と生き物、昼夜・天候・知らせ) | Must(M22 で最優先) | 満 | `observe/entry.ts` が初回に遅延読み込み。LOD・インポスター・VAT・動的解像度(M23) |
@@ -98,7 +98,7 @@
 | Q9 | 試しやすさ(契約は純粋関数、Worker はローカル D1) | Should | 満 | 単体 132 ファイル、worker 5 ファイル(miniflare D1)、E2E 20 spec、e2e-cloudflare 1 |
 | G1 | 本体の純粋性(`World` は three.js・DOM・fetch を知らない。規則は型付き配列を受ける純粋関数) | Must | 満 | `src/simulation` の外部 import は `simplex-noise` と `core/log/types`(型)だけ |
 | G2 | 本体の描画非依存(SceneView と Hud は `snapshot()` を読むだけ、書き込みは `Command` だけ) | Must | 満 | `render → simulation` のみ。`snapshot()` はコピーしない(読み取り専用は慣習) |
-| G3 | 通し実行の台本と UI の手の同一(「台本が UI より 10 倍強い」を再発させない) | Must | 満 | `src/ui/clicks.ts` を台本も使う(M21-01)。環 1・0.5・力 4 の規約(issues/README) |
+| G3 | 通し実行の台本と UI の手の同一(「台本が UI より 10 倍強い」を再発させない) | Must | 満 | `src/ui/clicks.ts` (M27-05 で `src/simulation/commands.ts` へ) を台本も使う(M21-01)。環 1・0.5・力 4 の規約(issues/README) |
 | G4 | 受入の機械化(人の 1 周 13 分 → 1〜4 分) | Must | 満 | ADR 0001。lens(覆い・画面内・切れ・コントラスト 4.5・11px)、要素ごとの基準画(2%、細い板 12%)、`judge.py` の 3 票 |
 | G5 | 版の中でだけの決定論(係数を変えたら `SIM_VERSION` を上げる) | Must | 満 | golden replay が上げ忘れを落とす。旧版の年代記は要約だけ(C5) |
 | G6 | 読みやすさ・到達性(コントラスト、字の大きさ、`prefers-reduced-motion`) | Should | 満 | `tests/e2e/lens.ts`、`graphDescription.ts`(グラフの文の説明)、Title・知らせ・観察入口が reduced-motion を見る |
@@ -167,7 +167,7 @@
 | # | 利用者 | きっかけ | 結果 | 通るコンテナ・部品 |
 |---|---|---|---|---|
 | UC1 | 見守り手 | `/` を開く | タイトル → 自由モードの島(続きがあれば続き) | ゲームクライアント(`bootRouteOf` → `showTitle` → `World.create / restore`)、手元の保存 |
-| UC2 | 見守り手 | 種を放つ・雨・災害・時間 | 本体が次の tick で命令を適用し、グラフ・レイヤーが動く | `ui/clicks.ts` → `intervene` → `World.dispatch` → `stepOnce` → `SceneView.update`・`Hud.update` |
+| UC2 | 見守り手 | 種を放つ・雨・災害・時間 | 本体が次の tick で命令を適用し、グラフ・レイヤーが動く | `ui/clicks.ts` (M27-05 で `simulation/commands.ts` へ) → `intervene` → `World.dispatch` → `stepOnce` → `SceneView.update`・`Hud.update` |
 | UC3 | 見守り手 | `?scenario=sinking` で石板を背負う | 予定の滅びが年ごとに入り、力で介入、判定が出る | `ScenarioRunner`、`stepByYear`、`recordChronicle`、`createScenarioAutosave` |
 | UC4 | 見守り手 | 観察画面に入る | 集落と生き物を 3D で眺める(本体は 10x まで) | `observe/entry.ts` が `view.ts` を遅延読み込み、`setSnapshot` |
 | UC5 | 見守り手 | 枠へ保存・読込・新しい島 | 確かめのあと、舞台に合う枠だけを読む(違う舞台なら移る) | `planOp → runPlan`、`SlotSave`、sessionStorage の pending slot |
@@ -444,7 +444,7 @@ flowchart BT
 |---|---|---|
 | chronicle ↔ harbor | `harbor/contract.ts` → `chronicle/digest`、`chronicle/{digest,replay,recorder,playback,replayInWorker}` → `harbor/chronicle`(型) | **`Chronicle` の型と `parseChronicle` が `harbor/` の下にある**。年代記の意味(記録・再生の単位)が港の wire の都合に置かれている |
 | harbor ↔ persist | `harbor/client.ts` → `persist/harborStore`(型)、`persist/{harborStore,islandStore,scenarioSave,slotSave}` → `harbor/{chronicle,contract}` | 同上(保存が年代記の型を港から借りる) |
-| harbor ↔ ui | `harbor/cargo.ts` → `ui/clicks.receiveCargoClick`、`harbor/client.ts` → `ui/clicks.visitHref`、`ui/Harbor.ts` → `harbor/client` | 命令の作り方(clicks)と URL の作り方(visitHref)が `ui/` にある |
+| harbor ↔ ui | `harbor/cargo.ts` → `ui/clicks.receiveCargoClick` (今は `harbor/cargo.ts`)、`harbor/client.ts` → `ui/clicks.visitHref` (今は `harbor/links.ts`)、`ui/Harbor.ts` → `harbor/client` | 命令の作り方(clicks)と URL の作り方(visitHref)が `ui/` にある |
 | app ↔ ui | `app/place.ts` → `ui/confirmAsk`、`ui/Hud.ts` → `app/place.slotControlsOf` | `Ask` の型が UI に、枠の可否の規則が app に |
 
 `simulation`・`scenario`・`render` は清潔(`simulation` の外部 import は `simplex-noise` と `core/log/types` だけ)。

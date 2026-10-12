@@ -283,7 +283,7 @@ export function populationAround(pops: Float32Array, home: number, elevation: Fl
   return sum;
 }
 
-/** WorldConfig.civilization の形 (main.ts がシナリオの start.civilization をこの形へ解決する) */
+/** WorldConfig.civilization の形 (app/worldConfig.ts の scenarioConfigOf がシナリオの start.civilization をこの形へ解決する) */
 export type CivilizationConfig = {
   speciesId: string;
   start?: {

@@ -13,7 +13,7 @@ import { resumeIsland } from '../fixtures/resumeIsland';
 const island = resumeIsland('test-quick', 5);
 const head = { simVersion: SIM_VERSION, scenarioId: island.def.id, seed: island.config.seed };
 
-/** main.ts と同じ組み立ての石板を n tick 進め、介入を 1 つ受けた枠の包みを返す */
+/** app/scenarioSession.ts と同じ組み立ての石板を n tick 進め、介入を 1 つ受けた枠の包みを返す */
 function scenarioSlot(n: number): Extract<SlotSave, { stage: 'scenario' }> {
   const world = World.create(island.config, { log: createMemorySink() });
   const runner = createScenarioRunner(island.def, world, { ticksPerYear: island.config.ticksPerYear });

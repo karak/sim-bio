@@ -25,7 +25,7 @@ const head = { simVersion: SIM_VERSION, scenarioId: island.def.id, seed: island.
 
 type Logged = { level: string; event: string; tick: number } & Record<string, unknown>;
 
-/** main.ts と同じ組み立ての石板。介入は記録器を通す */
+/** app/scenarioSession.ts と同じ組み立ての石板。介入は記録器を通す */
 function scenarioIsland() {
   const world = World.create(island.config, { log: createMemorySink() });
   const runner = createScenarioRunner(island.def, world, { ticksPerYear: island.config.ticksPerYear });

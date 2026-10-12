@@ -89,7 +89,7 @@ async function boot(): Promise<void> {
   const seeded = bootSeedOf(location.search, scenario !== null);
   if (seeded.search !== null) nav.replace(seeded.search);
   const config = scenarioConfigOf(base, species, scenario);
-  // 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない (recorder を作らない)。港から引いた命令を記録の tick で打ち直す
+  // 今いる舞台 (M27-05): 自由・石板・訪問。訪問 (他人の島、M19-09) では介入を受けず、年代記を記録せず、港から引いた命令を記録の tick で打ち直す (app/scenarioSession.ts)
   const stage = stageOf(booted);
   /** 最後に遊んだ舞台の印 (M24-05)。舞台に入った時と自動保存の時に書く。訪問 (他人の島) では書かない */
   const markStage = () => {
@@ -211,7 +211,7 @@ async function boot(): Promise<void> {
     saveChronicle();
     flushViaBeacon();
   });
-  // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは操作画面の速さの列を押して揃える
+  // 観察画面 (M22-08): 入っている間は 2D の地図を描かず、snapshot を観察画面へ渡す。速さは loop に言い、操作画面の速さの札は HUD が追う (M27-05)
   const observe = createObserveEntry(app, {
     names: speciesNames,
     getSpeed: () => loop.getSpeed(),

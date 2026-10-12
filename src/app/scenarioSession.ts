@@ -22,14 +22,14 @@ import type { ScenarioSession, Session } from './session';
 import type { Stage } from './stage';
 
 /**
- * 石板の組み立て (M27-03)。runner・介入の年代記・石板の途中の島の自動保存を作って Session に置き、判定の後の港の仕事と、石板を始め直す手順と、訪問の再生を繋ぐ。
- * 作ったものは Session に置くので、何も返さない
+ * 石板の組み立て (M27-03)。runner・介入の年代記・石板の途中の島の自動保存を作り、判定の後の港の仕事と、石板を始め直す手順と、訪問の再生を繋ぐ。
+ * 作ったものは ScenarioSession として返し、入口が Session.scenario に置く (M27-05)
  */
 
 export type ScenarioSessionDeps = {
   session: Session;
   config: WorldConfig;
-  /** 他人の島を訪れている (M19-09)。介入を受けず、年代記を記録しない */
+  /** 今いる舞台 (石板か訪問)。訪問 (他人の島、M19-09) では介入を受けず、年代記を記録しない */
   stage: Exclude<Stage, { kind: 'free' }>;
   /** 石板の定義。開発用の近道 (M19-16) では打ち切る年を縮めた定義 (URL だけで決まる) */
   def: ScenarioDef;
@@ -41,7 +41,7 @@ export type ScenarioSessionDeps = {
   markStage: () => void;
   resumed: Restored | null;
   fromSlot: boolean;
-  loop: Pick<Runner, 'setSpeed'>;
+  loop: Pick<Runner, 'setSpeed' | 'getSpeed'>;
   tablet: { showVerdict(verdict: Verdict, cargo?: Hold): void; hideVerdict(): void; flash(): void };
   harbor: {
     offerPublish(island: { chronicle: Chronicle; digest: Digest }): void;
@@ -50,6 +50,9 @@ export type ScenarioSessionDeps = {
   };
   observe: { enter(): Promise<void> };
 };
+
+/** 訪問で 3D 観察画面が描けるのを待つ上限 (M19-19) */
+const OBSERVE_WAIT_MS = 10_000;
 
 export function createScenarioSession(deps: ScenarioSessionDeps): ScenarioSession {
   const { session, config, stage, def, forced, log, persistLog, store, markStage, resumed, fromSlot, loop, tablet, harbor, observe } = deps;
@@ -129,11 +132,18 @@ export function createScenarioSession(deps: ScenarioSessionDeps): ScenarioSessio
   let playback: Playback | null = null;
   const step = stage.kind === 'visit' ? (n?: number) => playback?.step(n) : (n?: number) => stepByYear(session.world, scenarioRunner, n);
   if (stage.kind === 'visit') {
-    void harbor.visitChronicle().then((c) => {
+    void harbor.visitChronicle().then(async (c) => {
       if (!c) return;
+      // 他人の島を 0 年から見せるため、3D 観察画面が描けてから再生を始める (M19-19)。描けない・遅いときは 2D のまま始める
+      const before = loop.getSpeed();
+      const shown = new Promise<'shown' | 'failed'>((resolve) =>
+        requestAnimationFrame(() => observe.enter().then(() => resolve('shown'), () => resolve('failed'))),
+      );
+      const waited = await Promise.race([shown, new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), OBSERVE_WAIT_MS))]);
+      if (waited !== 'shown') note('warn', 'visit.observe-unavailable', { reason: waited, waitMs: OBSERVE_WAIT_MS });
       playback = createPlayback(session.world, scenarioRunner, c.commands);
-      loop.setSpeed(10);
-      requestAnimationFrame(() => void observe.enter());
+      // 待つ間に訪れた人が速さを選んだ (観察画面を閉じて 100x など) なら、それを残す
+      if (loop.getSpeed() === before) loop.setSpeed(10);
     });
   }
   return {

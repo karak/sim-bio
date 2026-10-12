@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import type { Chronicle } from '../../src/chronicle/chronicle';
@@ -8,14 +8,15 @@ import type { IslandStore } from '../../src/persist/islandStore';
 import { SIM_VERSION } from '../../src/simulation/version';
 import { createScenarioSession, type ScenarioSessionDeps } from '../../src/app/scenarioSession';
 import { sessionOf } from '../../src/app/session';
+import type { Speed } from '../../src/core/runner';
 import { resumeIsland } from '../fixtures/resumeIsland';
 
 const island = resumeIsland('test-quick', 5);
 
 /** 石板の手を組む。置き場への書き込みと、港から届く訪問の年代記 (arrive で渡す) を残す */
-function setup(o: { visit?: boolean; fromSlot?: boolean } = {}) {
+function setup(o: { visit?: boolean; fromSlot?: boolean; enter?: () => Promise<void> } = {}) {
   const saved: number[] = [];
-  const speeds: number[] = [];
+  const speeds: Speed[] = [];
   const store = { saveScenario: async (_id: string, s: { save: { tick: number } }) => void saved.push(s.save.tick) } as unknown as IslandStore;
   let arrive: (c: Chronicle | null) => void = () => undefined;
   const session = sessionOf(World.create(island.config, { log: createMemorySink() }));
@@ -31,17 +32,17 @@ function setup(o: { visit?: boolean; fromSlot?: boolean } = {}) {
     markStage: () => undefined,
     resumed: null,
     fromSlot: o.fromSlot ?? false,
-    loop: { setSpeed: (s) => void speeds.push(s) },
+    loop: { setSpeed: (s) => void speeds.push(s), getSpeed: () => speeds.at(-1) ?? 1 },
     tablet: { showVerdict: () => undefined, hideVerdict: () => undefined, flash: () => undefined },
     harbor: {
       offerPublish: () => undefined,
       settle: () => undefined,
       visitChronicle: () => new Promise((resolve) => (arrive = resolve)),
     },
-    observe: { enter: async () => undefined },
+    observe: { enter: o.enter ?? (async () => undefined) },
   };
   const scenario = createScenarioSession(deps);
-  return { session, scenario, saved, speeds, arrive: (c: Chronicle | null) => arrive(c) };
+  return { session, scenario, saved, speeds, setSpeed: deps.loop.setSpeed, arrive: (c: Chronicle | null) => arrive(c) };
 }
 
 const head = { simVersion: SIM_VERSION, scenarioId: island.def.id, seed: island.config.seed };
@@ -94,6 +95,57 @@ describe('石板の手 createScenarioSession (M27-05)', () => {
     expect(speeds).toEqual([]);
     arrive({ ...head, v: 1, commands: [] } as unknown as Chronicle);
     await new Promise((r) => setTimeout(r, 0));
+    expect(speeds).toEqual([10]);
+  });
+
+  it('訪問の再生は 3D 観察画面が描けてから始める (M19-19: 他人の島を 0 年から見せる)', async () => {
+    let shown: () => void = () => undefined;
+    const { session, scenario, speeds, arrive } = setup({ visit: true, enter: () => new Promise((r) => (shown = r)) });
+    arrive({ ...head, v: 1, commands: [] } as unknown as Chronicle);
+    await new Promise((r) => setTimeout(r, 50));
+    scenario.step(5);
+    expect(session.world.snapshot().tick).toBe(0);
+    expect(speeds).toEqual([]);
+    shown();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(speeds).toEqual([10]);
+    scenario.step(5);
+    expect(session.world.snapshot().tick).toBe(5);
+  });
+
+  it('3D を待つ間に訪れた人が速さを選んだら、描けた後も 10x で上書きしない (M19-19)', async () => {
+    let shown: () => void = () => undefined;
+    const { scenario, session, speeds, setSpeed, arrive } = setup({ visit: true, enter: () => new Promise((r) => (shown = r)) });
+    arrive({ ...head, v: 1, commands: [] } as unknown as Chronicle);
+    await new Promise((r) => setTimeout(r, 50));
+    setSpeed(100);
+    shown();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(speeds).toEqual([100]);
+    scenario.step(5);
+    expect(session.world.snapshot().tick).toBe(5);
+  });
+
+  it('3D が 10 秒で描けなければ、2D のまま再生を始める (M19-19)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { scenario, session, speeds, arrive } = setup({ visit: true, enter: () => new Promise(() => undefined) });
+      arrive({ ...head, v: 1, commands: [] } as unknown as Chronicle);
+      await vi.advanceTimersByTimeAsync(9_900);
+      expect(speeds).toEqual([]);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(speeds).toEqual([10]);
+      scenario.step(5);
+      expect(session.world.snapshot().tick).toBe(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('3D を開くのに失敗しても、待たずに 2D のまま再生を始める (M19-19)', async () => {
+    const { speeds, arrive } = setup({ visit: true, enter: () => Promise.reject(new Error('webgl')) });
+    arrive({ ...head, v: 1, commands: [] } as unknown as Chronicle);
+    await new Promise((r) => setTimeout(r, 50));
     expect(speeds).toEqual([10]);
   });
 

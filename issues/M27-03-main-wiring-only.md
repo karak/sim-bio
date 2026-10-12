@@ -65,3 +65,4 @@ evidence:
     - M27-03 より前から場所の違うもの (この票で動かしていない): src/ui/Hud.ts:91「main.ts の planOp」(planOp は app/place.ts)、src/ui/Hud.ts:368「main.ts の onNewIsland が確かめのダイアログで」
   - タイトル (title.ts) と石板の組み立て (scenarioSession.ts) と onFrame (frame.ts) には単体試験を足していない。E2E title・scenarioSave・verdict・harbor・chronicle・observe が通しで見る。
 - 2026-10-11: ユーザーが票の審査で承認 (done)。
+- 2026-10-11: 上の古いコメント 15 件をユーザーの承認で今の置き場 (app/worldConfig.ts の scenarioConfigOf・app/scenarioSession.ts・app/frame.ts の onFrame・app/place.ts の planOp) に書き換えた。Hud.ts:368 の「main.ts の onNewIsland」は今も main.ts にあるので残し、confirm.ts・confirmAsk.ts の置き場だけ直した。

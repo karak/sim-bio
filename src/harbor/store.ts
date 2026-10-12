@@ -10,7 +10,7 @@ export type Outbound = { id: ChronicleId; chronicle: Chronicle; digest: Digest; 
 export type Mark = { kind: 'received'; id: CargoId } | { kind: 'counted'; id: ChronicleId };
 
 /**
- * 港のクライアントの手元の置き場 (設計書 §3.1 の outbox・keys)。島の置き場 (islandStore) と同じ DB の別の store に置く。
+ * 港のクライアントの手元の置き場 (設計書 §3.1 の outbox・keys)。島の置き場 (persist/islandStore) と同じ DB の別の store に置く (ここは港の側の port。実装は persist/harborStore.ts)。
  * outbox の値は境界として港のクライアントがカタログで parse し直すので、ここは unknown で返す
  */
 export type HarborStore = {

@@ -1,7 +1,7 @@
 import type { SlotLoadPlan } from '../persist/slotSave';
 
 /**
- * やり直しの効かない操作 (M21-04)。どれに確かめを付け、何と尋ねるかをここだけで決める (ダイアログの DOM は confirm.ts)。
+ * やり直しの効かない操作 (M21-04)。どれに確かめを付け、何と尋ねるかをここだけで決める (ダイアログの DOM は ui/confirm.ts)。
  * 一覧と決めた理由は issues/M21-04-destructive-confirm.md の作業ログ
  */
 export type Risky =

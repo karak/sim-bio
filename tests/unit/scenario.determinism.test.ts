@@ -48,7 +48,7 @@ const fullDigest = (world: World, runner: ScenarioRunner) =>
   sha256({ tick: world.snapshot().tick, save: world.serialize(), timeline: runner.timeline(), verdict: runner.verdict() });
 
 /**
- * main.ts と同じ組み立て: rAF の runner が stepByYear で進め、onFrame が毎フレーム runner.update を呼び、onVerdict が速度を 0 にする。
+ * app/scenarioSession.ts と同じ組み立て: rAF の runner が stepByYear で進め、onFrame (app/frame.ts) が毎フレーム runner.update を呼び、onVerdict が速度を 0 にする。
  * opening は最初のフレームの前に打つ介入。clicks は s.tick が atTick に達した最初のフレームで打つ介入で、打った tick を記録して返す
  */
 function playByFrames(def: ScenarioDef, speed: Speed, intervals: readonly number[], opts: { opening?: Command; clicks?: readonly { atTick: number; command: Command }[] } = {}) {

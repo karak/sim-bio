@@ -1,7 +1,7 @@
 ---
 id: M21-08
 title: 人が見る画を E2E で撮り、受入の画面に並べる
-status: review
+status: done
 milestone: M21
 plan: docs/design/2026-09-29-acceptance-redesign.md
 depends_on: [M21-06]
@@ -33,7 +33,7 @@ E2E はもうその画面に着いている(harbor.spec・cellHighlight.spec・c
 - [x] 撮るもの: 港の知らせと板の文(閉港・出港のリンク・回避率の行)、漂着の目印と浜のセルの密度、確かめの板(新しい島・枠の上書き・判定の出た島を離れる)、選んだセル(遠いカメラ・寄ったカメラ・丘に隠れたセル)
 - [x] 撮る前に、画に写すものが見えていることを内容で確かめる(文は toHaveText、目印は HUD の中の文)。見えないまま撮った画を人に見せない
 - [x] `ACCEPTANCE_DIR` が無いと skip になり、`pnpm run test:e2e` の数と時間を変えない
-- [ ] 撮る手順は審査台で基準画を承認し (`pnpm run shots:update`)、llm の手順は `pnpm run judge` で判じる。人の 1 周の分が減ったら TUR の行の steps と minutes を直す
+- [x] 撮る手順は審査台で基準画を承認し (`pnpm run shots:update`)、llm の手順は `pnpm run judge` で判じる。人の 1 周の分が減ったら TUR の行の steps と minutes を直す
 
 ## 作業ログ
 
@@ -57,3 +57,5 @@ E2E はもうその画面に着いている(harbor.spec・cellHighlight.spec・c
 - 人の 1 周の TUR-001・TUR-002 の steps と minutes はまだ直していない (直しの案はユーザーの判断待ち)
 - 開発の板 (?dev=1) は HUD の「新しい島」を覆う (Playwright の押しが開発の板に取られた)。開発のときだけ
 - 島をドラッグで回すと、離した所のセルが選ばれる (canvas の click)。選んだセルが回すたびに動く
+- 2026-10-12: 審査台の回 m21-08-uat-20261011-1944 で AC1 の 4 項目(HBR-006・CRG-005・CNF-002・SEL-003)と AC4 の画面をユーザーが合格(19:50)。受入を全部チェックして done
+- 2026-10-12 追記: 上の「TUR の steps と minutes はまだ直していない」は古い。M25-08 (5abf08b、2026-10-02) が TUR-002 を retired にし、TUR-001 を手触りの 1 手順・1 分に書き直し済み。別の票は起こさない
