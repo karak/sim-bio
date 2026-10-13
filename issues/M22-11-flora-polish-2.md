@@ -1,7 +1,7 @@
 ---
 id: M22-11
 title: 草と木の次の磨き上げ (木の肌のテクスチャ・切り株・丸太を基準画の水準へ)
-status: todo
+status: in_progress
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-03]
@@ -33,3 +33,9 @@ M22-03 は 2026-10-11 の審査台 (回 m22-uat-20261011-1106、M22-03-R1-grass-
 ## 作業ログ
 
 - 2026-10-11: 起票 (M22-03 の審査台のメモから)。
+- 2026-10-13: 着手 (in_progress)。基準画と今の差を項目に書き出した (docs/design/qa/observe/environment.md の「追記(M22-11 …)」の表、8 項目: 幹の肌・陰の色・株の縁・木口・丸太の肌・丸太の積み方・株の胴と根・森の木の幹)。
+  直したこと: 樹皮の筆致の升 (`src/observe/render/barkDetail.ts`) を焼いた材質 (`bake.ts`) が樹皮の UV で読み、筋の明暗・色と法線の揺れを足す。木口には細い年輪。株の縁を棘の冠から帯の裂けに (`STUMP_RIM`)。木口の色を暖かく。三角形・draw call は増やしていない (株 1,662 → 1,642)。
+  `npm run bench:observe` (1280 × 720、Apple M4、前 05c8d81): 三角形 (千) / draw call 前 → 後 集落 399.9 / 97 → 399.9 / 97・船台 251.1 / 92 → 251.0 / 92・群れ 230.1 / 78 → 230.1 / 78・林 318.8 / 91 → 318.8 / 91・狼 347.5 / 103 → 347.5 / 103・海岸 255.4 / 74 → 255.4 / 74。
+  fps 前 → 後 (2 回) 356 → 353 / 357・392 → 373 / 374・442 → 431 / 440・337 → 340 / 340・352 → 348 / 339・413 → 406 / 408 (船台だけ 5% ほど低い、原因は切り分けていない)。
+  比較画 `docs/design/qa/observe/trees5-*.png`、審査台の回 `.claude/localreview/m22-11-flora-20261013-0904/` (item.json は取り込み待ち)。撮る台 `tools/flora-shots.ts`。単体テスト `tests/unit/observe.barkDetail.test.ts`・`tests/unit/observe.bake.test.ts`。
+  まだ遠いところ: 幹は前からの頂点色の濃い斑が強く基準画より暗い、木口の太い輪が残る、丸太の太さ・端の形と森の木の暗い幹は触っていない (environment.md の所見)。

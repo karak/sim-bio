@@ -13,6 +13,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createToonMaterial } from './toon';
+import { BARK_TILE_V, barkDetailTexture } from './barkDetail';
 
 /**
  * 材質ごとに分かれたメッシュを 1 つに焼く (M22-03 の draw call 予算)。
@@ -35,6 +36,68 @@ const sharedLeaf = new Map<number, MeshToonMaterial>();
 export const THIN_LEAF = /^flora_under/;
 const NORMAL_NO_FLIP = ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
 
+/**
+ * (M22-11 で追加) 樹皮と木口の材質。名前で見分け、焼いた形の頂点に aWood = (u, v, 種類) を持たせる (種類 1 = 樹皮、2 = 木口、0 = それ以外)。
+ * 樹皮の UV は Blender が付ける (u = 周りの割合 × 繰り返し、v = 軸に沿った m)、木口の UV は髄を原点に半径で割った位置
+ * (tools/blender/observe_kit.py の wrap_uv・ring_disc)。共有の材質は aWood を見て、樹皮には筆の筋 (barkDetail.ts) の明暗・色と
+ * 法線の揺れを、木口には細かい年輪を足す。draw call は増えない (種類は頂点の属性で、材質は今までと同じ共有の 1 つ)
+ */
+export const BARK_MATERIAL = /^(belltree_(trunk|bark)|flora_forest_(trunk|bark))$/;
+export const ENDGRAIN_MATERIAL = /^belltree_endgrain$/;
+
+function woodKind(name: string): number {
+  if (BARK_MATERIAL.test(name)) return 1;
+  if (ENDGRAIN_MATERIAL.test(name)) return 2;
+  return 0;
+}
+
+const glslFloat = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
+const WOOD_PARS = [
+  'uniform sampler2D uBark;',
+  'varying vec3 vWood;',
+  // 樹皮の升の高さ (m): 筋の盛り上がり 12 mm、裂け目の溝 12 mm (20 mm では裂け目の縁が細く白く光った)
+  'float woodBarkH(vec4 t) { return t.r * 0.012 - t.a * 0.012; }',
+].join('\n');
+// 色: 樹皮は筋の溝を青灰に、筋の上を暖かく、大きな斑で暖 / 寒に振り、裂け目を暗い青灰に。木口は細い年輪の線と髄のまわりの濃さ。
+// 20〜55 m で薄れる (遠くはミップで均され、頂点色だけに戻る)
+const WOOD_COLOR = [
+  'float wFade = 1.0 - smoothstep(20.0, 55.0, length(vViewPosition));',
+  `vec2 wUv = vec2(vWood.x, vWood.y / ${glslFloat(BARK_TILE_V)});`,
+  'vec2 wDx = dFdx(wUv);',
+  'vec2 wDy = dFdy(wUv);',
+  'float wBark = step(0.5, vWood.z) * step(vWood.z, 1.5) * wFade;',
+  'vec4 wT = vec4(0.5, 0.5, 0.5, 0.0);',
+  'if (vWood.z > 0.5 && vWood.z < 1.5) {',
+  '  wT = textureGrad(uBark, wUv, wDx, wDy);',
+  '  vec3 wTone = mix(vec3(0.84, 0.86, 0.95), vec3(1.05, 1.03, 0.97), wT.r);',
+  '  wTone *= mix(vec3(0.96, 0.98, 1.03), vec3(1.04, 1.01, 0.95), wT.g);',
+  '  wTone = mix(wTone, vec3(0.68, 0.68, 0.78), wT.a * 0.75);',
+  '  diffuseColor.rgb *= mix(vec3(1.0), wTone, wFade);',
+  '} else if (vWood.z > 1.5) {',
+  '  float wR = length(vWood.xy);',
+  '  float wAng = atan(vWood.y, vWood.x) / 6.2831853 + 0.5;',
+  '  float wWob = textureGrad(uBark, vec2(wAng, wR * 0.5), vec2(0.0), vec2(0.0)).b;',
+  '  float wRings = wR * 15.0 + (wWob - 0.5) * 1.2;',
+  '  float wLine = (1.0 - smoothstep(0.05, 0.14, abs(fract(wRings) - 0.5))) * (1.0 - smoothstep(0.25, 0.6, fwidth(wRings)));',
+  '  float wHeart = 1.0 - smoothstep(0.05, 0.3, wR);',
+  '  vec3 wTone = mix(vec3(1.0), vec3(0.8, 0.72, 0.62), wLine * 0.55) * mix(vec3(1.0), vec3(0.85, 0.78, 0.7), wHeart * 0.4);',
+  '  diffuseColor.rgb *= mix(vec3(1.0), wTone, wFade);',
+  '}',
+].join('\n');
+// 法線: 樹皮の升の高さを画面の隣の画素の UV で読み、高さの差で揺らす (three の bumpmap の perturbNormalArb と同じ式)
+const WOOD_NORMAL = [
+  'if (wBark > 0.0) {',
+  '  float wH0 = woodBarkH(wT);',
+  '  vec2 wDH = vec2(woodBarkH(textureGrad(uBark, wUv + wDx, wDx, wDy)) - wH0, woodBarkH(textureGrad(uBark, wUv + wDy, wDx, wDy)) - wH0) * wBark;',
+  '  vec3 wSx = dFdx(-vViewPosition);',
+  '  vec3 wSy = dFdy(-vViewPosition);',
+  '  vec3 wR1 = cross(wSy, normal);',
+  '  vec3 wR2 = cross(normal, wSx);',
+  '  float wDet = dot(wSx, wR1) * faceDirection;',
+  '  normal = normalize(abs(wDet) * normal - sign(wDet) * (wDH.x * wR1 + wDH.y * wR2));',
+  '}',
+].join('\n');
+
 function leafOf(m: Bakeable): boolean {
   return m.material.side === DoubleSide && THIN_LEAF.test(m.material.name);
 }
@@ -50,12 +113,16 @@ function bakedMaterial(side: number, leaf = false): MeshToonMaterial {
   m.onBeforeCompile = (shader, renderer) => {
     base.call(m, shader, renderer);
     shader.uniforms.uGlow = glow;
+    // (M22-11 で変更: 樹皮と木口の aWood を渡し、樹皮の升 uBark で色と法線を足す)
+    shader.uniforms.uBark = { value: barkDetailTexture() };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 aEmissive;\nvarying vec3 vEmissive;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEmissive = aEmissive;');
+      .replace('#include <common>', '#include <common>\nattribute vec3 aEmissive;\nvarying vec3 vEmissive;\nattribute vec3 aWood;\nvarying vec3 vWood;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEmissive = aEmissive;\nvWood = aWood;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uGlow;\nvarying vec3 vEmissive;')
-      .replace('vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = vEmissive * uGlow;');
+      .replace('#include <common>', `#include <common>\nuniform float uGlow;\nvarying vec3 vEmissive;\n${WOOD_PARS}`)
+      .replace('vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = vEmissive * uGlow;')
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${WOOD_COLOR}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${WOOD_NORMAL}`);
     if (leaf) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', NORMAL_NO_FLIP);
   };
   const key = m.customProgramCacheKey;
@@ -85,6 +152,17 @@ function bakeGeometry(mesh: Bakeable, parentSpace: boolean): BufferGeometry {
   const em = (mat.emissive ?? new Color(0, 0, 0)).clone().multiplyScalar(mat.emissiveIntensity ?? 1);
   const col = new Float32Array(n * 3);
   const emi = new Float32Array(n * 3);
+  // (M22-11 で追加) 樹皮と木口は UV と種類を aWood に。glTF の UV は v が 1 - v で来るので戻す (樹皮の v は m、木口は髄からの位置)
+  const kind = woodKind(mat.name);
+  const uv = kind > 0 ? src.getAttribute('uv') : undefined;
+  const wood = new Float32Array(n * 3);
+  if (uv) {
+    for (let i = 0; i < n; i++) {
+      wood[i * 3] = uv.getX(i);
+      wood[i * 3 + 1] = 1 - uv.getY(i);
+      wood[i * 3 + 2] = kind;
+    }
+  }
   for (let i = 0; i < n; i++) {
     const r = vc ? vc.getX(i) : 1;
     const g = vc ? vc.getY(i) : 1;
@@ -101,6 +179,7 @@ function bakeGeometry(mesh: Bakeable, parentSpace: boolean): BufferGeometry {
   }
   src.setAttribute('color', new BufferAttribute(col, 3));
   src.setAttribute('aEmissive', new BufferAttribute(emi, 3));
+  src.setAttribute('aWood', new BufferAttribute(wood, 3));
   // skinIndex は glTF では整数の型のまま来るが、形によって型が違うと結合できないので揃える
   const si = src.getAttribute('skinIndex');
   if (si) src.setAttribute('skinIndex', new BufferAttribute(Uint16Array.from({ length: si.count * 4 }, (_, k) => si.getComponent(Math.floor(k / 4), k % 4)), 4));

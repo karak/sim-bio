@@ -135,8 +135,43 @@ def _bridge(bm, rings, cap_start, cap_end):
         bm.faces.new(rings[-1])
 
 
-def tube(pts, radii, n=6, tip=False, cap_start=True, cap_end=True, phase=0.0, aspect=(1.0, 1.0), ridge=None):
+BARK_UV = 0.9  # (M22-11 で追加) 樹皮の UV の周りの 1 繰り返しの長さ (m)。観察画面の樹皮の筆致 (barkDetail.ts) の升 1 枚の幅
+
+
+def wrap_uv(bm, rings, vs, reps):
+    """(M22-11 で追加) 輪を積んだ管に、樹皮の筆致の UV を付ける。u = 周りの割合 × reps (整数で継ぎ目が合う)、v = 軸に沿った長さ (m)。
+    rings は輪 (頂点の列) か先の 1 点、vs は輪ごとの v。継ぎ目の面 (最後の頂点と 0 番の頂点を結ぶ面) は 0 番の u を reps にする"""
+    uv = bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
+    at = {}
+    for ring, v in zip(rings, vs):
+        if isinstance(ring, list):
+            for k, vert in enumerate(ring):
+                at[vert] = (k, len(ring), v)
+        else:
+            at[ring] = (None, 0, v)
+    for f in bm.faces:
+        ks = [at[lp.vert] for lp in f.loops if lp.vert in at]
+        if len(f.verts) > 4 or len(ks) < len(f.verts):  # 蓋は一様に
+            for lp in f.loops:
+                lp[uv].uv = (0.0, at.get(lp.vert, (0, 1, 0.0))[2])
+            continue
+        seam = any(k == 0 for k, _, _ in ks if k is not None) and any(k is not None and k == m - 1 for k, m, _ in ks)
+        us = []
+        for k, m, v in ks:
+            if k is None:
+                us.append(None)
+            else:
+                us.append((m if (seam and k == 0) else k) / m * reps)
+        known = [u for u in us if u is not None]
+        mean_u = sum(known) / max(1, len(known))
+        for lp, u, (_, _, v) in zip(f.loops, us, ks):
+            lp[uv].uv = (mean_u if u is None else u, v)
+    return bm
+
+
+def tube(pts, radii, n=6, tip=False, cap_start=True, cap_end=True, phase=0.0, aspect=(1.0, 1.0), ridge=None, uv=None):
     """折れ線に沿った管 (幹・枝・根・蔓)。輪の向きは平行移動で捻れを抑える。tip=True で先端を 1 点に収束"""
+    # (M22-11 で追加) uv=周りの 1 繰り返しの長さ (m、ふつう BARK_UV) で樹皮の筆致の UV を付ける (wrap_uv)。繰り返しの数は最初の輪の周りの長さから
     # (木の磨き上げで追加) aspect=(横, 縦) で断面を楕円にする (板根を縦に薄い鰭にする)。
     # ridge(i, k) -> 半径の倍率 で輪 i の k 番目の頂点を出し入れする (幹の縦の筋・裂け目)
     bm = bmesh.new()
@@ -158,6 +193,12 @@ def tube(pts, radii, n=6, tip=False, cap_start=True, cap_end=True, phase=0.0, as
                                         + v * aspect[1] * math.sin(phase + 2 * math.pi * k / n)) * r * (ridge(i, k) if ridge else 1.0))
                       for k in range(n)])
     _bridge(bm, rings, cap_start, cap_end and not tip)
+    if uv:
+        vs = [0.0]
+        for a, b in zip(pts, pts[1:]):
+            vs.append(vs[-1] + (b - a).length)
+        circ = 2 * math.pi * radii[0] * (aspect[0] + aspect[1]) / 2
+        wrap_uv(bm, rings, vs, max(1, round(circ / uv)))
     return bm
 
 
@@ -727,12 +768,13 @@ def leaf_folded(length, width, k=4, fold=0.18, bend=0.2, thick=0.01, base_col=(0
 
 
 def ring_disc(node, mat, matrix, radius, seed=0, rings=6, sides=16, light=(0.93, 0.8, 0.6), dark=(0.72, 0.52, 0.32),
-              pith=(0.55, 0.36, 0.2), sap=(0.97, 0.88, 0.7), off=(0.07, 0.03), cracks=2, crack_col=(0.3, 0.2, 0.12)):
+              pith=(0.55, 0.36, 0.2), sap=(0.97, 0.88, 0.7), off=(0.07, 0.03), cracks=2, crack_col=(0.3, 0.2, 0.12), uv=False):
     """伐った断面の年輪 (中心が原点、XY 平面、法線 +Z、半径 radius)。帯ごとに頂点を分けて色の境を立てる。
     - 年輪は外ほど間が詰まり、髄 (中心) は off だけ片寄る (偏心)。輪の半径を角度でゆっくり揺らす
     - 明るい早材の帯と細い暗い晩材の線を交互に、外の辺材は明るく、髄は暗く
     - cracks 本の放射状の割れ (暗い細い楔) を少し浮かせて重ねる
     matrix で置く。三角形は sides × (4 × rings + 1) + 割れ"""
+    # (M22-11 で追加) uv=True で、髄を原点に半径で割った UV を付ける (観察画面が細かい年輪を足す、barkDetail.ts)
     r_ = random.Random(seed)
     ph = [r_.uniform(0, 2 * math.pi) for _ in range(3)]
     cx, cy = off[0] * radius, off[1] * radius
@@ -759,7 +801,15 @@ def ring_disc(node, mat, matrix, radius, seed=0, rings=6, sides=16, light=(0.93,
                 j = (i + 1) % sides
                 bm.faces.new((inner[i], outer[i], outer[j], inner[j]))
         jit = r_.uniform(0.95, 1.04)
+        if uv:
+            disc_uv(bm)
         node.add(bm, mat, matrix=matrix, smooth=False, recalc=False, shade=shade_const(mul3(color, jit)))
+
+    def disc_uv(bm):
+        lay = bm.loops.layers.uv.new("UVMap")
+        for f in bm.faces:
+            for lp in f.loops:
+                lp[lay].uv = ((lp.vert.co.x - cx) / radius, (lp.vert.co.y - cy) / radius)
 
     edges = [((j + 1) / rings) ** 0.8 for j in range(rings)]
     prev = 0.0
@@ -781,4 +831,6 @@ def ring_disc(node, mat, matrix, radius, seed=0, rings=6, sides=16, light=(0.93,
         s = Vector((-math.sin(a), math.cos(a), 0)) * radius * 0.018
         vs = [bm.verts.new(p0), bm.verts.new(p1 - s), bm.verts.new(p1 + s)]
         bm.faces.new(vs)
+        if uv:
+            disc_uv(bm)
         node.add(bm, mat, matrix=matrix, smooth=False, recalc=False, shade=shade_const(crack_col))

@@ -223,7 +223,8 @@ def forest_tree(lod=0):
     bark = K.bark_shade(spine, radii, FOREST_BARK_LIN, FOREST_MOSS_LIN, lo=0.6, hi=1.0, z1=2.5, moss_z=(0.05, 0.8), seed=2.1)
     # (鐘樹の段の作り直しで追加) 鐘樹の株・丸太と同じく、樹皮に地衣の淡い斑を足す
     bark = forest_lichen(bark) if lod == 0 else bark
-    n.add(K.tube(spine, radii, n=sides, cap_start=False, ridge=K.fissures(sides, depth=(0.07, 0.14), seed=9, rings=len(spine))),
+    # (M22-11 で変更: 幹・根・太枝に樹皮の筆致の UV (uv=K.BARK_UV) を付ける。形と三角形は同じ)
+    n.add(K.tube(spine, radii, n=sides, cap_start=False, ridge=K.fissures(sides, depth=(0.07, 0.14), seed=9, rings=len(spine)), uv=K.BARK_UV),
           M["forest_trunk"], smooth=True, shade=bark)
     if lod == 0:
         for i in range(4):
@@ -231,7 +232,7 @@ def forest_tree(lod=0):
             d = Vector((math.cos(a), math.sin(a), 0))
             # (木の磨き上げで変更: 根の断面を縦長の楕円 (鰭) にする)
             n.add(K.tube([d * 0.15 + Z * 0.6, d * 0.45 + Z * 0.14, d * 0.78 + Z * -0.03], [0.17, 0.1, 0.03], n=4,
-                         tip=True, cap_start=False, aspect=(0.7, 1.3)), M["forest_trunk"], smooth=True, shade=bark)
+                         tip=True, cap_start=False, aspect=(0.7, 1.3), uv=K.BARK_UV), M["forest_trunk"], smooth=True, shade=bark)
         # (鐘樹の段の作り直しで追加) 根と根の間に苔の小山 3 つ (鐘樹の株と同じ、明るい苔と暗い苔の斑)
         for i in range(3):
             a = math.radians(75 + 90 * i)
@@ -246,7 +247,7 @@ def forest_tree(lod=0):
         end = c - Z * 0.2 * r
         p1 = p0.lerp(end, 0.4) + d * 0.25 - Z * 0.2
         rad = [0.12, 0.08, 0.04] if upper else [0.15, 0.1, 0.05]
-        n.add(K.tube([p0, p1, end], rad, n=5 if lod == 0 else 4, tip=True, cap_start=False), M["forest_bark"],
+        n.add(K.tube([p0, p1, end], rad, n=5 if lod == 0 else 4, tip=True, cap_start=False, uv=K.BARK_UV), M["forest_bark"],
               smooth=True, shade=K.shade_const(0.8))
     # (木の磨き上げで変更: 塊は FOREST_LUMP_K に縮めて暗い内側にし、表面に葉のカードを散らす。塊は lod0 の真ん中だけ細かさ 1、
     #  他は 0 (カードに三角形を回す)。柔らかい法線は 0.6 → 0.9 (粗い塊の面の角を陰りに出さない))

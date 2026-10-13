@@ -62,6 +62,8 @@ M["rope"] = K.material("belltree_rope", "#9A7E58", rough=0.9)
 M["leafv"] = K.material("belltree_leafv", "#FFFFFF", rough=0.85)
 M["wood"] = K.material("belltree_wood", "#FFFFFF", rough=0.9)
 M["ground"] = K.material("belltree_ground", "#FFFFFF", rough=0.95)
+# (M22-11 で追加) 伐った木口の年輪の材質 (色は頂点色)。観察画面は、この材質の UV (髄からの位置) で細かい年輪を足す (barkDetail.ts)
+M["endgrain"] = K.material("belltree_endgrain", "#FFFFFF", rough=0.9)
 # (鐘樹の段の作り直しで追加) 色 (リニア)。土・苔・落ち葉・小石・草、若木と芽の葉、伐った木口 (早材・晩材・髄・辺材)、内樹皮、地衣
 SOIL_LIN = K.hex_rgb("#6E5436")
 SOIL_DARK_LIN = K.hex_rgb("#4A3824")
@@ -73,6 +75,9 @@ GRASS_LIN = K.hex_rgb("#7FA447")
 SAPLING_LEAF = (K.hex_rgb("#3C6A2A"), K.hex_rgb("#62923C"), K.hex_rgb("#A2C06C"))
 SEEDLING_LEAF = (K.hex_rgb("#6E9E3A"), K.hex_rgb("#B2D060"), K.hex_rgb("#E0EDA6"))
 WOOD = dict(light=K.hex_rgb("#EBD3A6"), dark=K.hex_rgb("#C49A66"), pith=K.hex_rgb("#9A7046"), sap=K.hex_rgb("#F5E6C8"))
+# (M22-11 で変更: 基準画の木口は暖かい橙の黄土で、年輪は細く淡い。早材を暖かく、晩材の線を早材に近づけて輪の濃さを下げる
+#  (細い年輪は観察画面のシェーダが足す)。前は light #EBD3A6・dark #C49A66・pith #9A7046・sap #F5E6C8)
+WOOD = dict(light=K.hex_rgb("#E8C493"), dark=K.hex_rgb("#D2A673"), pith=K.hex_rgb("#A87850"), sap=K.hex_rgb("#F0D7AE"))
 FIBRE_LIN = K.hex_rgb("#E8D6B2")
 INNER_BARK_LIN = K.hex_rgb("#A89478")
 LICHEN_LIN = K.hex_rgb("#C9D0AC")
@@ -306,7 +311,8 @@ def mature(lod=0):
     # (木の磨き上げで変更: 幹と根は樹皮の縦の筋・裂け目・根元の苔を頂点色で持つ trunk の材質にする。
     #  基準画の幹は淡い樹皮に縦の筋が走り、板根が広がって根元に苔が付く)
     bark_shade = K.bark_shade(spine, radii, BARK_LIN, MOSS_LIN, lo=0.66, hi=1.0, z1=2.4, moss_z=(0.2, 1.5), seed=1.3)
-    n.add(K.tube(spine, radii, n=sides, cap_start=False, ridge=K.fissures(sides, seed=5, flare=(2, 1.12), rings=len(spine))),
+    # (M22-11 で変更: 幹・板根・太枝に樹皮の筆致の UV (uv=K.BARK_UV) を付ける。形と三角形は同じ)
+    n.add(K.tube(spine, radii, n=sides, cap_start=False, ridge=K.fissures(sides, seed=5, flare=(2, 1.12), rings=len(spine)), uv=K.BARK_UV),
           M["trunk"], smooth=True, shade=bark_shade)
     # (木の磨き上げで変更: 板根を 6 本 (lod1 は 4 本) にし、断面を縦長の楕円 (鰭) にして根元で幹に広く付ける)
     roots = 6 if lod == 0 else 4
@@ -316,7 +322,7 @@ def mature(lod=0):
         L = 1.0 + 0.18 * math.sin(i * 2.3)
         pts = [d * 0.22 + Z * 1.55, d * 0.62 + Z * 0.62, d * 1.15 * L + Z * 0.14, d * 1.7 * L + Z * (-0.05)]
         n.add(K.tube(pts, [0.34, 0.3, 0.15, 0.04], n=6 if lod == 0 else 4, tip=True, cap_start=False,
-                     aspect=(0.62, 1.35)), M["trunk"], smooth=True, shade=bark_shade)
+                     aspect=(0.62, 1.35), uv=K.BARK_UV), M["trunk"], smooth=True, shade=bark_shade)
     clumps = canopy_clumps(lod)
     # (M22-07 光の筋のために変更: 太枝 5 本 (lod1 は 3 本) を下の輪の塊へ伸ばす形をやめ、房 8 つのそれぞれへ枝を 1 本ずつ伸ばす。
     #  下の輪の枝は幹の 3.3〜4.2 m から外へ垂れてから上がり、上の輪の枝は幹の上 (5.2〜6.4 m) から立ち上がる。
@@ -333,7 +339,7 @@ def mature(lod=0):
         pts, rr = [p0, p1, p2, end], rad
         if lod:
             pts, rr = [p0, p1.lerp(p2, 0.5), end], [rad[0], rad[2], rad[3]]
-        n.add(K.tube(pts, rr, n=5 if lod == 0 else 4, tip=True, cap_start=False), M["bark"],
+        n.add(K.tube(pts, rr, n=5 if lod == 0 else 4, tip=True, cap_start=False, uv=K.BARK_UV), M["bark"],
               smooth=True, shade=K.shade_const(0.92))
     rnd = random.Random(7)
     per = 3 if lod == 0 else 1
@@ -647,8 +653,9 @@ def sapling(lod=0):
     sides = 8 if lod == 0 else 5
     bark = K.bark_shade(SAPLING_SPINE, SAPLING_RADII, BARK_LIN, MOSS_LIN, lo=0.68, hi=1.0, z1=1.3, groove=0.22,
                         moss_z=(0.0, 0.4), seed=0.7)
+    # (M22-11 で変更: 幹と枝に樹皮の筆致の UV を付ける)
     n.add(K.tube(SAPLING_SPINE, SAPLING_RADII, n=sides, cap_start=False, tip=True,
-                 ridge=K.fissures(sides, depth=(0.03, 0.08), bump=0.03, seed=3)), M["trunk"], smooth=True, shade=bark)
+                 ridge=K.fissures(sides, depth=(0.03, 0.08), bump=0.03, seed=3), uv=K.BARK_UV), M["trunk"], smooth=True, shade=bark)
     rnd = random.Random(4)
     crown = Vector((0, 0, 2.0))
     spine_v = [Vector(p) for p in SAPLING_SPINE]
@@ -657,7 +664,7 @@ def sapling(lod=0):
         p0 = trunk_at(spine_v, z0)
         d = Vector((math.cos(math.radians(a)), math.sin(math.radians(a)), 0))
         pts = [p0, p0 + d * L * 0.45 + Z * L * 0.35 * up, p0 + d * L + Z * L * 0.85 * up]
-        n.add(K.tube(pts, [0.026, 0.017, 0.006], n=5 if lod == 0 else 3, tip=True, cap_start=False), M["trunk"], smooth=True,
+        n.add(K.tube(pts, [0.026, 0.017, 0.006], n=5 if lod == 0 else 3, tip=True, cap_start=False, uv=K.BARK_UV), M["trunk"], smooth=True,
               shade=K.shade_const(K.mul3(BARK_LIN, 0.9)))
         stops = (0.45, 0.72, 0.95) if lod == 0 else (0.6, 0.95)
         for j, t in enumerate(stops):
@@ -693,16 +700,27 @@ STUMP_H = 0.72
 WOOD_MOSS = False
 STUMP_R = 0.55
 STUMP_CUT_R = 0.47
+# (M22-11 で追加) 株の上の裂けた樹皮の縁の形。"band" は外周に沿って続く帯の上の縁を、倒れた側の大きな裂け 3 つと反対側の小さな裂けの
+# 包絡で持ち上げる (基準画の株は、幅のある不揃いな裂けが数本で、細い棘の冠ではない)。"wedge" は前の、頂点ごとの細い楔 (棘に見えた)
+STUMP_RIM = "band"
+# (倒れた側からの方位 度, 高さ m, 半幅 度)。帯の上の縁は、この山の重なり + 低いぎざぎざ
+STUMP_TEARS = [(0, 0.33, 34), (-48, 0.2, 26), (52, 0.25, 30), (128, 0.09, 24), (-140, 0.11, 22), (178, 0.05, 30)]
 
 
-def ringed_body(zs, rs, sides, ridge, phase=0.0):
+def ringed_body(zs, rs, sides, ridge, phase=0.0, uv=None):
     """縦の軸 (0, 0) まわりの輪を積んだ胴 (蓋なし)。ridge(i, k) で輪 i の k 番目の頂点を出し入れする"""
+    # (M22-11 で追加) uv=周りの 1 繰り返しの長さ (m) で樹皮の筆致の UV を付ける (K.wrap_uv、v は輪の高さの差の和)
     bm = bmesh.new()
     rings = []
     for i, (z, r) in enumerate(zip(zs, rs)):
         rings.append([bm.verts.new((r * ridge(i, k) * math.cos(phase + 2 * math.pi * k / sides),
                                     r * ridge(i, k) * math.sin(phase + 2 * math.pi * k / sides), z)) for k in range(sides)])
     K._bridge(bm, rings, False, False)
+    if uv:
+        vs = [0.0]
+        for i in range(1, len(zs)):
+            vs.append(vs[-1] + math.hypot(zs[i] - zs[i - 1], rs[i] - rs[i - 1]))
+        K.wrap_uv(bm, rings, vs, max(1, round(2 * math.pi * rs[0] / uv)))
     return bm
 
 
@@ -722,7 +740,8 @@ def stump():
     # (鐘樹の段の見直しで変更: 苔 (bark_shade の moss) と地衣は付けない。苔の色を樹皮の色にし、地衣を掛けない)
     if not WOOD_MOSS:
         bark = K.bark_shade(spine, rs, BARK_LIN, BARK_LIN, lo=0.6, hi=1.0, z1=0.75, groove=0.3, moss_z=(0.02, 0.42), seed=2.2)
-    n.add(ringed_body(zs, rs, sides, fis), M["trunk"], smooth=True, shade=bark)
+    # (M22-11 で変更: 胴と鰭の根に樹皮の筆致の UV、木口の年輪を endgrain の材質 (髄からの UV つき) にする。形と三角形は同じ)
+    n.add(ringed_body(zs, rs, sides, fis, uv=K.BARK_UV), M["trunk"], smooth=True, shade=bark)
     # 樹皮の厚みの縁 (外の輪から木口へ、暗い内樹皮)
     bm = bmesh.new()
     outer = [bm.verts.new((STUMP_R * fis(3, k) * math.cos(2 * math.pi * k / sides), STUMP_R * fis(3, k) * math.sin(2 * math.pi * k / sides),
@@ -734,8 +753,8 @@ def stump():
         bm.faces.new((inner[k], outer[k], outer[j], inner[j]))
     n.add(bm, M["trunk"], smooth=False, recalc=False, shade=K.shade_const(INNER_BARK_LIN))
     # 木口の年輪 (髄は倒れた側と逆に片寄る)
-    K.ring_disc(n, M["wood"], K.trs((0, 0, STUMP_H - 0.008)), STUMP_CUT_R, seed=24, rings=7, sides=sides,
-                light=WOOD["light"], dark=WOOD["dark"], pith=WOOD["pith"], sap=WOOD["sap"], off=(-0.1, 0.05), cracks=3)
+    K.ring_disc(n, M["endgrain"], K.trs((0, 0, STUMP_H - 0.008)), STUMP_CUT_R, seed=24, rings=7, sides=sides,
+                light=WOOD["light"], dark=WOOD["dark"], pith=WOOD["pith"], sap=WOOD["sap"], off=(-0.1, 0.05), cracks=3, uv=True)
     # 裂けた樹皮と繊維の縁: 樹皮の外周の頂点ごとに楔を立てる。倒れた側 (hinge、方位 20°) ほど高い
     rnd = random.Random(23)
     hinge = math.radians(20)
@@ -764,9 +783,14 @@ def stump():
         vo_l, vo_r, vi_l, vi_r, vt_o, vt_i = (b2.verts.new(v) for v in (ol, orr, il, ir, to, ti))
         for f in ((vo_l, vo_r, vt_o), (vi_r, vi_l, vt_i), (vi_l, vo_l, vt_o, vt_i), (vo_r, vi_r, vt_i, vt_o), (vo_l, vi_l, vi_r, vo_r)):
             b2.faces.new(f)
+        if STUMP_RIM != "wedge":  # (M22-11 で変更: 帯の縁 (stump_rim_band) にするときは楔を足さない。乱数は同じだけ引いて、根の形を変えない)
+            b2.free()
+            continue
         n.add(b2, M["wood"], smooth=False,
               shade=lambda co, nrm, rad=rad, bc=bark_c, fc=fib, h=h: K.mul3(bc if nrm.dot(rad) > 0.6 else fc,
                                                                             0.8 + 0.2 * clamp01((co.z - STUMP_H) / max(0.02, h))))
+    if STUMP_RIM == "band":
+        stump_rim_band(n, sides, fis, hinge)
     # 木口の上に立つ細い裂け (倒れた側の縁の近く)
     for i in range(5):
         a = hinge + rnd.uniform(-0.6, 0.6)
@@ -781,7 +805,7 @@ def stump():
         d = Vector((math.cos(a), math.sin(a), 0))
         L = 1.0 + 0.2 * math.sin(i * 2.1)
         pts = [d * 0.3 + Z * 0.42, d * 0.6 + Z * 0.15, d * 0.98 * L + Z * 0.02, d * 1.28 * L + Z * (-0.06)]
-        n.add(K.tube(pts, [0.26, 0.2, 0.1, 0.03], n=6, tip=True, cap_start=False, aspect=(0.62, 1.35)), M["trunk"],
+        n.add(K.tube(pts, [0.26, 0.2, 0.1, 0.03], n=6, tip=True, cap_start=False, aspect=(0.62, 1.35), uv=K.BARK_UV), M["trunk"],
               smooth=True, shade=bark)
     # 根の間の苔の小山
     # (鐘樹の段の見直しで変更: WOOD_MOSS のときだけ)
@@ -790,6 +814,51 @@ def stump():
         d = Vector((math.cos(a), math.sin(a), 0))
         moss_cushion(n, d * 0.72 + Z * 0.02, 0.2, 30 + i)
     return n
+
+
+def stump_rim_band(n, sides, fis, hinge):
+    """(M22-11 で追加) 株の上の裂けた樹皮の縁を、外周に沿って続く帯にする。帯の上の縁の高さは STUMP_TEARS の山の重なりに、
+    頂点ごとの低いぎざぎざを足す。外の面は樹皮 (裂け目の筆致の UV つき)、内と上の面は木の繊維の色で、上ほど明るい。
+    三角形は面 1 つにつき 外 2・内 2・上 2 (前の楔は 8)"""
+    rnd = random.Random(29)
+
+    def rise(a):
+        d = math.degrees(math.atan2(math.sin(a - hinge), math.cos(a - hinge)))
+        h = 0.0
+        for at, top, w in STUMP_TEARS:
+            t = abs((d - at + 180) % 360 - 180) / w
+            if t < 1:
+                h = max(h, top * (1 - t) ** 1.4)
+        return h
+    ks = range(sides)
+    ang = [2 * math.pi * k / sides for k in ks]
+    hs = [0.025 + rise(a) + rnd.uniform(0.0, 0.035) for a in ang]
+    ro = [STUMP_R * fis(3, k) * 0.99 for k in ks]
+    ri = [STUMP_CUT_R + 0.012 + rnd.uniform(0.0, 0.015) for _ in ks]
+    lean = [rnd.uniform(-0.01, 0.035) for _ in ks]
+    z0 = STUMP_H - 0.02
+
+    def at(r, a, z, k):
+        return Vector((r * math.cos(a), r * math.sin(a), z)) + Vector((math.cos(a), math.sin(a), 0)) * (lean[k] * (z - z0) / 0.3)
+    bm = bmesh.new()
+    ob = [bm.verts.new(at(ro[k], ang[k], z0, k)) for k in ks]
+    ot = [bm.verts.new(at(ro[k], ang[k], STUMP_H + hs[k], k)) for k in ks]
+    ib = [bm.verts.new(at(ri[k], ang[k], z0, k)) for k in ks]
+    it = [bm.verts.new(at(ri[k] + 0.015, ang[k], STUMP_H + hs[k] * 0.86, k)) for k in ks]
+    outer, rest = [], []
+    for k in ks:
+        j = (k + 1) % sides
+        outer.append(bm.faces.new((ob[k], ob[j], ot[j], ot[k])))
+        rest.append(bm.faces.new((ib[j], ib[k], it[k], it[j])))
+        rest.append(bm.faces.new((ot[k], ot[j], it[j], it[k])))
+    top = max(hs)
+
+    def shade(co, nrm):
+        lift = 0.82 + 0.18 * clamp01((co.z - STUMP_H) / top)
+        r = math.hypot(co.x, co.y)
+        c = BARK_LIN if r > (STUMP_R + STUMP_CUT_R) / 2 and nrm.dot(Vector((co.x, co.y, 0)).normalized()) > 0.5 else FIBRE_LIN
+        return K.mul3(c, lift)
+    n.add(bm, M["wood"], smooth=False, shade=shade)
 
 
 # ---------------------------------------------------------------- 丸太 (作り直し)
@@ -834,7 +903,8 @@ def log_piece(n, length, r, center, yaw, seed, stub=None):
     zs = [0.03] + [length * t for t in (0.14, 0.27, 0.4, 0.52, 0.64, 0.76, 0.88)] + [length - 0.03]
     rs = [r * (1.02 - 0.07 * (z / length) + rnd.uniform(-0.012, 0.012)) for z in zs]
     fis = K.fissures(sides, depth=(0.04, 0.1), bump=0.035, seed=seed)
-    n.add(ringed_body(zs, rs, sides, fis, phase=0.2), M["trunk"], matrix=m, smooth=True, shade=log_shade(inv, r, seed))
+    # (M22-11 で変更: 胴に樹皮の筆致の UV (長さの向きに筋が流れる)、木口の年輪を endgrain の材質に)
+    n.add(ringed_body(zs, rs, sides, fis, phase=0.2, uv=K.BARK_UV), M["trunk"], matrix=m, smooth=True, shade=log_shade(inv, r, seed))
     for end, z, rr, i_ring in ((0, 0.0, rs[0], 0), (1, length, rs[-1], len(zs) - 1)):
         zb = zs[i_ring]
         bm = bmesh.new()
@@ -849,19 +919,19 @@ def log_piece(n, length, r, center, yaw, seed, stub=None):
             bm.faces.new(f)
         n.add(bm, M["trunk"], matrix=m, smooth=False, shade=K.shade_const(INNER_BARK_LIN))
         face_m = m @ K.trs((0, 0, z), (0 if end == 1 else 180, 0, rnd.uniform(0, 360)))
-        K.ring_disc(n, M["wood"], face_m, cr, seed=seed * 7 + end, rings=6, sides=sides,
+        K.ring_disc(n, M["endgrain"], face_m, cr, seed=seed * 7 + end, rings=6, sides=sides,
                     light=WOOD["light"], dark=WOOD["dark"], pith=WOOD["pith"], sap=WOOD["sap"],
-                    off=(rnd.uniform(-0.12, 0.12), rnd.uniform(-0.12, 0.12)), cracks=2)
+                    off=(rnd.uniform(-0.12, 0.12), rnd.uniform(-0.12, 0.12)), cracks=2, uv=True)
     if stub:
         t, a = stub
         a = math.radians(a)
         d = Vector((math.cos(a), math.sin(a), 0.25)).normalized()
         base = Vector((math.cos(a) * r * 0.85, math.sin(a) * r * 0.85, length * t))
         tipp = base + d * 0.2
-        n.add(K.tube([base, base + d * 0.12, tipp], [0.07, 0.058, 0.05], n=8, cap_start=False, cap_end=False), M["trunk"], matrix=m,
+        n.add(K.tube([base, base + d * 0.12, tipp], [0.07, 0.058, 0.05], n=8, cap_start=False, cap_end=False, uv=K.BARK_UV), M["trunk"], matrix=m,
               smooth=True, shade=log_shade(inv, r, seed))
-        K.ring_disc(n, M["wood"], m @ look_matrix(tipp, d), 0.05, seed=seed + 3, rings=2, sides=8, light=WOOD["light"], dark=WOOD["dark"],
-                    pith=WOOD["pith"], sap=WOOD["sap"], cracks=0)
+        K.ring_disc(n, M["endgrain"], m @ look_matrix(tipp, d), 0.05, seed=seed + 3, rings=2, sides=8, light=WOOD["light"], dark=WOOD["dark"],
+                    pith=WOOD["pith"], sap=WOOD["sap"], cracks=0, uv=True)
 
 
 def logs():
@@ -1170,9 +1240,10 @@ def stump_lod1():
     fis = K.fissures(sides, depth=(0.04, 0.1), bump=0.04, seed=21)
     spine = [(0, 0, z) for z in zs]
     bark = K.bark_shade(spine, rs, BARK_LIN, BARK_LIN, lo=0.6, hi=1.0, z1=0.75, groove=0.3, moss_z=(0.02, 0.42), seed=2.2)
-    n.add(ringed_body(zs, rs, sides, fis), M["trunk"], smooth=True, shade=bark)
-    K.ring_disc(n, M["wood"], K.trs((0, 0, STUMP_H - 0.008)), STUMP_R * 0.97, seed=24, rings=2, sides=sides,
-                light=WOOD["light"], dark=WOOD["dark"], pith=WOOD["pith"], sap=WOOD["sap"], off=(-0.1, 0.05), cracks=0)
+    # (M22-11 で変更: 胴と根に樹皮の筆致の UV、木口を endgrain の材質に (近い株と同じ))
+    n.add(ringed_body(zs, rs, sides, fis, uv=K.BARK_UV), M["trunk"], smooth=True, shade=bark)
+    K.ring_disc(n, M["endgrain"], K.trs((0, 0, STUMP_H - 0.008)), STUMP_R * 0.97, seed=24, rings=2, sides=sides,
+                light=WOOD["light"], dark=WOOD["dark"], pith=WOOD["pith"], sap=WOOD["sap"], off=(-0.1, 0.05), cracks=0, uv=True)
     hinge = math.radians(20)
     rnd = random.Random(23)
     for i in range(5):
@@ -1193,7 +1264,7 @@ def stump_lod1():
         a = math.radians(40 + 72 * i)
         d = Vector((math.cos(a), math.sin(a), 0))
         pts = [d * 0.3 + Z * 0.42, d * 0.8 + Z * 0.06, d * 1.25 + Z * (-0.06)]
-        n.add(K.tube(pts, [0.24, 0.12, 0.03], n=4, tip=True, cap_start=False, aspect=(0.62, 1.35)), M["trunk"], smooth=True, shade=bark)
+        n.add(K.tube(pts, [0.24, 0.12, 0.03], n=4, tip=True, cap_start=False, aspect=(0.62, 1.35), uv=K.BARK_UV), M["trunk"], smooth=True, shade=bark)
     return n
 
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BoxGeometry, Color, DoubleSide, Group, Mesh, type BufferAttribute } from 'three';
+import { BoxGeometry, Color, DoubleSide, Group, Mesh, ShaderLib, type BufferAttribute } from 'three';
 import { bakeMaterials, glow } from '../../src/observe/render/bake';
 import { createToonMaterial } from '../../src/observe/render/toon';
 import { grassKeep } from '../../src/observe/render/grass';
@@ -87,6 +87,67 @@ describe('観察画面 (遠距離版の追加): 薄い葉の両面の材質', ()
     const key = (m: Mesh) => (m.material as { customProgramCacheKey(): string }).customProgramCacheKey();
     expect(key(meshes[0])).not.toBe(key(meshes[1]));
     expect(key(leaf)).toContain('leaf');
+  });
+});
+
+describe('観察画面 (M22-11): 樹皮と木口の属性', () => {
+  const named = (name: string) => {
+    const m = toon('#FFFFFF');
+    m.name = name;
+    return m;
+  };
+  /** 箱の UV を (0.25, 0.75) にそろえる (glTF の UV は v が 1 - v で来る) */
+  const withUv = (g: BoxGeometry) => {
+    const uv = g.getAttribute('uv') as BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.25, 0.75);
+    return g;
+  };
+
+  it('樹皮の材質は UV と種類 1、木口は種類 2 を aWood に持ち (v は 1 - v に戻す)、他の材質は UV があっても 0', () => {
+    const root = new Group();
+    const node = new Group();
+    node.name = 'belltree_stump';
+    root.add(node);
+    const bark = new Mesh(withUv(new BoxGeometry(1, 1, 1)), named('belltree_trunk'));
+    const end = new Mesh(withUv(new BoxGeometry(1, 1, 1)), named('belltree_endgrain'));
+    end.position.set(2, 0, 0);
+    const forest = new Mesh(withUv(new BoxGeometry(1, 1, 1)), named('flora_forest_bark'));
+    forest.position.set(4, 0, 0);
+    const ground = new Mesh(withUv(new BoxGeometry(1, 1, 1)), named('belltree_ground'));
+    ground.position.set(6, 0, 0);
+    node.add(bark, end, forest, ground);
+    bakeMaterials(root);
+    expect(node.children.length).toBe(1);
+    const merged = node.children[0] as Mesh;
+    const wood = merged.geometry.getAttribute('aWood') as BufferAttribute;
+    expect(wood.count).toBe(96);
+    const at = (i: number) => [wood.getX(i), wood.getY(i), wood.getZ(i)];
+    expect(at(0)).toEqual([0.25, 0.25, 1]);
+    expect(at(24)).toEqual([0.25, 0.25, 2]);
+    expect(at(48)).toEqual([0.25, 0.25, 1]);
+    expect(at(72)).toEqual([0, 0, 0]);
+    // 樹皮の材質でも UV が無ければ 0 (筆致を足さない)
+    const lone = new Group();
+    const noUv = new BoxGeometry(1, 1, 1);
+    noUv.deleteAttribute('uv');
+    const m = new Mesh(noUv, named('belltree_trunk'));
+    lone.add(m);
+    bakeMaterials(lone);
+    expect((m.geometry.getAttribute('aWood') as BufferAttribute).getZ(0)).toBe(0);
+  });
+
+  it('共有の材質のシェーダは aWood を受け、樹皮の升で色と法線を足す (three のシェーダの差し込み先が今もある)', () => {
+    const root = new Group();
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1), named('belltree_trunk'));
+    root.add(mesh);
+    bakeMaterials(root);
+    const mat = mesh.material as unknown as { onBeforeCompile(s: { uniforms: Record<string, unknown>; vertexShader: string; fragmentShader: string }, r: unknown): void };
+    const shader = { uniforms: {} as Record<string, unknown>, vertexShader: ShaderLib.toon.vertexShader, fragmentShader: ShaderLib.toon.fragmentShader };
+    mat.onBeforeCompile(shader, {});
+    expect(shader.vertexShader).toContain('vWood = aWood;');
+    expect(shader.fragmentShader).toContain('wT = textureGrad(uBark, wUv, wDx, wDy);');
+    expect(shader.fragmentShader).toContain('normal = normalize(abs(wDet) * normal');
+    expect(shader.uniforms.uBark).toBeDefined();
   });
 });
 
