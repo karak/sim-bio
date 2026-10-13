@@ -5,9 +5,9 @@
 """手元の claude -p で、受入の画を採点表に当てる (M25-06、ADR 0001 段 5)。
 
     pnpm run judge                                   # 正本の judge: "llm" の手順を、その手順の画に当てる
-    pnpm run judge -- --step SEL-003/2               # 任意の手順 (ID/手順の番号、1 から) を当てる。正本は変えない
+    pnpm run judge -- --step SEL-003/2               # 採点表のある手順 (ID/手順の番号、1 から) を当てる。正本は変えない
     pnpm run judge -- --step SEL-003/2 --image x.png # 画を指す (仕込んだ欠陥の画を当てるとき)
-    pnpm run judge -- --dry-run                      # 何を何回呼ぶかだけ出す
+    pnpm run judge -- --dry-run                      # 何を (問いの文と画) 何回呼ぶかだけ出す
 
 1 枚の画に 3 回 claude -p を呼び、問いごとに多数決を取る (温度は送れないので、問いを yes / no に固定して票を数える)。
   - 3 票とも no の問い: fail。票が割れた (yes と no が混ざる・呼び出しが失敗した) 問い: undecided。
@@ -238,7 +238,7 @@ def has_pixel_baseline(image: Path, baselines: Path) -> bool:
 
 
 def questions_of(step: StepRef, rubrics: Mapping[str, Sequence[Mapping[str, str]]]):
-    """採点表の問い。rubrics.json に <ID>/<n> があればそれ、無ければ手順の文を 1 つの問いにする"""
+    """採点表の問い。rubrics.json に <ID>/<n> が無ければ ValueError (手順の文を問いにはしない。M26-18)"""
     rows = rubrics.get(step.key)
     if not rows:
         raise ValueError(

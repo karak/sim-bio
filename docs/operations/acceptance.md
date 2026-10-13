@@ -67,13 +67,13 @@ ADR 0001 の段 5。`pnpm run judge` は、手元の `claude -p` で画を採点
 
 ```sh
 pnpm run judge                                     # 正本の judge が "llm" の手順を、その手順の画に当てる (今は OBS-002 の 2〜4・SEL-003 の 2〜4・CNF-002 の 2〜3)
-pnpm run judge -- --step SEL-003/2                 # 任意の手順 (ID/手順の番号) を当てる。正本は変えない
+pnpm run judge -- --step SEL-003/2                 # 採点表のある手順 (ID/手順の番号) を当てる。正本は変えない
 pnpm run judge -- --step SEL-003/2 --image x.png   # 画を指す (仕込んだ欠陥の画を当てるとき)
-pnpm run judge -- --dry-run                        # 何を何回呼ぶかだけ出す
+pnpm run judge -- --dry-run                        # 何を (問いの文と画) 何回呼ぶかだけ出す
 ```
 
 - 画は、手順の文が「画 N」「画 N〜M」で指す画 (受入の画面の `shots/<ID>-<N>.png`)。指さなければその行の画すべて。
-- 問いは `docs/acceptance/rubrics.json` の `<ID>/<手順の番号>` に書く (yes / no の問い)。無ければ手順の文を 1 つの問いにする。
+- 問いは `docs/acceptance/rubrics.json` の `<ID>/<手順の番号>` に書く (yes / no の問い)。無ければ judge は呼ぶ前に止まる。
 - 1 枚の画に 3 回呼び、問いごとに多数決を取る。3 票とも yes なら yes、3 票とも no なら fail、割れた問い (呼び出しの失敗を含む) は undecided。
 - `results.json` には fail と undecided を `{verdict, note, at, by: "llm", llm: {cli, model, cost_usd, steps}}` で書く。合格は、観察画面の画 (画素の基準を持たず、人が承認した同じ場面の画を `docs/acceptance/observe-approved/` に持つ画。OBS-002) だけの手順で 3 票とも yes のときに、同じ形の `verdict: "pass"`・`by: "llm"` で書く。項目が pass になるのは、正本の llm の手順をすべて当ててどれも合格のときだけ。ほかの手順の合格は書かない。人が判定した項目 (`by` が llm でない) は上書きしない。受入の画面は `undecided` を「未判定」と読み、note に LLM の根拠が出る。
 - 全部の票と根拠は、受入の画面の置き場の `judge.json` に書く。画素の基準 (`tests/e2e/baselines/`) を持つ画は、3 票とも yes でも `writes_pass: false` (LLM の yes だけでは合格にしない)。
