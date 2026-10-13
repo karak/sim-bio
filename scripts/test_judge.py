@@ -97,6 +97,19 @@ def sot_of(*rows):
     return sot
 
 
+# scenario() の手順の採点表。問いの id S は、採点表が無いとき手順の文を問いにしていた頃 (M26-18 で止めた) の名残で、偽の応答が S で答える
+SEL_RUBRICS = {
+    "SEL-003/3": [{"id": "S", "q": "琥珀のピンで、どこを選んだか分かる"}],
+    "SEL-003/4": [{"id": "S", "q": "縁の帯が地形に沿う"}],
+}
+
+
+def write_rubrics(root: Path, rubrics) -> None:
+    (root / "docs/acceptance/rubrics.json").write_text(
+        json.dumps(rubrics, ensure_ascii=False), encoding="utf-8"
+    )
+
+
 class ParseTest(unittest.TestCase):
     def test_reads_answers_cost_time_and_model(self):
         v = parse_output(answer("yes", "no", "中央に文"), Q)
@@ -236,21 +249,25 @@ class ImagesTest(unittest.TestCase):
 
 
 class QuestionsTest(unittest.TestCase):
-    def test_default_is_one_yes_no_question_made_of_the_step_sentence(self):
-        qs = questions_of(
-            StepRef("SEL-003", 3, "【見た目】画 1: 琥珀のピンで分かる"), {}
-        )
-        self.assertEqual(len(qs), 1)
-        self.assertIn("琥珀のピンで分かる", qs[0].text)
-        self.assertNotIn("【見た目】", qs[0].text)
-        self.assertNotIn("画 1:", qs[0].text)
+    def test_a_step_without_a_rubric_stops_instead_of_asking_the_step_sentence(self):
+        """M26-18: 2026-10-01 の HBR-006/6 は採点表が無く、手順の文「…「この石板で最後に判定の出た島」が読める」を
+        そのまま問いにしたら、judge は括弧の中を読む文字でなく探す物 (島) と取って 3 票とも no にした"""
+        with self.assertRaises(ValueError) as cm:
+            questions_of(
+                StepRef(
+                    "HBR-006",
+                    6,
+                    "【見た目】画 5: 「この石板で最後に判定の出た島」が読める",
+                ),
+                {"SEL-003/3": [{"id": "Q1", "q": "ピンが見える"}]},
+            )
+        self.assertIn("HBR-006/6", str(cm.exception))
+        self.assertIn("rubrics.json", str(cm.exception))
 
-    def test_rubrics_json_replaces_the_default(self):
-        qs = questions_of(StepRef("A-001", 2, "x"), {})
+    def test_rubrics_json_gives_the_questions(self):
         rubric = {"SEL-003/3": [{"id": "Q1", "q": "ピンが見える"}]}
         got = questions_of(StepRef("SEL-003", 3, "x"), rubric)
         self.assertEqual(got, [Question("Q1", "ピンが見える")])
-        self.assertEqual(len(qs), 1)
 
     def test_the_prompt_fixes_language_and_names_the_image(self):
         p = prompt_of(Q, Path("/a/b.png"))
@@ -370,6 +387,7 @@ class RunBase(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        write_rubrics(self.root, SEL_RUBRICS)
         (self.acc / "shots").mkdir(parents=True)
         for n in (1, 2, 3):
             (self.acc / "shots" / f"SEL-003-{n}.png").write_bytes(b"png")
@@ -646,6 +664,7 @@ class MainTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        write_rubrics(self.tmp, SEL_RUBRICS)
         self.acc = self.tmp / "acc"
         (self.acc / "shots").mkdir(parents=True)
         (self.acc / "shots" / "SEL-003-1.png").write_bytes(b"x")
@@ -665,6 +684,21 @@ class MainTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("計 3 回", out)
         self.assertEqual(fake.calls, [])
+
+    def test_dry_run_prints_the_question_the_judge_will_be_asked(self):
+        """M26-18: 何を問うかを呼ぶ前に目で確かめられる"""
+        _, out = self.call("--step", "SEL-003/3", "--dry-run")
+        self.assertIn("- S: 琥珀のピンで、どこを選んだか分かる", out)
+
+    def test_a_step_without_a_rubric_exits_1_before_any_call(self):
+        """M26-18: 採点表の無い手順は、手順の文を問いにして当てずに止まる"""
+        write_rubrics(self.tmp, {})
+        fake = FakeClaude({})
+        code, out = self.call("--step", "SEL-003/3", runner=fake)
+        self.assertEqual(code, 1)
+        self.assertNotIn("計", out)
+        self.assertEqual(fake.calls, [])
+        self.assertFalse((self.acc / "results.json").exists())
 
     def test_nothing_marked_llm_is_not_an_error(self):
         (self.tmp / "docs/acceptance/scenarios.jsonl").write_text(
@@ -1169,13 +1203,14 @@ class RepoLlmStepsTest(unittest.TestCase):
         keys = {s.key for s in select_steps(repo_sot(), [])}
         self.assertTrue(set(LLM_STEPS) <= keys, set(LLM_STEPS) - keys)
 
-    def test_each_step_loads_its_own_rubric_not_the_fallback(self):
+    def test_every_llm_step_in_the_source_of_truth_has_a_rubric(self):
+        """M26-18: 採点表の無い手順は judge が呼ぶ前に止まるので、正本の llm の手順に 1 つでも欠けると pnpm run judge 全体が止まる"""
         rubrics = repo_rubrics()
-        for key in LLM_STEPS:
-            step = select_steps(repo_sot(), [key])[0]
+        for step in select_steps(repo_sot(), []):
             qs = questions_of(step, rubrics)
-            self.assertGreaterEqual(len(qs), 3, key)
-            self.assertNotEqual([q.id for q in qs], ["S"], f"{key} は採点表が無い")
+            self.assertGreaterEqual(len(qs), 3, step.key)
+        for key in LLM_STEPS:
+            qs = questions_of(select_steps(repo_sot(), [key])[0], rubrics)
             self.assertFalse(any(q.ref for q in qs), key)
 
     def test_the_two_trial_failures_are_tested_by_their_intent(self):
@@ -1216,6 +1251,36 @@ class RepoLlmStepsTest(unittest.TestCase):
         edited = [Question(qs[0].id, qs[0].text + "。", qs[0].ref), *qs[1:]]
         after = digest_of([PlanItem(step, edited, img, True, None)])
         self.assertNotEqual(before, after)
+
+
+class RepoFalseNoTest(unittest.TestCase):
+    """M26-18: 2026-10-01 に judge が HBR-006/6 を 3 票とも no にした (「この石板で最後に判定の出た島」の直下に島の表示が無い)。
+    当時は採点表が無く、手順の文「…「この石板で最後に判定の出た島」が読める」をそのまま問いにしたので、
+    judge は括弧の中を読む文字でなく探す物 (島) と取った。採点表は、読む文字と、その下に出る文を名指しする"""
+
+    def test_hbr_006_6_has_a_rubric_that_names_the_heading_as_text_to_read(self):
+        rows = repo_rubrics().get("HBR-006/6")
+        self.assertIsNotNone(rows, "HBR-006/6 の採点表が無い")
+        qs = [r["q"] for r in rows]
+        self.assertGreaterEqual(len(qs), 3)
+        heading = [q for q in qs if "この石板で最後に判定の出た島" in q]
+        self.assertEqual(len(heading), 1, qs)
+        self.assertIn("読むのはこの文字列", heading[0])
+        self.assertIn("no の理由にしない", heading[0])
+        name = [q for q in qs if "として港に並べる" in q]
+        self.assertEqual(len(name), 1, qs)
+        for kind in ("の島", "の環", "の洲"):
+            self.assertIn(kind, name[0])
+        self.assertFalse(any(r.get("ref") for r in rows))
+
+    def test_hbr_006_6_asks_about_shot_5(self):
+        step = select_steps(repo_sot(), ["HBR-006/6"])[0]
+        got = images_of(
+            step,
+            {"HBR-006": [f"shots/HBR-006-{n}.png" for n in range(1, 6)]},
+            Path("/x/shots"),
+        )
+        self.assertEqual([p.name for p in got], ["HBR-006-5.png"])
 
 
 class RepoCropTest(unittest.TestCase):

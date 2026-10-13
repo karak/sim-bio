@@ -72,7 +72,6 @@ JUDGE_LOG = "judge.json"
 STEP_SPEC = re.compile(r"^(?P<id>[A-Z]{3}-\d{3})/(?P<n>\d+)$")
 # 手順の文の「画 1」「画 1〜3」「画 1 (…)・画 2」が指す画の番号
 SHOT_REF = re.compile(r"画\s*(\d+)(?:\s*[〜~]\s*(\d+))?")
-TAG_AND_SHOT = re.compile(r"^【[^】]*】\s*(?:画[^:：]*[:：]\s*)?")
 
 SYSTEM_PROMPT = "受入の画を採点表で採点する。道具は Read だけ使う。"
 SCHEMA = {
@@ -241,16 +240,12 @@ def has_pixel_baseline(image: Path, baselines: Path) -> bool:
 def questions_of(step: StepRef, rubrics: Mapping[str, Sequence[Mapping[str, str]]]):
     """採点表の問い。rubrics.json に <ID>/<n> があればそれ、無ければ手順の文を 1 つの問いにする"""
     rows = rubrics.get(step.key)
-    if rows:
-        return [Question(r["id"], r["q"], bool(r.get("ref"))) for r in rows]
-    claim = TAG_AND_SHOT.sub("", step.text)
-    return [
-        Question(
-            "S",
-            f"この画で、次の文が成り立つ: {claim}"
-            " (文が途中で切れている・字が欠けている・文の言う物が見えない・読めないなら no)",
+    if not rows:
+        raise ValueError(
+            f"{step.key} の採点表が {RUBRICS} に無い。画の何を見るかを問いに書いてから当てる"
+            " (手順の文をそのまま問いにはしない。M26-18)"
         )
-    ]
+    return [Question(r["id"], r["q"], bool(r.get("ref"))) for r in rows]
 
 
 def prompt_of(
@@ -943,7 +938,9 @@ def main(
     parser.add_argument("--votes", type=int, default=VOTES)
     parser.add_argument("--jobs", type=int, default=JOBS)
     parser.add_argument(
-        "--dry-run", action="store_true", help="呼ばずに、何を何回呼ぶかだけ出す"
+        "--dry-run",
+        action="store_true",
+        help="呼ばずに、何を (問いの文と画) 何回呼ぶかだけ出す",
     )
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["--"]:
@@ -977,6 +974,8 @@ def main(
             print(
                 f"{item.step.key} {item.image.name}: 問い {len(item.questions)} つ x {args.votes} 回"
             )
+            for q in item.questions:
+                print(f"  - {q.id}: {q.text}")
         print(f"計 {len(plan) * args.votes} 回の claude -p ({args.model})")
         return 0
     try:
