@@ -423,6 +423,8 @@ export function createHud(
     for (const d of spawnableSpecies) {
       $(`spawn-${d.id}`).addEventListener('click', () => toggleChip({ kind: 'spawn', speciesId: d.id }));
     }
+    const heldId = chip && chipId(chip);
+    for (const b of $('spawn-row').querySelectorAll('.chip')) b.classList.toggle('armed', b.id === heldId);
   };
 
   const vegRatio = (s: WorldSnapshot) => {
