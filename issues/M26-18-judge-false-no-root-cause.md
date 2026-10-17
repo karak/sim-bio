@@ -1,11 +1,15 @@
 ---
 id: M26-18
 title: judge が製品の正しい画に 3 票とも no を出した (HBR-006/6) 根本の原因を突き止め、同じ形の偽の no が出ない仕組みにする
-status: in_progress
+status: done
 milestone: M26
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M25-15]
-evidence: []
+evidence:
+  - scripts/test_judge.py QuestionsTest.test_a_step_without_a_rubric_stops_instead_of_asking_the_step_sentence・MainTest.test_a_step_without_a_rubric_exits_1_before_any_call・MainTest.test_dry_run_prints_the_question_the_judge_will_be_asked・RepoFalseNoTest (red は b97dfeb の judge.py を戻して 3 失敗・1 エラーを確認)
+  - scripts/test_judge.py test_every_llm_step_in_the_source_of_truth_has_a_rubric (正本の llm の手順すべてに採点表がある)
+  - docs/acceptance/rubrics.json HBR-006/6 (b97dfeb)。judge 2 回: 全体の画は undecided (2026-10-14)、港の口の切り抜きは Q1〜Q4 とも 3 票 yes (2026-10-17、.claude/review/m26-18/judge-run2.log)
+  - pnpm run check exit 0 (2026-10-14、unit 1439・worker 66・scripts 329)
 ---
 
 # judge の偽の no の根本の原因を断つ
@@ -33,7 +37,7 @@ M25-15 で、judge が 3 票とも no にした HBR-006/6 (画 5) は製品が�
 
 - [x] HBR-006/6 の偽の no の原因が、問い・画・票の記録を根拠に作業ログにある
 - [x] 同じ形の手順で偽の no が出ないことを検める仕組み (試験または judge の前の検め) があり、直す前に赤
-- [ ] HBR-006/6 の judge を 1 回回して 3 票とも yes (または回さない訳と、目で見た根拠) — 1 回回して割れた (下の作業ログ)。2 回目は費用の上限でユーザーの判断
+- [x] HBR-006/6 の judge を 1 回回して 3 票とも yes (または回さない訳と、目で見た根拠) — 全体の画では割れ、港の口の切り抜きでは Q1〜Q4 とも 3 票 yes (2026-10-17、下の作業ログ)
 - [x] `pnpm run test:scripts`・`pnpm run check` が通る (2026-10-14 01:27、unit 1439・worker 66)
 
 ## 作業ログ
@@ -48,3 +52,4 @@ M25-15 で、judge が 3 票とも no にした HBR-006/6 (画 5) は製品が�
   - レビュー (読むだけの opus)。直す前の赤を HEAD の judge.py に当て直して確かめた (4 つとも赤)。取り込んだ指摘: (1) 採点表 Q3 の「…の島として」は島の呼び名の結びが「の島」「の環」「の洲」(src/harbor/names.ts の KIND) なので半分の回で偽の no になる → 「ひとことを刻んで、」で始まり「として港に並べる」で終わる文、結びは 3 つのどれか、に直した。(2) Q1 の「港の口 (引き出し)」は画にも src にも無い語 → 見出し「港」と「流れ着いた島の年代記」の板、に。(3) Q2 は「見出し」でなく「薄い小さな字の 1 行」と言い、no の条件 (文字列が無い・読めない) と no の理由にしないもの (下に島の絵が無い) を言い切った。(4) Q4 の「チップ」→「ひとことを選ぶ小さな札」。(5) `test_each_step_loads_its_own_rubric_not_the_fallback` は消えた既定 (id S) を前提にしていた → `test_every_llm_step_in_the_source_of_truth_has_a_rubric` に替え、正本の llm の手順すべて (OBS-002 を含む) に採点表があることを検める (無ければ pnpm run judge 全体が止まるため)。(6) `RepoFalseNoTest` は言い回しの試験なので、no の条件と 3 つの結びを見る形に強めた。
     取り込まなかった指摘 (候補): `--image` の回は no・error の票の根拠を出さないので次に原因を追えない → 根拠を標準出力に出す手 (別の票の候補)。shots の HBR-006 は lead が島の名前に替わる前に撮りうる (見込みは低い)。
   - 既存の文の書き換え (ユーザーの承認 2026-10-14、次のコミット): judge.py:10 と docs/operations/acceptance.md:72 の「何を何回呼ぶかだけ出す」(問いの文も出すようになった)、judge.py:241 の docstring「…無ければ手順の文を 1 つの問いにする」と acceptance.md:76 の同じ文 (既定を消した)、judge.py:8 と acceptance.md:70 の「任意の手順 (…) を当てる」(当てられるのは採点表のある手順だけ)。
+- 2026-10-17: judge の 2 回目 (切り抜き)。10-14 の全体の画 (1280x720) から港の口の板の辺り (左上 x30 y5、390x520) を sips で切り抜き、`--step HBR-006/6 --image` で当てた (記録は書かない)。Q1〜Q4 とも yes/yes/yes、3 回 9 秒 0.064 USD。切り抜きと出力は `.claude/review/m26-18/HBR-006-5-port.png`・`judge-run2.log` (git の外)。採点表の問いと切り抜きの 2 つで偽の no は消えた。crops.json には足していない: HBR-006 は auto の行で `pnpm run shots` が画を書かず (shots.spec.ts の isAuto)、judge の正本の回には乗らないため。judge で見る行に替えるなら、shots の cropAround (点を中心に 320x240) でなく板の矩形で切る手が要る (別の票の候補)。AC 3 にチェックして done。
