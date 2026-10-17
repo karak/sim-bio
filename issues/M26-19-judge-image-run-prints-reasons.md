@@ -1,7 +1,7 @@
 ---
 id: M26-19
 title: judge の --image の回も、no と失敗の票の根拠を標準出力に出す (記録に書かない回で原因を追えるように)
-status: todo
+status: done
 milestone: M26
 plan: docs/decisions/0001-acceptance-automation.md
 depends_on: [M26-18]
@@ -40,3 +40,4 @@ evidence:
 
 - 2026-10-17: 起票 (M26-18 の読むだけのレビューで取り込まなかった候補から)。
 - 2026-10-17: 実装。MainTest に 4 試験を足し、no の票の試験が赤 (標準出力に根拠の行が無い) なのを確かめてから、main の `--image` 分岐で `note_of(record_of(r) ...)` の 2 行目以降 (yes でない手順だけ) を出した。記録に書く回の出力は変えていない。
+- 2026-10-17: 取り込み (2590e62)。親が赤を取り直した (09dd3bc の judge.py に 4 つの新しい試験を当て、no の票と失敗の票の 2 つが FAIL、yes と記録の回の 2 つは通る)。test:scripts 333 OK、lint:py 通過。done。
