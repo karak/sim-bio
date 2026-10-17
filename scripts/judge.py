@@ -997,6 +997,9 @@ def main(
     print(summary_of(results, elapsed, cost, skipped, stale))
     if args.image:
         print("--image で画を替えたので、results.json と judge.json には書かない")
+        failing = {r.step.key: record_of(r) for r in results if r.verdict != "yes"}
+        if failing:
+            print("\n".join(note_of(failing).splitlines()[1:]))
     failed = [r.step.key for r in results if r.errored]
     if failed:
         print(

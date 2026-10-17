@@ -690,6 +690,47 @@ class MainTest(unittest.TestCase):
         _, out = self.call("--step", "SEL-003/3", "--dry-run")
         self.assertIn("- S: 琥珀のピンで、どこを選んだか分かる", out)
 
+    def test_a_replaced_image_prints_the_evidence_of_a_no_vote(self):
+        """M26-19: 記録に書かない回でも、落ちた票の根拠が標準出力に残る"""
+        other = self.tmp / "defect.png"
+        other.write_bytes(b"x")
+        fake = FakeClaude({"defect.png": reply("S", "no", "ピンが無い")})
+        _, out = self.call(
+            "--step", "SEL-003/3", "--image", str(other), "--votes", "3", runner=fake
+        )
+        self.assertIn(
+            "- SEL-003/3 defect.png S 不合格 (3 票とも no) [no/no/no]: ピンが無い", out
+        )
+
+    def test_a_replaced_image_prints_the_evidence_of_a_failed_call(self):
+        other = self.tmp / "defect.png"
+        other.write_bytes(b"x")
+
+        def broken(prompt, image, model, reference=None):
+            raise OSError("boom")
+
+        _, out = self.call(
+            "--step", "SEL-003/3", "--image", str(other), "--votes", "1", runner=broken
+        )
+        self.assertIn("- SEL-003/3 defect.png S 票が割れた [error]: OSError: boom", out)
+
+    def test_a_replaced_image_does_not_print_the_evidence_of_a_yes_vote(self):
+        other = self.tmp / "defect.png"
+        other.write_bytes(b"x")
+        fake = FakeClaude({"defect.png": reply("S", "yes", "ピンが見える")})
+        _, out = self.call(
+            "--step", "SEL-003/3", "--image", str(other), "--votes", "3", runner=fake
+        )
+        self.assertNotIn("ピンが見える", out)
+        self.assertNotIn("- SEL-003/3", out)
+
+    def test_a_recorded_run_prints_no_evidence_lines(self):
+        """M26-19: 記録に書く回の標準出力は変えない"""
+        fake = FakeClaude({"SEL-003-1.png": reply("S", "no", "ピンが無い")})
+        _, out = self.call("--step", "SEL-003/3", "--votes", "3", runner=fake)
+        self.assertNotIn("ピンが無い", out)
+        self.assertIn("SEL-003/3: fail", out)
+
     def test_a_step_without_a_rubric_exits_1_before_any_call(self):
         """M26-18: 採点表の無い手順は、手順の文を問いにして当てずに止まる"""
         write_rubrics(self.tmp, {})
