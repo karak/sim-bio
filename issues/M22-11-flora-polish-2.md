@@ -1,7 +1,7 @@
 ---
 id: M22-11
 title: 草と木の次の磨き上げ (木の肌のテクスチャ・切り株・丸太を基準画の水準へ)
-status: in_progress
+status: done
 milestone: M22
 plan: docs/design/2026-09-23-observation-view.md
 depends_on: [M22-03]
@@ -27,8 +27,8 @@ M22-03 は 2026-10-11 の審査台 (回 m22-uat-20261011-1106、M22-03-R1-grass-
 
 ## Acceptance criteria
 
-- [ ] 木の肌・切り株・丸太の前後の画が審査台で合格
-- [ ] 予算 (三角形・draw call) の内、`npm run bench:observe` の数を作業ログに写す
+- [x] 木の肌・切り株・丸太の前後の画が審査台で合格 (bark・logs・budget は回 m22-11-flora-20261013-0904、stump は回 m22-11-flora-20261017-1436、2026-10-17)
+- [x] 予算 (三角形・draw call) の内、`npm run bench:observe` の数を作業ログに写す (2 回目・3 回目の行)
 
 ## 作業ログ
 
@@ -44,3 +44,4 @@ M22-03 は 2026-10-11 の審査台 (回 m22-uat-20261011-1106、M22-03-R1-grass-
   三角形 株 1,642 → 1,930 (+288)、材質は wood のまま (draw call 同じ)、`stump_lod1` は触っていない。belltree.glb は 2 回書き出して同じ。
   `npm run bench:observe` (1280 × 720、Apple M4、前 70bf3c4): 三角形 (千) / draw call 前 → 後 集落 399.9 / 97 → 399.9 / 97・船台 251.0 / 92 → 252.8 / 92・群れ 230.1 / 78 → 230.1 / 78・林 318.8 / 91 → 319.4 / 91・狼 347.5 / 103 → 347.5 / 103・海岸 255.4 / 74 → 256.5 / 74。fps は各 1 回 (前は Vite を立てた直後で低く出た) 313 → 356・328 → 376・377 → 439・307 → 345・313 → 334・357 → 400。
   比較画 `docs/design/qa/observe/trees6-stump.png`、審査台の回 `.claude/localreview/m22-11-flora-20261017-1436/` (縁の寄り・株の引き・Blender の前後も)。所見は environment.md の「追記(M22-11 株の縁の 3 回目 …)」。
+- 2026-10-17: 審査台で stump 合格 (回 m22-11-flora-20261017-1436)。既存のコメント 3 か所 (observe_belltree.py の STUMP_TEARS の注・楔を足さない条件の注・stump_rim_band の docstring) を torn が既定になった今の形に書き換えた (ユーザーの承認 2026-10-17)。done。
