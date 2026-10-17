@@ -125,6 +125,22 @@ describe('HUD の持っているチップ (M27-05 段 4)', () => {
     expect(hint(root, 'volcano-hint')).toBe(true);
     expect(onArm).toHaveBeenLastCalledWith(null);
   });
+
+  it('放流のチップを持っている間に種の列が作り直されても、同じ種の新しい札は光る', async () => {
+    const { root, hud, snap, firstSpawn } = mount();
+    const user = userEvent.setup();
+    await user.click(root.querySelector(`#spawn-${firstSpawn.id}`)!);
+    const before = root.querySelector(`#spawn-${firstSpawn.id}`)!;
+    expect(before.classList.contains('armed')).toBe(true);
+
+    hud.update({ ...snap, species: [...snap.species, { ...firstSpawn, id: `${firstSpawn.id}-extra`, name: '追加の種' }] });
+
+    const after = root.querySelector(`#spawn-${firstSpawn.id}`)!;
+    expect(after).not.toBe(before);
+    expect(hud.chip()).toEqual({ kind: 'spawn', speciesId: firstSpawn.id });
+    expect(after.classList.contains('armed')).toBe(true);
+    expect(armed(root)).toEqual([`spawn-${firstSpawn.id}`]);
+  });
 });
 
 const lit = (root: HTMLElement) => [...root.querySelectorAll('#speed-row .on')].map((b) => b.id);
