@@ -1,7 +1,7 @@
 ---
 id: M27-07
 title: HUD の種の列を作り直すと、持っている放流のチップの光 (.armed) だけ消える
-status: todo
+status: done
 milestone: M27
 plan: issues/M27-05-stage-union-and-command-layer.md
 depends_on: [M27-05]
@@ -26,9 +26,10 @@ evidence:
 
 - [x] `tests/unit/ui.hud.dom.test.ts` に、放流のチップを持った状態で種が増えた snapshot を `update` し、新しい `#spawn-row` の札に `.armed` が付いていることを見る試験 (直す前に赤を確かめる)
 - [x] `pnpm run check` が通る。基準画 (`pnpm run shots`) は変わらない (見込み。理由は evidence)
-- [ ] 既存コメントの削除・書き換えは候補として報告し、承認を得てから
+- [x] 既存コメントの削除・書き換えは候補として報告し、承認を得てから (候補なし)
 
 ## 作業ログ
 
 - 2026-10-11 22:50 起票 (M27-05 の作業ログ「前からある穴」から)。
 - 2026-10-17 TDD で直した。赤を確かめてから、`ensureSpecies` の末尾に、持っているチップの id と同じ札だけ `.armed` を付ける 2 行を足した。案の `setChip(chip)` は `h.onArm` を再び呼び main.ts に二重に知らせるので、光だけを揃える形にした。AC 3 点目 (既存コメントの削除・書き換え) は候補なし。status は親が取り込んでから。
+- 2026-10-17: 取り込み (02cf5cf)。done。
