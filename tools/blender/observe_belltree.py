@@ -702,9 +702,17 @@ STUMP_R = 0.55
 STUMP_CUT_R = 0.47
 # (M22-11 で追加) 株の上の裂けた樹皮の縁の形。"band" は外周に沿って続く帯の上の縁を、倒れた側の大きな裂け 3 つと反対側の小さな裂けの
 # 包絡で持ち上げる (基準画の株は、幅のある不揃いな裂けが数本で、細い棘の冠ではない)。"wedge" は前の、頂点ごとの細い楔 (棘に見えた)
-STUMP_RIM = "band"
+STUMP_RIM = "torn"
 # (倒れた側からの方位 度, 高さ m, 半幅 度)。帯の上の縁は、この山の重なり + 低いぎざぎざ
 STUMP_TEARS = [(0, 0.33, 34), (-48, 0.2, 26), (52, 0.25, 30), (128, 0.09, 24), (-140, 0.11, 22), (178, 0.05, 30)]
+# (M22-11 3 回目で追加) "torn" は "band" と同じ山の帯に、その 1 段下の尺度 (数 cm〜十数 cm) の荒れを足す (stump_rim_torn)。
+# 審査台のメモ「全体をぎざぎざにするのでなく、その1段階下のレベル（フラクタル的な意味で）をより荒くするように」。
+# 帯の周の分割は胴の 1 面を STUMP_RIM_SUB に割る (胴の sides は変えない)
+STUMP_RIM_SUB = 3
+# (倒れた側からの方位 度, 深さ (その場所の山の高さに対する割合))。山の斜面の切れ込み。方位は帯の頂点の間に置く
+STUMP_NOTCHES = [(-43.33, 0.55), (-10.0, 0.62), (16.67, 0.55), (43.33, 0.6)]
+# (倒れた側からの方位 度, 高さ m)。山の頂の近くの細い突起
+STUMP_SPIKES = [(3.33, 0.075), (56.67, 0.06)]
 
 
 def ringed_body(zs, rs, sides, ridge, phase=0.0, uv=None):
@@ -791,6 +799,8 @@ def stump():
                                                                             0.8 + 0.2 * clamp01((co.z - STUMP_H) / max(0.02, h))))
     if STUMP_RIM == "band":
         stump_rim_band(n, sides, fis, hinge)
+    elif STUMP_RIM == "torn":  # (M22-11 3 回目で追加)
+        stump_rim_torn(n, sides, fis, hinge)
     # 木口の上に立つ細い裂け (倒れた側の縁の近く)
     for i in range(5):
         a = hinge + rnd.uniform(-0.6, 0.6)
@@ -851,6 +861,97 @@ def stump_rim_band(n, sides, fis, hinge):
         outer.append(bm.faces.new((ob[k], ob[j], ot[j], ot[k])))
         rest.append(bm.faces.new((ib[j], ib[k], it[k], it[j])))
         rest.append(bm.faces.new((ot[k], ot[j], it[j], it[k])))
+    top = max(hs)
+
+    def shade(co, nrm):
+        lift = 0.82 + 0.18 * clamp01((co.z - STUMP_H) / top)
+        r = math.hypot(co.x, co.y)
+        c = BARK_LIN if r > (STUMP_R + STUMP_CUT_R) / 2 and nrm.dot(Vector((co.x, co.y, 0)).normalized()) > 0.5 else FIBRE_LIN
+        return K.mul3(c, lift)
+    n.add(bm, M["wood"], smooth=False, shade=shade)
+
+
+def stump_rim_torn(n, sides, fis, hinge):
+    """(M22-11 3 回目で追加) "band" の帯の 1 段下の尺度を荒くした縁。大きな山 (STUMP_TEARS) の形はそのままに、
+    - 周の分割を胴の 1 面あたり STUMP_RIM_SUB に (胴の外周の折れ線の上に頂点を置き、帯が胴から浮かない・食い込まない)
+    - 上の縁に周に沿った値ノイズ (波長 15〜30 cm ほど) を、その場所の山の高さに比例する振幅で足す (山の高い所ほど荒く、低い縁は静か)
+    - 山の斜面に切れ込み (STUMP_NOTCHES: 高さが急に落ちる壁と、次の頂点へ戻る斜面)
+    - 頂の近くに細い突起 (STUMP_SPIKES: 根元 1 つと先 1 つの頂点を足した細い鰭)
+    外の面は樹皮、内と上の面は木の繊維の色 (band と同じ塗り)。三角形は帯の頂点 1 つにつき 6。決定論 (乱数は使わず vnoise だけ)"""
+    step = 2 * math.pi / sides
+    corner = [Vector((STUMP_R * fis(3, k) * math.cos(step * k), STUMP_R * fis(3, k) * math.sin(step * k), 0)) for k in range(sides)]
+
+    def body_r(a):
+        """方位 a の、胴の上の輪 (頂点 sides 個の折れ線) までの距離"""
+        k = math.floor(a / step) % sides
+        p, e = corner[k], corner[(k + 1) % sides] - corner[k]
+        dx, dy = math.cos(a), math.sin(a)
+        return (p.x * e.y - p.y * e.x) / (dx * e.y - dy * e.x)
+
+    def rise(a):
+        d = math.degrees(math.atan2(math.sin(a - hinge), math.cos(a - hinge)))
+        h = 0.0
+        for at_, top, w in STUMP_TEARS:
+            t = abs((d - at_ + 180) % 360 - 180) / w
+            if t < 1:
+                h = max(h, top * (1 - t) ** 1.4)
+        return h
+
+    def ring_noise(a, f, seed):
+        """周に沿って継ぎ目なく続く値ノイズ (0〜1)。f は周 1 回りの格子の数 / 2π"""
+        return K.vnoise(math.cos(a) * f, math.sin(a) * f, 0.0, seed)
+
+    def height(a):
+        r = rise(a)
+        # 低い縁の静かなうねり (振幅 1.2 cm) と、山に比例する荒れ (尺度 11 cm と 6.5 cm ほどの 2 つの和)。荒れは |2n - 1| の折れで、
+        # 下向きの尖った谷 (繊維の裂け目) と丸い肩になる。平均 0.34 を引いて、山の高さを -30〜+37% 揺らす。
+        # 種は 3 つの大きな山の頂の高さがほぼ変わらないものを選んだ (0.33 → 0.30・0.2 → 0.2・0.25 → 0.24)
+        quiet = 0.025 + 0.012 * ring_noise(a, 2.0, 3.1)
+        rough = 0.6 * abs(2 * ring_noise(a, 4.5, 1.3) - 1) + 0.4 * abs(2 * ring_noise(a, 7.5, 8.8) - 1)
+        # 反対側の低い山 (0.05〜0.11 m) は静かに: 揺れの強さを山の高さ 0.18 m まで比例で弱める
+        return quiet + r * (1 + 0.9 * min(1.0, r / 0.18) * (rough - 0.34))
+
+    # 帯の頂点の方位と高さ: 一様な分割 + 切れ込み (壁の上と底) + 突起 (根元と先)
+    pts = [(step / STUMP_RIM_SUB * i, None) for i in range(sides * STUMP_RIM_SUB)]
+    for d, depth in STUMP_NOTCHES:
+        a0 = hinge + math.radians(d)
+        pts.append((a0 - math.radians(0.6), None))
+        pts.append((a0, ("notch", depth)))
+    for d, tall in STUMP_SPIKES:
+        a0 = hinge + math.radians(d)
+        pts.append((a0 - math.radians(0.8), None))
+        pts.append((a0, ("spike", tall)))
+    pts = sorted(((a % (2 * math.pi)), f) for a, f in pts)
+    ang = [a for a, _ in pts]
+    hs, out = [], []
+    for a, f in pts:
+        h = height(a)
+        push = 0.0
+        if f and f[0] == "notch":
+            h = 0.025 + (h - 0.025) * (1 - f[1])
+        elif f and f[0] == "spike":
+            h += f[1]
+            push = 0.025
+        hs.append(h)
+        out.append(push)
+    m = len(pts)
+    ro = [body_r(a) * 0.99 for a in ang]
+    ri = [STUMP_CUT_R + 0.012 + 0.015 * ring_noise(a, 4.0, 5.3) for a in ang]
+    lean = [-0.01 + 0.045 * ring_noise(a, 2.4, 9.1) + out[i] for i, a in enumerate(ang)]
+    z0 = STUMP_H - 0.02
+
+    def at(r, a, z, k):
+        return Vector((r * math.cos(a), r * math.sin(a), z)) + Vector((math.cos(a), math.sin(a), 0)) * (lean[k] * (z - z0) / 0.3)
+    bm = bmesh.new()
+    ob = [bm.verts.new(at(ro[k], ang[k], z0, k)) for k in range(m)]
+    ot = [bm.verts.new(at(ro[k], ang[k], STUMP_H + hs[k], k)) for k in range(m)]
+    ib = [bm.verts.new(at(ri[k], ang[k], z0, k)) for k in range(m)]
+    it = [bm.verts.new(at(ri[k] + 0.015, ang[k], STUMP_H + hs[k] * 0.86, k)) for k in range(m)]
+    for k in range(m):
+        j = (k + 1) % m
+        bm.faces.new((ob[k], ob[j], ot[j], ot[k]))
+        bm.faces.new((ib[j], ib[k], it[k], it[j]))
+        bm.faces.new((ot[k], ot[j], it[j], it[k]))
     top = max(hs)
 
     def shade(co, nrm):
