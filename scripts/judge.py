@@ -30,7 +30,7 @@ CI では回さない (Claude Code の認証も基準画も無い)。鍵は持�
 pass の失効 (M25-12): 手順の記録に digest (判じた画・承認済みの画・採点表の問いの内容の sha256) を添える。
   - 次に pnpm run judge が走るとき、呼ぶ前に、digest が今と合わない (画・承認済みの画・採点表が変わった。digest の無い古い記録も) pass を消す。
     今回当てない手順 (--step で絞った回) の pass も消す。項目は undecided になり、note に「まだ当てていない手順」が出る。
-  - --image の試しは記録に触らない。人の判定・fail・undecided も消さない。
+  - --image の試しは記録に触らない。人の判定・fail・undecided も消さない。no・失敗の票の根拠は標準出力に出す (results.json の note と同じ 1 行の形)。
 """
 
 from __future__ import annotations

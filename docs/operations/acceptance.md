@@ -77,7 +77,7 @@ pnpm run judge -- --dry-run                        # 何を (問いの文と画)
 - 1 枚の画に 3 回呼び、問いごとに多数決を取る。3 票とも yes なら yes、3 票とも no なら fail、割れた問い (呼び出しの失敗を含む) は undecided。
 - `results.json` には fail と undecided を `{verdict, note, at, by: "llm", llm: {cli, model, cost_usd, steps}}` で書く。合格は、観察画面の画 (画素の基準を持たず、人が承認した同じ場面の画を `docs/acceptance/observe-approved/` に持つ画。OBS-002) だけの手順で 3 票とも yes のときに、同じ形の `verdict: "pass"`・`by: "llm"` で書く。項目が pass になるのは、正本の llm の手順をすべて当ててどれも合格のときだけ。ほかの手順の合格は書かない。人が判定した項目 (`by` が llm でない) は上書きしない。受入の画面は `undecided` を「未判定」と読み、note に LLM の根拠が出る。
 - 全部の票と根拠は、受入の画面の置き場の `judge.json` に書く。画素の基準 (`tests/e2e/baselines/`) を持つ画は、3 票とも yes でも `writes_pass: false` (LLM の yes だけでは合格にしない)。
-- `--image` で画を替えたとき (仕込んだ欠陥の試し) は、標準出力だけで `results.json` にも `judge.json` にも書かない。呼び出しがすべて失敗した手順 (認証切れ) は記録を書き換えず、終了コード 1 で返る。
+- `--image` で画を替えたとき (仕込んだ欠陥の試し) は、標準出力だけで `results.json` にも `judge.json` にも書かない (標準出力には no・失敗の票の根拠が `note` と同じ 1 行の形で出る)。呼び出しがすべて失敗した手順 (認証切れ) は記録を書き換えず、終了コード 1 で返る。
 - 受入の画面で人が LLM の項目を押す・メモを直すと、画面のサーバーが `by` と `llm` を落として保存する。以後その項目は人の判定として扱い、judge は書き換えない。
 - モデルは `--model` (既定 sonnet)。呼び出しは 1 回 5〜10 秒、換算 0.014〜0.023 USD (2026-10-01 の実測。ADR の 10〜14 秒・0.015〜0.033 USD より速く安い)。
 
