@@ -59,6 +59,8 @@
 | C7 | 既存の型に合わせる: `LogSink`/`LogRecord`、`Command`、`SaveData`、`World.dispatch`、`ScenarioRunner.intervene`、`src/ui/clicks.ts` (M27-05 で `src/simulation/commands.ts` へ)(台本と UI が同じ入口) | コード |
 | C8 | Workers と D1 の日次の枠はアカウント単位 | pricing。このゲーム専用の Cloudflare アカウントを使う |
 
+版は 3 つある。`SaveData.version` (島の保存の形)・`SIM_VERSION` (C5 の本体の規則の版、`src/simulation/version.ts`)・`RUNNER_STATE_VERSION` (石板の runner の状態の形、`src/scenario/ScenarioRunner.ts`)。それぞれの関係と上げる時は ADR 0002 の決定 5 (`docs/decisions/0002-architecture-fence.md`) に書いた。
+
 C6 の注(opus の案が見つけ、コードで確かめた):
 - `core/runner.ts` は 1 フレームで最大 200 tick 進める(`world.step(Math.min(ticks, cap))`)。
 - `ScenarioRunner.update`(`fireDue(year)` で予定の滅びを出し、年の境目で予算を動かす)は、`main.ts` の onTick からフレームごとに 1 回しか呼ばれない。
@@ -140,6 +142,8 @@ C6 の注(opus の案が見つけ、コードで確かめた):
 | Workers Logs | 無料プランに含む、3 日保持・1 日 200,000 件 | 1 日 数千件 | — | [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)、[pricing#workers-logs](https://developers.cloudflare.com/workers/platform/pricing/#workers-logs)(2026-09-26 に M19-02 で確認: 無料は 3 日) |
 | Turnstile | 無料、1 アカウント 20 ウィジェット。トークンは 300 秒・1 回きり、siteverify 必須 | 1 ウィジェット | — | [Turnstile plans](https://developers.cloudflare.com/turnstile/plans/) |
 | Cron | 5 本/アカウント | 1 本 | — | limits |
+
+superseded by: docs/specs/2026-10-18-decisions-current.md#d1-の書きの予算 (D1 の行の書きの「約 4.3 万行」。2026-10-18、M27-06)
 
 ### 3.3 「課金にしない」を構造で守る
 
@@ -338,6 +342,7 @@ export function replay(c: Chronicle, onYear?: (year: number) => void, signal?: A
 2026-09-01 から、D1 は上限に当たると読みも含めてクエリが失敗する。その手前で、港が自分から閉まる。
 
 - D1 の `daily_budget` に、その日の出港・積荷・通報の件数を数える。上限は仮に、出港 2,000、積荷 5,000、通報 1,000。これで D1 の書きは最悪でも約 43% に収まる。
+  - superseded by: docs/specs/2026-10-18-decisions-current.md#d1-の書きの予算 (D1 の書きの「約 43%」。2026-10-18、M27-06)
 - 捨てる順は、ログ > 確認 > 一覧 > 積荷 > 出港 > 訪問。共有リンクの訪問は最後まで守る。
 - `/logs` と `/confirm` は、入口で粗い日次上限を持つ。超えた分は 204 を返して黙って捨てる。M19-01 の「失敗しても本体は止まらない」を満たす。
 - D1 の保存が 400 MB を超えたら、出港を「港は満杯」で閉じる。1 データベース 500 MB の内側に置く栓で、保存量は Cron が毎日集計する。古い記録は運営が CLI で間引く。
