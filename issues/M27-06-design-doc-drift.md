@@ -1,11 +1,12 @@
 ---
 id: M27-06
 title: 設計書とコードのずれ (R3): 09-19 の決定事項の表に改訂を、09-26 §6.1 の D1 の数を policy.ts に合わせる
-status: in_progress
+status: done
 milestone: M27
 plan: docs/design/2026-10-10-architecture-review.md#6-所見と推奨優先順
 depends_on: []
 evidence:
+  - commit 7bb4c31 (check:docs、赤) → dd08879 (新文書とポインタ、ユーザーの承認 2026-10-18) → 864d6cf、取り込み 215b973
   - "scripts/test_check_docs.py RepoTest.test_todays_docs_pass (ポインタ・版の段落・今の決定事項の印。直す前に赤)"
   - "scripts/test_check_docs.py RepoTest.test_docs_before_m27_06_fail (46fc759 の docs が落ちる)"
   - "scripts/test_check_docs.py PointerTest・VersionParagraphTest・FactTest・MarkTest・SlugTest"
@@ -45,3 +46,4 @@ evidence:
 - 2026-10-18: 審査台の判定 (decisions-20261017)。表の「改訂」の列は却下 (1-1 のメモ「元の設計書に superseded by <参照先文書と節へのポインタ> をつけて別ファイルを起こす。必ず RED を持つ自動テストで担保」、残り 10 行は保留で同じ)。§6.1・§3.2 の数は承認 (メモ「内容は良いが、文書管理は superseded 方式にして」)。policy.ts の注は却下 (メモ「これはコメントに書くべきことか？ 性能要件として切り出したうえで、対応する測定用の適用度関数を python などで書いてほしい」→ 別の票 M26-20)。ADR 0002 の 1 行は 09-26 の制約の表の後 (C8 と C6 の注の間)。Cron の掃除の分は文書に書くだけ (予算は変えない)。表の外の古い記述 (09-19 の 4 行目・§4.2:191・§7 の 4 項目) は次の回で候補を出す。
 - 2026-10-18: superseded 方式で実装 (worktree の agent)。先に `scripts/check_docs.py`・`scripts/test_check_docs.py` を書いて赤を確かめた (`RepoTest.test_todays_docs_pass` が落ち、`pnpm run check:docs` は 4 件の違反で終了コード 1: 09-26 に `#d1-の書きの予算` へのポインタが 0 個 (要るのは 2 個)、09-19 に `#決定事項` へのポインタが 0 個、09-26:60 の C8 と「C6 の注」の間に版 3 つと ADR 0002 の段落が無い、`docs/specs/2026-10-18-decisions-current.md` が無い)。その後に新文書 (決定事項の表 20 行 + 列「今 (2026-10-18)」「根拠」、D1 の書きの予算、改訂) を起こし、09-19 の冒頭の箇条・09-26 の §3.2 の表の後・§6.1 の箇条の下にポインタ、09-26 の C8 と「C6 の注」の間に版 3 つの段落を足した (既存の文は変えず、行を足しただけ)。新文書の数は印 `<!-- check: 名=値 -->` で、check:docs が今のコード (E2E 21 本・Command 9 種・decomposer・SLOTS 4・AUTOSAVE_TICKS 90・BUDGETS の cap と shedAt の最大 45,000・policy.ts の注の 88,000) と突き合わせる。`pnpm run check` に `check:docs` を入れた。
 - 2026-10-18: `pnpm run check` が通った (typecheck・lint・lint:py・check:readme・check:docs・test 1440・test:worker 66・test:scripts 362)。
+- 2026-10-18: 取り込み (215b973)。親が検めた: 既存の 2 文書は追加のみ (numstat の削除 0)、check:docs 違反なし、test_check_docs 29 OK (RepoTest.test_docs_before_m27_06_fail が 46fc759 の文書で違反 4 件を出すことを固定)、test:scripts 362 OK、lint:py 通過。done。表の外の古い記述 (09-19:4 の状態・192 の HTTP sink・898〜901 のスコープ外) は次の審査台の回で候補 (ポインタだけ足す案 / 新文書に節を足す案) を出す。
