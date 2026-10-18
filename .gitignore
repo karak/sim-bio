@@ -50,3 +50,6 @@ __pycache__/
 
 # デザインボードの生成途中の絵 (承認したものだけ assets/textures/board/ の下へ移す)
 assets/textures/board/drafts/
+
+# 検証の証拠の置き場 (.claude/skills/verify-biotope の run-e2e.sh が書く)
+.claude/verify/
