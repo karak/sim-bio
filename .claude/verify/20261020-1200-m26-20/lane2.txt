@@ -1,0 +1,27 @@
+ worker/src/policy.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+> biotope-island@1.0.0 check:d1-writes /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-a1df9d527e13c714b
+> uv run scripts/check_d1_writes.py
+
+道                       上限  1 件の行     最悪の行
+------------------  ------  -----  -------
+daily_budget        45,000      1   45,000
+confirm              5,000      1    5,000
+report_outcome       5,000      1    5,000
+cast_cargo          50,000      3  150,000
+publish              2,000      4    8,000
+report               1,000      5    5,000
+withdraw             1,000      5    5,000
+Cron: reports        1,000      2    2,000
+Cron: cargo         50,000      3  150,000
+Cron: daily_budget      11      1       11
+Cron: chronicles       333      2      666
+Cron: harbor_stats       1      2        2
+
+道の書き 223,000 + Cron の掃除 152,679 = 合計 375,679 行/日
+無料枠 100,000 行/日の 375.7% (要件 90% = 90,000 行)
+超えた。375,679 > 90,000
+ ELIFECYCLE  Command failed with exit code 1.
+exit=1
+--- restored: git diff worker/src/policy.ts (empty below) ---
