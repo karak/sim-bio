@@ -1,6 +1,6 @@
 import type { Chronicle, ChronicleHead } from '../chronicle/chronicle';
 import { parseChronicleId, type ChronicleId } from '../harbor/contract';
-import { checkSlot, planSlotLoad, type Here, type SlotSave } from '../persist/slotSave';
+import { checkSlot, planSlotLoad, type AtTitle, type Here, type SlotSave } from '../persist/slotSave';
 import type { ManualSlot, PendingSlot, SlotId } from '../persist/slots';
 import type { TabMarks } from '../persist/tabMarks';
 import type { RunnerState } from '../scenario/ScenarioRunner';
@@ -18,7 +18,9 @@ import type { Stage } from './stage';
 export type At =
   | { stage: 'free' }
   | { stage: 'scenario'; head: ChronicleHead; finished: boolean }
-  | { stage: 'visit' };
+  | { stage: 'visit' }
+  /** (M24-02) タイトル (舞台なし、島が無い)。freeSaved は自動の枠 (自由モード) に続きがあるか。atOf は返さず、タイトルのメニュー (ui/titleMenu.ts) だけが渡す */
+  | { stage: 'title'; freeSaved: boolean };
 
 /** やり直しの効かない操作。select は石板を選ぶ・自由モードへ (null)、retry は判定の板のもう一度 (訪問中は visit を残す、M26-08)、visit は港の訪れる札、title はタイトルへ (M24-04)。load の slot が null ならファイル */
 export type Op =
@@ -66,6 +68,7 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
   switch (op.kind) {
     case 'new_island':
       if (at.stage === 'visit') return NOTHING;
+      if (at.stage === 'title') return newFromTitle(at.freeSaved);
       // 石板の中では「石板を初めから」(M19-17)。今の続きを Year 0 で上書きする。判定の出た島 (港へ出せる島) は別の置き場に残る
       return {
         ask: askOf({ kind: 'new_island', inScenario: at.stage === 'scenario' }),
@@ -74,7 +77,7 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
     case 'load':
       return at.stage === 'visit' ? NOTHING : planLoad(op, at, titleOf);
     case 'slot_save':
-      return at.stage === 'visit' ? NOTHING : { ask: askOf({ kind: 'slot_save', overwrites: op.overwrites }), effects: [{ kind: 'save_slot', slot: op.slot }] };
+      return at.stage === 'visit' || at.stage === 'title' ? NOTHING : { ask: askOf({ kind: 'slot_save', overwrites: op.overwrites }), effects: [{ kind: 'save_slot', slot: op.slot }] };
     case 'select':
       return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: op.scenarioId }] };
     case 'retry':
@@ -83,9 +86,19 @@ export function planOp(op: Op, at: At, titleOf: (scenarioId: string) => string):
     case 'visit':
       return { ask: leaving(at), effects: [{ kind: 'assign', href: op.href }] };
     case 'title':
+      if (at.stage === 'title') return NOTHING;
       // タイトルへ (M24-04、docs/uiux/2026-10-04-title-flow.md の「タイトルへ戻るときの約束」)。書き切ってから移る。訪問では flush が何も書かない
       return { ask: leaving(at), effects: [{ kind: 'flush' }, { kind: 'to_title' }] };
   }
+}
+
+/**
+ * (M24-02) タイトルの新規ゲームの「自由モード」。自動の枠に続きがあれば、操作画面の新しい島と同じ確かめを経て新しい seed の島 (M26-10) へ。
+ * 無ければ確かめずに最初の島 (seed 42、基準画と E2E の前提)。タイトルの new_world は「次に開く島の seed を引く」(app/title.ts)
+ */
+function newFromTitle(freeSaved: boolean): Plan {
+  const go: Effect = { kind: 'go', scenarioId: null };
+  return freeSaved ? { ask: askOf({ kind: 'new_island', inScenario: false }), effects: [{ kind: 'new_world' }, go] } : { ask: null, effects: [go] };
 }
 
 /**
@@ -100,12 +113,14 @@ const leaving = (at: At): Ask | null => askOf({ kind: 'leave', finished: at.stag
  */
 function planLoad(op: Extract<Op, { kind: 'load' }>, at: Exclude<At, { stage: 'visit' }>, titleOf: (scenarioId: string) => string): Plan {
   // (M19-17 で変更: 石板の中でも、同じ石板の枠は runner の状態・年代記と一緒に戻すので読める。別の島の差し込みは下の checkSlot (checkedSlot) の舞台の確かめで弾く。無効は訪問だけ)
-  const here: Here = at.stage === 'scenario' ? { stage: 'scenario', head: at.head } : { stage: 'free' };
+  // (M24-02) タイトル (舞台なし) からは、planSlotLoad がいつも「移って読む」を返す
+  const here: Here | AtTitle = at.stage === 'title' ? { stage: 'title' } : at.stage === 'scenario' ? { stage: 'scenario', head: at.head } : { stage: 'free' };
   const plan = planSlotLoad(op.data, here, titleOf);
   const ask = askOf({ kind: 'load', plan });
-  if (plan.kind === 'navigate') {
+  if (plan.kind === 'navigate' || here.stage === 'title') {
+    const to = plan.kind === 'navigate' ? plan.to : op.data;
     const pending: Effect[] = op.slot ? [{ kind: 'put_pending', slot: op.slot }] : [{ kind: 'stash_import', data: op.data }, { kind: 'put_pending', slot: 'import' }];
-    return { ask, effects: [...pending, { kind: 'flush' }, { kind: 'go', scenarioId: plan.to.stage === 'scenario' ? plan.to.scenarioId : null }] };
+    return { ask, effects: [...pending, { kind: 'flush' }, { kind: 'go', scenarioId: to.stage === 'scenario' ? to.scenarioId : null }] };
   }
   const checked = checkedSlot(op.data, here);
   if (!checked.ok) return { ask, effects: [{ kind: 'refuse', slot: op.slot, tick: op.data.save.tick, error: checked.error }] };
