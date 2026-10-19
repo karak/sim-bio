@@ -21,10 +21,43 @@ function collectLogs(page: Page): Logged[] {
 const menu = (page: Page) => page.getByRole('menu', { name: 'タイトルのメニュー' });
 const item = (page: Page, name: string) => menu(page).getByRole('menuitem', { name });
 
+/** (M24-02 の perf) タイトルの時刻 (ms、navigation の始まりから)。title はタイトルの画面が入った最初のフレーム (初期描画)、menu はメニューの行に focus が来た (押せる) フレーム */
+type TitleTimes = { title: number; menu: number };
+
+/** goto の前に置く。フレームごとにタイトルの画面とメニューの focus を見て、最初に見えた時刻を残す */
+async function watchTitleTimes(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __titleTimes?: { title?: number; menu?: number } };
+    const t: { title?: number; menu?: number } = {};
+    w.__titleTimes = t;
+    const tick = () => {
+      if (t.title === undefined && document.querySelector('section.title')) t.title = performance.now();
+      const focused = document.activeElement;
+      if (t.menu === undefined && focused instanceof HTMLElement && focused.getAttribute('role') === 'menuitem') t.menu = performance.now();
+      if (t.menu === undefined) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+async function titleTimes(page: Page): Promise<TitleTimes> {
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __titleTimes?: { menu?: number } }).__titleTimes?.menu ?? null)).not.toBeNull();
+  return page.evaluate(() => {
+    const t = (window as unknown as { __titleTimes: TitleTimes }).__titleTimes;
+    return { title: t.title, menu: t.menu };
+  });
+}
+
 test('M24-01: 素の / はタイトルを出し、キーボードだけで選べる。選ぶと背景のデモを止めて外し、舞台に入った後の再読み込みと検索語の URL はタイトルを飛ばす', async ({ page }) => {
   const logs = collectLogs(page);
+  await watchTitleTimes(page);
   await page.goto('/');
   await expect(page.getByRole('region', { name: 'タイトル' })).toBeVisible();
+  // (M24-02 の perf) 初期描画からメニューが押せるまで。報告の数は title.menu の行 (前後を同じ条件で測る)
+  const times = await titleTimes(page);
+  console.log(`[perf] title.menu ${JSON.stringify(times)}`);
+  await test.info().attach('title-times', { body: JSON.stringify(times), contentType: 'application/json' });
+  expect(times.menu).toBeGreaterThanOrEqual(times.title);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('ビオトープ島');
   // 続きの無い手元: 4 行で、既定 (focus) は新規ゲーム
   await expect(menu(page).getByRole('menuitem')).toHaveText(['新規ゲーム', 'ロード', '港', 'コンフィグ']);
