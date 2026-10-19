@@ -1,11 +1,14 @@
 ---
 id: M26-20
 title: D1 の書きの日次予算を性能要件として切り出し、最悪の行数を policy.ts と表の定義から数える適用度関数 (python) で測る
-status: todo
+status: done
 milestone: M26
 plan: docs/design/2026-09-26-cloudflare-architecture.md#6-運用
 depends_on: [M27-06]
-evidence: []
+evidence:
+  - fb1558d 性能要件の節 (X = 90)
+  - 22d1cad scripts/check_d1_writes.py, scripts/test_check_d1_writes.py (10 tests, RED→GREEN は .claude/verify/20261020-1200-m26-20/red.txt・green.txt)
+  - ac2b6a5 M26-21 起票、check から外す
 ---
 
 # D1 の書きの予算の適用度関数
@@ -28,10 +31,11 @@ M27-06 の候補出しで、`worker/src/policy.ts` の注の最悪 88,000 行/�
 
 ## Acceptance criteria
 
-- [ ] 性能要件の文が文書にあり、数 (X%) がユーザーの決定で決まっている
-- [ ] `scripts/check_d1_writes.py` が policy.ts・migrations から最悪の行数を計算し、手計算 (88,000 + 取り下げの連鎖 + Cron ≒ 105,700) と一致する試験が `scripts/test_check_d1_writes.py` にある (直す前に赤)
-- [ ] `pnpm run check` に入り、通る (超えているなら、その理由と次の票)
+- [x] 性能要件の文が文書にあり、数 (X%) がユーザーの決定で決まっている
+- [x] `scripts/check_d1_writes.py` が policy.ts・migrations から最悪の行数を計算し、手計算 (88,000 + 取り下げの連鎖 + Cron ≒ 105,700) と一致する試験が `scripts/test_check_d1_writes.py` にある (直す前に赤)
+- [x] `pnpm run check` に入り、通る (超えているなら、その理由と次の票) → 超えている (105,679 行、105.7%)。理由は Cron の掃除 17,679 行。次の票 M26-21。入れるのは M26-21 の後
 
 ## 作業ログ
 
 - 2026-10-18: 起票 (M27-06 の審査台のメモから)。
+- 2026-10-20: 実装・取り込み。最悪の日 105,679 行 (道 88,000 + Cron 17,679)。要件 90,000 を超えるので check:d1-writes は check に入れず、削減案を M26-21 に。withdraw の 5 行目の根拠は不明 (M26-21 に記録)。perf 0.17 s。
