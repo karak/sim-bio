@@ -39,6 +39,7 @@ pnpm run build       # 本番ビルド
 pnpm run preview     # ビルド結果をローカルで確認
 pnpm run test        # 単体テスト(vitest)
 pnpm run test:slow   # 通し(放置/校正)テスト。約 15〜20 分、CI では走らせない(下記)
+pnpm run test:slow:table # 通しを describe ごとに分けて 2 本並列で回し、シナリオごとの結果と時間の表を出す(scripts/slow_report.py)
 pnpm run check       # typecheck + lint + test
 pnpm run test:worker # ログの受け口 (Worker) の単体テスト。workerd の中で回す。check にも入っている
 pnpm run test:scripts # scripts/ の Python の単体テスト(unittest)。ローカルの D1 も使う。check にも入っている
