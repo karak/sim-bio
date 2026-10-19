@@ -1,0 +1,20 @@
+test_check_d1_writes (unittest.loader._FailedTest.test_check_d1_writes) ... ERROR
+
+======================================================================
+ERROR: test_check_d1_writes (unittest.loader._FailedTest.test_check_d1_writes)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_check_d1_writes
+Traceback (most recent call last):
+  File "/Users/yasushi/.pyenv/versions/3.14.7/lib/python3.14/unittest/loader.py", line 141, in loadTestsFromName
+    module = __import__(module_name)
+  File "/Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-a1df9d527e13c714b/scripts/test_check_d1_writes.py", line 7, in <module>
+    from check_d1_writes import (
+    ...<11 lines>...
+    )
+ModuleNotFoundError: No module named 'check_d1_writes'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)

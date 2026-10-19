@@ -1,0 +1,15 @@
+test_total_follows_the_policy_caps (test_check_d1_writes.Compute.test_total_follows_the_policy_caps) ... ok
+test_total_matches_the_hand_calculation (test_check_d1_writes.Compute.test_total_matches_the_hand_calculation) ... ok
+test_reads_tables_the_cron_deletes (test_check_d1_writes.ParseLedger.test_reads_tables_the_cron_deletes) ... ok
+test_policy_without_budgets_is_an_error (test_check_d1_writes.ParsePolicy.test_policy_without_budgets_is_an_error) ... ok
+test_reads_caps_and_shed_levels_from_budgets (test_check_d1_writes.ParsePolicy.test_reads_caps_and_shed_levels_from_budgets) ... ok
+test_counts_index_writes_per_row_from_migrations (test_check_d1_writes.ParseSchema.test_counts_index_writes_per_row_from_migrations) ... ok
+test_integer_primary_key_and_unique_and_comments (test_check_d1_writes.ParseSchema.test_integer_primary_key_and_unique_and_comments) ... ok
+test_over_the_requirement_exits_1_with_the_over_line (test_check_d1_writes.Requirement.test_over_the_requirement_exits_1_with_the_over_line) ... ok
+test_requirement_is_ninety_percent_of_one_hundred_thousand (test_check_d1_writes.Requirement.test_requirement_is_ninety_percent_of_one_hundred_thousand) ... ok
+test_within_the_requirement_exits_0 (test_check_d1_writes.Requirement.test_within_the_requirement_exits_0) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.004s
+
+OK
