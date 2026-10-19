@@ -244,7 +244,8 @@ test('M24-04 (2026-10-10 の決定): 「タイトルへ」は ?player= と ?dev=
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   const panel = page.getByRole('dialog', { name: '新規ゲーム' });
-  await expect(panel.locator('p')).toHaveText('タイトルからの新規ゲームは準備中です。島の中の「新しい島」で始められます。');
+  // (M24-02) 準備中の板は、自由モードと石板を選ぶの板になった
+  await expect(panel.getByRole('button')).toHaveText(['戻る', /^自由モード/, /^石板を選ぶ/]);
   await page.keyboard.press('Escape');
   await expect(item(page, '新規ゲーム')).toBeFocused();
 

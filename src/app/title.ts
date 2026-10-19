@@ -2,10 +2,13 @@ import type { LogSink } from '../core/log/types';
 import type { IslandStore } from '../persist/islandStore';
 import { continueTargetOf, readLastStage, scenarioProgressOf, type Continuation, type ScenarioProgress } from '../persist/lastStage';
 import { checkScenarioSave } from '../persist/scenarioSave';
+import { putPendingSlot, takePendingSlot, type SlotSave } from '../persist/slotSave';
+import type { SlotId, SlotSummary } from '../persist/slots';
 import type { ScenarioDef } from '../scenario/types';
 import { SIM_VERSION } from '../simulation/version';
+import type { Ask } from './confirmAsk';
 import type { Nav } from './effects';
-import { bootPlanOf, searchFor, type BootPlan } from './place';
+import { bootPlanOf, DEFAULT_SEED, freshSeed, runPlan, searchFor, seedSearchFor, type BootPlan, type Plan } from './place';
 
 /**
  * タイトルからの入り (M27-03)。置き場の一覧と最後に遊んだ石板の続きを打ち切りの内で読んで「続きから」を決め、タイトルで選ばれた舞台の起動の計画を返す。
@@ -29,8 +32,73 @@ export type TitleDeps = {
   /** 最後に遊んだ舞台の印を読む置き場 (localStorage) */
   storage: Pick<Storage, 'getItem'>;
   nav: Pick<Nav, 'search' | 'replace'>;
-  showTitle: (deps: { continuation: Continuation | null; freeSaved: boolean; log: (event: string, extra: Record<string, unknown>) => void }) => Promise<TitleChoice>;
+  /** (M24-02) このタブの sessionStorage (移って読む枠の名) */
+  tab: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+  /** (M24-02) やり直しの効かない操作の確かめ (ui/confirm.ts) */
+  confirm: (ask: Ask) => Promise<boolean>;
+  /** (M24-02) 新しい島の seed を引く (0 以上 2^32-1 の整数) */
+  drawSeed: () => number;
+  showTitle: (deps: TitleScreenDeps) => Promise<TitleChoice>;
 };
+
+/** タイトルの画面 (ui/Title.ts) へ渡すもの */
+export type TitleScreenDeps = {
+  continuation: Continuation | null;
+  freeSaved: boolean;
+  log: (event: string, extra: Record<string, unknown>) => void;
+  /** (M24-02) ロードの板に並べる枠 (保存のある枠だけ、SLOTS の順) */
+  slots: readonly SlotSummary[];
+  titleOf: (scenarioId: string) => string;
+  /** (M24-02) 枠の包みを置き場から読む。無い・読めなければ null */
+  loadSlot: (slot: SlotId) => Promise<SlotSave | null>;
+  /** (M24-02) planOp の確かめと効果をタイトルで行い、移る先の舞台を返す。断った・行えなかったなら null (タイトルに留まる) */
+  run: (plan: Plan) => Promise<TitleChoice | null>;
+};
+
+/** タイトルでの効果 (runAtTitle) が使うもの */
+export type TitleEffectsDeps = {
+  store: Pick<IslandStore, 'stashImport'> | null;
+  tab: Pick<Storage, 'setItem'>;
+  nav: Pick<Nav, 'search' | 'replace'>;
+  drawSeed: () => number;
+  log: (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => void;
+};
+
+/**
+ * タイトルで planOp の効果を行う (M24-02)。タイトルには島が無いので、行えるのは「次に開く島の seed を引く」(new_world)・ファイルの置き場・読む枠の名・移る先だけ。
+ * 移る先 (go) は読み込み直さずに検索語だけ差し替え、その舞台を返す (起動は bootPlanOf が移って読む枠ごと決める)。ほかの効果は記録に残して止める
+ */
+export async function runAtTitle(plan: Plan, confirm: (ask: Ask) => Promise<boolean>, deps: TitleEffectsDeps): Promise<TitleChoice | null> {
+  const { nav, log } = deps;
+  let went: TitleChoice | null = null;
+  await runPlan(plan, confirm, async (e) => {
+    switch (e.kind) {
+      case 'new_world':
+        // 自動の枠の島と違う seed (M26-10)。URL の seed= の島は、自動の枠の続きと seed が違えば新しい島で開く (seedMatches)
+        nav.replace(seedSearchFor(nav.search(), freshSeed(DEFAULT_SEED, deps.drawSeed)));
+        return true;
+      case 'stash_import':
+        await deps.store?.stashImport(e.data).catch((err: unknown) => log('warn', 'persist.save.failed', { slot: 'import', error: String(err) }));
+        return true;
+      case 'put_pending':
+        putPendingSlot(deps.tab, e.slot);
+        return true;
+      case 'flush':
+        // タイトルには書き切る島が無い
+        return true;
+      case 'go': {
+        const q = searchFor(nav.search(), e.scenarioId, { keepVisit: e.keepVisit });
+        nav.replace(q ? `?${q}` : '');
+        went = e.scenarioId ? { kind: 'scenario', scenarioId: e.scenarioId } : { kind: 'free' };
+        return true;
+      }
+      default:
+        log('warn', 'title.effect.unexpected', { effect: e.kind });
+        return false;
+    }
+  });
+  return went;
+}
 
 export function createTitle(deps: TitleDeps) {
   const { store, scenarios, log, nav } = deps;
@@ -64,10 +132,21 @@ export function createTitle(deps: TitleDeps) {
     clearTimeout(timer);
     const auto = slots.find((s) => s.slot === 'auto' && s.stage === 'free') ?? null;
     const continuation = continueTargetOf(mark, auto, progress, (id) => scenarios.find((d) => d.id === id)?.title ?? null);
-    const choice = await deps.showTitle({ continuation, freeSaved: auto !== null, log: (event, extra) => titleLog('info', event, extra) });
+    const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
+    const choice = await deps.showTitle({
+      continuation,
+      freeSaved: auto !== null,
+      log: (event, extra) => titleLog('info', event, extra),
+      slots,
+      titleOf,
+      // (M24-02) 操作画面の枠の読込 (localSave.loadSlot) と同じく、読めなければ記録に残して null
+      loadSlot: (slot) => (store ? store.load(slot).catch((e: unknown) => (titleLog('warn', 'persist.load.failed', { slot, error: String(e) }), null)) : Promise.resolve(null)),
+      run: (plan) => runAtTitle(plan, deps.confirm, { store, tab: deps.tab, nav, drawSeed: deps.drawSeed, log: titleLog }),
+    });
     // 石板の続きは ?scenario=<id> の道 (bootPlanOf の restore scenario → resumeScenario)。読み込み直さずに検索語だけ差し替える
     if (choice.kind === 'scenario') nav.replace(`?${searchFor(nav.search(), choice.scenarioId)}`);
-    return bootPlanOf(nav.search(), scenarios, null);
+    // (M24-02) ロードの板から移るときは、読む枠の名 (runAtTitle の put_pending) を起動の戻し方の先頭に置く (操作画面から移って読むのと同じ道)
+    return bootPlanOf(nav.search(), scenarios, takePendingSlot(deps.tab));
   };
   return { enterFromTitle };
 }
