@@ -3,6 +3,7 @@ import type { IslandStore } from '../persist/islandStore';
 import { continueTargetOf, readLastStage, scenarioProgressOf, type Continuation, type ScenarioProgress } from '../persist/lastStage';
 import { checkScenarioSave } from '../persist/scenarioSave';
 import { putPendingSlot, takePendingSlot, type SlotSave } from '../persist/slotSave';
+import { readConfig, reducedMotionOf, writeConfig, type Config } from '../persist/config';
 import type { SlotId, SlotSummary } from '../persist/slots';
 import type { ScenarioDef } from '../scenario/types';
 import { SIM_VERSION } from '../simulation/version';
@@ -30,7 +31,9 @@ export type TitleDeps = {
   player: string | undefined;
   log: LogSink;
   /** 最後に遊んだ舞台の印を読む置き場 (localStorage) */
-  storage: Pick<Storage, 'getItem'>;
+  storage: Pick<Storage, 'getItem' | 'setItem'>;
+  /** (M24-02) OS の「視差効果を減らす」(prefers-reduced-motion: reduce)。コンフィグの動きを減らすが OS に従うときに効く */
+  osReducedMotion: boolean;
   nav: Pick<Nav, 'search' | 'replace'>;
   /** (M24-02) このタブの sessionStorage (移って読む枠の名) */
   tab: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -53,6 +56,11 @@ export type TitleScreenDeps = {
   loadSlot: (slot: SlotId) => Promise<SlotSave | null>;
   /** (M24-02) planOp の確かめと効果をタイトルで行い、移る先の舞台を返す。断った・行えなかったなら null (タイトルに留まる) */
   run: (plan: Plan) => Promise<TitleChoice | null>;
+  /** (M24-02) 背景のデモを止めた 1 枚にするか (コンフィグの動きを減らす、既定は OS に従う) */
+  reducedMotion: boolean;
+  /** (M24-02) コンフィグの今の値と、変えたときに置き場 (localStorage) へ書く口 */
+  config: Config;
+  saveConfig: (config: Config) => void;
 };
 
 /** タイトルでの効果 (runAtTitle) が使うもの */
@@ -133,6 +141,7 @@ export function createTitle(deps: TitleDeps) {
     const auto = slots.find((s) => s.slot === 'auto' && s.stage === 'free') ?? null;
     const continuation = continueTargetOf(mark, auto, progress, (id) => scenarios.find((d) => d.id === id)?.title ?? null);
     const titleOf = (id: string) => scenarios.find((d) => d.id === id)?.title ?? id;
+    const prefs = readConfig(deps.storage);
     const choice = await deps.showTitle({
       continuation,
       freeSaved: auto !== null,
@@ -142,11 +151,17 @@ export function createTitle(deps: TitleDeps) {
       // (M24-02) 操作画面の枠の読込 (localSave.loadSlot) と同じく、読めなければ記録に残して null
       loadSlot: (slot) => (store ? store.load(slot).catch((e: unknown) => (titleLog('warn', 'persist.load.failed', { slot, error: String(e) }), null)) : Promise.resolve(null)),
       run: (plan) => runAtTitle(plan, deps.confirm, { store, tab: deps.tab, nav, drawSeed: deps.drawSeed, log: titleLog }),
+      // (M24-02) コンフィグ (persist/config.ts): 動きを減らすは OS の設定より先に効く。変えた値はその場で置き場へ
+      reducedMotion: reducedMotionOf(prefs.motion, deps.osReducedMotion),
+      config: prefs,
+      saveConfig: (c) => void writeConfig(deps.storage, c),
     });
     // 石板の続きは ?scenario=<id> の道 (bootPlanOf の restore scenario → resumeScenario)。読み込み直さずに検索語だけ差し替える
     if (choice.kind === 'scenario') nav.replace(`?${searchFor(nav.search(), choice.scenarioId)}`);
     // (M24-02) ロードの板から移るときは、読む枠の名 (runAtTitle の put_pending) を起動の戻し方の先頭に置く (操作画面から移って読むのと同じ道)
     return bootPlanOf(nav.search(), scenarios, takePendingSlot(deps.tab));
   };
-  return { enterFromTitle };
+  /** (M24-02) 島を開いたときの速さ (コンフィグの最初の速さ)。タイトルで変えた値も、舞台を組むときに読み直して効かせる */
+  const startSpeed = () => readConfig(deps.storage).speed;
+  return { enterFromTitle, startSpeed };
 }

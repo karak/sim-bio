@@ -73,6 +73,8 @@ export async function restoreIsland(order: readonly Restore[], deps: RestoreDeps
       break;
     }
   }
-  if (deps.pending && !found?.fromSlot) persistLog('warn', 'persist.slot.load.failed', 0, { slot: deps.pending });
+  // (M24-02) タイトルのロードから移ってきた枠は deps.pending に無く、戻し方の先頭 (bootPlanOf) にだけある
+  const asked = deps.pending ?? order.flatMap((r) => (r.from === 'slot' ? [r.slot] : []))[0] ?? null;
+  if (asked && !found?.fromSlot) persistLog('warn', 'persist.slot.load.failed', 0, { slot: asked });
   return found ?? { resumed: null, fromSlot: false };
 }

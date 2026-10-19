@@ -21,7 +21,6 @@ import { mountHarbor } from './ui/Harbor';
 import { createConfirm } from './ui/confirm';
 import { showTitle } from './ui/Title';
 import { markEntered, takeTabMarks } from './persist/tabMarks';
-import { readConfig, reducedMotionOf, writeConfig } from './persist/config';
 import { askOf, type Risky } from './app/confirmAsk';
 import { scenarioConfigOf } from './app/worldConfig';
 import { restoreIsland } from './app/restore';
@@ -72,22 +71,12 @@ async function boot(): Promise<void> {
   // 起動の行き先 (M24-01): 素の / で、このタブでまだ舞台に入っていなければタイトル。選ばれてから舞台を組む
   const route = bootRouteOf(location.search, scenarios, pending, takeTabMarks(sessionStorage), devTools ? devTools.skipsTitle(localStorage) : false);
   const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
-  const titleConfirm = createConfirm(document.getElementById('app') ?? document.body);
-  const { enterFromTitle } = createTitle({
-    store, scenarios, baseSeed: base.seed, player: dev?.player?.name, log, storage: localStorage, nav,
-    // (M24-02) タイトルの新規ゲームとロードは、操作画面と同じ確かめ (ui/confirm.ts) を経る
-    tab: sessionStorage, drawSeed, confirm: titleConfirm,
+  const { enterFromTitle, startSpeed } = createTitle({
+    store, scenarios, baseSeed: base.seed, player: dev?.player?.name, log, storage: localStorage, nav, tab: sessionStorage, drawSeed, confirm: createConfirm(document.getElementById('app') ?? document.body), osReducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
     showTitle: (deps) => {
       const root = document.getElementById('app');
       if (!root) throw new Error('#app missing');
-      // (M24-02) コンフィグ (persist/config.ts): 動きを減らすは OS の設定より先に効く。変えた値はその場で置き場へ
-      const prefs = readConfig(localStorage);
-      return showTitle(root, {
-        ...deps,
-        reducedMotion: reducedMotionOf(prefs.motion, matchMedia('(prefers-reduced-motion: reduce)').matches),
-        config: prefs,
-        saveConfig: (c) => void writeConfig(localStorage, c),
-      });
+      return showTitle(root, deps);
     },
   });
   const booted = route.kind === 'stage' ? route.plan : await enterFromTitle();
@@ -121,9 +110,7 @@ async function boot(): Promise<void> {
     },
   });
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
-  // (M24-02) タイトルのロードから移ってきた枠は、起動の計画 (bootPlanOf) の戻し方の先頭にある
-  const fromTitle = booted.restore.find((r) => r.from === 'slot');
-  const { resumed, fromSlot } = await restoreIsland(booted.restore, { localSave, store, head, log, persistLog, seed: seeded.seed, pending: pending ?? (fromTitle?.from === 'slot' ? fromTitle.slot : null) });
+  const { resumed, fromSlot } = await restoreIsland(booted.restore, { localSave, store, head, log, persistLog, seed: seeded.seed, pending });
   const session = sessionOf(resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log }));
   // 枠から開いた自由モードの島は、読込と同じくその場で自動の枠に書く
   if (fromSlot) localSave.replaced(session.world.serialize());
@@ -264,9 +251,7 @@ async function boot(): Promise<void> {
       return { save, chronicle: session.scenario?.recorder?.current() ?? null };
     },
   });
-  if (dev?.paused) loop.setSpeed(0);
-  // (M24-02) コンフィグの最初の速さ。タイトルで変えた値も、ここで読み直して効かせる
-  else loop.setSpeed(readConfig(localStorage).speed);
+  loop.setSpeed(dev?.paused ? 0 : startSpeed());
   loop.start();
 }
 
