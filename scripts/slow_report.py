@@ -44,15 +44,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # tests/slow の describe の題と、1 本で回したときの分 (分けの重さ)。
-# 2026-10-20 の Lane 1 の 1 回目から: 時間切れの無かった群は実測、時間切れを含む群は通った試験の和に
-# 時間切れの試験を同じ群の平均で足した見積もり。新しい describe はここに足さなくても REST の分けで回る
+# 2026-10-20 の Lane 1 (jobs 1、lane1-b) の実測。新しい describe はここに足さなくても REST の分けで回る
 GROUPS: tuple[tuple[str, float], ...] = (
-    ("scenario playthroughs (size 64)", 12.3),
+    ("scenario playthroughs (size 64)", 14.7),
     ("tower scenario v2 playthroughs (size 64)", 4.5),
-    ("faith scenarios (M9-04, size 64)", 13.0),
-    ("intercept-tower scenario playthroughs (size 64)", 15.0),
-    ("sky-ship scenario playthroughs (size 64)", 14.0),
-    ("観察画面の 4 場面が空の舟の実プレイで引かれる (M22-09)", 1.6),
+    ("faith scenarios (M9-04, size 64)", 10.4),
+    ("intercept-tower scenario playthroughs (size 64)", 7.4),
+    ("sky-ship scenario playthroughs (size 64)", 6.3),
+    ("観察画面の 4 場面が空の舟の実プレイで引かれる (M22-09)", 2.7),
 )
 REST = "(残り)"
 
