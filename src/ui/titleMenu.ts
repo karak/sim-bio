@@ -1,4 +1,6 @@
-import type { Continuation } from '../persist/lastStage';
+import type { Continuation, ScenarioProgress } from '../persist/lastStage';
+import type { ScenarioDef } from '../scenario/types';
+import { KIND_LABEL } from './Tablet';
 import type { SlotSave } from '../persist/slotSave';
 import { SLOTS, type SlotId, type SlotSummary } from '../persist/slots';
 import { MOTIONS, QUALITIES, START_SPEEDS, type Config } from '../persist/config';
@@ -56,7 +58,11 @@ export type TitleAction =
   | { kind: 'item'; id: TitleItemId }
   | { kind: 'new_free' }
   | { kind: 'scenarios' }
-  | { kind: 'load'; data: SlotSave; slot: SlotId | null };
+  | { kind: 'load'; data: SlotSave; slot: SlotId | null }
+  /** (M24-03) 石板の板で選んだ石板。操作画面の石板の選択 (Tablet の select) と同じ planOp を通る */
+  | { kind: 'select'; scenarioId: string }
+  /** (M24-03) 港の板の訪れる札 (href は visitHref)。操作画面の港の札と同じ planOp の visit を通る */
+  | { kind: 'visit'; href: string };
 
 /** 行き先。stay は何もしない、panel は板を開く、enter は確かめずに舞台へ、plan は操作画面と同じ planOp の確かめと効果を通る (タイトルでの効果は app/title.ts の runAtTitle) */
 export type TitleStep = { kind: 'stay' } | { kind: 'panel'; panel: TitlePanel } | { kind: 'enter'; choice: TitleChoice } | { kind: 'plan'; plan: Plan };
@@ -81,7 +87,29 @@ export function titleStepOf(action: TitleAction, ctx: TitleContext): TitleStep {
       return { kind: 'panel', panel: 'scenarios' };
     case 'load':
       return { kind: 'plan', plan: planOp({ kind: 'load', data: action.data, slot: action.slot }, at, ctx.titleOf) };
+    case 'select':
+      return { kind: 'plan', plan: planOp({ kind: 'select', scenarioId: action.scenarioId }, at, ctx.titleOf) };
+    case 'visit':
+      return { kind: 'plan', plan: planOp({ kind: 'visit', href: action.href }, at, ctx.titleOf) };
   }
+}
+
+/** (M24-03) 石板の板の 1 行。meta は種類と年数、note は続きか判定の添え書き (無ければ null)、start は始める札の文 */
+export type ScenarioRow = { id: string; title: string; meta: string; prophecy: string; note: string | null; start: string };
+
+/**
+ * (M24-03) 石板の板の並び (W/F new-game-*.svg、docs/uiux/2026-10-04-title-flow.md の M24-03 への申し送り)。操作画面の石板 (Tablet の select) と同じく hidden を除いた同じ順。
+ * progress は石板ごとの続き (読んでいない石板は鍵が無い)。判定の前の続きは「続きから始める」、判定の出た石板は開き直すと初めから (M19-14)。どちらを押しても行き先は同じ select
+ */
+export function scenarioRowsOf(defs: readonly Pick<ScenarioDef, 'id' | 'title' | 'kind' | 'years' | 'prophecy' | 'hidden'>[], progress: Readonly<Record<string, ScenarioProgress | null>>): ScenarioRow[] {
+  return defs
+    .filter((d) => !d.hidden)
+    .map((d) => {
+      const p = progress[d.id] ?? null;
+      const resumes = p !== null && !p.finished;
+      const note = p === null ? null : p.finished ? '判定が出ている · 開くと初めから' : `続きあり · ${p.year} 年`;
+      return { id: d.id, title: d.title, meta: `${KIND_LABEL[d.kind]} · ${d.years} 年`, prophecy: d.prophecy, note, start: resumes ? '続きから始める' : 'この石板で始める' };
+    });
 }
 
 /** (M24-02) ロードの板の 1 行。note は「続きから」と同じ要約、空の枠は null (読み込むを押せない) */

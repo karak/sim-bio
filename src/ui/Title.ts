@@ -1,7 +1,8 @@
 import { el } from './el';
 import { startTitleDemo, type DemoStats } from './titleDemo';
-import { CONFIG_ROWS, menuKeyOf, slotRowsOf, titleMenuOf, titleStepOf, type TitleAction, type TitleChoice, type TitleContext, type TitleItem, type TitlePanel, type TitleStep } from './titleMenu';
-import type { Continuation } from '../persist/lastStage';
+import { CONFIG_ROWS, menuKeyOf, scenarioRowsOf, slotRowsOf, titleMenuOf, titleStepOf, type TitleAction, type TitleChoice, type TitleContext, type TitleItem, type TitlePanel, type TitleStep } from './titleMenu';
+import { titleHarborBody } from './Harbor';
+import type { Continuation, ScenarioProgress } from '../persist/lastStage';
 import { slotSaveOf } from '../persist/slotSave';
 import { DEFAULT_CONFIG, type Config } from '../persist/config';
 import type { TitleScreenDeps } from '../app/title';
@@ -31,10 +32,16 @@ export type TitleDeps = {
   /** (M24-02) コンフィグの今の値と、変えたときに置き場へ書く口 */
   config: Config;
   saveConfig: (config: Config) => void;
+  /** (M24-03) 石板の板に並べる石板と、石板ごとの続きを読む口 (板を開いたときに読む) */
+  scenarios: TitleScreenDeps['scenarios'];
+  progressOf: TitleScreenDeps['progressOf'];
+  /** (M24-03) 港の板が港へ問う元と、取り下げの確かめ */
+  harbor: TitleScreenDeps['harbor'];
+  ask: TitleScreenDeps['ask'];
 };
 
 /** 中身がまだ無い板 (M24-02・M24-03 で作る) の文 */
-const PENDING_TEXT: Record<'harbor' | 'scenarios', string> = {
+export const PENDING_TEXT: Record<'harbor' | 'scenarios', string> = {
   harbor: 'タイトルからの港は準備中です。島の中の港の口からは、いまも訪れられます。',
   scenarios: 'タイトルからの石板の選択は準備中です。島の中の石板の板から選べます。',
 };
@@ -102,7 +109,19 @@ export function showTitle(root: HTMLElement, deps: TitleDeps): Promise<TitleChoi
     /** (M24-02) 板を開く。板の中から次の板へ移るときも、閉じたらメニューの元の行へ戻る */
     const openOf = (panel: TitlePanel, back: () => void): void => {
       const heading = PANEL_HEADINGS[panel];
-      if (panel === 'harbor' || panel === 'scenarios') return openPanel(screen, heading, PENDING_TEXT[panel], back);
+      // (M24-03) 石板の板: 選んだ石板は操作画面の石板の選択と同じ planOp (select) を通る
+      if (panel === 'scenarios') return void openBoard(screen, heading, scenariosBody(deps, (scenarioId, stay) => go(titleStepOf({ kind: 'select', scenarioId }, ctx), stay)), back, true).classList.add('stones');
+      if (panel === 'harbor') {
+        // (M24-03) 港の板: 訪れるは操作画面の港の札と同じ planOp (visit)。空の港の「石板を選ぶ」は石板の板へ移る (閉じるとメニューの港へ戻る)
+        const guard = { ask: deps.ask, leave: (href: string) => void go(titleStepOf({ kind: 'visit', href }, ctx), () => {}) };
+        const board = openBoard(screen, heading, titleHarborBody({ ...deps.harbor, scenarios: deps.scenarios, guard }, {
+          toScenarios: () => {
+            board.remove();
+            openOf('scenarios', back);
+          },
+        }), back, true);
+        return;
+      }
       if (panel === 'new') {
         const board = openBoard(screen, heading, newGameBody({
           free: (b) => void go(titleStepOf({ kind: 'new_free' }, ctx), () => b.focus()),
@@ -150,7 +169,7 @@ function itemButton(item: TitleItem, isDefault: boolean): HTMLButtonElement {
 }
 
 /** 中身がまだ無い板。開くと「戻る」に focus を置き、Esc・「戻る」で閉じてメニューの行へ focus を返す */
-function openPanel(screen: HTMLElement, heading: string, text: string, back: () => void): void {
+export function openPanel(screen: HTMLElement, heading: string, text: string, back: () => void): void {
   const id = `title-panel-${Math.random().toString(36).slice(2, 8)}`;
   const close = el('button', { type: 'button', class: 'title-panel-back' }, '戻る');
   const panel = el('div', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': id, class: 'title-panel' }, el('h2', { id }, heading), el('p', {}, text), close);
@@ -189,7 +208,8 @@ function openBoard(screen: HTMLElement, heading: string, body: readonly HTMLElem
       done();
     } else if (e.key === 'Tab') {
       // 押せる札と、選んである丸 (同じ組の丸は矢印で動く) だけを回る
-      const stops = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), input[type="radio"]:checked')];
+      // (M24-03) 港の板の訪れる札 (a) も回る。隠した札 (もっと古い年代記など) は飛ばす
+      const stops = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input[type="radio"]:checked')].filter((x) => !x.closest('[hidden]'));
       const at = stops.indexOf(document.activeElement as HTMLElement);
       const next = e.shiftKey ? (at <= 0 ? stops.length - 1 : at - 1) : (at + 1) % stops.length;
       e.preventDefault();
@@ -218,6 +238,59 @@ function newGameBody(on: { free: (b: HTMLButtonElement) => void; scenarios: () =
       optionButton('石板を選ぶ', '予言に抗う島', () => on.scenarios()),
     ),
   ];
+}
+
+/**
+ * (M24-03) 石板の板 (W/F new-game-*.svg の石板の欄)。左に石板の一覧 (題と「種類 · 年数」、続きがあれば添える)、右に選んだ石板の予言と始める札。
+ * 開いたときは最初の石板を選んである。続きは石板ごとに読み、届いたら添え書きと札の文を書き換える。始めるは操作画面の石板の選択と同じ行き先 (start)
+ */
+function scenariosBody(deps: TitleDeps, start: (scenarioId: string, stay: () => void) => Promise<void>): HTMLElement[] {
+  const progress: Record<string, ScenarioProgress | null> = {};
+  const rowsNow = () => scenarioRowsOf(deps.scenarios, progress);
+  let picked: string | null = rowsNow()[0]?.id ?? null;
+  const name = el('h3', { class: 'title-stone-name' });
+  const meta = el('p', { class: 'title-option-note' });
+  const prophecy = el('p', { class: 'title-stone-prophecy' });
+  const begin = el('button', { type: 'button', class: 'title-panel-back title-stone-start' });
+  const detail = el('section', { class: 'title-stone-detail', 'aria-label': '選んだ石板' }, name, meta, prophecy, begin);
+  const buttons = new Map<string, HTMLButtonElement>();
+  const paint = () => {
+    const rows = rowsNow();
+    for (const r of rows) {
+      const b = buttons.get(r.id);
+      b?.setAttribute('aria-pressed', String(r.id === picked));
+      const note = b?.querySelector('.title-option-note');
+      if (note) note.textContent = r.note ? `${r.meta} · ${r.note}` : r.meta;
+    }
+    const r = rows.find((x) => x.id === picked);
+    detail.hidden = !r;
+    if (!r) return;
+    name.textContent = r.title;
+    meta.textContent = r.note ? `${r.meta} · ${r.note}` : r.meta;
+    prophecy.textContent = r.prophecy;
+    begin.textContent = r.start;
+  };
+  const list = el(
+    'div',
+    { class: 'title-stones-list', role: 'group', 'aria-label': '石板の一覧' },
+    ...rowsNow().map((r) => {
+      const b = optionButton(r.title, r.meta, () => {
+        picked = r.id;
+        paint();
+        begin.focus();
+      });
+      b.dataset.scenario = r.id;
+      buttons.set(r.id, b);
+      return b;
+    }),
+  );
+  begin.addEventListener('click', () => {
+    if (picked) void start(picked, () => begin.focus());
+  });
+  paint();
+  // 続きは板を開いたこの時に読む (タイトルの初めの描画を待たせない)。読めない石板は続き無し (progressOf が null を返す)
+  void Promise.all(rowsNow().map(async (r) => void (progress[r.id] = await deps.progressOf(r.id)))).then(paint);
+  return [el('div', { class: 'title-stones' }, list, detail)];
 }
 
 /**

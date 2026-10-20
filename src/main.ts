@@ -71,8 +71,9 @@ async function boot(): Promise<void> {
   // 起動の行き先 (M24-01): 素の / で、このタブでまだ舞台に入っていなければタイトル。選ばれてから舞台を組む
   const route = bootRouteOf(location.search, scenarios, pending, takeTabMarks(sessionStorage), devTools ? devTools.skipsTitle(localStorage) : false);
   const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+  const harborPort = { speciesIds: species.map((d) => d.id), simVersion: SIM_VERSION, baseUrl: import.meta.env.VITE_HARBOR_URL, sitekey: import.meta.env.VITE_TURNSTILE_SITEKEY, store: harborStore, player: dev?.player };
   const { enterFromTitle, startSpeed } = createTitle({
-    store, scenarios, baseSeed: base.seed, player: dev?.player?.name, log, storage: localStorage, nav, tab: sessionStorage, drawSeed, confirm: createConfirm(document.getElementById('app') ?? document.body), osReducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    store, scenarios, baseSeed: base.seed, player: dev?.player?.name, log, storage: localStorage, nav, tab: sessionStorage, drawSeed, confirm: createConfirm(document.getElementById('app') ?? document.body), osReducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches, harbor: harborPort,
     showTitle: (deps) => {
       const root = document.getElementById('app');
       if (!root) throw new Error('#app missing');
@@ -188,17 +189,12 @@ async function boot(): Promise<void> {
   const landCargo = createLandCargo({ session, scenario, at, speciesNames, intervene, flash: () => tablet.flash(), hud });
   const harbor = mountHarbor(app, {
     scenarios,
-    speciesIds: species.map((d) => d.id),
-    simVersion: SIM_VERSION,
-    baseUrl: import.meta.env.VITE_HARBOR_URL,
-    sitekey: import.meta.env.VITE_TURNSTILE_SITEKEY,
+    ...harborPort,
     stage,
     config,
     speciesNames,
     land: landCargo,
     log: (level, event, extra) => persistLog(level, event, session.world.snapshot().tick, extra),
-    store: harborStore,
-    player: dev?.player,
     guard: {
       ask: confirmed,
       leave: (href) => void run({ kind: 'visit', href }),

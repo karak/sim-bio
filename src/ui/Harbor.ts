@@ -84,17 +84,12 @@ const visitOf = (stage: Extract<Stage, { kind: 'visit' }>, config: WorldConfig):
 /** 自分の島の石板。判定の後に閉じた島 (M19-14 の直し) を港の板から出港できるようにする。自由モードと訪問では null */
 const ownScenarioOf = (stage: Stage): string | null => (stage.kind === 'scenario' ? stage.def.id : null);
 
-export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
-  const titleOf = (scenarioId: string) => deps.scenarios.find((d) => d.id === scenarioId)?.title ?? scenarioId;
+/** (M24-03) 港へ問う元。舞台 (島) に頼らないものだけ。操作画面の港 (mountHarbor) とタイトルの港の板 (titleHarborBody) が同じ元から組む */
+export type HarborPort = Pick<HarborUiDeps, 'scenarios' | 'speciesIds' | 'simVersion' | 'baseUrl' | 'sitekey' | 'store' | 'player' | 'log' | 'guard'>;
 
+export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   // 人間確認の widget の置き場。同時に 2 つ (再送と出港) 確かめても、最後の 1 つが終わるまで出しておく
-  const human = el('div', { class: 'harbor-stone harbor-human', role: 'status', hidden: '' }, el('p', { class: 'harbor-line' }, '港の番人が、人の手か確かめている'));
-  let checks = 0;
-  const hostOf = (show: boolean) => {
-    checks = Math.max(0, checks + (show ? 1 : -1));
-    human.hidden = checks === 0;
-    return human;
-  };
+  const { human, hostOf } = humanCheck();
   const toast = el('div', { class: 'harbor-stone harbor-toast', id: 'harbor-toast', role: 'status', 'aria-live': 'polite', hidden: '' });
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   const say = (text: string) => {
@@ -105,29 +100,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   };
 
   // 碑文のカタログは静的アセット。読めなければ碑文の無いカタログになり、出港は港へ送る前に断る
-  const inscriptionsReady = fetch('/data/inscriptions.json')
-    .then((r) => r.json() as Promise<unknown>)
-    .then(parseInscriptions, (e: unknown): Inscription[] => {
-      deps.log('warn', 'harbor.inscriptions.unavailable', { error: String(e) });
-      return [];
-    });
-  const { store } = deps;
-  const ready: Promise<Ready> = inscriptionsReady.then((inscriptions) => ({
-    store,
-    inscriptions,
-    simVersion: deps.simVersion,
-    titleOf,
-    guard: deps.guard,
-    harbor: createHarbor({
-      baseUrl: deps.baseUrl,
-      linkBase: location.origin,
-      store,
-      catalog: { scenarios: new Set(deps.scenarios.map((d) => d.id)), species: new Set(deps.speciesIds), inscriptions: new Set(inscriptions.map((d) => d.id)) },
-      turnstile: createTurnstile({ sitekey: deps.sitekey || TEST_SITEKEY, host: hostOf }),
-      log: deps.log,
-      headers: deps.player?.headers,
-    }),
-  }));
+  const ready: Promise<Ready> = readyOf(deps, hostOf);
 
   // 港の口: 左の縁の石の札。預けた年代記があれば数を刻む
   const dockCount = el('span', { class: 'harbor-dock-count', id: 'harbor-dock-count', hidden: '' });
@@ -139,20 +112,11 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     dock.setAttribute('aria-label', n === 0 ? '港を開く' : `港を開く (預けた年代記 ${n} 件)`);
   };
 
-  const finishedSlot = el('div', { class: 'harbor-finished', hidden: '' });
   const finishedScope = finishedScopeOf(deps.scenarios, { stage: deps.stage.kind, scenarioId: ownScenarioOf(deps.stage) });
   /** 判定の出た最後の島 (手元に残したもの)。判定の板を閉じた後・開き直した後も、ここから港へ出せる */
-  const showFinished = async () => {
-    const ctx = await ready;
-    const found = await Promise.all(finishedScope.map(async ({ def, label }) => ({ label, island: await ctx.harbor.finished(def.id) })));
-    const rows = found.flatMap(({ label, island }) => (island ? [el('p', { class: 'harbor-sub' }, label), publishPanel(ctx, island, refreshCount)] : []));
-    finishedSlot.hidden = rows.length === 0;
-    finishedSlot.replaceChildren(...rows);
-  };
+  const { slot: finishedSlot, show: showFinished } = finishedRows(ready, finishedScope, refreshCount);
   void showFinished();
-  const drawerState = el('p', { class: 'harbor-line harbor-state', id: 'harbor-state' });
-  const list = el('ul', { class: 'harbor-list', 'aria-label': '流れ着いた年代記' });
-  const more = el('button', { class: 'harbor-chip', hidden: '' }, 'もっと古い年代記');
+  const { state: drawerState, list, more, loadPage } = browseOf(ready);
   const close = el('button', { class: 'harbor-chip harbor-close' }, '閉じる');
   const drawer = el(
     'aside',
@@ -164,25 +128,6 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     list,
     more,
   );
-  let cursor: BrowseCursor | null = null;
-  const loadPage = async (reset: boolean) => {
-    const ctx = await ready;
-    if (reset) {
-      cursor = null;
-      list.replaceChildren();
-      drawerState.textContent = '年代記を引いている…';
-    }
-    const [page, own] = await Promise.all([ctx.harbor.browse(cursor ? { before: cursor } : {}), ctx.harbor.ownIds()]);
-    if (page.kind === 'closed') {
-      drawerState.textContent = HARBOR_CLOSED_TEXT;
-      more.hidden = true;
-      return;
-    }
-    list.append(...page.cards.map((c) => cardItem(ctx, c, own.has(c.id))));
-    cursor = page.next;
-    more.hidden = cursor === null;
-    drawerState.textContent = list.childElementCount === 0 ? HARBOR_EMPTY_TEXT : '港は開いている';
-  };
   const setOpen = (open: boolean) => {
     drawer.hidden = !open;
     dock.setAttribute('aria-expanded', String(open));
@@ -190,7 +135,6 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
   };
   dock.addEventListener('click', () => setOpen(drawer.hidden === true));
   close.addEventListener('click', () => setOpen(false));
-  more.addEventListener('click', () => void loadPage(false));
 
   app.append(dock, drawer, toast, human);
   if (deps.stage.kind === 'visit') app.classList.add('harbor-visiting');
@@ -231,6 +175,122 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
     },
     visitChronicle: () => (deps.stage.kind === 'visit' ? mountVisit(app, ready, visitOf(deps.stage, deps.config)) : Promise.resolve(null)),
   };
+}
+
+/**
+ * (M24-03) タイトルの港の板の中身 (docs/uiux/2026-10-04-title-flow.md の決めること 4 の案 A、W/F harbor-*.svg)。操作画面の港の板と同じ部品で、
+ * 判定の出た自分の島の出港・流れ着いた島の一覧・訪れる札を出す。範囲は自由モードと同じ (どの石板の判定の出た島も並べる)。浜の漂着は島が要るので出さない。
+ * 港へは板を開いたこの時に初めて問う (起動は港に頼らない、M19-09)。預けた年代記の送り直しは舞台に入ってから (mountHarbor) に任せ、ここではしない。
+ * 空の港には「石板を選ぶ」の札を添える (toScenarios、空状態に次の手)
+ */
+export function titleHarborBody(port: HarborPort, opts: { toScenarios: () => void }): HTMLElement[] {
+  const { human, hostOf } = humanCheck();
+  const ready = readyOf(port, hostOf);
+  const browse = browseOf(ready);
+  const toScenarios = el('button', { class: 'harbor-chip harbor-primary', hidden: '' }, '石板を選ぶ');
+  toScenarios.addEventListener('click', opts.toScenarios);
+  /** 一覧を初めから引き、空の港のときだけ「石板を選ぶ」を出す。出港の後にも引き直して、自分の島を並べる */
+  const reload = () => browse.loadPage(true).then((kind) => void (toScenarios.hidden = kind !== 'empty'));
+  const finished = finishedRows(ready, finishedScopeOf(port.scenarios, { stage: 'free', scenarioId: null }), reload);
+  void finished.show();
+  void reload();
+  return [
+    el(
+      'div',
+      { class: 'title-harbor' },
+      el('p', { class: 'harbor-sub' }, '流れ着いた島の年代記'),
+      finished.slot,
+      browse.state,
+      el('div', { class: 'harbor-actions' }, toScenarios),
+      browse.list,
+      browse.more,
+      el('p', { class: 'harbor-line harbor-dim' }, '浜の漂着 (積荷を受け取る) は、島の中の港の口から'),
+    ),
+    human,
+  ];
+}
+
+/** 人間確認の widget の置き場と、出し入れの口 (Turnstile の host)。数えて、最後の 1 つが終わるまで出しておく */
+function humanCheck(): { human: HTMLElement; hostOf: (show: boolean) => HTMLElement } {
+  const human = el('div', { class: 'harbor-stone harbor-human', role: 'status', hidden: '' }, el('p', { class: 'harbor-line' }, '港の番人が、人の手か確かめている'));
+  let checks = 0;
+  const hostOf = (show: boolean) => {
+    checks = Math.max(0, checks + (show ? 1 : -1));
+    human.hidden = checks === 0;
+    return human;
+  };
+  return { human, hostOf };
+}
+
+/** 碑文のカタログを読んでから、港のクライアントと手元の置き場を揃える。呼んだ時に初めて碑文を引く */
+function readyOf(port: HarborPort, hostOf: (show: boolean) => HTMLElement): Promise<Ready> {
+  const titleOf = (scenarioId: string) => port.scenarios.find((d) => d.id === scenarioId)?.title ?? scenarioId;
+  const inscriptionsReady = fetch('/data/inscriptions.json')
+    .then((r) => r.json() as Promise<unknown>)
+    .then(parseInscriptions, (e: unknown): Inscription[] => {
+      port.log('warn', 'harbor.inscriptions.unavailable', { error: String(e) });
+      return [];
+    });
+  const { store } = port;
+  return inscriptionsReady.then((inscriptions) => ({
+    store,
+    inscriptions,
+    simVersion: port.simVersion,
+    titleOf,
+    guard: port.guard,
+    harbor: createHarbor({
+      baseUrl: port.baseUrl,
+      linkBase: location.origin,
+      store,
+      catalog: { scenarios: new Set(port.scenarios.map((d) => d.id)), species: new Set(port.speciesIds), inscriptions: new Set(inscriptions.map((d) => d.id)) },
+      turnstile: createTurnstile({ sitekey: port.sitekey || TEST_SITEKEY, host: hostOf }),
+      log: port.log,
+      headers: port.player?.headers,
+    }),
+  }));
+}
+
+/** 判定の出た島の欄。show を呼ぶたびに、範囲の石板ごとに手元に残した島を読み直し、あれば出港の板を出す。published は出港の後に呼ぶ */
+function finishedRows(ready: Promise<Ctx>, scope: readonly { def: { id: string }; label: string }[], published: () => Promise<void>): { slot: HTMLElement; show: () => Promise<void> } {
+  const slot = el('div', { class: 'harbor-finished', hidden: '' });
+  const show = async () => {
+    const ctx = await ready;
+    const found = await Promise.all(scope.map(async ({ def, label }) => ({ label, island: await ctx.harbor.finished(def.id) })));
+    const rows = found.flatMap(({ label, island }) => (island ? [el('p', { class: 'harbor-sub' }, label), publishPanel(ctx, island, published)] : []));
+    slot.hidden = rows.length === 0;
+    slot.replaceChildren(...rows);
+  };
+  return { slot, show };
+}
+
+/** 流れ着いた年代記の一覧。loadPage は reset なら初めから引き直し、そうでなければ続きを足す。返すのは港の様子 (閉港・空・開いている) */
+function browseOf(ready: Promise<Ctx>): { state: HTMLElement; list: HTMLElement; more: HTMLButtonElement; loadPage: (reset: boolean) => Promise<'closed' | 'empty' | 'open'> } {
+  const state = el('p', { class: 'harbor-line harbor-state', id: 'harbor-state' });
+  const list = el('ul', { class: 'harbor-list', 'aria-label': '流れ着いた年代記' });
+  const more = el('button', { class: 'harbor-chip', hidden: '' }, 'もっと古い年代記');
+  let cursor: BrowseCursor | null = null;
+  const loadPage = async (reset: boolean): Promise<'closed' | 'empty' | 'open'> => {
+    const ctx = await ready;
+    if (reset) {
+      cursor = null;
+      list.replaceChildren();
+      state.textContent = '年代記を引いている…';
+    }
+    const [page, own] = await Promise.all([ctx.harbor.browse(cursor ? { before: cursor } : {}), ctx.harbor.ownIds()]);
+    if (page.kind === 'closed') {
+      state.textContent = HARBOR_CLOSED_TEXT;
+      more.hidden = true;
+      return 'closed';
+    }
+    list.append(...page.cards.map((c) => cardItem(ctx, c, own.has(c.id))));
+    cursor = page.next;
+    more.hidden = cursor === null;
+    const empty = list.childElementCount === 0;
+    state.textContent = empty ? HARBOR_EMPTY_TEXT : '港は開いている';
+    return empty ? 'empty' : 'open';
+  };
+  more.addEventListener('click', () => void loadPage(false));
+  return { state, list, more, loadPage };
 }
 
 /** 一覧の 1 件は石碑: 島の呼び名・ひとこと・結末・確かめた人。版違いは要約だけで、訪れる札を出さない */
