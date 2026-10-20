@@ -7,6 +7,7 @@
     pnpm run test:slow:table                       # 2 本並列で回し、表と合計時間を出す
     pnpm run test:slow:table --jobs 1              # 1 本で (分けを 1 つにまとめて)
     uv run scripts/slow_report.py report a.json …  # vitest の JSON の報告から表だけ作る
+    uv run scripts/slow_report.py compare <置き場 A> <置き場 B>  # 2 回の結果 (実際と合否) を比べる
 
 並列の単位
 vitest が worker に配る単位はファイルで、ファイルの中の試験は 1 つの worker で順に回る。
@@ -22,6 +23,7 @@ GROUPS に無い describe (新しいシナリオ) は残り (REST) の分けが�
 
 期待は題の「→ alive/dead/escaped」(観察の試験は「結末 …」) から読む。題に無い試験は「—」。
 実際は、通った試験は期待と同じ、落ちた試験は `expected 'X' to be 'Y'` の X。
+時間切れ (Test timed out) は「timeout」。本体は同期なので vitest は回し終えてから時間切れを言い、結末は残らない。
 上限 (既定 30 分) と超えたときの方針は docs/specs/2026-10-18-decisions-current.md の節「回帰の通し実行の時間」。
 """
 
@@ -41,14 +43,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-# tests/slow の describe の題と、1 本で回したときの分 (分けの重さ。2026-10-20 の Lane 1 の実測)。
-# 新しい describe はここに足さなくても REST の分けで回る。足すと重さで配れる
+# tests/slow の describe の題と、1 本で回したときの分 (分けの重さ)。
+# 2026-10-20 の Lane 1 の 1 回目から: 時間切れの無かった群は実測、時間切れを含む群は通った試験の和に
+# 時間切れの試験を同じ群の平均で足した見積もり。新しい describe はここに足さなくても REST の分けで回る
 GROUPS: tuple[tuple[str, float], ...] = (
-    ("scenario playthroughs (size 64)", 13.0),
-    ("tower scenario v2 playthroughs (size 64)", 5.0),
-    ("faith scenarios (M9-04, size 64)", 10.0),
-    ("intercept-tower scenario playthroughs (size 64)", 4.0),
-    ("sky-ship scenario playthroughs (size 64)", 10.0),
+    ("scenario playthroughs (size 64)", 12.3),
+    ("tower scenario v2 playthroughs (size 64)", 4.5),
+    ("faith scenarios (M9-04, size 64)", 13.0),
+    ("intercept-tower scenario playthroughs (size 64)", 15.0),
+    ("sky-ship scenario playthroughs (size 64)", 14.0),
     ("観察画面の 4 場面が空の舟の実プレイで引かれる (M22-09)", 1.6),
 )
 REST = "(残り)"
@@ -56,6 +59,7 @@ REST = "(残り)"
 VERDICTS = ("alive", "dead", "escaped")
 _EXPECTED = re.compile(r"(?:→|結末)\s*(alive|dead|escaped)\b")
 _ACTUAL = re.compile(r"expected '(\w+)' to be '(\w+)'")
+_TIMEOUT = re.compile(r"(?:Error: )?Test timed out in ")
 _JS_SPECIAL = re.compile(r"([\\^$.*+?()\[\]{}|/])")
 RAN = frozenset({"passed", "failed"})
 LIMIT_MINUTES = 30
@@ -89,6 +93,8 @@ def observed_of(status: str, expected: str, failures: Sequence[str]) -> str:
         return expected
     if status != "failed":
         return ""
+    if any(_TIMEOUT.match(message) for message in failures):
+        return "timeout"
     for message in failures:
         m = _ACTUAL.search(message)
         if m and m.group(1) in VERDICTS:
@@ -157,6 +163,21 @@ def check_partition(rows: Sequence[Row]) -> tuple[list[Row], list[str], list[str
     return kept, duplicated, missing
 
 
+def compare_rows(a: Sequence[Row], b: Sequence[Row]) -> list[str]:
+    """2 回の通し実行で、試験ごとの実際と結果が違うもの (片方にしか無いものも)"""
+
+    def verdicts(rows: Sequence[Row]) -> dict[str, str]:
+        return {r.key: f"{r.observed or '?'}/{r.status}" for r in rows}
+
+    va, vb = verdicts(a), verdicts(b)
+    keys = list(va) + [k for k in vb if k not in va]
+    return [
+        f"{k}: {va.get(k, '(無し)')} ≠ {vb.get(k, '(無し)')}"
+        for k in keys
+        if va.get(k) != vb.get(k)
+    ]
+
+
 def js_escape(text: str) -> str:
     """JavaScript の RegExp の特別な字を逃がす (空白・かな漢字はそのまま)"""
     return _JS_SPECIAL.sub(r"\\\1", text)
@@ -199,7 +220,8 @@ def command_of(pattern: str, out: Path, caffeinate: str | None) -> list[str]:
         "--reporter=json",
         f"--outputFile.json={out}",
     ]
-    return [caffeinate, "-i", *cmd] if caffeinate else cmd
+    # -s が要る。蓋を閉じた Mac は DarkWake の間に回り、-i だけでは眠りに戻って時間切れになる (2026-10-20)
+    return [caffeinate, "-ims", *cmd] if caffeinate else cmd
 
 
 def format_clock(seconds: float) -> str:
@@ -220,6 +242,7 @@ def render(
     label: str,
     duplicated: Sequence[str] = (),
     missing: Sequence[str] = (),
+    load: tuple[float, float] | None = None,
 ) -> str:
     passed = sum(1 for r in rows if r.status == "passed")
     failed = sum(1 for r in rows if r.status == "failed")
@@ -236,6 +259,10 @@ def render(
         ),
         f"- 試験の時間の和: {format_clock(total)} ({round(total)} s)",
     ]
+    if load is not None:
+        lines.append(
+            f"- 負荷 (1 分の load average): 始め {load[0]:.2f}、終わり {load[1]:.2f}"
+        )
     lines += [f"- 二度回った: {k}" for k in duplicated]
     lines += [f"- 回らなかった: {k}" for k in missing]
     lines += [
@@ -274,6 +301,10 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     run.add_argument(
         "--dir", type=Path, help="出す置き場 (既定 .claude/verify/<日時>-slow)"
     )
+    cmp = sub.add_parser("compare", help="2 回の通し実行の置き場を比べる (実際と結果)")
+    cmp.add_argument("a", type=Path)
+    cmp.add_argument("b", type=Path)
+    cmp.add_argument("--root", default=str(Path(__file__).resolve().parent.parent))
     for p in (rep, run):
         p.add_argument("--root", default=str(Path(__file__).resolve().parent.parent))
         p.add_argument(
@@ -285,7 +316,7 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 def _load(paths: Sequence[Path]) -> list[tuple[str, dict]]:
-    return [(p.stem, json.loads(p.read_text(encoding="utf-8"))) for p in paths]
+    return [(p.stem, data) for p, data in _load_pairs(paths)]
 
 
 def _finish(
@@ -295,11 +326,12 @@ def _finish(
     limit_minutes: int,
     label: str,
     out: Path | None,
+    load: tuple[float, float] | None = None,
 ) -> int:
     rows = [r for shard, data in reports for r in rows_of(data, root, shard)]
     kept, duplicated, missing = check_partition(rows)
     seconds = wall if wall is not None else span_seconds([d for _, d in reports])
-    text = render(kept, seconds, limit_minutes, label, duplicated, missing)
+    text = render(kept, seconds, limit_minutes, label, duplicated, missing, load)
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8")
@@ -319,6 +351,7 @@ def _run(args: argparse.Namespace) -> int:
     procs: list[tuple[str, subprocess.Popen, object]] = []
     plan = []
     start = time.monotonic()
+    load_start = os.getloadavg()[0]
     for n, groups in enumerate(bins, start=1):
         shard = f"s{n}"
         pattern = pattern_of(groups)
@@ -346,6 +379,7 @@ def _run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     wall = time.monotonic() - start
+    load_end = os.getloadavg()[0]
     paths = [out_dir / f"s{n}.json" for n in range(1, len(bins) + 1)]
     lost = [p.name for p in paths if not p.exists()]
     if lost:
@@ -362,13 +396,35 @@ def _run(args: argparse.Namespace) -> int:
         args.limit_minutes,
         label,
         args.out or out_dir / "slow.md",
+        (load_start, load_end),
     )
+
+
+def _rows_in(directory: Path, root: str) -> list[Row]:
+    reports = [
+        (p.stem, data)
+        for p, data in _load_pairs(sorted(directory.glob("*.json")))
+        if "testResults" in data
+    ]
+    rows = [r for shard, data in reports for r in rows_of(data, root, shard)]
+    return check_partition(rows)[0]
+
+
+def _load_pairs(paths: Sequence[Path]) -> list[tuple[Path, dict]]:
+    return [(p, json.loads(p.read_text(encoding="utf-8"))) for p in paths]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.command == "run":
         return _run(args)
+    if args.command == "compare":
+        a, b = _rows_in(args.a, args.root), _rows_in(args.b, args.root)
+        diff = compare_rows(a, b)
+        for line in diff:
+            print(line)
+        print(f"{len(a)} 件と {len(b)} 件を比べ、違い {len(diff)} 件")
+        return 1 if diff else 0
     return _finish(
         _load(args.json),
         args.root,

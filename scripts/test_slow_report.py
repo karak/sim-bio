@@ -13,6 +13,7 @@ from slow_report import (
     bins_of,
     check_partition,
     command_of,
+    compare_rows,
     expected_of,
     format_clock,
     js_escape,
@@ -111,9 +112,17 @@ class ObservedTest(unittest.TestCase):
         )
         self.assertEqual(observed_of("failed", "dead", [message]), "alive")
 
+    def test_timed_out_test_is_a_timeout(self) -> None:
+        self.assertEqual(
+            observed_of(
+                "failed", "dead", ["Error: Test timed out in 600000ms.\nIf this"]
+            ),
+            "timeout",
+        )
+
     def test_failed_test_with_another_error_is_a_question_mark(self) -> None:
         self.assertEqual(
-            observed_of("failed", "alive", ["Error: Test timed out in 600000ms."]), "?"
+            observed_of("failed", "alive", ["TypeError: x is undefined"]), "?"
         )
 
     def test_skipped_test_was_not_run(self) -> None:
@@ -307,7 +316,7 @@ class CommandTest(unittest.TestCase):
             cmd,
             [
                 "/usr/bin/caffeinate",
-                "-i",
+                "-ims",
                 "pnpm",
                 "exec",
                 "vitest",
@@ -366,6 +375,16 @@ class RenderTest(unittest.TestCase):
         self.assertIn("- 合計の壁時計: 2:05 (125 s)。上限 30:00 の内", text)
         self.assertIn("- 試験の時間の和: 2:00 (120 s)", text)
 
+    def test_load_average_at_start_and_end_is_given_when_known(self) -> None:
+        text = render(
+            self.rows(), wall=125.0, limit_minutes=30, label="lane", load=(1.5, 12.25)
+        )
+        self.assertIn("- 負荷 (1 分の load average): 始め 1.50、終わり 12.25", text)
+
+    def test_load_line_is_left_out_when_unknown(self) -> None:
+        text = render(self.rows(), wall=125.0, limit_minutes=30, label="lane")
+        self.assertNotIn("負荷", text)
+
     def test_over_the_limit_is_said(self) -> None:
         text = render(self.rows(), wall=1900.0, limit_minutes=30, label="lane")
         self.assertIn("上限 30:00 を超えた", text)
@@ -396,6 +415,29 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(format_clock(0), "0:00")
         self.assertEqual(format_clock(59.6), "1:00")
         self.assertEqual(format_clock(3725), "1:02:05")
+
+
+class CompareTest(unittest.TestCase):
+    def test_same_verdicts_in_any_order_are_equal(self) -> None:
+        a = [row("x → dead", "passed", "s1"), row("y → alive", "passed", "s1")]
+        b = [row("y → alive", "passed", "s2"), row("x → dead", "passed", "s1")]
+        self.assertEqual(compare_rows(a, b), [])
+
+    def test_a_different_verdict_is_listed(self) -> None:
+        a = [row("x → dead", "passed")]
+        b = [row("x → dead", "failed")]
+        self.assertEqual(
+            compare_rows(a, b),
+            ["tests/slow/a.test.ts > g > x → dead: dead/passed ≠ ?/failed"],
+        )
+
+    def test_a_test_on_one_side_only_is_listed(self) -> None:
+        a = [row("x → dead"), row("y → dead")]
+        b = [row("x → dead")]
+        self.assertEqual(
+            compare_rows(a, b),
+            ["tests/slow/a.test.ts > g > y → dead: dead/passed ≠ (無し)"],
+        )
 
 
 class ArgsTest(unittest.TestCase):
@@ -438,6 +480,30 @@ class EndToEndTest(unittest.TestCase):
         text = out.read_text(encoding="utf-8")
         self.assertIn("| 1 | g | t → dead | dead | dead | pass | 2.0 | s1 |", text)
         self.assertIn("合計の壁時計: 0:02 (2 s)", text)
+
+    def test_compare_command_reads_every_vitest_json_in_two_dirs(self) -> None:
+        from slow_report import main
+
+        tmp = Path(tempfile.mkdtemp())
+        for name, shards in {
+            "a": {"vitest": [case("g", "x → dead"), case("g", "y → alive")]},
+            "b": {
+                "s1": [case("g", "x → dead"), case("g", "y → alive", "skipped")],
+                "s2": [case("g", "x → dead", "skipped"), case("g", "y → alive")],
+            },
+        }.items():
+            (tmp / name).mkdir()
+            (tmp / name / "shards.json").write_text("[]", encoding="utf-8")
+            for shard, cases in shards.items():
+                (tmp / name / f"{shard}.json").write_text(
+                    json.dumps(report((str(tmp / "t.test.ts"), cases, 0, 1))),
+                    encoding="utf-8",
+                )
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = main(["compare", str(tmp / "a"), str(tmp / "b"), "--root", str(tmp)])
+        self.assertEqual(code, 0)
+        self.assertIn("2 件と 2 件を比べ、違い 0 件", out.getvalue())
 
     def test_report_command_fails_when_a_test_failed(self) -> None:
         from slow_report import main
