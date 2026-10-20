@@ -62,7 +62,7 @@ test('M24-02 lane1: 新規ゲームは、続きの無い手元ならそのまま
   // 石板を選ぶは石板の板 (中身は M24-03)。戻るとメニューの新規ゲームへ
   await panel.getByRole('button', { name: /^石板を選ぶ/ }).click();
   const stones = page.getByRole('dialog', { name: '石板を選ぶ' });
-  await expect(stones.locator('p')).toHaveText('タイトルからの石板の選択は準備中です。島の中の石板の板から選べます。');
+  await expect(stones.getByRole('region', { name: '選んだ石板' }).getByRole('heading')).toHaveText('沈む欠片');
   await stones.getByRole('button', { name: '戻る' }).click();
   await expect(item(page, '新規ゲーム')).toBeFocused();
 

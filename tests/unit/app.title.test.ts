@@ -3,7 +3,7 @@ import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import type { SlotSave } from '../../src/persist/slotSave';
 import { runAtTitle, type TitleEffectsDeps } from '../../src/app/title';
-import type { Plan } from '../../src/app/place';
+import { bootPlanOf, planOp, searchFor, type Plan } from '../../src/app/place';
 import { resumeIsland } from '../fixtures/resumeIsland';
 
 /** タイトルで planOp の効果を行う (M24-02)。タイトルには島が無いので、新しい seed・ファイルの置き場・読む枠の名・移る先だけを行い、移る先の舞台を返す */
@@ -31,6 +31,7 @@ function setup(search = '', draws: number[] = []) {
         q = s;
         calls.push(`replace ${s}`);
       },
+      assign: (href) => void calls.push(`assign ${href}`),
     },
     drawSeed: () => draws.shift() ?? 0,
     log: (level, event, extra) => void logs.push({ level, event, extra }),
@@ -81,5 +82,28 @@ describe('タイトルでの効果 runAtTitle (M24-02)', () => {
     expect(await runAtTitle(plan, yes, t.deps)).toBeNull();
     expect(t.logs).toEqual([{ level: 'warn', event: 'title.effect.unexpected', extra: { effect: 'replace' } }]);
     expect(t.calls).toEqual([]);
+  });
+});
+
+describe('タイトルでの石板の選択と港の訪れる runAtTitle (M24-03)', () => {
+  const defs = [{ id: 'test-quick' }, { id: 'sinking' }];
+  const titleOf = (id: string) => id;
+
+  it('石板の選択: 操作画面の石板の選択と同じ検索語 (seed= を落とし、ほかは残す) にしてその石板を返し、起動の計画も操作画面から移ったのと同じ', async () => {
+    const t = setup('?dev=1&seed=9');
+    expect(await runAtTitle(planOp({ kind: 'select', scenarioId: 'sinking' }, { stage: 'title', freeSaved: true }, titleOf), yes, t.deps)).toEqual({ kind: 'scenario', scenarioId: 'sinking' });
+    // 操作画面は効果 go で nav.go(searchFor(...)) へ読み込み直す。タイトルは読み込み直さずに同じ検索語へ差し替える
+    expect(t.search()).toBe(`?${searchFor('?dev=1&seed=9', 'sinking')}`);
+    expect(t.search()).toBe('?dev=1&scenario=sinking');
+    expect(bootPlanOf(t.search(), defs, null)).toEqual(bootPlanOf(`?${searchFor('?dev=1&seed=9', 'sinking')}`, defs, null));
+    expect(bootPlanOf(t.search(), defs, null)).toEqual({ scenario: { id: 'sinking' }, visitId: null, unknown: null, restore: [{ from: 'scenario' }] });
+  });
+
+  it('港の訪れる: 操作画面の港の札と同じく訪問の URL へ移る (nav.assign)。舞台は移った先の起動が決めるので null を返す', async () => {
+    const t = setup('?player=a');
+    const href = `/?scenario=test-civ&visit=${'a'.repeat(64)}`;
+    expect(await runAtTitle(planOp({ kind: 'visit', href }, { stage: 'title', freeSaved: false }, titleOf), yes, t.deps)).toBeNull();
+    expect(t.calls).toEqual([`assign ${href}`]);
+    expect(t.logs).toEqual([]);
   });
 });

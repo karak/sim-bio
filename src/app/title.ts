@@ -7,7 +7,9 @@ import { readConfig, reducedMotionOf, writeConfig, type Config } from '../persis
 import type { SlotId, SlotSummary } from '../persist/slots';
 import type { ScenarioDef } from '../scenario/types';
 import { SIM_VERSION } from '../simulation/version';
-import type { Ask } from './confirmAsk';
+import type { HarborLog } from '../harbor/client';
+import type { HarborStore } from '../harbor/store';
+import { askOf, type Ask, type Risky } from './confirmAsk';
 import type { Nav } from './effects';
 import { bootPlanOf, DEFAULT_SEED, freshSeed, runPlan, searchFor, seedSearchFor, type BootPlan, type Plan } from './place';
 
@@ -34,14 +36,28 @@ export type TitleDeps = {
   storage: Pick<Storage, 'getItem' | 'setItem'>;
   /** (M24-02) OS の「視差効果を減らす」(prefers-reduced-motion: reduce)。コンフィグの動きを減らすが OS に従うときに効く */
   osReducedMotion: boolean;
-  nav: Pick<Nav, 'search' | 'replace'>;
+  nav: Pick<Nav, 'search' | 'replace' | 'assign'>;
   /** (M24-02) このタブの sessionStorage (移って読む枠の名) */
   tab: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   /** (M24-02) やり直しの効かない操作の確かめ (ui/confirm.ts) */
   confirm: (ask: Ask) => Promise<boolean>;
   /** (M24-02) 新しい島の seed を引く (0 以上 2^32-1 の整数) */
   drawSeed: () => number;
+  /** (M24-03) 港の板が港へ問う元 (操作画面の港と同じ置き場・鍵・名乗り)。記録はタイトルの記録に書く */
+  harbor: Omit<TitleHarbor, 'log'>;
   showTitle: (deps: TitleScreenDeps) => Promise<TitleChoice>;
+};
+
+/** (M24-03) タイトルの港の板が港へ問う元。石板の目録は TitleScreenDeps.scenarios */
+export type TitleHarbor = {
+  speciesIds: readonly string[];
+  simVersion: string;
+  /** 港の API の置き場。無ければ常に閉港 */
+  baseUrl?: string;
+  sitekey?: string;
+  store: HarborStore;
+  player?: { headers: Readonly<Record<string, string>> };
+  log: HarborLog;
 };
 
 /** タイトルの画面 (ui/Title.ts) へ渡すもの */
@@ -61,13 +77,21 @@ export type TitleScreenDeps = {
   /** (M24-02) コンフィグの今の値と、変えたときに置き場 (localStorage) へ書く口 */
   config: Config;
   saveConfig: (config: Config) => void;
+  /** (M24-03) 石板の板に並べる石板 (操作画面の石板と同じ目録。hidden は板が除く) */
+  scenarios: readonly ScenarioDef[];
+  /** (M24-03) 石板の続き。石板の板を開いたときに石板ごとに読む (無い・この版で開けない・読めなければ null) */
+  progressOf: (scenarioId: string) => Promise<ScenarioProgress | null>;
+  /** (M24-03) 港の板が港へ問う元。港を押すまで港にも碑文にも問わない */
+  harbor: TitleHarbor;
+  /** (M24-03) 港の板の取り下げの確かめ (操作画面の港の guard.ask と同じく askOf の文) */
+  ask: (r: Risky) => Promise<boolean>;
 };
 
 /** タイトルでの効果 (runAtTitle) が使うもの */
 export type TitleEffectsDeps = {
   store: Pick<IslandStore, 'stashImport'> | null;
   tab: Pick<Storage, 'setItem'>;
-  nav: Pick<Nav, 'search' | 'replace'>;
+  nav: Pick<Nav, 'search' | 'replace' | 'assign'>;
   drawSeed: () => number;
   log: (level: 'info' | 'warn', event: string, extra: Record<string, unknown>) => void;
 };
@@ -100,6 +124,10 @@ export async function runAtTitle(plan: Plan, confirm: (ask: Ask) => Promise<bool
         went = e.scenarioId ? { kind: 'scenario', scenarioId: e.scenarioId } : { kind: 'free' };
         return true;
       }
+      case 'assign':
+        // (M24-03) 港の訪れる。操作画面の港の札と同じく訪問の URL へ移る (舞台は移った先の起動が決める)。ここで舞台は返さない
+        nav.assign(e.href);
+        return true;
       default:
         log('warn', 'title.effect.unexpected', { effect: e.kind });
         return false;
@@ -155,6 +183,14 @@ export function createTitle(deps: TitleDeps) {
       reducedMotion: reducedMotionOf(prefs.motion, deps.osReducedMotion),
       config: prefs,
       saveConfig: (c) => void writeConfig(deps.storage, c),
+      // (M24-03) 石板の板の続きは、タイトルの「続きから」と同じ読み方 (この版で開ける続きだけ)。板を開いたときに読む
+      scenarios,
+      progressOf: scenarioProgressFor,
+      harbor: { ...deps.harbor, log: (level, event, extra) => titleLog(level, event, extra ?? {}) },
+      ask: (r) => {
+        const ask = askOf(r);
+        return ask ? deps.confirm(ask) : Promise.resolve(true);
+      },
     });
     // 石板の続きは ?scenario=<id> の道 (bootPlanOf の restore scenario → resumeScenario)。読み込み直さずに検索語だけ差し替える
     if (choice.kind === 'scenario') nav.replace(`?${searchFor(nav.search(), choice.scenarioId)}`);

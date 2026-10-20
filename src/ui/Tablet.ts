@@ -26,7 +26,7 @@ export type Tablet = {
   flash(): void;
 };
 
-const KIND_LABEL: Record<ScenarioDef['kind'], string> = { prevent: '防ぐ', endure: '耐える', escape: '逃がす' };
+export const KIND_LABEL: Record<ScenarioDef['kind'], string> = { prevent: '防ぐ', endure: '耐える', escape: '逃がす' };
 /** 石板に同時に出す警告の上限 */
 const MAX_WARNINGS = 3;
 /** 年表に出す直近の件数 */
