@@ -6,6 +6,8 @@ import { planSlotLoad, type SlotSave } from '../../src/persist/slotSave';
 import type { SlotId } from '../../src/persist/slots';
 import type { Continuation } from '../../src/persist/lastStage';
 import { titleStepOf, type TitleAction, type TitleStep } from '../../src/ui/titleMenu';
+import { planOp } from '../../src/app/place';
+import { visitHref } from '../../src/harbor/links';
 import { resumeIsland } from '../fixtures/resumeIsland';
 
 /**
@@ -38,8 +40,9 @@ function rowOf(step: TitleStep): Row {
       const effects = step.plan.effects;
       const go = effects.find((e) => e.kind === 'go');
       const pending = effects.find((e) => e.kind === 'put_pending');
+      const assign = effects.find((e) => e.kind === 'assign');
       return {
-        to: go?.kind === 'go' ? (go.scenarioId ?? 'free') : 'none',
+        to: go?.kind === 'go' ? (go.scenarioId ?? 'free') : assign?.kind === 'assign' ? `assign ${assign.href}` : 'none',
         slot: pending?.kind === 'put_pending' ? pending.slot : null,
         stash: effects.some((e) => e.kind === 'stash_import'),
         fresh: effects.some((e) => e.kind === 'new_world'),
@@ -48,6 +51,9 @@ function rowOf(step: TitleStep): Row {
     }
   }
 }
+
+/** (M24-03) 港の一覧の訪れる札の行き先 (Harbor.ts の cardItem と同じ visitHref) */
+const VISIT = visitHref({ id: 'a'.repeat(64), scenarioId: 'test-civ' });
 
 const actions: Record<string, TitleAction> = {
   続きから: { kind: 'item', id: 'continue' },
@@ -62,6 +68,9 @@ const actions: Record<string, TitleAction> = {
   'ロード > 枠 2 (石板)': { kind: 'load', data: scenarioSlot, slot: 'manual-2' },
   'ロード > ファイル (自由モード)': { kind: 'load', data: freeSlot, slot: null },
   'ロード > ファイル (石板)': { kind: 'load', data: scenarioSlot, slot: null },
+  '石板を選ぶ > 試し読み': { kind: 'select', scenarioId: 'test-quick' },
+  '港 (空) > 石板を選ぶ': { kind: 'scenarios' },
+  '港 > 訪れる': { kind: 'visit', href: VISIT },
 };
 
 const hands: Record<string, { continuation: Continuation | null; freeSaved: boolean }> = {
@@ -93,6 +102,15 @@ const table: ({ action: string; hand: string } & Row)[] = [
   { action: 'ロード > 枠 2 (石板)', hand: '自動の枠あり', to: 'test-quick', slot: 'manual-2', stash: false, fresh: false, ask: '舞台を移って読む' },
   { action: 'ロード > ファイル (自由モード)', hand: '空', to: 'free', slot: 'import', stash: true, fresh: false, ask: '舞台を移って読む' },
   { action: 'ロード > ファイル (石板)', hand: '石板の続きだけ', to: 'test-quick', slot: 'import', stash: true, fresh: false, ask: '舞台を移って読む' },
+  // (M24-03) 石板の板で選ぶ: 操作画面の石板の選択 (select) と同じく、書き切ってからその石板へ移る。タイトルには走っている島も判定の出た島も無いので確かめない
+  { action: '石板を選ぶ > 試し読み', hand: '自動の枠あり', to: 'test-quick', slot: null, stash: false, fresh: false, ask: null },
+  { action: '石板を選ぶ > 試し読み', hand: '空', to: 'test-quick', slot: null, stash: false, fresh: false, ask: null },
+  { action: '石板を選ぶ > 試し読み', hand: '石板の続きだけ', to: 'test-quick', slot: null, stash: false, fresh: false, ask: null },
+  // (M24-03) 空の港の「石板を選ぶ」は、新規ゲームの板の「石板を選ぶ」と同じ石板の板 (続きの無い手元でも石板へ行ける)
+  { action: '港 (空) > 石板を選ぶ', hand: '空', to: 'panel:scenarios', slot: null, stash: false, fresh: false, ask: null },
+  // (M24-03) 港の訪れる: 操作画面の港の札と同じ planOp の visit (訪問の URL へ移る)。確かめない
+  { action: '港 > 訪れる', hand: '空', to: `assign ${VISIT}`, slot: null, stash: false, fresh: false, ask: null },
+  { action: '港 > 訪れる', hand: '自動の枠あり', to: `assign ${VISIT}`, slot: null, stash: false, fresh: false, ask: null },
 ];
 
 describe('タイトルのメニューの行き先 titleStepOf (M24-02)', () => {
@@ -125,6 +143,23 @@ describe('タイトルのメニューの行き先 titleStepOf (M24-02)', () => {
         effects: [{ kind: 'stash_import', data: freeSlot }, { kind: 'put_pending', slot: 'import' }, { kind: 'flush' }, { kind: 'go', scenarioId: null }],
       },
     });
+  });
+});
+
+describe('タイトルの石板の選択と港の訪れる (M24-03)', () => {
+  it('titleStepOf: 石板の板で選ぶのは、操作画面の石板の選択 (Tablet の select) と同じ planOp の確かめと効果 (同じ石板で同じ始まり)', () => {
+    for (const hand of Object.values(hands)) {
+      expect(titleStepOf({ kind: 'select', scenarioId: 'test-quick' }, { ...hand, titleOf })).toEqual({
+        kind: 'plan',
+        plan: planOp({ kind: 'select', scenarioId: 'test-quick' }, { stage: 'free' }, titleOf),
+      });
+    }
+    expect(planOp({ kind: 'select', scenarioId: 'test-quick' }, { stage: 'free' }, titleOf)).toEqual({ ask: null, effects: [{ kind: 'flush' }, { kind: 'go', scenarioId: 'test-quick' }] });
+  });
+
+  it('titleStepOf: 港の訪れるは、操作画面の港の札 (guard.leave → visit) を自由モードの島で押したのと同じ計画', () => {
+    expect(titleStepOf({ kind: 'visit', href: VISIT }, { ...hands['空'], titleOf })).toEqual({ kind: 'plan', plan: planOp({ kind: 'visit', href: VISIT }, { stage: 'free' }, titleOf) });
+    expect(VISIT).toBe(`/?scenario=test-civ&visit=${'a'.repeat(64)}`);
   });
 });
 
