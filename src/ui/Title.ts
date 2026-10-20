@@ -1,7 +1,10 @@
 import { el } from './el';
 import { startTitleDemo, type DemoStats } from './titleDemo';
-import { menuKeyOf, titleChoiceOf, titleMenuOf, type TitleChoice, type TitleItem, type TitleItemId } from './titleMenu';
+import { CONFIG_ROWS, menuKeyOf, slotRowsOf, titleMenuOf, titleStepOf, type TitleAction, type TitleChoice, type TitleContext, type TitleItem, type TitlePanel, type TitleStep } from './titleMenu';
 import type { Continuation } from '../persist/lastStage';
+import { slotSaveOf } from '../persist/slotSave';
+import { DEFAULT_CONFIG, type Config } from '../persist/config';
+import type { TitleScreenDeps } from '../app/title';
 import './title.css';
 
 /**
@@ -18,15 +21,26 @@ export type TitleDeps = {
   freeSaved: boolean;
   reducedMotion: boolean;
   log: (event: string, extra: Record<string, unknown>) => void;
+  /** (M24-02) ロードの板に並べる枠 (保存のある枠だけ) */
+  slots: TitleScreenDeps['slots'];
+  titleOf: (scenarioId: string) => string;
+  /** (M24-02) 枠の包みを置き場から読む */
+  loadSlot: TitleScreenDeps['loadSlot'];
+  /** (M24-02) planOp の確かめと効果をタイトルで行う (app/title.ts の runAtTitle)。移る先の舞台、断れば null */
+  run: TitleScreenDeps['run'];
+  /** (M24-02) コンフィグの今の値と、変えたときに置き場へ書く口 */
+  config: Config;
+  saveConfig: (config: Config) => void;
 };
 
 /** 中身がまだ無い板 (M24-02・M24-03 で作る) の文 */
-const PENDING_TEXT: Record<Exclude<TitleItemId, 'continue'>, string> = {
-  new: 'タイトルからの新規ゲームは準備中です。島の中の「新しい島」で始められます。',
-  load: '枠とファイルからの読込は準備中です。島の中の「枠」からは、いまも読めます。',
+const PENDING_TEXT: Record<'harbor' | 'scenarios', string> = {
   harbor: 'タイトルからの港は準備中です。島の中の港の口からは、いまも訪れられます。',
-  config: 'コンフィグ (画質・動きを減らす・始めの速さ) は準備中です。',
+  scenarios: 'タイトルからの石板の選択は準備中です。島の中の石板の板から選べます。',
 };
+
+/** (M24-02) 板の題 */
+const PANEL_HEADINGS: Record<TitlePanel, string> = { new: '新規ゲーム', load: 'ロード', config: 'コンフィグ', harbor: '港', scenarios: '石板を選ぶ' };
 
 /** ロゴ: 石板 (上に星の紋、下に予言の刻線) を台にし、動物の紋 (月鹿の三日月の角・土兎の六角の紋・灰狼の背の稜線) をシアンの光の線で刻む */
 const LOGO_SVG = `<svg class="title-logo-mark" viewBox="0 0 84 120" aria-hidden="true" focusable="false">
@@ -74,18 +88,43 @@ export function showTitle(root: HTMLElement, deps: TitleDeps): Promise<TitleChoi
       screen.remove();
       resolve(choice);
     };
-    const choose = (i: number) => {
-      const id = menu.items[i].id;
-      const to = titleChoiceOf(id, deps.continuation, deps.freeSaved);
-      if (to.kind !== 'panel') finish(to);
-      else if (id !== 'continue') {
-        // 板の間はメニューを inert にする (aria-modal の板の外を押せない・focus が出ない)
-        list.inert = true;
-        openPanel(screen, menu.items[i].label, PENDING_TEXT[id], () => {
-          list.inert = false;
-          focusAt(i);
-        });
+    const ctx: TitleContext = { continuation: deps.continuation, freeSaved: deps.freeSaved, titleOf: deps.titleOf };
+    let busy = false;
+    /** (M24-02) 行き先へ進む。plan は確かめと効果をタイトルで行い、移る先が決まれば舞台へ、断れば stay (板に留まる) */
+    const go = async (step: TitleStep, stay: () => void): Promise<void> => {
+      if (step.kind === 'enter') return finish(step.choice);
+      if (step.kind !== 'plan' || busy) return;
+      busy = true;
+      const choice = await deps.run(step.plan).finally(() => (busy = false));
+      if (choice) finish(choice);
+      else stay();
+    };
+    /** (M24-02) 板を開く。板の中から次の板へ移るときも、閉じたらメニューの元の行へ戻る */
+    const openOf = (panel: TitlePanel, back: () => void): void => {
+      const heading = PANEL_HEADINGS[panel];
+      if (panel === 'harbor' || panel === 'scenarios') return openPanel(screen, heading, PENDING_TEXT[panel], back);
+      if (panel === 'new') {
+        const board = openBoard(screen, heading, newGameBody({
+          free: (b) => void go(titleStepOf({ kind: 'new_free' }, ctx), () => b.focus()),
+          scenarios: () => {
+            board.remove();
+            openOf('scenarios', back);
+          },
+        }), back);
+        return;
       }
+      if (panel === 'load') return void openBoard(screen, heading, loadBody(deps, (action, stay) => go(titleStepOf(action, ctx), stay)), back, true);
+      openBoard(screen, heading, configBody(deps), back);
+    };
+    const choose = (i: number) => {
+      const step = titleStepOf({ kind: 'item', id: menu.items[i].id }, ctx);
+      if (step.kind !== 'panel') return void go(step, () => focusAt(i));
+      // 板の間はメニューを inert にする (aria-modal の板の外を押せない・focus が出ない)
+      list.inert = true;
+      openOf(step.panel, () => {
+        list.inert = false;
+        focusAt(i);
+      });
     };
     list.addEventListener('keydown', (e) => {
       const k = menuKeyOf(e.key, at, items.length);
@@ -128,4 +167,125 @@ function openPanel(screen: HTMLElement, heading: string, text: string, back: () 
   });
   screen.append(panel);
   close.focus();
+}
+
+/**
+ * (M24-02) 中身のある板 (W/F new-game・load・config)。上に「戻る」と題を置き、開くと「戻る」に focus を置く。
+ * Esc・「戻る」で閉じて back を呼ぶ。Tab は板の中を回る。返す要素を外すと、back を呼ばずに閉じる (次の板へ移るとき)
+ */
+function openBoard(screen: HTMLElement, heading: string, body: readonly HTMLElement[], back: () => void, wide = false): HTMLElement {
+  const id = `title-panel-${Math.random().toString(36).slice(2, 8)}`;
+  const close = el('button', { type: 'button', class: 'title-panel-back' }, '戻る');
+  const head = el('div', { class: 'title-board-head' }, close, el('h2', { id }, heading), el('span', { class: 'title-board-esc' }, 'Esc でタイトルへ'));
+  const panel = el('div', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': id, class: wide ? 'title-panel title-board wide' : 'title-panel title-board' }, head, ...body);
+  const done = () => {
+    panel.remove();
+    back();
+  };
+  close.addEventListener('click', done);
+  panel.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      done();
+    } else if (e.key === 'Tab') {
+      // 押せる札と、選んである丸 (同じ組の丸は矢印で動く) だけを回る
+      const stops = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), input[type="radio"]:checked')];
+      const at = stops.indexOf(document.activeElement as HTMLElement);
+      const next = e.shiftKey ? (at <= 0 ? stops.length - 1 : at - 1) : (at + 1) % stops.length;
+      e.preventDefault();
+      stops[next]?.focus();
+    }
+  });
+  screen.append(panel);
+  close.focus();
+  return panel;
+}
+
+/** (M24-02) 札の 1 つ (題と小さな添え書き)。押すと on に自分を渡す */
+function optionButton(label: string, note: string, on: (b: HTMLButtonElement) => void): HTMLButtonElement {
+  const b = el('button', { type: 'button', class: 'title-option' }, el('span', { class: 'title-option-label' }, label), el('span', { class: 'title-option-note' }, note));
+  b.addEventListener('click', () => on(b));
+  return b;
+}
+
+/** (M24-02) 新規ゲームの板 (W/F new-game-*.svg)。自由モードは確かめてから新しい島、石板を選ぶは石板の板 (中身は M24-03) */
+function newGameBody(on: { free: (b: HTMLButtonElement) => void; scenarios: () => void }): HTMLElement[] {
+  return [
+    el(
+      'div',
+      { class: 'title-options' },
+      optionButton('自由モード', '制約の無い島。好きに介入する (今の島は新しい島に替わる)', on.free),
+      optionButton('石板を選ぶ', '予言に抗う島', () => on.scenarios()),
+    ),
+  ];
+}
+
+/**
+ * (M24-02) ロードの板 (W/F load-*.svg)。自動の枠と枠 1〜3、下にファイル。読むと確かめ (舞台を移って読む) の後に包みの舞台を開く。
+ * 読めない枠・ファイルは板の中に知らせ、板に留まる
+ */
+function loadBody(deps: TitleDeps, load: (action: Extract<TitleAction, { kind: 'load' }>, stay: () => void) => Promise<void>): HTMLElement[] {
+  const status = el('p', { class: 'title-board-status', role: 'status' });
+  const rows = slotRowsOf(deps.slots, deps.titleOf).map((r) => {
+    const read = el('button', { type: 'button', class: 'title-panel-back', 'aria-label': `${r.name}を読み込む` }, '読み込む');
+    read.disabled = r.note === null;
+    read.addEventListener('click', () => {
+      status.textContent = '';
+      void deps.loadSlot(r.slot).then((data) => {
+        if (data) return load({ kind: 'load', data, slot: r.slot }, () => read.focus());
+        status.textContent = `${r.name}を読めませんでした`;
+      });
+    });
+    return el('div', { class: 'title-slot', 'data-slot': r.slot }, el('span', { class: 'title-slot-name' }, r.name), el('span', { class: 'title-slot-note' }, r.note ?? '空'), read);
+  });
+  const input = el('input', { type: 'file', accept: 'application/json,.json', hidden: '' });
+  const pick = el('button', { type: 'button', class: 'title-option title-file' }, el('span', { class: 'title-option-label' }, 'ファイルから読む…'), el('span', { class: 'title-option-note' }, '保存したファイル (.json) を選ぶ'));
+  pick.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    const f = input.files?.[0];
+    if (!f) return;
+    status.textContent = '';
+    // 操作画面の読込 (Hud の load-input) と同じく、JSON を読んで包み (slotSaveOf) にする
+    void f
+      .text()
+      .then((t) => load({ kind: 'load', data: slotSaveOf(JSON.parse(t)), slot: null }, () => pick.focus()))
+      .catch(() => {
+        status.textContent = 'ファイルを読めませんでした';
+      })
+      .finally(() => {
+        input.value = '';
+      });
+  });
+  return [
+    el('div', { class: 'title-slots' }, ...rows),
+    el('div', { class: 'title-options' }, pick, input),
+    el('p', { class: 'title-board-note' }, '読むと確かめの後に、保存した舞台 (自由モード・石板) をその年から開きます。'),
+    status,
+  ];
+}
+
+/** (M24-02) コンフィグの板 (W/F config-*.svg)。変えた値はその場で置き場へ書き、次の起動でも戻る。既定に戻すは 3 つとも既定へ */
+function configBody(deps: TitleDeps): HTMLElement[] {
+  let now: Config = deps.config;
+  const radios: { key: keyof Config; value: Config[keyof Config]; input: HTMLInputElement }[] = [];
+  const set = (next: Config) => {
+    now = next;
+    for (const r of radios) r.input.checked = now[r.key] === r.value;
+    deps.saveConfig(now);
+  };
+  const groups = CONFIG_ROWS.map((row) => {
+    const labels = row.choices.map((c) => {
+      const input = el('input', { type: 'radio', name: `title-config-${row.key}`, value: String(c.value) });
+      input.checked = now[row.key] === c.value;
+      input.addEventListener('change', () => {
+        if (input.checked) set({ ...now, [row.key]: c.value });
+      });
+      radios.push({ key: row.key, value: c.value, input });
+      return el('label', { class: 'title-choice' }, input, el('span', {}, c.label));
+    });
+    return el('fieldset', { class: 'title-config-row' }, el('legend', {}, row.legend), el('span', { class: 'title-option-note' }, row.hint), el('div', { class: 'title-choices' }, ...labels));
+  });
+  const reset = el('button', { type: 'button', class: 'title-panel-back' }, '既定に戻す');
+  reset.addEventListener('click', () => set(DEFAULT_CONFIG));
+  return [...groups, el('p', { class: 'title-board-note' }, '変えた値はその場で保存し、次の起動でも戻ります。'), el('div', { class: 'title-board-actions' }, reset)];
 }

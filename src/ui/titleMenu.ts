@@ -1,5 +1,9 @@
 import type { Continuation } from '../persist/lastStage';
+import type { SlotSave } from '../persist/slotSave';
+import { SLOTS, type SlotId, type SlotSummary } from '../persist/slots';
+import { MOTIONS, QUALITIES, START_SPEEDS, type Config } from '../persist/config';
 import type { TitleChoice } from '../app/title';
+import { planOp, type At, type Plan } from '../app/place';
 export type { TitleChoice };
 
 /** タイトルのメニューの 1 行 (M24-01)。note は「続きから」の下に小さく添える要約 */
@@ -40,6 +44,84 @@ export function titleChoiceOf(id: TitleItemId, continuation: Continuation | null
   if (id === 'new' && !freeSaved) return { kind: 'free' };
   return { kind: 'panel' };
 }
+
+/** (M24-02) タイトルの板。scenarios は新規ゲームの「石板を選ぶ」、harbor は港 (どちらも中身は M24-03) */
+export type TitlePanel = 'new' | 'load' | 'config' | 'harbor' | 'scenarios';
+
+/**
+ * (M24-02) タイトルの操作。item はメニューの行、new_free は新規ゲームの板の「自由モード」、scenarios は同じ板の「石板を選ぶ」、
+ * load はロードの板の枠 (slot) かファイル (slot が null)
+ */
+export type TitleAction =
+  | { kind: 'item'; id: TitleItemId }
+  | { kind: 'new_free' }
+  | { kind: 'scenarios' }
+  | { kind: 'load'; data: SlotSave; slot: SlotId | null };
+
+/** 行き先。stay は何もしない、panel は板を開く、enter は確かめずに舞台へ、plan は操作画面と同じ planOp の確かめと効果を通る (タイトルでの効果は app/title.ts の runAtTitle) */
+export type TitleStep = { kind: 'stay' } | { kind: 'panel'; panel: TitlePanel } | { kind: 'enter'; choice: TitleChoice } | { kind: 'plan'; plan: Plan };
+
+export type TitleContext = { continuation: Continuation | null; freeSaved: boolean; titleOf: (scenarioId: string) => string };
+
+/**
+ * タイトルの操作 → 行き先 (M24-02、docs/uiux/2026-10-04-title-flow.md の遷移図)。メニューの行は titleChoiceOf のまま (続きから・自動の枠の無い新規ゲームは舞台へ)、
+ * 新しい島と読込は操作画面と同じ planOp をタイトル (舞台なし) から通す。読込はいつも包みの舞台へ移って読む (planSlotLoad、別の読み方を作らない)
+ */
+export function titleStepOf(action: TitleAction, ctx: TitleContext): TitleStep {
+  const at: At = { stage: 'title', freeSaved: ctx.freeSaved };
+  switch (action.kind) {
+    case 'item': {
+      const to = titleChoiceOf(action.id, ctx.continuation, ctx.freeSaved);
+      if (to.kind !== 'panel') return { kind: 'enter', choice: to };
+      return action.id === 'continue' ? { kind: 'stay' } : { kind: 'panel', panel: action.id };
+    }
+    case 'new_free':
+      return { kind: 'plan', plan: planOp({ kind: 'new_island' }, at, ctx.titleOf) };
+    case 'scenarios':
+      return { kind: 'panel', panel: 'scenarios' };
+    case 'load':
+      return { kind: 'plan', plan: planOp({ kind: 'load', data: action.data, slot: action.slot }, at, ctx.titleOf) };
+  }
+}
+
+/** (M24-02) ロードの板の 1 行。note は「続きから」と同じ要約、空の枠は null (読み込むを押せない) */
+export type SlotRow = { slot: SlotId; name: string; note: string | null };
+
+const SLOT_NAMES: Record<SlotId, string> = { auto: '自動の枠', 'manual-1': '枠 1', 'manual-2': '枠 2', 'manual-3': '枠 3' };
+
+/** ロードの板の枠の並び (W/F load-*.svg)。自動の枠と枠 1〜3 をいつも並べる (空の枠も見せ、次の手のファイルを下に置く) */
+export function slotRowsOf(slots: readonly SlotSummary[], titleOf: (scenarioId: string) => string): SlotRow[] {
+  return SLOTS.map((slot) => {
+    const s = slots.find((x) => x.slot === slot);
+    if (!s) return { slot, name: SLOT_NAMES[slot], note: null };
+    const c: Continuation = s.stage === 'free' ? { stage: 'free', year: s.year, savedAt: s.savedAt } : { stage: 'scenario', scenarioId: s.scenarioId, title: titleOf(s.scenarioId), year: s.year, savedAt: s.savedAt };
+    return { slot, name: SLOT_NAMES[slot], note: continueNoteOf(c) };
+  });
+}
+
+type ConfigRow<K extends keyof Config> = { key: K; legend: string; hint: string; choices: readonly { value: Config[K]; label: string }[] };
+
+/** (M24-02) コンフィグの板の行 (W/F config-*.svg、決めること 2 の案 A)。画質は観察画面にまだ繋いでいない (保存と戻りだけ) */
+export const CONFIG_ROWS: readonly [ConfigRow<'quality'>, ConfigRow<'motion'>, ConfigRow<'speed'>] = [
+  {
+    key: 'quality',
+    legend: '画質',
+    hint: '観察画面の影・草・解像度 (観察画面への反映は準備中)',
+    choices: QUALITIES.map((value) => ({ value, label: { auto: '自動', light: '軽い', fine: 'きれい' }[value] })),
+  },
+  {
+    key: 'motion',
+    legend: '動きを減らす',
+    hint: 'タイトルの背景の動き',
+    choices: MOTIONS.map((value) => ({ value, label: { os: 'OS に従う', on: '入', off: '切' }[value] })),
+  },
+  {
+    key: 'speed',
+    legend: '最初の速さ',
+    hint: '島を開いたときの速さ',
+    choices: START_SPEEDS.map((value) => ({ value, label: `${value}x` })),
+  },
+];
 
 export type MenuKey = { kind: 'move'; to: number } | { kind: 'activate'; at: number } | { kind: 'back' } | null;
 

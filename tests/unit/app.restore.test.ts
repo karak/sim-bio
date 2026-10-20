@@ -98,6 +98,12 @@ describe('起動の島の戻し方 restoreIsland (M27-03)', () => {
     expect(loaded.logs).toEqual([]);
   });
 
+  it('(M24-02) タイトルのロードから移ってきた枠 (pending に無く、戻し方の先頭にだけある) も、戻せなければ persist.slot.load.failed を残す', async () => {
+    const failed = setup({ auto: freeSave(10) }, { head: null, pending: null });
+    expect((await restoreIsland(ORDER, failed.deps)).resumed?.world.snapshot().tick).toBe(10);
+    expect(failed.logs).toEqual([{ event: 'persist.slot.load.failed', extra: { slot: 'manual-1' } }]);
+  });
+
   it('何も戻せなければ null (新しい島を作る)', async () => {
     const { deps } = setup({}, { head: null });
     expect(await restoreIsland(ORDER, deps)).toEqual({ resumed: null, fromSlot: false });

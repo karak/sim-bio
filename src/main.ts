@@ -70,12 +70,13 @@ async function boot(): Promise<void> {
   const pending = takePendingSlot(sessionStorage);
   // 起動の行き先 (M24-01): 素の / で、このタブでまだ舞台に入っていなければタイトル。選ばれてから舞台を組む
   const route = bootRouteOf(location.search, scenarios, pending, takeTabMarks(sessionStorage), devTools ? devTools.skipsTitle(localStorage) : false);
-  const { enterFromTitle } = createTitle({
-    store, scenarios, baseSeed: base.seed, player: dev?.player?.name, log, storage: localStorage, nav,
+  const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+  const { enterFromTitle, startSpeed } = createTitle({
+    store, scenarios, baseSeed: base.seed, player: dev?.player?.name, log, storage: localStorage, nav, tab: sessionStorage, drawSeed, confirm: createConfirm(document.getElementById('app') ?? document.body), osReducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
     showTitle: (deps) => {
       const root = document.getElementById('app');
       if (!root) throw new Error('#app missing');
-      return showTitle(root, { ...deps, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches });
+      return showTitle(root, deps);
     },
   });
   const booted = route.kind === 'stage' ? route.plan : await enterFromTitle();
@@ -108,7 +109,6 @@ async function boot(): Promise<void> {
       markStage();
     },
   });
-  const drawSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
   const head = scenario ? { simVersion: SIM_VERSION, scenarioId: scenario.id, seed: config.seed } : null;
   const { resumed, fromSlot } = await restoreIsland(booted.restore, { localSave, store, head, log, persistLog, seed: seeded.seed, pending });
   const session = sessionOf(resumed?.world ?? World.create(seeded.seed === null ? config : { ...config, seed: seeded.seed }, { log }));
@@ -251,7 +251,7 @@ async function boot(): Promise<void> {
       return { save, chronicle: session.scenario?.recorder?.current() ?? null };
     },
   });
-  if (dev?.paused) loop.setSpeed(0);
+  loop.setSpeed(dev?.paused ? 0 : startSpeed());
   loop.start();
 }
 

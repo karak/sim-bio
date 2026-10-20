@@ -37,6 +37,34 @@
 .title-panel p { margin: 0 0 14px; font-size: 14px; line-height: 1.6; color: #c9d6df; }
 .title-panel-back { background: #233544; color: #e9eff3; border: 0; border-radius: 10px; padding: 6px 16px; font: inherit; font-size: 14px; cursor: pointer; }
 .title-panel-back:focus-visible { outline: 2px solid #5ff3ea; outline-offset: 2px; }
+.title-panel-back:disabled { opacity: 0.45; cursor: default; }
+/* (M24-02) 中身のある板 (W/F new-game・load・config)。上に戻ると題、背の低い画面では板の中を流す */
+.title-board { display: flex; flex-direction: column; gap: 12px; max-height: calc(100% - 32px); overflow-y: auto; }
+.title-board.wide { width: min(560px, calc(100% - 32px)); }
+.title-board-head { display: flex; align-items: center; gap: 12px; }
+.title-board-head h2 { margin: 0; flex: 1; }
+.title-board-esc { color: #9fb3c2; font-size: 12px; }
+.title-board p { margin: 0; }
+.title-board-note { font-size: 13px; color: #b5c4cf; }
+.title-board-status { min-height: 1.2em; font-size: 13px; color: #f0a07e; }
+.title-board-actions { display: flex; justify-content: flex-end; }
+.title-options { display: flex; flex-direction: column; gap: 8px; }
+.title-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 10px 14px; border: 1px solid rgba(95, 243, 234, 0.25); border-radius: 6px; background: rgba(35, 53, 68, 0.6); color: #e9eff3; font: inherit; font-size: 16px; text-align: left; cursor: pointer; }
+.title-option:hover { background: rgba(95, 243, 234, 0.1); }
+.title-option:focus-visible { outline: 2px solid #5ff3ea; outline-offset: 1px; }
+.title-option-label { font-weight: 700; }
+.title-option-note { font-size: 13px; color: #b5c4cf; }
+.title-slots { display: flex; flex-direction: column; gap: 6px; }
+.title-slot { display: grid; grid-template-columns: 5.5em 1fr auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; background: rgba(35, 53, 68, 0.6); font-size: 14px; }
+.title-slot-name { font-weight: 700; }
+.title-slot-note { color: #c9d6df; font-size: 13px; }
+.title-config-row { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 10px 12px; border: 0; border-radius: 6px; background: rgba(35, 53, 68, 0.6); }
+.title-config-row legend { float: left; padding: 0; font-weight: 700; font-size: 15px; }
+.title-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.title-choice { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 14px; background: #233544; font-size: 14px; cursor: pointer; }
+.title-choice:has(input:checked) { background: #2f6d6a; color: #ffffff; }
+.title-choice input { accent-color: #5ff3ea; margin: 0; }
+.title-choice:has(input:focus-visible) { outline: 2px solid #5ff3ea; outline-offset: 1px; }
 /* 狭い画面 (縦長): 背景の主役は上半分、メニューは親指の届く下半分 */
 @media (max-width: 640px), (max-aspect-ratio: 3/4) {
   /* 画は上 62% に収める (16:9 の画を縦長いっぱいに cover すると、主役の群れが帯の下に隠れる) */

@@ -39,13 +39,18 @@ export function checkSlot(s: SlotSave, here: Here): { ok: true; value: SlotSave 
 
 export type SlotLoadPlan = { kind: 'replace'; confirm: string } | { kind: 'navigate'; to: Stage; confirm: string };
 
+/** (M24-02) タイトル (舞台なし)。読む操作の行き先 (planSlotLoad) だけが受ける。タイトルからはどの枠も包みの舞台へ移って読む */
+export type AtTitle = { stage: 'title' };
+
 /** 枠 (とファイル) を読む操作の行き先 (§4)。同じ舞台ならその場で差し替え、違う舞台ならその舞台へ移ってから読む。どちらも確かめてから */
-export function planSlotLoad(slot: Stage, here: Here, titleOf: (scenarioId: string) => string): SlotLoadPlan {
-  if (sameStage(slot, stageOfHere(here))) {
+export function planSlotLoad(slot: Stage, here: Here | AtTitle, titleOf: (scenarioId: string) => string): SlotLoadPlan {
+  if (here.stage !== 'title' && sameStage(slot, stageOfHere(here))) {
     return { kind: 'replace', confirm: here.stage === 'free' ? '今の島を捨てて、枠の島を読み込みますか (自動の枠は上書きされます)' : '石板を枠の時点に戻しますか (今の続きは上書きされます)' };
   }
   const to: Stage = slot.stage === 'free' ? { stage: 'free' } : { stage: 'scenario', scenarioId: slot.scenarioId };
-  const confirm = to.stage === 'free' ? '自由モードの枠です。自由モードを開いて読みますか' : `石板『${titleOf(to.scenarioId)}』の枠です。石板を開いて読みますか`;
+  // (M24-02) タイトルから自由モードの枠を読むと、移った先で自動の枠が上書きされる (restoreIsland の fromSlot)。その事を文に添える
+  const overwrites = here.stage === 'title' ? ' (自動の枠は上書きされます)' : '';
+  const confirm = to.stage === 'free' ? `自由モードの枠です。自由モードを開いて読みますか${overwrites}` : `石板『${titleOf(to.scenarioId)}』の枠です。石板を開いて読みますか`;
   return { kind: 'navigate', to, confirm };
 }
 
