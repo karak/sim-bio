@@ -5,7 +5,10 @@ status: todo
 milestone: M24
 plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-01]
-evidence: []
+evidence:
+  - 749ecd8 行き先の表の行 RED (tests/unit/ui.titleMenu.route.test.ts, app.title.test.ts, ui.titleMenu.panels.test.ts)
+  - 8985dc4 tests/e2e/titleHarbor.spec.ts 4 本 (層 A: .claude/verify/20261020-1019-m24-03/、15 passed)
+  - 8f62234 実装 (石板の板 scenarioRowsOf、港の板 案 A、runAtTitle の assign)
 ---
 
 # タイトルからシナリオ選択と港への導線
@@ -32,3 +35,4 @@ M24-00 の W/F に沿って、タイトルから次へ行けるようにする�
 - M21-07 (searchFor・finishedScopeOf)
 
 ## 作業ログ
+- 2026-10-20: 実装・feat/m19 に取り込み (merge)。層 C (前後の画 .claude/localreview/m24-03-20261020-0954/) と scenarios.jsonl の 4 行 (同じ置き場の scenarios-proposal.jsonl) の承認待ちで status は todo のまま。perf 92.1→93.8 ms。未決: 自動の枠が無く閉港だとタイトルから石板を選ぶ道が無い (案 a いつも板 / 案 b 閉港の板にも「石板を選ぶ」)。「初めから始める」は未実装。check:docs は E2E の数 21→23 の承認待ちで赤。
