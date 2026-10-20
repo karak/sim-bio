@@ -67,3 +67,34 @@ M11 以降は各マイルストーンの先頭に `-00 レベルデザイン` �
 
 チケットの番号は付け替えない。別のマイルストーンへ移したチケットは id を保ち、frontmatter の `milestone` だけを書き換える
 (M17-04 歌鳥 → M14、M19-03 回帰の通し実行 → M21)。
+
+## 新しいシナリオを通し実行に足す(判定行列のテンプレート、M19-03)
+
+上の「シナリオの作り方」の 3(校正)で、判定行列を tests/slow に固定するときの形。
+通し実行は `pnpm run test:slow:table`(`scripts/slow_report.py`)で describe ごとに分けて並列に回り、題から結末を読んで表にする。
+合計時間の上限と、超えたときの方針は docs/specs/2026-10-18-decisions-current.md の節「回帰の通し実行の時間」。
+
+1. 判定行列を `tests/slow/scenarios.playthrough.test.ts` の新しい describe 1 つに写す。行列の 1 行が試験 1 件。
+2. 題の末尾に結末を「→ alive」「→ dead」「→ escaped」で書き、理由を括弧で添える。表の「期待」はここから読む(書かないと「—」になる)。
+3. 行は少なくとも次の 3 種。台本は UI と同じ手(放流は `spawnClick`・災害は `disasterClick`、環 1・0.5、力 4)で書く。
+
+```ts
+describe('<id> scenario playthroughs (size 64)', { timeout: 600_000 }, () => {
+  // 放置
+  it('idle → dead (<放置で何が尽きて滅びるか>)', () => { /* play(def, null) */ });
+  // 素朴な手: 1 つのレバーだけを押す。2〜3 本。滅びの理由を reason で固定する
+  it('naive <素朴な手> → dead (<なぜ滅びるか>)', () => {
+    const v = play(def, naive);
+    expect(v.status, v.reason).toBe('dead');
+    expect(v.reason).toContain('<滅びの理由の語>');
+  });
+  // 配分の手(想定解): 2 本。どちらも手で再現できること
+  it('solution 1: <想定解 1> → alive (<何で回避するか>)', () => { /* expect(v.status, v.reason).toBe('alive') */ });
+  it('solution 2: <想定解 2> → alive', () => { /* 同上 */ });
+});
+```
+
+4. describe の題は、既存の題に空白を足したもので始めない(分けは `-t` で題の頭に当てる。`scripts/test_slow_report.py` が GROUPS の中で確かめる)。
+5. `scripts/slow_report.py` の `GROUPS` に題と 1 本で回した分を足す。足さなくても「(残り)」の分けで回るが、重さで配れない。
+6. `pnpm run test:slow:table` を回し、表の新しい行の「実際」が「期待」と同じで、ほかの行が変わらず、合計の壁時計が上限の内かを見る。
+7. 票の作業ログに、表の新しい行と合計の壁時計を写す。

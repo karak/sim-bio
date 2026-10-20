@@ -38,6 +38,7 @@
     "d1:local": "wrangler d1 migrations apply biotope-harbor --local",
     "test:e2e:cloudflare": "pnpm run build:cloudflare && playwright test -c playwright.cloudflare.config.ts",
     "test:slow": "SLOW=1 vitest run",
+    "test:slow:table": "uv run scripts/slow_report.py run",
     "bench:observe": "node tools/bench-observe.ts",
     "bench:observe:compare": "node tools/bench-observe-compare.ts"
   },
