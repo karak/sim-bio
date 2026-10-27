@@ -38,3 +38,4 @@ M24-00 の W/F に沿って、タイトルのメニューの中身を作る。
 
 ## 作業ログ
 - 2026-10-20: 実装・feat/m19 に取り込み (merge)。層 C (前後の画 .claude/localreview/m24-02-20261020-0617/) と scenarios.jsonl の 5 行の承認待ちで status は todo のまま。check:docs は E2E の数 21→22 の承認待ちで赤。perf 92.8→91.7 ms。既知: observeCharacterization.spec.ts:37 は変更前から落ちる。
+- 2026-10-28 審査台 decisions-20261020 の判定: コンフィグの置き場は `src/persist/config.ts` のままでよい (d1020-config-place=ok)。正本に SAV-008/009/010・CFG-001 を足した (675a1b5)。TTL-001 (human) は ADR 0001 段 6 と衝突するので保留。死んだ PENDING_TEXT・openPanel を消した (429d70b)。層 C は未判定。
