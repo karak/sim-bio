@@ -38,7 +38,7 @@ export function titleMenuOf(continuation: Continuation | null): TitleMenu {
 }
 
 /**
- * メニューの行を決めたときの行き先。panel は中身がまだ無い板 (M24-02・M24-03 で作る)。
+ * メニューの行を決めたときの行き先。panel はタイトルの板 (新規ゲーム・ロード・コンフィグ・石板・港。M24-02・M24-03)。
  * 新規ゲームは自動の枠 (freeSaved) が無ければ自由モードの最初の島。あれば今の島を残すかの確かめが要る (M24-02) ので板。石板の続きは自動の枠を上書きしない
  */
 export function titleChoiceOf(id: TitleItemId, continuation: Continuation | null, freeSaved: boolean): TitleChoice | { kind: 'panel' } {

@@ -240,7 +240,7 @@ test('M24-04 (2026-10-10 の決定): 「タイトルへ」は ?player= と ?dev=
   expect(marks[0]).toBeNull();
   expect(JSON.parse(marks[1] ?? 'null')).toMatchObject({ stage: 'free' });
 
-  // 自動の枠があるので新規ゲームは準備中の板 (文は 2026-10-10 の決定)
+  // 自動の枠があるので新規ゲームは板 (2026-10-10 の決定。M24-02 で新規ゲームの板に)
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   const panel = page.getByRole('dialog', { name: '新規ゲーム' });

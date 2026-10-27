@@ -21,7 +21,7 @@
 import { enterObserve, lookFrom } from '../driver/observe';
 await enterObserve(page);                 // 集落のある 10 年目の春に進めて入る
 await lookFrom(page, '集落');             // 視点は src/observe/view/camera.ts の presets と同じ
-const stats = await page.evaluate(() => window.__probe.observe().stats());
+const stats = await page.evaluate(() => window.__probe.observe.stats());
 ```
 
 画は `installFrames` で時計を止めてから撮る。前後の比較は同じ台を変更の前後のコミットで走らせる:

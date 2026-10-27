@@ -54,8 +54,8 @@ describe('石板の続きの「続きから」(M24-05)', () => {
     ['続きから (自由モード) は自由モード', 'continue', { stage: 'free', year: 12, savedAt }, true, { kind: 'free' }],
     ['続きから (石板) はその石板', 'continue', scenario, false, { kind: 'scenario', scenarioId: 'test-quick' }],
     ['新規ゲームは自動の枠が無ければ自由モードの最初の島 (石板の続きがあっても)', 'new', scenario, false, { kind: 'free' }],
-    ['新規ゲームは自動の枠があれば準備中の板 (確かめと新しい seed は M24-02)', 'new', scenario, true, { kind: 'panel' }],
-    ['ロードは準備中の板', 'load', null, false, { kind: 'panel' }],
+    ['新規ゲームは自動の枠があれば板 (確かめと新しい seed は M24-02)', 'new', scenario, true, { kind: 'panel' }],
+    ['ロードは板', 'load', null, false, { kind: 'panel' }],
   ];
   it.each(rows)('titleChoiceOf: %s', (_why, id, continuation, freeSaved, to) => {
     expect(titleChoiceOf(id, continuation, freeSaved)).toEqual(to);

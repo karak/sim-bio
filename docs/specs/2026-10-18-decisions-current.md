@@ -40,7 +40,7 @@
 | 14 | 見た目 | セミリアルに拡張できる設計。初期素材は識別優先の単色ローファイ | 種 ID → アセット対応表で後から glTF に差し替える | 地図の画は単色のまま。glTF は M22-02 で観察画面に入った (差し替えでなく別の画面) | `src/render/assetTable.ts`、`src/observe/render/assets.ts` |
 | 15 | 時間 | 1 ティック = 1 日、1 年 = 360 ティック。ティック長は定数 | 季節が滑らか。細かいほど数値的に安定 | 同じ | — |
 | 16 | カメラ | オービット。パン範囲を島の外周で制限 | セルクリックのレイキャストと相性が良い | 同じ | — |
-| 17 | テスト | 単体 + 固定シード性質テスト必須。E2E はスモーク 1 本 | 決定論的モデルは性質テストの費用対効果が最も高い | E2E は `tests/e2e/*.spec.ts` 21 本 <!-- check: e2e_specs=21 --> と `tests/e2e-cloudflare` 1 本 | `tests/e2e/`、`tests/e2e-cloudflare/` |
+| 17 | テスト | 単体 + 固定シード性質テスト必須。E2E はスモーク 1 本 | 決定論的モデルは性質テストの費用対効果が最も高い | E2E は `tests/e2e/*.spec.ts` 23 本 <!-- check: e2e_specs=23 --> と `tests/e2e-cloudflare` 1 本 | `tests/e2e/`、`tests/e2e-cloudflare/` |
 | 18 | ログ | 固定スキーマの JSON を console に 1 行 1 イベント。chrome-devtools MCP で読める | 可観測性を初期設計に組み込む | 同じ | — |
 | 19 | ログ送出 | `LogSink` ポートを定義し console 実装のみ。HTTP 実装は Cloudflare Worker を用意する時に追加 | 2 つ目の実装(memory)がテストで必要なので継ぎ目は本物 | M19-01 で HTTP 実装を足した。`appSink.ts` が console と束ねる | `src/core/log/httpSink.ts`・`src/core/log/appSink.ts` |
 
@@ -118,3 +118,4 @@ vitest の並列の単位はファイルで、47 件が 1 つのファイルに�
 | 2026-10-18 | M27-06 | 起こした。09-19 の決定事項の表と、09-26 §3.2・§6.1 の D1 の書きの数を移した (審査台 decisions-20261017 の判定) |
 | 2026-10-20 | M26-20 | 「D1 の書きの性能要件」の節を足した (X = 90) |
 | 2026-10-20 | M19-03 | 節「回帰の通し実行の時間」を足した (上限 30 分と、超えたときの方針) |
+| 2026-10-20 | M24-02・M24-03 | E2E を 21 → 23 本 (titleMenu.spec・titleHarbor.spec) |

@@ -38,7 +38,7 @@ pnpm run dev        # 開発サーバ起動。http://localhost:5173
 pnpm run build       # 本番ビルド
 pnpm run preview     # ビルド結果をローカルで確認
 pnpm run test        # 単体テスト(vitest)
-pnpm run test:slow   # 通し(放置/校正)テスト。約 15〜20 分、CI では走らせない(下記)
+pnpm run test:slow   # 通し(放置/校正)テスト。1 本で約 43 分 (test:slow:table の 2 本並列で約 23 分)、CI では走らせない(下記)
 pnpm run test:slow:table # 通しを describe ごとに分けて 2 本並列で回し、シナリオごとの結果と時間の表を出す(scripts/slow_report.py)
 pnpm run check       # typecheck + lint + test
 pnpm run test:worker # ログの受け口 (Worker) の単体テスト。workerd の中で回す。check にも入っている
@@ -58,7 +58,7 @@ pnpm exec playwright test
 
 3D モデル・Blender ファイル・PNG は Git LFS で管理している。クローン前に `git lfs install` を済ませておくこと(LFS が無いとポインタファイルだけが落ちてくる)。
 
-CI(GitHub Actions、`.github/workflows/ci.yml`)は push と PR ごとに `pnpm run check` と Playwright の E2E を走らせる。`pnpm run test:slow` は 1 件あたり数分かかる通し実行なので CI には含めず、シナリオを触ったときに手元で回す(放置中の Mac ではバックグラウンド実行が極端に遅くなるので、`caffeinate` を付けて前面で回すか `-t` で分割する)。
+CI(GitHub Actions、`.github/workflows/ci.yml`)は push と PR ごとに `pnpm run check` と Playwright の E2E を走らせる。`pnpm run test:slow` は 1 件あたり数分かかる通し実行なので CI には含めず、シナリオを触ったときに手元で回す(蓋を閉じた Mac は眠り、壁時計の時間切れが偽の失敗になるので、`pnpm run test:slow:table` (caffeinate -s 付き、describe ごとに並列) で回す)。
 
 CI は続けて `pnpm run test:e2e:cloudflare`(ビルドを wrangler dev で配って、ログの受け口に当てる E2E)も走らせる。配備は CI ではなく、下の「Cloudflare へ配る」のワークフローで人が起こす。
 

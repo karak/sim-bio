@@ -66,7 +66,7 @@
 | ID | 目的(守るドライバ) | 測定対象 | 指標 | 合格基準 | 実行 | 置き場 |
 |---|---|---|---|---|---|---|
 | FF-23 | 観察画面の性能予算(Q8) | 寄せ先 6 画(集落・船台・群れ・林・狼・海岸) | 三角形・draw call・fps(`__probe.observe.stats()`) | draw call ≤ 200、三角形 ≤ 1.5M、60 fps(M23 の計測 303k 三角形) | 手動(`pnpm run bench:observe`、前後比較は `bench:observe:compare`) | `tools/bench-observe.ts`、`docs/design/2026-09-24-observe-perf.md` |
-| FF-24 | 石板が「体験として」成立する(P1、B9) | 各石板の通し実行(放置・素朴な手・配分の手。UI と同じ手: 環 1・0.5・力 4) | 判定 | 放置 dead・素朴 dead・配分 alive | 手動(`pnpm run test:slow`、15〜20 分、CI に入れない) | `tests/slow/scenarios.playthrough.test.ts` |
+| FF-24 | 石板が「体験として」成立する(P1、B9) | 各石板の通し実行(放置・素朴な手・配分の手。UI と同じ手: 環 1・0.5・力 4) | 判定 | 放置 dead・素朴 dead・配分 alive | 手動(`pnpm run test:slow:table`、2 本並列で約 23 分、CI に入れない) | `tests/slow/scenarios.playthrough.test.ts` |
 
 ## 足し方
 
