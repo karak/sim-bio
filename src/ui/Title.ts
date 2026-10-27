@@ -40,12 +40,6 @@ export type TitleDeps = {
   ask: TitleScreenDeps['ask'];
 };
 
-/** 中身がまだ無い板 (M24-02・M24-03 で作る) の文 */
-export const PENDING_TEXT: Record<'harbor' | 'scenarios', string> = {
-  harbor: 'タイトルからの港は準備中です。島の中の港の口からは、いまも訪れられます。',
-  scenarios: 'タイトルからの石板の選択は準備中です。島の中の石板の板から選べます。',
-};
-
 /** (M24-02) 板の題 */
 const PANEL_HEADINGS: Record<TitlePanel, string> = { new: '新規ゲーム', load: 'ロード', config: 'コンフィグ', harbor: '港', scenarios: '石板を選ぶ' };
 
@@ -166,26 +160,6 @@ function itemButton(item: TitleItem, isDefault: boolean): HTMLButtonElement {
   const b = el('button', { type: 'button', role: 'menuitem', class: isDefault ? 'title-item default' : 'title-item', 'data-item': item.id, tabindex: isDefault ? '0' : '-1' }, el('span', { class: 'title-item-label' }, item.label));
   if (item.note) b.append(el('span', { class: 'title-item-note' }, item.note));
   return b;
-}
-
-/** 中身がまだ無い板。開くと「戻る」に focus を置き、Esc・「戻る」で閉じてメニューの行へ focus を返す */
-export function openPanel(screen: HTMLElement, heading: string, text: string, back: () => void): void {
-  const id = `title-panel-${Math.random().toString(36).slice(2, 8)}`;
-  const close = el('button', { type: 'button', class: 'title-panel-back' }, '戻る');
-  const panel = el('div', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': id, class: 'title-panel' }, el('h2', { id }, heading), el('p', {}, text), close);
-  const done = () => {
-    panel.remove();
-    back();
-  };
-  close.addEventListener('click', done);
-  panel.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' || e.key === 'Tab') {
-      e.preventDefault();
-      if (e.key === 'Escape') done();
-    }
-  });
-  screen.append(panel);
-  close.focus();
 }
 
 /**
