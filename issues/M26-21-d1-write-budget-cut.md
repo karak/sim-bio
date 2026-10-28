@@ -6,7 +6,7 @@ milestone: M26
 plan: docs/specs/2026-10-18-decisions-current.md#d1-の書きの性能要件
 depends_on: [M26-20]
 evidence:
-  - 'commit: (下の作業ログの SHA)'
+  - 'commit: 47bf058'
   - 'worker/test/budget.test.ts: D1 の書きが重い 3 つの道の上限 (M26-21): 積荷 3,000・通報 500・取り下げ 500'
   - 'worker/src/policy.ts (BUDGETS の cap と注)'
   - 'scripts/test_check_d1_writes.py (test_todays_policy_is_within_the_requirement ほか)・scripts/test_check_docs.py'
