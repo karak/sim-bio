@@ -31,3 +31,5 @@ M21-01
 - [ ] npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す
 
 ## 作業ログ
+
+- 2026-10-28: LD を書いた(docs/design/2026-10-28-level-design-intercept-2.md)。推奨のキーアイテムは K1「見える星」(工事が備蓄に積めるのは着弾 12 年前からの窓の間だけ)。縮約モデルと本体の trace は .claude/verify/20261028-0857-m21-03-ld/。ユーザーの承認待ち
