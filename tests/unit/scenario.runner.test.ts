@@ -239,6 +239,14 @@ describe('createScenarioRunner', () => {
     expect(w.cmds).toEqual([cmd]);
     expect(r.timeline()).toEqual([{ year: 0, kind: 'scheduled', command: cmd }]);
   });
+  it('単発 (everyYears なし) の text 付きの予定も、年表に text を積む (M21-11)', () => {
+    const w = fakeWorld({ deer: 1 });
+    const cmd: Command = { type: 'spawn_species', speciesId: 'wolf', cell: -1, amount: 1 };
+    const d: ScenarioDef = { ...def, schedule: [{ atYear: 0, text: '狼の群れが北の谷に下りた', command: cmd }] };
+    const r = createScenarioRunner(d, w);
+    r.update(w.snapshot());
+    expect(r.timeline()).toEqual([{ year: 0, kind: 'scheduled', command: cmd, text: '狼の群れが北の谷に下りた' }]);
+  });
   it('fires scheduled commands once at their year, resolves cell -1 to the center, and counts interventions', () => {
     const w = fakeWorld({ deer: 1 });
     const r = createScenarioRunner(def, w);
