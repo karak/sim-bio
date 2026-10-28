@@ -46,6 +46,7 @@ tools/issues.sh todo     # 状態で絞り込み
 ScenarioRunner の放流の値段は半径に依らないので、環 3〜4 の台本は UI の 10 倍の量を同じ値段で放ち、手で再現できない想定解になる。
 M11 以降は各マイルストーンの先頭に `-00 レベルデザイン` チケットを置き、実装と校正のチケットはそれに依存する。
 受入の正本 (docs/acceptance/scenarios.jsonl) へ足す・置き換える提案の行は、審査台に出す前に `python3 scripts/acceptance.py lint <提案.jsonl>` で正本と合わせて検査する。
+行の形の決まり (札【見た目】【読みやすさ】【手触り】の付いた手順は `checks` か `judge` を持つ、human の行も `covered_by` を持つ、新しい領域は `kind: code` の行を先に、round の human は TUR-001 の 1 分だけ) は docs/operations/acceptance.md の「手順ごとの checks と judge (M25-05)」と「人の 1 周は 1 分 (M25-08)」にある。
 
 ## 進める順(2026-09-23 承認、docs/specs/plans/2026-09-23-roadmap.md §7)
 
