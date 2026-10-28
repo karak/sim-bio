@@ -1,11 +1,15 @@
 ---
 id: M21-11
 title: 狼レイヤーを見ている間に来た狼の波の台詞を、石板に出すかどうか
-status: todo
+status: done
 milestone: M21
 plan: docs/specs/plans/2026-09-23-roadmap.md#21-チケットになっていない負債既存-11-本の仕上げ
 depends_on: []
-evidence: []
+evidence:
+  - 'commit: 23f657d'
+  - 'tests/unit/scenario.runner.test.ts: 単発 (everyYears なし) の text 付きの予定も、年表に text を積む (M21-11)'
+  - 'src/scenario/ScenarioRunner.ts (fireDue)'
+  - 'pnpm run check 全通過'
 ---
 
 # 狼レイヤーを見ている間に来た狼の波の台詞を、石板に出すかどうか
@@ -43,9 +47,10 @@ PR #4 (M21-02 D5、2026-09-30 マージ) のマージ後レビュー (2026-10-11
 
 ## Acceptance criteria
 
-- [ ] A / B / C (または別の案) のどれにするかを、ユーザーが決める
-- [ ] B か C を選んだ場合: 実装の前に、runner のテストを新しい挙動で赤にしてから直す
-- [ ] A を選んだ場合: 単発の予定でも text を年表に積むかどうかを、別に決める (積まないなら、その理由を `fireDue` のコメントに残す)
+- [x] A / B / C (または別の案) のどれにするかを、ユーザーが決める
+- [x] B か C を選んだ場合: 実装の前に、runner のテストを新しい挙動で赤にしてから直す
+- [x] A を選んだ場合: 単発の予定でも text を年表に積むかどうかを、別に決める (積まないなら、その理由を `fireDue` のコメントに残す)
 
 ## 作業ログ
 - 2026-10-28 ユーザーの決め: A (今のまま。d1020-m21-11=A)。残る決めは「単発の予定でも text を年表に積むか」(受入基準の 3 つ目)。次の審査台の回で聞く。
+- 2026-10-28 ユーザーの決め (審査台 d1028-m21-11-oneshot=yes): 単発 (everyYears なし) の text 付きの予定も年表に text を積む。runner の試験を足して直した (commit 23f657d)。
