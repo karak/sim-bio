@@ -258,7 +258,8 @@ class RepoTest(unittest.TestCase):
             self.assertIn(name, files)
         joined = "\n".join(check_files(files))
         self.assertIn(f"{CURRENT_DOC} が無い", joined)
-        for old in REQUIRED_POINTERS:
+        # M27-06 より後に書かれた文書 (10-28 の LD など) は当時の木に無いので、あるものだけ見る
+        for old in (o for o in REQUIRED_POINTERS if o in files):
             self.assertIn(f"{old}: `superseded by:", joined)
         self.assertIn(f"{VERSION_DOC}:60: C8 の行と「C6 の注」の間に", joined)
 

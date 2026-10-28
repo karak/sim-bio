@@ -45,6 +45,9 @@ REQUIRED_POINTERS: Mapping[str, Mapping[str, int]] = {
     "docs/design/2026-09-26-cloudflare-architecture.md": {
         f"{CURRENT_DOC}#d1-の書きの予算": 2,
     },
+    "docs/design/2026-10-28-level-design-intercept-2.md": {
+        f"{CURRENT_DOC}#迎撃の塔-m21-03": 1,
+    },
 }
 
 VERSION_DOC = "docs/design/2026-09-26-cloudflare-architecture.md"
