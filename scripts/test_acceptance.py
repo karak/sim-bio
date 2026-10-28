@@ -14,6 +14,7 @@ from acceptance import (
     check_results,
     check_shots,
     check_sot,
+    check_sot_invariants,
     lens_names,
     load,
     main,
@@ -698,6 +699,63 @@ class MainTest(unittest.TestCase):
             self.assertEqual((code, out), (0, f"{tmp}\n"))
 
 
+class LintTest(unittest.TestCase):
+    """審査台へ出す前の提案の行を、一時の repo の正本と合わせて検査する"""
+
+    def run_lint(self, repo_rows, *proposal_rows):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs/acceptance").mkdir(parents=True)
+            (root / "docs/acceptance/scenarios.jsonl").write_text(
+                text_of(*repo_rows), encoding="utf-8"
+            )
+            (root / "tests/e2e").mkdir(parents=True)
+            (root / TEST_FILE).write_text(TEST_TEXT, encoding="utf-8")
+            (root / LENS_FILE).write_text(LENS_TEXT, encoding="utf-8")
+            proposal = root / "proposal.jsonl"
+            proposal.write_text(text_of(*proposal_rows), encoding="utf-8")
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                status = main(["lint", str(proposal)], root=root)
+            return status, out.getvalue(), err.getvalue().replace(str(root), "<root>")
+
+    def repo_rows(self):
+        return [*BASE_ROWS, human(minutes=1), auto()]
+
+    def test_a_clean_proposal_passes_with_the_row_count(self):
+        status, out, err = self.run_lint(self.repo_rows(), auto("HBR-002"))
+        self.assertEqual((status, out, err), (0, "違反なし (5 行)\n", ""))
+
+    def test_a_proposal_row_without_covered_by_is_a_problem_with_file_and_line(self):
+        status, _, err = self.run_lint(self.repo_rows(), auto("HBR-002", covered_by=[]))
+        self.assertEqual(status, 1)
+        self.assertIn("<root>/proposal.jsonl:1 HBR-002: [cover]", err)
+
+    def test_a_proposal_human_row_in_the_round_breaks_the_tur_001_rule(self):
+        row = human("HBR-002", minutes=1)
+        status, _, err = self.run_lint(self.repo_rows(), row)
+        self.assertEqual(status, 1)
+        self.assertIn("proposal.jsonl:1 HBR-002: [round-human]", err)
+        self.assertIn("round: [round-human]", err)
+
+    def test_a_new_area_without_a_code_row_is_a_problem(self):
+        status, _, err = self.run_lint(self.repo_rows(), auto("CFG-001"))
+        self.assertEqual(status, 1)
+        self.assertIn("proposal.jsonl:1 CFG-001: [id] 領域 CFG の code の行が無い", err)
+
+    def test_a_proposal_row_replaces_the_repo_row_with_the_same_id(self):
+        status, out, err = self.run_lint(
+            self.repo_rows(), auto("HBR-001", title="置き換えた")
+        )
+        self.assertEqual((status, out, err), (0, "違反なし (4 行)\n", ""))
+
+    def test_a_repo_only_problem_keeps_the_plain_id(self):
+        broken = auto("HBR-002", covered_by=[])
+        status, _, err = self.run_lint([*self.repo_rows(), broken], auto("HBR-003"))
+        self.assertEqual(status, 1)
+        self.assertIn("\nHBR-002: [cover]", "\n" + err)
+
+
 class FeatureTest(unittest.TestCase):
     def test_renders_japanese_gherkin_without_retired_rows(self):
         retired = auto(
@@ -728,27 +786,17 @@ class RepoSotTest(unittest.TestCase):
         sot, _ = load(
             (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
         )
-        tagged_steps = [
-            (s.id, text)
-            for s in sot.scenarios
-            if s.status == "active"
-            for (_, text), mark in zip(s.steps, s.marks, strict=True)
-            if text.startswith("【")
-            and (mark is None or not (mark.checks or mark.judge))
-        ]
-        self.assertEqual(tagged_steps, [])
+        self.assertEqual(
+            [p for p in check_sot_invariants(sot) if p.rule == "tagged-step"], []
+        )
 
     def test_the_round_has_only_the_one_minute_of_touch_in_tur_001(self):
         sot, _ = load(
             (REPO / "docs/acceptance/scenarios.jsonl").read_text(encoding="utf-8")
         )
-        round_human = [
-            s
-            for s in sot.scenarios
-            if s.status == "active" and s.mode == "human" and s.when == "round"
-        ]
-        self.assertEqual([s.id for s in round_human], ["TUR-001"])
-        self.assertEqual(sum(s.minutes or 0 for s in round_human), 1)
+        self.assertEqual(
+            [p for p in check_sot_invariants(sot) if p.rule == "round-human"], []
+        )
 
     def test_every_tagged_step_of_tur_001_is_judged_by_a_human_and_nothing_else(self):
         sot, _ = load(
