@@ -190,7 +190,8 @@ export function titleHarborBody(port: HarborPort, opts: { toScenarios: () => voi
   const toScenarios = el('button', { class: 'harbor-chip harbor-primary', hidden: '' }, '石板を選ぶ');
   toScenarios.addEventListener('click', opts.toScenarios);
   /** 一覧を初めから引き、空の港のときだけ「石板を選ぶ」を出す。出港の後にも引き直して、自分の島を並べる */
-  const reload = () => browse.loadPage(true).then((kind) => void (toScenarios.hidden = kind !== 'empty'));
+  const reload = () => browse.loadPage(true).then((kind) => void (toScenarios.hidden = kind === 'open'));
+  // 閉港 (開発は VITE_HARBOR_URL が無くいつも閉港) の板にも同じ札を出す。自動の枠が無い手元から石板の板へ行く道 (審査台 d1020-m24-03-newgame=b)
   const finished = finishedRows(ready, finishedScopeOf(port.scenarios, { stage: 'free', scenarioId: null }), reload);
   void finished.show();
   void reload();
