@@ -1,0 +1,49 @@
+#!/bin/sh
+# commit-msg hook: Co-Authored-By の trailer を固定する。
+# 有効化は `pnpm run hooks:install` (git config core.hooksPath .githooks)。
+REQUIRED='Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>'
+MSG_FILE="$1"
+
+if [ "${SKIP_TRAILER_HOOK:-}" = "1" ]; then
+  echo "commit-msg: SKIP_TRAILER_HOOK=1 のため trailer の検査を飛ばします" >&2
+  exit 0
+fi
+
+first=$(sed -e '/^#/d' "$MSG_FILE" | sed -n '1p')
+case "$first" in
+  "Merge "* | "fixup! "* | "squash! "* | 'Revert "'*) exit 0 ;;
+esac
+
+# 最後の段落 (コメント行を除く) を取り出す
+last=""
+cur=""
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in "#"*) continue ;; esac
+  if [ -z "$line" ]; then
+    [ -n "$cur" ] && last="$cur"
+    cur=""
+    continue
+  fi
+  if [ -z "$cur" ]; then
+    cur="$line"
+  else
+    cur="$cur
+$line"
+  fi
+done < "$MSG_FILE"
+[ -n "$cur" ] && last="$cur"
+
+bad=$(sed -e '/^#/d' "$MSG_FILE" | grep -iE '^Co-Authored-By:.*Claude' | grep -vxF "$REQUIRED")
+if [ -n "$bad" ]; then
+  echo "commit-msg: 別のモデルの Co-Authored-By が書かれています。" >&2
+  echo "  誤: $bad" >&2
+  echo "  必須: $REQUIRED" >&2
+  exit 1
+fi
+
+if ! printf '%s\n' "$last" | grep -qxF "$REQUIRED"; then
+  echo "commit-msg: 最後の段落に次の trailer がありません。" >&2
+  echo "  必須: $REQUIRED" >&2
+  exit 1
+fi
+exit 0
