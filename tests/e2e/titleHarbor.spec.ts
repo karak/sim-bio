@@ -145,7 +145,7 @@ test('M24-03 lane3: 港が閉じていれば、タイトルの港の板は閉港
   const board = page.getByRole('dialog', { name: '港' });
   await expect(board.locator('#harbor-state')).toHaveText('港は今日は閉まっている。遊ぶ・保存するはそのまま続けられる');
   await expect(board.locator('.harbor-card')).toHaveCount(0);
-  await expect(board.getByRole('button', { name: '石板を選ぶ' })).toBeHidden();
+  await expect(board.getByRole('button', { name: '石板を選ぶ' })).toBeVisible();
   await expect(board.locator('.harbor-finished')).toBeHidden();
   await lane(page, 3);
   await page.keyboard.press('Escape');
@@ -171,4 +171,22 @@ test('M24-03: 空の港は「石板を選ぶ」を添え、続きの無い手元
   await stones.getByRole('button', { name: 'この石板で始める' }).click();
   await expect(page.locator('#tablet-title')).toHaveText('空の舟 · 逃がす');
   expect(new URL(page.url()).search).toBe('?scenario=sky-ship');
+});
+
+test('M24-03 lane1b: 港が閉じていても、タイトルの港の板の「石板を選ぶ」から石板の板へ行き、自動の枠の無い手元から石板を始められる', async ({ page }) => {
+  await page.context().route('**/api/**', (route) => route.abort('failed'));
+  await page.goto('/');
+  await item(page, '港').click();
+  const board = page.getByRole('dialog', { name: '港' });
+  await expect(board.locator('#harbor-state')).toHaveText('港は今日は閉まっている。遊ぶ・保存するはそのまま続けられる');
+  const chip = board.getByRole('button', { name: '石板を選ぶ' });
+  await expect(chip).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('m24-03b-lane1.png') });
+  await chip.click();
+  const stones = page.getByRole('dialog', { name: '石板を選ぶ' });
+  await expect(stones).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await stones.getByRole('group', { name: '石板の一覧' }).getByRole('button', { name: /^空の舟/ }).click();
+  await stones.getByRole('button', { name: 'この石板で始める' }).click();
+  await expect(page.locator('#tablet-title')).toHaveText('空の舟 · 逃がす');
 });

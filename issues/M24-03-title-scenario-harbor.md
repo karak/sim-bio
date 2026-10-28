@@ -37,3 +37,4 @@ M24-00 の W/F に沿って、タイトルから次へ行けるようにする�
 ## 作業ログ
 - 2026-10-20: 実装・feat/m19 に取り込み (merge)。層 C (前後の画 .claude/localreview/m24-03-20261020-0954/) と scenarios.jsonl の 4 行 (同じ置き場の scenarios-proposal.jsonl) の承認待ちで status は todo のまま。perf 92.1→93.8 ms。未決: 自動の枠が無く閉港だとタイトルから石板を選ぶ道が無い (案 a いつも板 / 案 b 閉港の板にも「石板を選ぶ」)。「初めから始める」は未実装。check:docs は E2E の数 21→23 の承認待ちで赤。
 - 2026-10-28 審査台 decisions-20261020 の判定: 閉港の板にも「石板を選ぶ」を出す (案 b、d1020-m24-03-newgame=b)。「初めから始める」は別の票 M24-06 に (d1020-m24-03-restart=ticket)。正本に SEL-004・HBR-008/009 を足した (675a1b5)。TTL-002 (human) は ADR 0001 段 6 と衝突するので保留。層 C は未判定。
+- 2026-10-28: 案 b を実装。閉港のタイトルの港の板にも「石板を選ぶ」の札を出す (src/ui/Harbor.ts の titleHarborBody、空の港と同じ toScenarios)。単体 tests/unit/ui.titleHarbor.closed.dom.test.ts、E2E lane1b を足した。lane3 の「石板を選ぶ」の確かめは hidden から visible へ反転。HBR-009 の行の案は .claude/verify/20261028-0856-m24-03b/scenarios-proposal.jsonl (正本は未編集)。層 C は未判定のため status は todo のまま。
