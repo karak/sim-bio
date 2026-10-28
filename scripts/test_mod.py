@@ -381,7 +381,7 @@ class LocalD1Test(unittest.TestCase):
             INSERT INTO daily_budget (day, bucket, used) VALUES
               ('2026-09-25', 'publish', 1500), ('2026-09-25', 'cast_cargo', 10),
               ('2026-09-26', 'publish', 12), ('2026-09-26', 'cast_cargo', 250),
-              ('2026-09-26', 'report', 1000);
+              ('2026-09-26', 'report', 500);
             """
         )
 
@@ -445,8 +445,8 @@ class LocalD1Test(unittest.TestCase):
 
     def test_budget_shows_the_newest_days_against_the_caps(self):
         today = (
-            "2026-09-26  合計 1,262/45,000 (3%)  積荷 250/5,000 (5%)"
-            "  出港 12/2,000 (1%)  通報 1,000/1,000 (100%)"
+            "2026-09-26  合計 762/45,000 (2%)  積荷 250/3,000 (8%)"
+            "  出港 12/2,000 (1%)  通報 500/500 (100%)"
         )
         code, out, _ = run_main([*self.target, "budget", "--days", "1"])
         self.assertEqual(code, 0)
@@ -458,7 +458,7 @@ class LocalD1Test(unittest.TestCase):
             out.splitlines(),
             [
                 today,
-                "2026-09-25  合計 1,510/45,000 (3%)  積荷 10/5,000 (0%)  出港 1,500/2,000 (75%)",
+                "2026-09-25  合計 1,510/45,000 (3%)  積荷 10/3,000 (0%)  出港 1,500/2,000 (75%)",
             ],
         )
 

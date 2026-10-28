@@ -8,8 +8,9 @@ import type { HarborRequest } from '../../src/harbor/contract';
  * 閉じた道には、クライアントが UTC の 0 時まで同じ道を呼ばない返事 (503・Retry-After) を返すので、Workers の 100,000/日も後ろの道に残る。
  *
  * D1 の書きの最悪 (全部の道が上限まで) は、予算の数え 1 行 × 合計の最大 45,000 と、道の書き
- * (出港 2,000 × 4 行 [行・主鍵・部分索引 2 つ]・積荷 5,000 × 3 行・通報 1,000 × 5 行・確認 5,000・結末 5,000・取り下げ 1,000 × 5 行)
- * で 45,000 + 8,000 + 15,000 + 5,000 + 10,000 + 5,000 = 88,000 行。無料枠 100,000 行/日の内に収まる
+ * (出港 2,000 × 4 行 [行・主鍵・部分索引 2 つ]・積荷 3,000 × 3 行・通報 500 × 5 行・確認 5,000・結末 5,000・取り下げ 500 × 5 行)
+ * で 45,000 + 8,000 + 9,000 + 2,500 + 5,000 + 5,000 + 2,500 = 77,000 行。無料枠 100,000 行/日の内に収まる。
+ * Cron の掃除を足した合計は scripts/check_d1_writes.py が数える (要件は無料枠の 90%)。2026-10-28 の値は 87,345 行
  */
 export type Bucket = HarborRequest['kind'] | 'logs';
 
@@ -22,11 +23,11 @@ export const BUDGETS: { readonly [B in Bucket]: Budget } = {
   report_outcome: { cap: 5_000, shedAt: 25_000, over: 'drop' },
   browse: { cap: 20_000, shedAt: 30_000, over: 'close' },
   avoidance: { cap: 10_000, shedAt: 30_000, over: 'close' },
-  cast_cargo: { cap: 5_000, shedAt: 35_000, over: 'close' },
+  cast_cargo: { cap: 3_000, shedAt: 35_000, over: 'close' },
   draw_cargo: { cap: 10_000, shedAt: 35_000, over: 'close' },
   publish: { cap: 2_000, shedAt: 40_000, over: 'close' },
-  report: { cap: 1_000, shedAt: 40_000, over: 'close' },
-  withdraw: { cap: 1_000, shedAt: 45_000, over: 'close' },
+  report: { cap: 500, shedAt: 40_000, over: 'close' },
+  withdraw: { cap: 500, shedAt: 45_000, over: 'close' },
   visit: { cap: 40_000, shedAt: 45_000, over: 'close' },
 };
 

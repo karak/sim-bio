@@ -57,12 +57,12 @@
 |---|---|---|---|
 | 予算の数え (`daily_budget`。通した 1 件につき 1 行) | 全部の道の合計で 45,000 (段 `shedAt` の最大) <!-- check: shed_max=45000 --> | 1 | 45,000 |
 | 出港 (`publish`) | 2,000 <!-- check: cap_publish=2000 --> | 4 (行・主鍵・部分索引 2 つ) | 8,000 |
-| 積荷 (`cast_cargo`) | 5,000 <!-- check: cap_cast_cargo=5000 --> | 3 | 15,000 |
-| 通報 (`report`) | 1,000 <!-- check: cap_report=1000 --> | 5 | 5,000 |
+| 積荷 (`cast_cargo`) | 3,000 <!-- check: cap_cast_cargo=3000 --> | 3 | 9,000 |
+| 通報 (`report`) | 500 <!-- check: cap_report=500 --> | 5 | 2,500 |
 | 確認 (`confirm`) | 5,000 <!-- check: cap_confirm=5000 --> | 1 | 5,000 |
 | 結末 (`report_outcome`) | 5,000 <!-- check: cap_report_outcome=5000 --> | 1 | 5,000 |
-| 取り下げ (`withdraw`) | 1,000 <!-- check: cap_withdraw=1000 --> | 5 | 5,000 |
-| 合計 | | | 88,000 (`policy.ts` の注と同じ <!-- check: policy_worst_rows=88000 -->) |
+| 取り下げ (`withdraw`) | 500 <!-- check: cap_withdraw=500 --> | 5 | 2,500 |
+| 合計 | | | 77,000 (`policy.ts` の注と同じ <!-- check: policy_worst_rows=77000 -->) |
 
 道の書きだけの和は 43,000 で、09-26 の「約 4.3 万」と一致する。
 偶然か数えの行の落ちかは、式が残っていないので不明。
@@ -82,7 +82,7 @@
 
 全部の道が上限まで使われ、Cron の掃除が走る最悪の日でも、D1 の書きは無料枠 100,000 行/日の 90% (90,000 行) 以内。
 90% は既定 (M26-20。ユーザーが別の数を言えばその数にする)。
-測りは `scripts/check_d1_writes.py` (`pnpm run check:d1-writes`)。2026-10-20 の測りは 105,679 行 (105.7%) で要件を超えているので、予算の削減 (M26-21、ユーザーの承認待ち) が入るまで `pnpm run check` には入れない (CI と配備が赤になるため)。入れるのは M26-21 の後。
+測りは `scripts/check_d1_writes.py` (`pnpm run check:d1-writes`)。2026-10-28 の測りは 87,345 行 (87.3%) で要件の内。M26-21 で cap を下げ、`pnpm run check` に入れた。
 `worker/src/policy.ts` の `BUDGETS`、`worker/migrations/*.sql` の主鍵・索引・UNIQUE、`worker/src/ledger.ts` の Cron の掃除から最悪の日の行数を数え、要件を超えたら終了コード 1 で落ちる。
 上の「D1 の書きの予算」の手計算 (88,000 + Cron 約 17,700 ≒ 105,700) と同じ数が出ることは、`scripts/test_check_d1_writes.py` が固定する。
 取り下げの連鎖で消える通報の行は、Cron が消す行と同じ行なので足さない (1 行は 1 度だけ消える)。
@@ -119,3 +119,4 @@ vitest の並列の単位はファイルで、47 件が 1 つのファイルに�
 | 2026-10-20 | M26-20 | 「D1 の書きの性能要件」の節を足した (X = 90) |
 | 2026-10-20 | M19-03 | 節「回帰の通し実行の時間」を足した (上限 30 分と、超えたときの方針) |
 | 2026-10-20 | M24-02・M24-03 | E2E を 21 → 23 本 (titleMenu.spec・titleHarbor.spec) |
+| 2026-10-28 | M26-21 | cap を cast_cargo 3,000・report 500・withdraw 500 に下げ、check:d1-writes を check に入れた (審査台 decisions-20261020 の判定) |

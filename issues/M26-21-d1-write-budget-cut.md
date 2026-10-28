@@ -1,11 +1,17 @@
 ---
 id: M26-21
 title: D1 の書きの予算を性能要件 (90%) の内に収める (shedAt・cap の削減、ユーザーの承認制)
-status: todo
+status: done
 milestone: M26
 plan: docs/specs/2026-10-18-decisions-current.md#d1-の書きの性能要件
 depends_on: [M26-20]
-evidence: []
+evidence:
+  - 'commit: (下の作業ログの SHA)'
+  - 'worker/test/budget.test.ts: D1 の書きが重い 3 つの道の上限 (M26-21): 積荷 3,000・通報 500・取り下げ 500'
+  - 'worker/src/policy.ts (BUDGETS の cap と注)'
+  - 'scripts/test_check_d1_writes.py (test_todays_policy_is_within_the_requirement ほか)・scripts/test_check_docs.py'
+  - 'pnpm run check:d1-writes: 87,345 行/日 = 87.3% (要件 90%) で 0'
+  - 'docs/specs/2026-10-18-decisions-current.md (予算の表・性能要件・改訂 2026-10-28)'
 ---
 
 # D1 の書きの予算の削減
@@ -33,10 +39,11 @@ evidence: []
 
 ## Acceptance criteria
 
-- [ ] BUDGETS の変更がユーザーの承認 (日付) 付きで入り、`pnpm run check:d1-writes` が 0 で終わる
-- [ ] `package.json` の `check` に `check:d1-writes` が入り、`pnpm run check` が通る
-- [ ] `docs/specs/2026-10-18-decisions-current.md` の「D1 の書きの予算」に変更後の数と改訂の行
+- [x] BUDGETS の変更がユーザーの承認 (日付) 付きで入り、`pnpm run check:d1-writes` が 0 で終わる
+- [x] `package.json` の `check` に `check:d1-writes` が入り、`pnpm run check` が通る
+- [x] `docs/specs/2026-10-18-decisions-current.md` の「D1 の書きの予算」に変更後の数と改訂の行
 
 ## 作業ログ
 
 - 2026-10-20: 起票 (M26-20 の測りから)。
+- 2026-10-28: 案 B (審査台 d1020-m26-21 の判定「caps」: cast_cargo 3,000・report 500・withdraw 500、shedAt は据え置き) で実装。ユーザーの承認 2026-10-28。`check:d1-writes` は 87,345 行 = 87.3% で 0。`check` に入れた。
