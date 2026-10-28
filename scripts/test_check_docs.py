@@ -170,10 +170,10 @@ class FactTest(unittest.TestCase):
         self.assertEqual(facts["slots"], "4")
         self.assertEqual(facts["autosave_ticks"], "90")
         self.assertEqual(facts["cap_publish"], "2000")
-        self.assertEqual(facts["cap_cast_cargo"], "5000")
-        self.assertEqual(facts["cap_report"], "1000")
+        self.assertEqual(facts["cap_cast_cargo"], "3000")
+        self.assertEqual(facts["cap_report"], "500")
         self.assertEqual(facts["shed_max"], "45000")
-        self.assertEqual(facts["policy_worst_rows"], "88000")
+        self.assertEqual(facts["policy_worst_rows"], "77000")
         self.assertTrue(REQUIRED_CHECKS <= set(facts))
 
 

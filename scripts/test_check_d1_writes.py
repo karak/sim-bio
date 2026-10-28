@@ -45,9 +45,9 @@ class ParsePolicy(unittest.TestCase):
     def test_reads_caps_and_shed_levels_from_budgets(self):
         budgets = parse_budgets((REPO / POLICY_TS).read_text(encoding="utf-8"))
         self.assertEqual(budgets["publish"], (2_000, 40_000))
-        self.assertEqual(budgets["cast_cargo"], (5_000, 35_000))
-        self.assertEqual(budgets["report"], (1_000, 40_000))
-        self.assertEqual(budgets["withdraw"], (1_000, 45_000))
+        self.assertEqual(budgets["cast_cargo"], (3_000, 35_000))
+        self.assertEqual(budgets["report"], (500, 40_000))
+        self.assertEqual(budgets["withdraw"], (500, 45_000))
         self.assertEqual(len(budgets), 11)
 
     def test_policy_without_budgets_is_an_error(self):
@@ -95,16 +95,16 @@ class Compute(unittest.TestCase):
         lane_rows = {lane.name: lane.worst_rows for lane in result.lanes}
         self.assertEqual(lane_rows["daily_budget"], 45_000)
         self.assertEqual(lane_rows["publish"], 8_000)
-        self.assertEqual(lane_rows["cast_cargo"], 15_000)
-        self.assertEqual(lane_rows["report"], 5_000)
-        self.assertEqual(lane_rows["withdraw"], 5_000)
-        self.assertEqual(sum(lane_rows.values()), 88_000)  # policy.ts の注の最悪
-        self.assertEqual(result.cron_rows, 17_679)  # 注の約 17,700
-        self.assertAlmostEqual(result.total, 105_700, delta=100)
+        self.assertEqual(lane_rows["cast_cargo"], 9_000)
+        self.assertEqual(lane_rows["report"], 2_500)
+        self.assertEqual(lane_rows["withdraw"], 2_500)
+        self.assertEqual(sum(lane_rows.values()), 77_000)  # policy.ts の注の最悪
+        self.assertEqual(result.cron_rows, 10_345)
+        self.assertEqual(result.total, 87_345)  # 注の 2026-10-28 の値
 
     def test_total_follows_the_policy_caps(self):
         policy = (REPO / POLICY_TS).read_text(encoding="utf-8")
-        tenfold = re.sub(r"(cast_cargo: \{ cap: )5_000", r"\g<1>50_000", policy)
+        tenfold = re.sub(r"(cast_cargo: \{ cap: )3_000", r"\g<1>30_000", policy)
         self.assertNotEqual(policy, tenfold)
         budgets = parse_budgets(tenfold)
         ledger = (REPO / LEDGER_TS).read_text(encoding="utf-8")
@@ -114,7 +114,7 @@ class Compute(unittest.TestCase):
             cron_deleted_tables(ledger),
             parse_reports_to_hide(policy),
         )
-        self.assertEqual(result.total, real_result().total + 45_000 * 3 + 45_000 * 3)
+        self.assertEqual(result.total, real_result().total + 27_000 * 3 + 27_000 * 3)
 
 
 class Requirement(unittest.TestCase):
@@ -138,14 +138,31 @@ class Requirement(unittest.TestCase):
         self.assertEqual(REQUIREMENT_PERCENT, 90)
 
     def test_over_the_requirement_exits_1_with_the_over_line(self):
+        def before_m26_21(policy):
+            for bucket, now, old in (
+                ("cast_cargo", "3_000", "5_000"),
+                ("report", "500", "1_000"),
+                ("withdraw", "500", "1_000"),
+            ):
+                policy = policy.replace(
+                    f"{bucket}: {{ cap: {now},", f"{bucket}: {{ cap: {old},"
+                )
+            return policy
+
         out = io.StringIO()
-        code = run(self.tree(), out)
+        code = run(self.tree(before_m26_21), out)
         text = out.getvalue()
         self.assertEqual(code, 1)
         self.assertRegex(text, r"超えた。105,679 > 90,000")
         self.assertIn("105.7%", text)
         for column in ("道", "上限", "1 件の行", "最悪の行"):
             self.assertIn(column, text)
+
+    def test_todays_policy_is_within_the_requirement(self):
+        out = io.StringIO()
+        code = run(self.tree(), out)
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn("87,345", out.getvalue())
 
     def test_within_the_requirement_exits_0(self):
         def small(policy):

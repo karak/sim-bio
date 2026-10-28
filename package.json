@@ -17,7 +17,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker && wrangler types worker/worker-configuration.d.ts --check",
     "types:worker": "wrangler types worker/worker-configuration.d.ts",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run lint:py && pnpm run check:readme && pnpm run check:docs && pnpm run test && pnpm run test:worker && pnpm run test:scripts",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run lint:py && pnpm run check:readme && pnpm run check:docs && pnpm run check:d1-writes && pnpm run test && pnpm run test:worker && pnpm run test:scripts",
     "check:readme": "uv run scripts/check_readme.py",
     "check:docs": "uv run scripts/check_docs.py",
     "check:d1-writes": "uv run scripts/check_d1_writes.py",

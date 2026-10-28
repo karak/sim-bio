@@ -80,6 +80,10 @@ describe('日次予算 (設計書 §6.1)', () => {
     expect((await send({ kind: 'visit', id })).status).toBe(200);
   });
 
+  it('D1 の書きが重い 3 つの道の上限 (M26-21): 積荷 3,000・通報 500・取り下げ 500', () => {
+    expect([BUDGETS.cast_cargo.cap, BUDGETS.report.cap, BUDGETS.withdraw.cap]).toEqual([3_000, 500, 500]);
+  });
+
   it('段は下から ログ < 確認 < 一覧 < 積荷 < 出港 < 訪問 の順に閉じる', () => {
     const order: Bucket[] = ['logs', 'confirm', 'browse', 'cast_cargo', 'publish', 'visit'];
     const shed = order.map((b) => BUDGETS[b].shedAt);
