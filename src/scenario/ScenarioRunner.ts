@@ -328,8 +328,8 @@ export function createScenarioRunner(
         world.dispatch(resolve(sc.command), { fromStar: false });
         // 毎年繰り返す進行 (沈降など) は年表に出さない。単発の予定イベントだけ。
         // ただし text のある予定 (M10R-07: 狼の波) は繰り返しでも年表と警告に出す (星が気づいて動くための台詞)
-        if (!sc.everyYears) timeline.push({ year: y, kind: 'scheduled', command: sc.command });
-        else if (sc.text) timeline.push({ year: y, kind: 'scheduled', command: sc.command, text: sc.text });
+        // M21-11: 単発でも text は年表に積む (見ている間に抑止された台詞の読める場所を残す)
+        if (!sc.everyYears || sc.text) timeline.push({ year: y, kind: 'scheduled', command: sc.command, ...(sc.text ? { text: sc.text } : {}) });
         // 警告から種レイヤーを開ける (M21-02 D5): spawn_species の予定なら id を種 id にする (species_low と同じ規約)
         if (sc.text) {
           const w: Warning = { kind: 'event', key: `event:${idx}@${y}`, text: sc.text, ...(sc.command.type === 'spawn_species' ? { id: sc.command.speciesId } : {}) };
