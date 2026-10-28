@@ -1,0 +1,589 @@
+layout	stars	years	coef	rule	W	holds	with_margin	alive_slack	alive_faith	alive_pool	dead_margin	closest	放置	応えだけ	儀式だけ	止めよ無し	旧想定解	止めよだけ	想定解 1	想定解 2
+1 星 40 / 45 年	40	45	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 40	alive 45	alive 45	alive 45	alive 45	dead 40	alive 45	alive 45
+1 星 40 / 50 年	40	50	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 40	alive 50	alive 50	alive 50	alive 50	dead 40	alive 50	alive 50
+1 星 50 / 55 年	50	55	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 50	alive 55	alive 55	alive 55	alive 55	dead 50	alive 55	alive 55
+1 星 50 / 60 年	50	60	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 50	alive 60	alive 60	alive 60	alive 60	dead 50	alive 60	alive 60
+1 星 60 / 65 年	60	65	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 60	alive 65	alive 65	alive 65	alive 65	dead 60	alive 65	alive 65
+1 星 60 / 70 年	60	70	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 60	alive 70	alive 70	alive 70	alive 70	dead 60	alive 70	alive 70
+1 星 70 / 75 年	70	75	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 70	alive 75	alive 75	alive 75	alive 75	dead 70	alive 75	alive 75
+1 星 70 / 80 年	70	80	CALIBRATED	K1	12	0	0	3.00	0.40	19.06	-1.00	応えだけ	dead 70	alive 80	alive 80	alive 80	alive 80	dead 70	alive 80	alive 80
+2 星 40・70 / 75 年	40・70	75	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	応えだけ	dead 40	alive 75	alive 75	alive 75	alive 75	dead 40	alive 75	alive 75
+2 星 40・70 / 80 年	40・70	80	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	応えだけ	dead 40	alive 80	alive 80	alive 80	alive 80	dead 40	alive 80	alive 80
+2 星 40・75 / 80 年	40・75	80	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	応えだけ	dead 40	alive 80	alive 80	alive 80	alive 80	dead 40	alive 80	alive 80
+2 星 40・75 / 85 年	40・75	85	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	応えだけ	dead 40	alive 85	alive 85	alive 85	alive 85	dead 40	alive 85	alive 85
+2 星 40・80 / 85 年	40・80	85	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	応えだけ	dead 40	alive 85	alive 85	alive 85	alive 85	dead 40	alive 85	alive 85
+2 星 40・80 / 90 年	40・80	90	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	応えだけ	dead 40	alive 90	alive 90	alive 90	alive 90	dead 40	alive 90	alive 90
+2 星 40・85 / 90 年	40・85	90	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	儀式だけ	dead 40	dead 85	alive 90	alive 90	alive 90	dead 40	alive 90	alive 90
+2 星 40・85 / 95 年	40・85	95	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	儀式だけ	dead 40	dead 85	alive 95	alive 95	alive 95	dead 40	alive 95	alive 95
+2 星 40・90 / 95 年	40・90	95	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	儀式だけ	dead 40	dead 90	alive 95	alive 95	alive 95	dead 40	alive 95	alive 95
+2 星 40・90 / 100 年	40・90	100	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	儀式だけ	dead 40	dead 90	alive 100	alive 100	alive 100	dead 40	alive 100	alive 100
+2 星 50・80 / 85 年	50・80	85	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	応えだけ	dead 50	alive 85	alive 85	alive 85	alive 85	dead 50	alive 85	alive 85
+2 星 50・80 / 90 年	50・80	90	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	応えだけ	dead 50	alive 90	alive 90	alive 90	alive 90	dead 50	alive 90	alive 90
+2 星 50・85 / 90 年	50・85	90	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	儀式だけ	dead 50	dead 85	alive 90	alive 90	alive 90	dead 50	alive 90	alive 90
+2 星 50・85 / 95 年	50・85	95	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	儀式だけ	dead 50	dead 85	alive 95	alive 95	alive 95	dead 50	alive 95	alive 95
+2 星 50・90 / 95 年	50・90	95	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	儀式だけ	dead 50	dead 90	alive 95	alive 95	alive 95	dead 50	alive 95	alive 95
+2 星 50・90 / 100 年	50・90	100	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	儀式だけ	dead 50	dead 90	alive 100	alive 100	alive 100	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 105 年	50・95	105	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 110 年	50・100	110	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 60・90 / 95 年	60・90	95	CALIBRATED	K1	12	0	0	3.00	0.40	12.58	-1.00	儀式だけ	dead 60	dead 90	alive 95	alive 95	alive 95	dead 60	alive 95	alive 95
+2 星 60・90 / 100 年	60・90	100	CALIBRATED	K1	12	0	0	3.00	0.40	10.78	-1.00	儀式だけ	dead 60	dead 90	alive 100	alive 100	alive 100	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 105 年	60・95	105	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 110 年	60・100	110	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 115 年	60・105	115	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 120 年	60・110	120	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 70・100 / 105 年	70・100	105	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 110 年	70・100	110	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 115 年	70・105	115	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 120 年	70・110	120	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 125 年	70・115	125	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CALIBRATED	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 130 年	70・120	130	CALIBRATED	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+3 星 40・70・100 / 105 年	40・70・100	105	CALIBRATED	K1	12	1	1	3.00	0.40	1.78	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 110 年	40・70・100	110	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・75・110 / 115 年	40・75・110	115	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 120 年	40・75・110	120	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・80・120 / 125 年	40・80・120	125	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 130 年	40・80・120	130	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・85・130 / 135 年	40・85・130	135	CALIBRATED	K1	12	0	0	-	-	-	4.67	応えだけ	dead 40	dead 85	dead 130	dead 130	dead 130	dead 40	alive 135	dead 130
+3 星 40・85・130 / 140 年	40・85・130	140	CALIBRATED	K1	12	0	0	-	-	-	4.67	応えだけ	dead 40	dead 85	dead 130	dead 130	dead 130	dead 40	alive 140	dead 130
+3 星 40・90・140 / 145 年	40・90・140	145	CALIBRATED	K1	12	0	0	-	-	-	7.67	応えだけ	dead 40	dead 90	dead 140	dead 140	dead 140	dead 40	alive 145	dead 140
+3 星 40・90・140 / 150 年	40・90・140	150	CALIBRATED	K1	12	0	0	-	-	-	7.67	応えだけ	dead 40	dead 90	dead 140	dead 140	dead 140	dead 40	alive 150	dead 140
+3 星 50・80・110 / 115 年	50・80・110	115	CALIBRATED	K1	12	1	1	3.00	0.40	1.78	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 120 年	50・80・110	120	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・85・120 / 125 年	50・85・120	125	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	4.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 130 年	50・85・120	130	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	4.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・90・130 / 135 年	50・90・130	135	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 140 年	50・90・130	140	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・95・140 / 145 年	50・95・140	145	CALIBRATED	K1	12	0	0	-	-	-	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 145	dead 140
+3 星 50・95・140 / 150 年	50・95・140	150	CALIBRATED	K1	12	0	0	-	-	-	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 150	dead 140
+3 星 50・100・150 / 155 年	50・100・150	155	CALIBRATED	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 155	dead 150
+3 星 50・100・150 / 160 年	50・100・150	160	CALIBRATED	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 160	dead 150
+3 星 60・90・120 / 125 年	60・90・120	125	CALIBRATED	K1	12	1	1	3.00	0.40	1.78	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 130 年	60・90・120	130	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・95・130 / 135 年	60・95・130	135	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 140 年	60・95・130	140	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・100・140 / 145 年	60・100・140	145	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 150 年	60・100・140	150	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・105・150 / 155 年	60・105・150	155	CALIBRATED	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 155	dead 150
+3 星 60・105・150 / 160 年	60・105・150	160	CALIBRATED	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 160	dead 150
+3 星 70・100・130 / 135 年	70・100・130	135	CALIBRATED	K1	12	1	1	3.00	0.40	1.78	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 140 年	70・100・130	140	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・105・140 / 145 年	70・105・140	145	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 150 年	70・105・140	150	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・110・150 / 155 年	70・110・150	155	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 160 年	70・110・150	160	CALIBRATED	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+2 星 50・95 / 100 年	50・95	100	CAL	K1	12	1	1	3.00	0.40	12.58	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL	K1	10	1	0	1.00	0.40	13.30	5.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL	K1	14	1	0	5.00	0.40	11.86	1.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL	K1+K3	12	1	1	3.00	0.31	12.58	3.72	儀式だけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL	K1+K3	10	1	0	1.00	0.31	13.30	4.33	応えだけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL	K1+K3	14	1	0	5.00	0.31	11.86	1.72	儀式だけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	LEG	K1	12	1	1	3.00	0.40	12.58	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	LEG	K1+K3	12	1	1	3.00	0.19	12.58	3.33	応えだけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL 池25	K1	12	0	0	3.00	0.40	15.28	-1.00	儀式だけ	dead 50	dead 95	alive 100	alive 100	alive 100	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 100 年	50・95	100	CAL 池15	K1	12	1	1	3.00	0.40	5.28	7.67	応えだけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 100	alive 100
+2 星 50・95 / 105 年	50・95	105	CAL	K1	12	1	1	3.00	0.40	10.78	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL	K1	10	1	0	1.00	0.40	11.50	5.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL	K1	14	1	0	5.00	0.40	10.06	1.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL	K1+K3	12	1	1	3.00	0.31	10.78	3.72	儀式だけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL	K1+K3	10	1	0	1.00	0.31	11.50	4.33	応えだけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL	K1+K3	14	1	0	5.00	0.31	10.06	1.72	儀式だけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	LEG	K1	12	1	1	3.00	0.40	10.78	3.72	儀式だけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	LEG	K1+K3	12	1	1	3.00	0.19	10.78	3.33	応えだけ	dead 50	dead 50	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL 池25	K1	12	0	0	3.00	0.40	13.48	-1.00	儀式だけ	dead 50	dead 95	alive 105	alive 105	alive 105	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・95 / 105 年	50・95	105	CAL 池15	K1	12	1	1	3.00	0.40	3.48	7.67	応えだけ	dead 50	dead 95	dead 95	dead 95	dead 95	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL	K1	14	1	1	5.00	0.40	11.86	6.72	儀式だけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL	K1+K3	12	1	1	3.00	0.31	12.58	4.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL	K1+K3	10	1	0	1.00	0.31	13.30	4.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL	K1+K3	14	1	1	5.00	0.31	11.86	3.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	LEG	K1+K3	12	1	1	3.00	0.19	12.58	3.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL 池25	K1	12	1	0	3.00	0.40	15.28	1.22	儀式だけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 105 年	50・100	105	CAL 池15	K1	12	1	1	3.00	0.40	5.28	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 105	alive 105
+2 星 50・100 / 110 年	50・100	110	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL	K1	14	1	1	5.00	0.40	10.06	6.72	儀式だけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL	K1+K3	12	1	1	3.00	0.31	10.78	4.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL	K1+K3	10	1	0	1.00	0.31	11.50	4.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL	K1+K3	14	1	1	5.00	0.31	10.06	3.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	LEG	K1+K3	12	1	1	3.00	0.19	10.78	3.33	応えだけ	dead 50	dead 50	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL 池25	K1	12	1	0	3.00	0.40	13.48	1.22	儀式だけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 50・100 / 110 年	50・100	110	CAL 池15	K1	12	1	1	3.00	0.40	3.48	7.67	応えだけ	dead 50	dead 100	dead 100	dead 100	dead 100	dead 50	alive 110	alive 110
+2 星 60・95 / 100 年	60・95	100	CAL	K1	12	1	1	3.00	0.40	12.58	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL	K1	10	1	0	1.00	0.40	13.30	5.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL	K1	14	1	0	5.00	0.40	11.86	1.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL	K1+K3	12	1	1	3.00	0.31	12.58	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL	K1+K3	10	1	0	1.00	0.31	13.30	5.33	応えだけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL	K1+K3	14	1	0	5.00	0.31	11.86	1.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	LEG	K1	12	1	1	3.00	0.40	12.58	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	LEG	K1+K3	12	1	1	3.00	0.19	12.58	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL 池25	K1	12	0	0	3.00	0.40	15.28	-1.00	儀式だけ	dead 60	dead 95	alive 100	alive 100	alive 100	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 100 年	60・95	100	CAL 池15	K1	12	1	1	3.00	0.40	5.28	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 100	alive 100
+2 星 60・95 / 105 年	60・95	105	CAL	K1	12	1	1	3.00	0.40	10.78	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL	K1	10	1	0	1.00	0.40	11.50	5.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL	K1	14	1	0	5.00	0.40	10.06	1.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL	K1+K3	12	1	1	3.00	0.31	10.78	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL	K1+K3	10	1	0	1.00	0.31	11.50	5.33	応えだけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL	K1+K3	14	1	0	5.00	0.31	10.06	1.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	LEG	K1	12	1	1	3.00	0.40	10.78	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	LEG	K1+K3	12	1	1	3.00	0.19	10.78	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL 池25	K1	12	0	0	3.00	0.40	13.48	-1.00	儀式だけ	dead 60	dead 95	alive 105	alive 105	alive 105	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・95 / 105 年	60・95	105	CAL 池15	K1	12	1	1	3.00	0.40	3.48	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL	K1	14	1	1	5.00	0.40	11.86	6.72	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL	K1+K3	12	1	1	3.00	0.31	12.58	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL	K1+K3	10	1	0	1.00	0.31	13.30	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL	K1+K3	14	1	1	5.00	0.31	11.86	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	LEG	K1+K3	12	1	1	3.00	0.19	12.58	4.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL 池25	K1	12	1	0	3.00	0.40	15.28	1.22	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 105 年	60・100	105	CAL 池15	K1	12	1	1	3.00	0.40	5.28	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 105	alive 105
+2 星 60・100 / 110 年	60・100	110	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL	K1	14	1	1	5.00	0.40	10.06	6.72	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL	K1+K3	12	1	1	3.00	0.31	10.78	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL	K1+K3	10	1	0	1.00	0.31	11.50	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL	K1+K3	14	1	1	5.00	0.31	10.06	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	LEG	K1+K3	12	1	1	3.00	0.19	10.78	4.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL 池25	K1	12	1	0	3.00	0.40	13.48	1.22	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・100 / 110 年	60・100	110	CAL 池15	K1	12	1	1	3.00	0.40	3.48	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL	K1	14	1	1	5.00	0.40	11.86	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL	K1+K3	12	1	1	3.00	0.31	12.58	5.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL	K1+K3	10	1	0	1.00	0.31	13.30	5.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL	K1+K3	14	1	1	5.00	0.31	11.86	5.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	LEG	K1+K3	12	1	1	3.00	0.19	12.58	4.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL 池25	K1	12	1	1	3.00	0.40	15.28	6.22	儀式だけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 110 年	60・105	110	CAL 池15	K1	12	1	1	3.00	0.40	5.28	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 110	alive 110
+2 星 60・105 / 115 年	60・105	115	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL	K1	14	1	1	5.00	0.40	10.06	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL	K1+K3	12	1	1	3.00	0.31	10.78	5.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL	K1+K3	10	1	0	1.00	0.31	11.50	5.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL	K1+K3	14	1	1	5.00	0.31	10.06	5.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	LEG	K1+K3	12	1	1	3.00	0.19	10.78	4.33	応えだけ	dead 60	dead 60	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL 池25	K1	12	1	1	3.00	0.40	13.48	6.22	儀式だけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・105 / 115 年	60・105	115	CAL 池15	K1	12	1	1	3.00	0.40	3.48	7.67	応えだけ	dead 60	dead 105	dead 105	dead 105	dead 105	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL	K1	14	1	1	5.00	0.40	11.86	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL	K1+K3	12	1	1	3.00	0.31	12.58	5.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL	K1+K3	10	1	0	1.00	0.31	13.30	5.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL	K1+K3	14	1	1	5.00	0.31	11.86	5.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	LEG	K1+K3	12	1	1	3.00	0.19	12.58	4.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL 池25	K1	12	1	1	3.00	0.40	15.28	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 115 年	60・110	115	CAL 池15	K1	12	1	1	3.00	0.40	5.28	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 115	alive 115
+2 星 60・110 / 120 年	60・110	120	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL	K1	14	1	1	5.00	0.40	10.06	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL	K1+K3	12	1	1	3.00	0.31	10.78	5.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL	K1+K3	10	1	0	1.00	0.31	11.50	5.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL	K1+K3	14	1	1	5.00	0.31	10.06	5.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	LEG	K1+K3	12	1	1	3.00	0.19	10.78	4.33	応えだけ	dead 60	dead 60	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL 池25	K1	12	1	1	3.00	0.40	13.48	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 60・110 / 120 年	60・110	120	CAL 池15	K1	12	1	1	3.00	0.40	3.48	7.67	応えだけ	dead 60	dead 110	dead 110	dead 110	dead 110	dead 60	alive 120	alive 120
+2 星 70・100 / 105 年	70・100	105	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL	K1	14	1	1	5.00	0.40	11.86	6.72	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL	K1+K3	12	1	1	3.00	0.31	12.58	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL	K1+K3	10	1	0	1.00	0.31	13.30	7.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL	K1+K3	14	1	1	5.00	0.31	11.86	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	LEG	K1+K3	12	1	1	3.00	0.19	12.58	5.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL 池25	K1	12	1	0	3.00	0.40	15.28	1.22	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 105 年	70・100	105	CAL 池15	K1	12	1	1	3.00	0.40	5.28	2.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 105	alive 105
+2 星 70・100 / 110 年	70・100	110	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL	K1	14	1	1	5.00	0.40	10.06	6.72	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL	K1+K3	12	1	1	3.00	0.31	10.78	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL	K1+K3	10	1	0	1.00	0.31	11.50	7.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL	K1+K3	14	1	1	5.00	0.31	10.06	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	LEG	K1+K3	12	1	1	3.00	0.19	10.78	5.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL 池25	K1	12	1	0	3.00	0.40	13.48	1.22	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・100 / 110 年	70・100	110	CAL 池15	K1	12	1	1	3.00	0.40	3.48	2.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL	K1	14	1	1	5.00	0.40	11.86	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL	K1+K3	12	1	1	3.00	0.31	12.58	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL	K1+K3	10	1	0	1.00	0.31	13.30	7.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL	K1+K3	14	1	1	5.00	0.31	11.86	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	LEG	K1+K3	12	1	1	3.00	0.19	12.58	5.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL 池25	K1	12	1	1	3.00	0.40	15.28	6.22	儀式だけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 110 年	70・105	110	CAL 池15	K1	12	1	1	3.00	0.40	5.28	2.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 110	alive 110
+2 星 70・105 / 115 年	70・105	115	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL	K1	14	1	1	5.00	0.40	10.06	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL	K1+K3	12	1	1	3.00	0.31	10.78	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL	K1+K3	10	1	0	1.00	0.31	11.50	7.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL	K1+K3	14	1	1	5.00	0.31	10.06	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	LEG	K1+K3	12	1	1	3.00	0.19	10.78	5.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL 池25	K1	12	1	1	3.00	0.40	13.48	6.22	儀式だけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・105 / 115 年	70・105	115	CAL 池15	K1	12	1	1	3.00	0.40	3.48	2.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL	K1	14	1	1	5.00	0.40	11.86	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL	K1+K3	12	1	1	3.00	0.31	12.58	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL	K1+K3	10	1	0	1.00	0.31	13.30	7.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL	K1+K3	14	1	1	5.00	0.31	11.86	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	LEG	K1+K3	12	1	1	3.00	0.19	12.58	5.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL 池25	K1	12	1	1	3.00	0.40	15.28	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 115 年	70・110	115	CAL 池15	K1	12	1	1	3.00	0.40	5.28	2.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 115	alive 115
+2 星 70・110 / 120 年	70・110	120	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL	K1	14	1	1	5.00	0.40	10.06	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL	K1+K3	12	1	1	3.00	0.31	10.78	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL	K1+K3	10	1	0	1.00	0.31	11.50	7.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL	K1+K3	14	1	1	5.00	0.31	10.06	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	LEG	K1+K3	12	1	1	3.00	0.19	10.78	5.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL 池25	K1	12	1	1	3.00	0.40	13.48	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・110 / 120 年	70・110	120	CAL 池15	K1	12	1	1	3.00	0.40	3.48	2.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL	K1	14	1	1	5.00	0.40	11.86	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL	K1+K3	12	1	1	3.00	0.31	12.58	6.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL	K1+K3	10	1	0	1.00	0.31	13.30	7.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL	K1+K3	14	1	1	5.00	0.31	11.86	6.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	LEG	K1+K3	12	1	1	3.00	0.19	12.58	5.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL 池25	K1	12	1	1	3.00	0.40	15.28	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 120 年	70・115	120	CAL 池15	K1	12	1	1	3.00	0.40	5.28	2.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 120	alive 120
+2 星 70・115 / 125 年	70・115	125	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL	K1	14	1	1	5.00	0.40	10.06	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL	K1+K3	12	1	1	3.00	0.31	10.78	6.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL	K1+K3	10	1	0	1.00	0.31	11.50	7.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL	K1+K3	14	1	1	5.00	0.31	10.06	6.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	LEG	K1+K3	12	1	1	3.00	0.19	10.78	5.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL 池25	K1	12	1	1	3.00	0.40	13.48	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 70	dead 115	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・115 / 125 年	70・115	125	CAL 池15	K1	12	1	1	3.00	0.40	3.48	2.33	応えだけ	dead 70	dead 70	dead 115	dead 115	dead 115	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL	K1	10	1	0	1.00	0.40	13.30	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL	K1	14	1	1	5.00	0.40	11.86	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL	K1+K3	12	1	1	3.00	0.31	12.58	6.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL	K1+K3	10	1	0	1.00	0.31	13.30	7.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL	K1+K3	14	1	1	5.00	0.31	11.86	6.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	LEG	K1	12	1	1	3.00	0.40	12.58	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	LEG	K1+K3	12	1	1	3.00	0.19	12.58	5.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL 池25	K1	12	1	1	3.00	0.40	15.28	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL 池18	K1	12	1	1	3.00	0.40	8.28	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 125 年	70・120	125	CAL 池15	K1	12	1	1	3.00	0.40	5.28	2.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 125	alive 125
+2 星 70・120 / 130 年	70・120	130	CAL	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL	K1	10	1	0	1.00	0.40	11.50	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL	K1	14	1	1	5.00	0.40	10.06	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL	K1+K3	12	1	1	3.00	0.31	10.78	6.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL	K1+K3	10	1	0	1.00	0.31	11.50	7.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL	K1+K3	14	1	1	5.00	0.31	10.06	6.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	LEG	K1	12	1	1	3.00	0.40	10.78	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	LEG	K1+K3	12	1	1	3.00	0.19	10.78	5.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL 池25	K1	12	1	1	3.00	0.40	13.48	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL 池18	K1	12	1	1	3.00	0.40	6.48	7.67	応えだけ	dead 70	dead 120	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+2 星 70・120 / 130 年	70・120	130	CAL 池15	K1	12	1	1	3.00	0.40	3.48	2.33	応えだけ	dead 70	dead 70	dead 120	dead 120	dead 120	dead 70	alive 130	alive 130
+3 星 40・70・100 / 105 年	40・70・100	105	CAL	K1	12	1	1	3.00	0.40	1.78	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL	K1	10	1	0	1.00	0.40	2.50	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL	K1	14	1	1	5.00	0.40	1.06	7.06	儀式だけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL	K1+K3	12	1	1	3.00	0.31	1.78	5.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL	K1+K3	10	1	0	1.00	0.31	2.50	5.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL	K1+K3	14	1	1	5.00	0.31	1.06	4.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	LEG	K1	12	1	1	3.00	0.40	1.78	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	LEG	K1+K3	12	1	1	3.00	0.19	1.78	5.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL 池25	K1	12	1	0	3.00	0.40	4.48	1.56	儀式だけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL 池18	K1	12	1	1	3.00	0.29	0.00	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 105	alive 105
+3 星 40・70・100 / 105 年	40・70・100	105	CAL 池15	K1	12	0	0	-	-	-	1.67	応えだけ	dead 40	dead 70	dead 100	dead 100	dead 100	dead 40	alive 105	dead 100
+3 星 40・70・100 / 110 年	40・70・100	110	CAL	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL	K1	10	1	0	1.00	0.40	0.70	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL	K1	14	1	1	5.00	0.40	0.00	7.06	儀式だけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL	K1+K3	10	1	0	1.00	0.31	0.70	5.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL	K1+K3	14	1	1	5.00	0.31	0.00	4.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 40	dead 40	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL 池25	K1	12	1	0	3.00	0.40	2.68	1.56	儀式だけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL 池18	K1	12	1	1	3.00	0.29	0.00	8.00	応えだけ	dead 40	dead 100	dead 100	dead 100	dead 100	dead 40	alive 110	alive 110
+3 星 40・70・100 / 110 年	40・70・100	110	CAL 池15	K1	12	0	0	-	-	-	1.67	応えだけ	dead 40	dead 70	dead 100	dead 100	dead 100	dead 40	alive 110	dead 100
+3 星 40・75・110 / 115 年	40・75・110	115	CAL	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	CAL	K1	10	1	0	1.00	0.40	0.70	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	CAL	K1	14	1	1	5.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	CAL	K1+K3	10	1	0	1.00	0.31	0.70	5.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	CAL	K1+K3	14	1	1	5.00	0.31	0.00	4.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	CAL 池25	K1	12	1	1	3.00	0.40	2.68	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 115	alive 115
+3 星 40・75・110 / 115 年	40・75・110	115	CAL 池18	K1	12	0	0	-	-	-	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 115	dead 110
+3 星 40・75・110 / 115 年	40・75・110	115	CAL 池15	K1	12	0	0	-	-	-	4.00	儀式だけ	dead 40	dead 75	dead 75	dead 75	dead 75	dead 40	alive 115	dead 110
+3 星 40・75・110 / 120 年	40・75・110	120	CAL	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	CAL	K1	10	1	0	1.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	CAL	K1	14	1	1	5.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	CAL	K1+K3	10	1	0	1.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	CAL	K1+K3	14	1	1	5.00	0.31	0.00	4.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 40	dead 40	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	CAL 池25	K1	12	1	1	3.00	0.40	0.88	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 120	alive 120
+3 星 40・75・110 / 120 年	40・75・110	120	CAL 池18	K1	12	0	0	-	-	-	8.00	応えだけ	dead 40	dead 110	dead 110	dead 110	dead 110	dead 40	alive 120	dead 110
+3 星 40・75・110 / 120 年	40・75・110	120	CAL 池15	K1	12	0	0	-	-	-	4.00	儀式だけ	dead 40	dead 75	dead 75	dead 75	dead 75	dead 40	alive 120	dead 110
+3 星 40・80・120 / 125 年	40・80・120	125	CAL	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	CAL	K1	10	1	0	1.00	0.40	0.00	1.67	応えだけ	dead 40	dead 80	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	CAL	K1	14	1	1	5.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	CAL	K1+K3	10	1	0	1.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	CAL	K1+K3	14	1	1	5.00	0.31	0.00	4.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	CAL 池25	K1	12	1	1	3.00	0.40	0.88	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 125	alive 125
+3 星 40・80・120 / 125 年	40・80・120	125	CAL 池18	K1	12	0	0	-	-	-	0.67	儀式だけ	dead 40	dead 80	dead 80	dead 80	dead 80	dead 40	alive 125	dead 120
+3 星 40・80・120 / 125 年	40・80・120	125	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 40	dead 80	dead 80	dead 80	dead 80	dead 40	alive 125	dead 120
+3 星 40・80・120 / 130 年	40・80・120	130	CAL	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	CAL	K1	10	1	0	1.00	0.40	0.00	1.67	応えだけ	dead 40	dead 80	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	CAL	K1	14	1	1	5.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	CAL	K1+K3	10	1	0	1.00	0.31	0.00	5.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	CAL	K1+K3	14	1	1	5.00	0.31	0.00	4.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 40	dead 40	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	CAL 池25	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 40	dead 120	dead 120	dead 120	dead 120	dead 40	alive 130	alive 130
+3 星 40・80・120 / 130 年	40・80・120	130	CAL 池18	K1	12	0	0	-	-	-	0.67	儀式だけ	dead 40	dead 80	dead 80	dead 80	dead 80	dead 40	alive 130	dead 120
+3 星 40・80・120 / 130 年	40・80・120	130	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 40	dead 80	dead 80	dead 80	dead 80	dead 40	alive 130	dead 120
+3 星 50・80・110 / 115 年	50・80・110	115	CAL	K1	12	1	1	3.00	0.40	1.78	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL	K1	10	1	0	1.00	0.40	2.50	1.67	応えだけ	dead 50	dead 80	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL	K1	14	1	1	5.00	0.40	1.06	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL	K1+K3	12	1	1	3.00	0.31	1.78	4.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL	K1+K3	10	1	0	1.00	0.31	2.50	4.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL	K1+K3	14	1	1	5.00	0.31	1.06	3.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	LEG	K1	12	1	1	3.00	0.40	1.78	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	LEG	K1+K3	12	1	1	3.00	0.19	1.78	3.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL 池25	K1	12	1	1	3.00	0.40	4.48	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL 池18	K1	12	1	0	3.00	0.29	0.00	0.67	儀式だけ	dead 50	dead 80	dead 80	dead 80	dead 80	dead 50	alive 115	alive 115
+3 星 50・80・110 / 115 年	50・80・110	115	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 80	dead 80	dead 80	dead 80	dead 50	alive 115	dead 110
+3 星 50・80・110 / 120 年	50・80・110	120	CAL	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL	K1	10	1	0	1.00	0.40	0.70	1.67	応えだけ	dead 50	dead 80	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL	K1	14	1	1	5.00	0.40	0.00	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL	K1+K3	12	1	1	3.00	0.31	0.00	4.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL	K1+K3	10	1	0	1.00	0.31	0.70	4.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL	K1+K3	14	1	1	5.00	0.31	0.00	3.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	LEG	K1+K3	12	1	1	3.00	0.19	0.00	3.33	応えだけ	dead 50	dead 50	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL 池25	K1	12	1	1	3.00	0.40	2.68	8.00	応えだけ	dead 50	dead 110	dead 110	dead 110	dead 110	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL 池18	K1	12	1	0	3.00	0.29	0.00	0.67	儀式だけ	dead 50	dead 80	dead 80	dead 80	dead 80	dead 50	alive 120	alive 120
+3 星 50・80・110 / 120 年	50・80・110	120	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 80	dead 80	dead 80	dead 80	dead 50	alive 120	dead 110
+3 星 50・85・120 / 125 年	50・85・120	125	CAL	K1	12	1	1	3.00	0.40	0.00	4.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	CAL	K1	10	1	0	1.00	0.40	0.70	6.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	CAL	K1	14	1	1	5.00	0.40	0.00	2.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	CAL	K1+K3	12	1	1	3.00	0.31	0.00	4.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	CAL	K1+K3	10	1	0	1.00	0.31	0.70	4.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	CAL	K1+K3	14	1	1	5.00	0.31	0.00	3.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 50	dead 120	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	LEG	K1+K3	12	1	1	3.00	0.19	0.00	3.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	CAL 池25	K1	12	1	1	3.00	0.40	2.68	4.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 125	alive 125
+3 星 50・85・120 / 125 年	50・85・120	125	CAL 池18	K1	12	0	0	-	-	-	5.67	儀式だけ	dead 50	dead 85	dead 85	dead 85	dead 85	dead 50	alive 125	dead 120
+3 星 50・85・120 / 125 年	50・85・120	125	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 85	dead 85	dead 85	dead 85	dead 50	alive 125	dead 120
+3 星 50・85・120 / 130 年	50・85・120	130	CAL	K1	12	1	1	3.00	0.40	0.00	4.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	CAL	K1	10	1	0	1.00	0.40	0.00	6.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	CAL	K1	14	1	1	5.00	0.40	0.00	2.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	CAL	K1+K3	12	1	1	3.00	0.31	0.00	4.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	CAL	K1+K3	10	1	0	1.00	0.31	0.00	4.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	CAL	K1+K3	14	1	1	5.00	0.31	0.00	3.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	LEG	K1	12	1	1	3.00	0.40	0.00	8.00	応えだけ	dead 50	dead 120	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	LEG	K1+K3	12	1	1	3.00	0.19	0.00	3.33	応えだけ	dead 50	dead 50	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	CAL 池25	K1	12	1	1	3.00	0.40	0.88	4.67	応えだけ	dead 50	dead 85	dead 120	dead 120	dead 120	dead 50	alive 130	alive 130
+3 星 50・85・120 / 130 年	50・85・120	130	CAL 池18	K1	12	0	0	-	-	-	5.67	儀式だけ	dead 50	dead 85	dead 85	dead 85	dead 85	dead 50	alive 130	dead 120
+3 星 50・85・120 / 130 年	50・85・120	130	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 85	dead 85	dead 85	dead 85	dead 50	alive 130	dead 120
+3 星 50・90・130 / 135 年	50・90・130	135	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	CAL	K1	10	1	0	1.00	0.40	0.00	0.72	儀式だけ	dead 50	dead 90	dead 90	dead 90	dead 90	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	CAL	K1	14	1	1	5.00	0.40	0.00	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	CAL	K1+K3	12	1	1	3.00	0.31	0.00	4.33	応えだけ	dead 50	dead 50	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	CAL	K1+K3	10	1	0	1.00	0.31	0.00	0.72	儀式だけ	dead 50	dead 50	dead 90	dead 90	dead 90	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	CAL	K1+K3	14	1	1	5.00	0.31	0.00	3.33	応えだけ	dead 50	dead 50	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	LEG	K1	12	1	0	3.00	0.40	0.00	1.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	LEG	K1+K3	12	1	1	3.00	0.19	0.00	3.33	応えだけ	dead 50	dead 50	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	CAL 池25	K1	12	1	1	3.00	0.40	0.88	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 135	alive 135
+3 星 50・90・130 / 135 年	50・90・130	135	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 90	dead 90	dead 90	dead 90	dead 50	alive 135	dead 130
+3 星 50・90・130 / 135 年	50・90・130	135	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 90	dead 90	dead 90	dead 90	dead 50	alive 135	dead 130
+3 星 50・90・130 / 140 年	50・90・130	140	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	CAL	K1	10	1	0	1.00	0.40	0.00	0.72	儀式だけ	dead 50	dead 90	dead 90	dead 90	dead 90	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	CAL	K1	14	1	1	5.00	0.40	0.00	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	CAL	K1+K3	12	1	1	3.00	0.31	0.00	4.33	応えだけ	dead 50	dead 50	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	CAL	K1+K3	10	1	0	1.00	0.31	0.00	0.72	儀式だけ	dead 50	dead 50	dead 90	dead 90	dead 90	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	CAL	K1+K3	14	1	1	5.00	0.31	0.00	3.33	応えだけ	dead 50	dead 50	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	LEG	K1	12	1	0	3.00	0.40	0.00	1.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	LEG	K1+K3	12	1	1	3.00	0.19	0.00	3.33	応えだけ	dead 50	dead 50	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	CAL 池25	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 50	dead 90	dead 130	dead 130	dead 130	dead 50	alive 140	alive 140
+3 星 50・90・130 / 140 年	50・90・130	140	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 90	dead 90	dead 90	dead 90	dead 50	alive 140	dead 130
+3 星 50・90・130 / 140 年	50・90・130	140	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 50	dead 90	dead 90	dead 90	dead 90	dead 50	alive 140	dead 130
+3 星 60・90・120 / 125 年	60・90・120	125	CAL	K1	12	1	1	3.00	0.40	1.78	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL	K1	10	1	0	1.00	0.40	2.50	0.72	儀式だけ	dead 60	dead 90	dead 90	dead 90	dead 90	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL	K1	14	1	1	5.00	0.40	1.06	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL	K1+K3	12	1	1	3.00	0.31	1.78	5.33	応えだけ	dead 60	dead 60	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL	K1+K3	10	1	0	1.00	0.31	2.50	0.72	儀式だけ	dead 60	dead 60	dead 90	dead 90	dead 90	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL	K1+K3	14	1	1	5.00	0.31	1.06	5.33	応えだけ	dead 60	dead 60	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	LEG	K1	12	1	0	3.00	0.40	1.78	1.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	LEG	K1+K3	12	1	1	3.00	0.19	1.78	4.33	応えだけ	dead 60	dead 60	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL 池25	K1	12	1	1	3.00	0.40	4.48	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL 池18	K1	12	1	1	3.00	0.29	0.00	7.67	応えだけ	dead 60	dead 90	dead 90	dead 90	dead 90	dead 60	alive 125	alive 125
+3 星 60・90・120 / 125 年	60・90・120	125	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 90	dead 90	dead 90	dead 90	dead 60	alive 125	dead 120
+3 星 60・90・120 / 130 年	60・90・120	130	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL	K1	10	1	0	1.00	0.40	0.70	0.72	儀式だけ	dead 60	dead 90	dead 90	dead 90	dead 90	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL	K1	14	1	1	5.00	0.40	0.00	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL	K1+K3	10	1	0	1.00	0.31	0.70	0.72	儀式だけ	dead 60	dead 60	dead 90	dead 90	dead 90	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL	K1+K3	14	1	1	5.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	LEG	K1	12	1	0	3.00	0.40	0.00	1.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	LEG	K1+K3	12	1	1	3.00	0.19	0.00	4.33	応えだけ	dead 60	dead 60	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL 池25	K1	12	1	1	3.00	0.40	2.68	7.67	応えだけ	dead 60	dead 90	dead 120	dead 120	dead 120	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL 池18	K1	12	1	1	3.00	0.29	0.00	7.67	応えだけ	dead 60	dead 90	dead 90	dead 90	dead 90	dead 60	alive 130	alive 130
+3 星 60・90・120 / 130 年	60・90・120	130	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 90	dead 90	dead 90	dead 90	dead 60	alive 130	dead 120
+3 星 60・95・130 / 135 年	60・95・130	135	CAL	K1	12	1	1	3.00	0.40	0.00	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	CAL	K1	10	1	0	1.00	0.40	0.70	5.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	CAL	K1	14	1	0	5.00	0.40	0.00	1.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	CAL	K1+K3	12	1	1	3.00	0.31	0.00	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	CAL	K1+K3	10	1	0	1.00	0.31	0.70	5.33	応えだけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	CAL	K1+K3	14	1	0	5.00	0.31	0.00	1.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	LEG	K1	12	1	1	3.00	0.40	0.00	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	LEG	K1+K3	12	1	1	3.00	0.19	0.00	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	CAL 池25	K1	12	1	1	3.00	0.40	2.68	7.67	応えだけ	dead 60	dead 95	dead 130	dead 130	dead 130	dead 60	alive 135	alive 135
+3 星 60・95・130 / 135 年	60・95・130	135	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 135	dead 130
+3 星 60・95・130 / 135 年	60・95・130	135	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 135	dead 130
+3 星 60・95・130 / 140 年	60・95・130	140	CAL	K1	12	1	1	3.00	0.40	0.00	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	CAL	K1	10	1	0	1.00	0.40	0.00	5.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	CAL	K1	14	1	0	5.00	0.40	0.00	1.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	CAL	K1+K3	12	1	1	3.00	0.31	0.00	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	CAL	K1+K3	10	1	0	1.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	CAL	K1+K3	14	1	0	5.00	0.31	0.00	1.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	LEG	K1	12	1	1	3.00	0.40	0.00	3.72	儀式だけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	LEG	K1+K3	12	1	1	3.00	0.19	0.00	3.72	儀式だけ	dead 60	dead 60	dead 95	dead 95	dead 95	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	CAL 池25	K1	12	1	1	3.00	0.40	0.88	7.67	応えだけ	dead 60	dead 95	dead 130	dead 130	dead 130	dead 60	alive 140	alive 140
+3 星 60・95・130 / 140 年	60・95・130	140	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 140	dead 130
+3 星 60・95・130 / 140 年	60・95・130	140	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 95	dead 95	dead 95	dead 95	dead 60	alive 140	dead 130
+3 星 60・100・140 / 145 年	60・100・140	145	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	CAL	K1	10	1	0	1.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	CAL	K1	14	1	1	5.00	0.40	0.00	6.72	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	CAL	K1+K3	10	1	0	1.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	CAL	K1+K3	14	1	1	5.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	LEG	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	LEG	K1+K3	12	1	1	3.00	0.19	0.00	4.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	CAL 池25	K1	12	1	0	3.00	0.40	0.88	1.22	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	alive 145
+3 星 60・100・140 / 145 年	60・100・140	145	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	dead 140
+3 星 60・100・140 / 145 年	60・100・140	145	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 145	dead 140
+3 星 60・100・140 / 150 年	60・100・140	150	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	CAL	K1	10	1	0	1.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	CAL	K1	14	1	1	5.00	0.40	0.00	6.72	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	CAL	K1+K3	12	1	1	3.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	CAL	K1+K3	10	1	0	1.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	CAL	K1+K3	14	1	1	5.00	0.31	0.00	5.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	LEG	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	LEG	K1+K3	12	1	1	3.00	0.19	0.00	4.33	応えだけ	dead 60	dead 60	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	CAL 池25	K1	12	1	0	3.00	0.40	0.00	1.22	儀式だけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	alive 150
+3 星 60・100・140 / 150 年	60・100・140	150	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	dead 140
+3 星 60・100・140 / 150 年	60・100・140	150	CAL 池15	K1	12	0	0	-	-	-	7.67	応えだけ	dead 60	dead 100	dead 100	dead 100	dead 100	dead 60	alive 150	dead 140
+3 星 70・100・130 / 135 年	70・100・130	135	CAL	K1	12	1	1	3.00	0.40	1.78	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL	K1	10	1	0	1.00	0.40	2.50	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL	K1	14	1	1	5.00	0.40	1.06	6.72	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL	K1+K3	12	1	1	3.00	0.31	1.78	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL	K1+K3	10	1	0	1.00	0.31	2.50	7.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL	K1+K3	14	1	1	5.00	0.31	1.06	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	LEG	K1	12	1	1	3.00	0.40	1.78	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	LEG	K1+K3	12	1	1	3.00	0.19	1.78	5.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL 池25	K1	12	1	0	3.00	0.40	4.48	1.22	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL 池18	K1	12	1	1	3.00	0.29	0.00	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 135	alive 135
+3 星 70・100・130 / 135 年	70・100・130	135	CAL 池15	K1	12	0	0	-	-	-	2.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 135	dead 130
+3 星 70・100・130 / 140 年	70・100・130	140	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL	K1	10	1	0	1.00	0.40	0.70	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL	K1	14	1	1	5.00	0.40	0.00	6.72	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL	K1+K3	12	1	1	3.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL	K1+K3	10	1	0	1.00	0.31	0.70	7.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL	K1+K3	14	1	1	5.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	LEG	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL 池25	K1	12	1	0	3.00	0.40	2.68	1.22	儀式だけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL 池18	K1	12	1	1	3.00	0.29	0.00	7.67	応えだけ	dead 70	dead 100	dead 100	dead 100	dead 100	dead 70	alive 140	alive 140
+3 星 70・100・130 / 140 年	70・100・130	140	CAL 池15	K1	12	0	0	-	-	-	2.33	応えだけ	dead 70	dead 70	dead 100	dead 100	dead 100	dead 70	alive 140	dead 130
+3 星 70・105・140 / 145 年	70・105・140	145	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	CAL	K1	10	1	0	1.00	0.40	0.70	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	CAL	K1	14	1	1	5.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	CAL	K1+K3	12	1	1	3.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	CAL	K1+K3	10	1	0	1.00	0.31	0.70	7.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	CAL	K1+K3	14	1	1	5.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	LEG	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	CAL 池25	K1	12	1	1	3.00	0.40	2.68	6.22	儀式だけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 145	alive 145
+3 星 70・105・140 / 145 年	70・105・140	145	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 145	dead 140
+3 星 70・105・140 / 145 年	70・105・140	145	CAL 池15	K1	12	0	0	-	-	-	2.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 145	dead 140
+3 星 70・105・140 / 150 年	70・105・140	150	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	CAL	K1	10	1	0	1.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	CAL	K1	14	1	1	5.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	CAL	K1+K3	12	1	1	3.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	CAL	K1+K3	10	1	0	1.00	0.31	0.00	7.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	CAL	K1+K3	14	1	1	5.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	LEG	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	CAL 池25	K1	12	1	1	3.00	0.40	0.88	6.22	儀式だけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 150	alive 150
+3 星 70・105・140 / 150 年	70・105・140	150	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 70	dead 105	dead 105	dead 105	dead 105	dead 70	alive 150	dead 140
+3 星 70・105・140 / 150 年	70・105・140	150	CAL 池15	K1	12	0	0	-	-	-	2.33	応えだけ	dead 70	dead 70	dead 105	dead 105	dead 105	dead 70	alive 150	dead 140
+3 星 70・110・150 / 155 年	70・110・150	155	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	CAL	K1	10	1	0	1.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	CAL	K1	14	1	1	5.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	CAL	K1+K3	12	1	1	3.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	CAL	K1+K3	10	1	0	1.00	0.31	0.00	7.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	CAL	K1+K3	14	1	1	5.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	LEG	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	CAL 池25	K1	12	1	1	3.00	0.40	0.88	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 155	alive 155
+3 星 70・110・150 / 155 年	70・110・150	155	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 155	dead 150
+3 星 70・110・150 / 155 年	70・110・150	155	CAL 池15	K1	12	0	0	-	-	-	2.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 155	dead 150
+3 星 70・110・150 / 160 年	70・110・150	160	CAL	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	CAL	K1	10	1	0	1.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	CAL	K1	14	1	1	5.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	CAL	K1+K3	12	1	1	3.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	CAL	K1+K3	10	1	0	1.00	0.31	0.00	7.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	CAL	K1+K3	14	1	1	5.00	0.31	0.00	6.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	LEG	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	LEG	K1+K3	12	1	1	3.00	0.19	0.00	5.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	CAL 池25	K1	12	1	1	3.00	0.40	0.00	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 160	alive 160
+3 星 70・110・150 / 160 年	70・110・150	160	CAL 池18	K1	12	0	0	-	-	-	7.67	応えだけ	dead 70	dead 110	dead 110	dead 110	dead 110	dead 70	alive 160	dead 150
+3 星 70・110・150 / 160 年	70・110・150	160	CAL 池15	K1	12	0	0	-	-	-	2.33	応えだけ	dead 70	dead 70	dead 110	dead 110	dead 110	dead 70	alive 160	dead 150
