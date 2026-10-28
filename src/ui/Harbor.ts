@@ -181,7 +181,7 @@ export function mountHarbor(app: HTMLElement, deps: HarborUiDeps): HarborUi {
  * (M24-03) タイトルの港の板の中身 (docs/uiux/2026-10-04-title-flow.md の決めること 4 の案 A、W/F harbor-*.svg)。操作画面の港の板と同じ部品で、
  * 判定の出た自分の島の出港・流れ着いた島の一覧・訪れる札を出す。範囲は自由モードと同じ (どの石板の判定の出た島も並べる)。浜の漂着は島が要るので出さない。
  * 港へは板を開いたこの時に初めて問う (起動は港に頼らない、M19-09)。預けた年代記の送り直しは舞台に入ってから (mountHarbor) に任せ、ここではしない。
- * 空の港には「石板を選ぶ」の札を添える (toScenarios、空状態に次の手)
+ * 空の港と閉港には「石板を選ぶ」の札を添える (toScenarios、次の手。自動の枠が無い手元から石板の板へ行く道)
  */
 export function titleHarborBody(port: HarborPort, opts: { toScenarios: () => void }): HTMLElement[] {
   const { human, hostOf } = humanCheck();
@@ -189,7 +189,7 @@ export function titleHarborBody(port: HarborPort, opts: { toScenarios: () => voi
   const browse = browseOf(ready);
   const toScenarios = el('button', { class: 'harbor-chip harbor-primary', hidden: '' }, '石板を選ぶ');
   toScenarios.addEventListener('click', opts.toScenarios);
-  /** 一覧を初めから引き、空の港のときだけ「石板を選ぶ」を出す。出港の後にも引き直して、自分の島を並べる */
+  /** 一覧を初めから引き、開港で島があるとき以外 (空の港・閉港) は「石板を選ぶ」を出す。出港の後にも引き直して、自分の島を並べる */
   const reload = () => browse.loadPage(true).then((kind) => void (toScenarios.hidden = kind === 'open'));
   // 閉港 (開発は VITE_HARBOR_URL が無くいつも閉港) の板にも同じ札を出す。自動の枠が無い手元から石板の板へ行く道 (審査台 d1020-m24-03-newgame=b)
   const finished = finishedRows(ready, finishedScopeOf(port.scenarios, { stage: 'free', scenarioId: null }), reload);

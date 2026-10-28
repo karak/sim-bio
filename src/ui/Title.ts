@@ -106,7 +106,7 @@ export function showTitle(root: HTMLElement, deps: TitleDeps): Promise<TitleChoi
       // (M24-03) 石板の板: 選んだ石板は操作画面の石板の選択と同じ planOp (select) を通る
       if (panel === 'scenarios') return void openBoard(screen, heading, scenariosBody(deps, (scenarioId, stay) => go(titleStepOf({ kind: 'select', scenarioId }, ctx), stay)), back, true).classList.add('stones');
       if (panel === 'harbor') {
-        // (M24-03) 港の板: 訪れるは操作画面の港の札と同じ planOp (visit)。空の港の「石板を選ぶ」は石板の板へ移る (閉じるとメニューの港へ戻る)
+        // (M24-03) 港の板: 訪れるは操作画面の港の札と同じ planOp (visit)。空の港・閉港の「石板を選ぶ」は石板の板へ移る (閉じるとメニューの港へ戻る)
         const guard = { ask: deps.ask, leave: (href: string) => void go(titleStepOf({ kind: 'visit', href }, ctx), () => {}) };
         const board = openBoard(screen, heading, titleHarborBody({ ...deps.harbor, scenarios: deps.scenarios, guard }, {
           toScenarios: () => {
