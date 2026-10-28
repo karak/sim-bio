@@ -14,6 +14,7 @@
     uv run scripts/acceptance.py feature               # Gherkin の文で読む
     uv run scripts/acceptance.py next HBR              # 次の id (退役した行も数える)
     uv run scripts/acceptance.py dir                   # 受入の画面の置き場 (pnpm run shots が画を書く先)
+    uv run scripts/acceptance.py lint 提案.jsonl       # 審査台へ出す前の行 (置き換え・追加) を正本と合わせて検査
 
 行は消さない。要らなくなった行は status を retired にし、retired に日付・理由・代わりの id を書く。
 行を消すと領域の連番に穴が空いて check が落ちる (一度付けた id を使い回さないため)。
@@ -503,6 +504,48 @@ def check_sot(
     return problems + _check_budget(sot)
 
 
+def check_sot_invariants(sot: Sot) -> list[Problem]:
+    """check_sot の外の、正本の不変条件。札のある手順は checks か judge を持つ。
+    round の human は TUR-001 だけで、合計 1 分 (ADR 0001 段 6)"""
+    problems: list[Problem] = []
+    for s in sot.scenarios:
+        if s.status != "active":
+            continue
+        for (kw, text), mark in zip(s.steps, s.marks, strict=True):
+            if text.startswith("【") and (
+                mark is None or not (mark.checks or mark.judge)
+            ):
+                problems.append(
+                    Problem(
+                        s.id,
+                        "tagged-step",
+                        f"「{kw} {text[:24]}」は札が付いているのに checks も judge も無い",
+                    )
+                )
+    round_human = [
+        s
+        for s in sot.scenarios
+        if s.status == "active" and s.mode == "human" and s.when == "round"
+    ]
+    for s in round_human:
+        if s.id != "TUR-001":
+            problems.append(
+                Problem(
+                    s.id,
+                    "round-human",
+                    "round の human は TUR-001 だけ (ADR 0001 段 6)。deploy か auto にする",
+                )
+            )
+    minutes = sum(s.minutes or 0 for s in round_human)
+    if minutes != 1:
+        problems.append(
+            Problem(
+                "round", "round-human", f"round の human は合計 1 分: {minutes:g} 分"
+            )
+        )
+    return problems
+
+
 def check_results(sot: Sot, results: Mapping[str, object]) -> list[Problem]:
     """results.json の鍵が、どれかの行の id か from に当たること (結果を宙に浮かせない)"""
     known = {s.id for s in sot.scenarios} | {f for s in sot.scenarios for f in s.from_}
@@ -696,6 +739,53 @@ def check_repo(root: Path) -> list[Problem]:
     return problems + check_sot(sot, _reader(root), _ticket_status(root))
 
 
+def _origins(text: str, name: str) -> dict[str, str]:
+    """提案の行の id (code の行は領域) -> "<ファイル>:<行>"。読めない行は load が Problem にする"""
+    origins: dict[str, str] = {}
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        key = (row.get("id") or row.get("code")) if isinstance(row, dict) else None
+        if isinstance(key, str):
+            origins[key] = f"{name}:{lineno}"
+    return origins
+
+
+def lint_proposals(root: Path, proposals: Sequence[Path]) -> tuple[list[Problem], int]:
+    """審査台へ出す前の提案の行を、正本と合わせて検査する。提案の行は同じ id (code は同じ領域) の
+    正本の行を置き換え、無ければ足す。合わせた集合に check_sot と check_sot_invariants をかける。
+    提案から来た Problem は where に <ファイル>:<行> を付ける。返すのは (Problem, 合わせた行数)"""
+    repo_sot, problems = load((root / SOT).read_text(encoding="utf-8"))
+    codes = list(repo_sot.codes)
+    scenarios = list(repo_sot.scenarios)
+    origins: dict[str, str] = {}
+    for path in proposals:
+        text = path.read_text(encoding="utf-8")
+        sot, load_problems = load(text)
+        problems += [
+            Problem(f"{path}:{p.where.removeprefix('line ')}", p.rule, p.detail)
+            for p in load_problems
+        ]
+        origins |= _origins(text, str(path))
+        new_codes = {c.code for c in sot.codes}
+        new_ids = {s.id for s in sot.scenarios}
+        codes = [c for c in codes if c.code not in new_codes] + list(sot.codes)
+        scenarios = [s for s in scenarios if s.id not in new_ids] + list(sot.scenarios)
+    merged = Sot(tuple(codes), tuple(scenarios))
+    found = check_sot(merged, _reader(root), _ticket_status(root)) + (
+        check_sot_invariants(merged)
+    )
+    problems += [
+        Problem(f"{origins[p.where]} {p.where}", p.rule, p.detail)
+        if p.where in origins
+        else p
+        for p in found
+    ]
+    return problems, len(codes) + len(scenarios)
+
+
 def _git(root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args], cwd=root, capture_output=True, text=True, check=True
@@ -737,8 +827,17 @@ def main(argv: Sequence[str] | None = None, root: Path | None = None) -> int:
     sub.add_parser("dir")
     nxt = sub.add_parser("next")
     nxt.add_argument("code")
+    lint = sub.add_parser("lint")
+    lint.add_argument("proposals", nargs="+", type=Path)
     args = parser.parse_args(argv)
 
+    if args.cmd == "lint":
+        problems, rows = lint_proposals(root, args.proposals)
+        if problems:
+            _print(problems)
+            return 1
+        print(f"違反なし ({rows} 行)")
+        return 0
     problems = check_repo(root)
     if problems:
         _print(problems)
