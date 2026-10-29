@@ -15,10 +15,10 @@
 
 1. **曖昧さの元は「日付つきの文書を正本として保守してきたこと」。** 09-19 の設計書は名の日付の後に 45 回、信仰の経済の LD は 13 回、企画書と観察画面の決定は 6 回ずつ書き足された。書いた時点の記録 (flow) と今の正 (stock) が 1 本に混ざり、どの行が今も効くかは本文から読めない。
 2. **今の決めの大半が、まだ正本 (decisions-current) に無い。** LD 5 本の結論 (祈りに応えるなの 2063・北の谷・8 年ごと、鐘樹の係数、舟の 6/年、星の門、塔の重さの燃料) は今のコードの定数と一致するが、その文章は LD の後半にしか無い。正本に移したのは迎撃の塔 (M21-03) だけ。
-3. **消してよい文書はほとんど無い。** 62 本のうち 60 本は、ほかの文書・src/ と worker/ のコメント・票の `plan:`・`scripts/check_docs.py` のどれかから指されている。提案は「凍結して残す」42 本、「残す」16 本、「統合して消す」2 本、「消す」2 本 (§1)。
+3. **消してよい文書はほとんど無い。** 62 本のうち 60 本は、ほかの文書・src/ と worker/ のコメント・票の `plan:`・`scripts/check_docs.py` のどれかから指されている。提案は「凍結して残す」45 本、「残す」15 本、「消す」2 本 (参照 0 の引き継ぎと、済んだ一度きりの指示書)。統合して消す候補だった 2 本 (art-brief・cloudflare-deploy) は、消すと承認制のコメントや scenarios.jsonl の行が指す先が切れるので凍結にした (§1)。
 4. **積み重ねる文書 (append-only) と保守する文書 (stock) と凍結する記録 (flow) を分ける。** ADR・decisions-current の改訂の表・審査台の記録は積み重ねる。overview・fitness-functions・operations・README は保守する。日付つきの設計書・LD・計画・プレイテスト・作業ログは凍結する (§4.1)。
-5. **凍結は 1 本ずつポインタを足すより、目録 1 本で持つ方が承認が少ない。** 凍結の状態を `docs/README.md` (新しい目録) に 1 行ずつ書き、`check_docs.py` に「目録に無い文書」「凍結した文書の本文の書き換え」を落とさせる。ポインタの行は、生きた中身を正本へ移した文書 (約 12 本) にだけ足す (§4.2・§4.4)。
-6. **承認は 25 回で済む粒度にした** (§4.3)。順番は「柵 → 正本へ移す → 凍結 → 消す」。柵を先に入れるのは、凍結の後に書き足しが戻るのを機械で止めるため。
+5. **凍結は「目録」と「頭の 1 行」の両方で示す。** 目録 (`docs/README.md`、新しく起こす) に全文書の箱と凍結の日を並べ、凍結した文書の頭にも 1 行足す (コードのコメントや票から直に来た人が気づけるように)。凍結した本文が変わったことは、目録に持たせた本文のハッシュで `check_docs.py` が落とす。git の履歴を読まないので、今の check の作り (中身だけを見る純粋な検査) と CI (fetch-depth 1) に乗る (§4.2・§4.4)。
+6. **承認は 1 回に 1 つの変更にした** (§4.3、計 33 回。凍結は群ごとに 1 票だが、中の文書を 1 本ずつ外せる)。順番は「目録 → 柵 → 正本へ移す → 凍結 → 消す」。
 7. **正本の decisions-current にも直すべき所がある。** :51 の「積荷 5,000・通報 1,000 は 09-26 と同じ」が同じ文書の表 (3,000・500) と食い違う。迎撃の塔の節は列の名が「今」だが、コードはまだ 3 星・150 年 (M21-03 は todo)。通し実行の件数 49 には check の印が無い (2026-09-23 のロードマップ §8 は 34 + 2 と書いている)。
 
 ## 1. 数で見た今
@@ -28,82 +28,82 @@
 | 調べた文書 | 62 (docs 61 + issues/README.md) |
 | stock / flow | 13 / 49 |
 | 有効 / 一部有効 / 無効 (失効) | 16 / 33 / 13 |
-| 提案: 残す / 凍結して残す / 統合して消す / 消す | 16 / 42 / 2 / 2 |
-| 名に日付があり、その日より後に commit のある文書 | 17 |
-| 2026-10-18 (書き換えない決まりの日) より後に、名の日付より後で中身を書き換えた flow の文書 | 0 (決まりは守られている。ただし機械の柵は無い。intercept-2 は書いた当日 10-28 に承認を得て §4 を直し、:67 に 3 星の頃の 87 年が取り残された) |
+| 提案: 残す / 凍結して残す / 統合して消す / 消す | 15 / 45 / 0 / 2 |
+| 名に日付があり、その日より後に commit のある文書 | 17 (数え方: `git log` を --follow なしで、commit の日が名の日付より後 (>)。--follow で数えると 09-19 の設計書は 55 回のうち 43 回、と少し変わる) |
+| 2026-10-18 (書き換えない決まりの日) より後に、名の日付より後で中身を書き換えた flow の文書 | 0。ただし日の単位で数えたので、同じ日の書き換えは見えない。intercept-2 は 10-28 に、決めを正本へ移したのと同じ commit (b3cf33e) で §4 を直し、:67 に 3 星の頃の 87 年が取り残された。柵 (F1) を日付でなく本文のハッシュで作るのはこのため |
 | どこからも参照されない文書 | 2 (`docs/specs/plans/2026-09-23-handoff.md`・`docs/review/archive-2026-10-13.md`) |
 | コードと食い違う箇所の例 (§3 に file:line) | 89 |
 | 書き換え・削除・追記の候補 (§3) | 46 |
-| 参照の切れ | 3 (archived M9-03・M9-05 の `plan:` が無い道 `docs/specs/plans/2026-09-19-scenarios-and-world.md` を指す。M26-20 の `plan:` のアンカー `#6-運用` が無い) |
+| 票の `plan:` の切れ (check_docs の anchors_of で検めた) | 10。道が無い 2 (archived M9-03・M9-05 → `docs/specs/plans/2026-09-19-scenarios-and-world.md`)。アンカーが無い 8 (M26-20 `#6-運用`、archived M6-02〜05 は見出しの「—」で `--m6-0x` になる、M10R-03 は「夢食い」と「夢喰い」、M10R-07 は「§」が残る、M10R-08 は「仅説」)。ほかに `plan: null` が 15 票、ART-01 は `git show` の旧版を指す (意図した形) |
 
 ## 2. 評価表
 
-列: 初出 = 最初の commit の日。後 = 名の日付より後の commit の数 (日付の無い文書は —)。参照 = 被参照の数 (うち票)。S/F = stock / flow。提案の太字は既定 (日付つき → flow → 凍結、日付なし → stock → 残す) から外れたもの。詳細と食い違いの file:line は §3 の同じ番号。
+列: 初出 = 最初の commit の日。後 = 名の日付より後の commit の数 (日付の無い文書は —)。参照 = 被参照の数 (うち票)。出 = その文書が書いている path (docs/・src/・worker/・scripts/・tests/・issues/) の数。S/F = stock / flow。箱 = §4.1 の A (積み重ねる)・B (保守する)・C (凍結する)。「C (未凍結)」は書き足す予定がまだある flow (票が閉じたら凍結)。提案の太字は既定 (日付つき → flow → 凍結、日付なし → stock → 残す) から外れたもの。詳細と食い違いの file:line は §3 の同じ番号。
 
-| # | 文書 | 種類 | 初出 | 最終 commit | 後 | 参照 (票) | 有効 | S/F | 提案 | S/F の根拠 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| D01 | `docs/specs/2026-09-19-ecosystem-sim-design.md` | spec | 2026-09-19 | dd08879 (2026-10-18) | 45 | 20 (12) | 一部有効 | flow | 凍結して残す | a440d08 (09-19) の設計書に、M1〜M10R の実装差分 §4.7〜4.31 と §6 の証跡を 09-23 までに 45 回書き足した。stock として作られたが、中身は積み上がった flow になっている。09-23 より後の commit は dd08879 (ポインタを足した) の 1 回だけ。 |
-| D02 | `docs/specs/2026-10-18-decisions-current.md` | spec | 2026-10-18 | b3cf33e (2026-10-28) | 7 | 12 (5) | 有効 | **stock** | 残す | 今の正本として、改訂の表で保守している |
-| D03 | `docs/specs/plans/2026-09-19-m1-implementation-plan.md` | plan | 2026-09-19 | a1c9d67 (2026-09-19) | 0 | 17 (17) | 無効 (失効) | flow | 凍結して残す | 日付つきの実装計画で、M1 の完了で役目を終えた |
-| D04 | `docs/specs/plans/2026-09-19-m6-playable-dilemma-plan.md` | plan | 2026-09-19 | 25e0f6f (2026-09-19) | 0 | 6 (5) | 無効 (失効) | flow | 凍結して残す | 日付つきの計画で、§3.6 に校正の結果を書き足して閉じている |
-| D05 | `docs/specs/plans/2026-09-19-m6-playtest.md` | playtest | 2026-09-19 | a2cd73e (2026-09-19) | 0 | 6 (4) | 有効 | flow | 凍結して残す | 日付つきの手動受入の記録 |
-| D06 | `docs/specs/plans/2026-09-19-m8-civilization-plan.md` | plan | 2026-09-19 | dcd8ad9 (2026-09-19) | 0 | 7 (6) | 無効 (失効) | flow | 凍結して残す | 日付つきの計画 |
-| D07 | `docs/specs/plans/2026-09-20-m20-public-release-plan.md` | plan | 2026-09-20 | 21878a8 (2026-09-20) | 0 | 4 (4) | 一部有効 | flow | 凍結して残す | 日付つきの計画と監査の記録 |
-| D08 | `docs/specs/plans/2026-09-20-m8-playtest.md` | playtest | 2026-09-21 | acce045 (2026-09-21) | 1 | 2 (1) | 有効 | flow | 凍結して残す | 日付つきの手動受入の記録 |
-| D09 | `docs/specs/plans/2026-09-22-m10-playtest.md` | playtest | 2026-09-22 | 2e22bc7 (2026-09-22) | 0 | 2 (1) | 有効 | flow | 凍結して残す | 日付つきの手動受入の記録 |
-| D10 | `docs/specs/plans/2026-09-22-m9-playtest.md` | playtest | 2026-09-22 | 5f040bb (2026-09-22) | 0 | 2 (1) | 有効 | flow | 凍結して残す | 日付つきの手動受入の記録 |
-| D11 | `docs/specs/plans/2026-09-23-handoff.md` | handoff | 2026-09-23 | 5daf40a (2026-09-23) | 0 | 0 (0) | 無効 (失効) | flow | **消す** | セッションの引き継ぎで、書いた時点の状態を写したもの |
-| D12 | `docs/specs/plans/2026-09-23-m10r-07-playtest.md` | playtest | 2026-09-23 | d427d3c (2026-09-23) | 0 | 1 (1) | 有効 | flow | 凍結して残す | 日付つきの手動受入の記録 |
-| D13 | `docs/specs/plans/2026-09-23-m10r-08-playtest.md` | playtest | 2026-09-23 | c024381 (2026-09-23) | 0 | 1 (1) | 有効 | flow | 凍結して残す | 日付つきの手動受入の記録 |
-| D14 | `docs/specs/plans/2026-09-23-m10r-playtest.md` | playtest | 2026-09-23 | 5b8d6fc (2026-09-23) | 0 | 3 (2) | 一部有効 | flow | 凍結して残す | 日付つきの手動受入の記録 (差し戻しの判断を含む) |
-| D15 | `docs/specs/plans/2026-09-23-m21-01-ui-parity-audit.md` | review | 2026-09-23 | a54f1b1 (2026-09-23) | 0 | 6 (3) | 一部有効 | flow | 凍結して残す | 日付つきの監査の記録 |
-| D16 | `docs/specs/plans/2026-09-23-roadmap.md` | plan | 2026-09-23 | a895cf2 (2026-10-18) | 1 | 16 (13) | 一部有効 | flow | 凍結して残す | 日付つきの計画。09-23 の後は §8 を末尾に足しただけ (a895cf2) で、前の文は書き換えていない |
-| D17 | `docs/specs/plans/2026-10-18-plan.md` | plan | 2026-10-18 | d072620 (2026-10-18) | 0 | 1 (1) | 一部有効 | flow | **残す** | 日付つきの点検表。d072620 の 1 回だけ書き、以後は追っていない |
-| D18 | `docs/design/2026-09-19-art-brief.md` | design | 2026-09-19 | 1c0344f (2026-09-19) | 0 | 1 (0) | 一部有効 | flow | **統合して消す** | 名に日付 → flow (既定) |
-| D19 | `docs/design/2026-09-19-proposal.html` | plan | 2026-09-19 | 2e22bc7 (2026-09-22) | 6 | 5 (2) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D20 | `docs/design/2026-09-19-scenarios-and-world.md` | design | 2026-09-19 | 5c80fe3 (2026-09-22) | 1 | 68 (59) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D21 | `docs/design/2026-09-20-level-design-tower.md` | level-design | 2026-09-20 | 7bada9d (2026-09-21) | 1 | 8 (4) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D22 | `docs/design/2026-09-21-level-design-faith.md` | level-design | 2026-09-21 | d33de56 (2026-09-22) | 2 | 8 (2) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D23 | `docs/design/2026-09-22-level-design-devices.md` | level-design | 2026-09-22 | d2c4de9 (2026-09-22) | 0 | 8 (2) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D24 | `docs/design/2026-09-22-level-design-faith-economy.md` | level-design | 2026-09-23 | 25b7f59 (2026-10-11) | 13 | 15 (9) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D25 | `docs/design/2026-09-23-observation-view-design.md` | design | 2026-09-23 | 2e76f19 (2026-10-12) | 2 | 10 (1) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D26 | `docs/design/2026-09-23-observation-view.md` | design | 2026-09-23 | 18bbff2 (2026-09-24) | 6 | 22 (13) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D27 | `docs/design/2026-09-24-observe-perf.md` | plan | 2026-09-24 | 9c309ec (2026-10-02) | 1 | 23 (12) | 無効 (失効) | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D28 | `docs/design/2026-09-26-cloudflare-architecture.md` | design | 2026-09-26 | dd08879 (2026-10-18) | 3 | 39 (24) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D29 | `docs/design/2026-09-27-scenario-save-url.md` | design | 2026-09-27 | 2cd444f (2026-09-28) | 1 | 5 (2) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D30 | `docs/design/2026-09-29-acceptance-redesign.md` | design | 2026-09-29 | b427b74 (2026-09-30) | 1 | 6 (3) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D31 | `docs/design/2026-10-10-architecture-review.md` | review | 2026-10-10 | 25b7f59 (2026-10-11) | 1 | 10 (6) | 一部有効 | flow | 凍結して残す | 名に日付 → flow (既定) |
-| D32 | `docs/design/2026-10-28-level-design-intercept-2.md` | level-design | 2026-10-28 | b3cf33e (2026-10-28) | 0 | 3 (1) | 一部有効 | flow | **残す** | 名に日付 → flow (既定) |
-| D33 | `docs/design/qa/observe/deer.md` | qa-log | 2026-09-23 | 0fffb7d (2026-09-26) | — | 4 (2) | 一部有効 | **flow** | 凍結して残す | 手直しを下へ足していく作業の記録 (追記型)。今の値は末尾の節にしか無い |
-| D34 | `docs/design/qa/observe/environment.md` | qa-log | 2026-09-23 | cb97bb8 (2026-10-17) | — | 5 (4) | 一部有効 | **flow** | 凍結して残す | 試作の記録の下に追記を重ねる作業ログ (650 行)。M22-11 (done) の所見の置き場 |
-| D35 | `docs/design/qa/observe/keyitems.md` | qa-log | 2026-09-24 | 44f4ce4 (2026-09-24) | — | 5 (3) | 一部有効 | **flow** | 凍結して残す | 試作の記録と追記。ただし中に今も効く契約 (舟の GLB) が埋まっている |
-| D36 | `docs/design/qa/observe/rabbit.md` | qa-log | 2026-09-24 | 83cf98c (2026-09-26) | — | 1 (1) | 一部有効 | **flow** | 凍結して残す | 手直し 1〜7 を下へ重ねた作業ログ (595 行) |
-| D37 | `docs/design/qa/observe/session-2026-10.md` | playtest | 2026-10-20 | 7daf697 (2026-10-20) | — | 2 (1) | 有効 | **flow** | **残す** | 日付つき (2026-10-20) の 1 回のセッションの記録 |
-| D38 | `docs/design/qa/observe/wolf.md` | qa-log | 2026-09-24 | c0d641b (2026-10-12) | — | 1 (1) | 一部有効 | **flow** | 凍結して残す | 作り直し 1〜6 回目の作業ログ (489 行) |
-| D39 | `docs/design/qa/deer-acceptance-criteria.md` | qa-log | 2026-09-19 | ba31f2f (2026-09-20) | — | 1 (0) | 無効 (失効) | **flow** | 凍結して残す | 日付は無いが 2026-09-20 の 1 ブランチ (worktree-concept-art-variants) の受入の記録。D5 手動受入は未実施のまま、方針転換で失効 |
-| D40 | `docs/design/qa/deer-remaining-issues.md` | qa-log | 2026-09-19 | ba31f2f (2026-09-20) | — | 2 (0) | 無効 (失効) | **flow** | 凍結して残す | 2026-09-20 時点の残課題の一覧。閉じる票が無いまま放棄された |
-| D41 | `docs/design/qa/handoff-T18-merge.md` | handoff | 2026-09-20 | 32d52f1 (2026-09-20) | — | 3 (2) | 無効 (失効) | **flow** | **消す** | 1 回の作業のための貼り付け用プロンプト。済んだ後に読む理由が無い |
-| D42 | `docs/design/qa/rabbit-acceptance-criteria.md` | qa-log | 2026-09-19 | efc7551 (2026-09-19) | — | 1 (0) | 無効 (失効) | **flow** | 凍結して残す | 2026-09-20 のブランチの受入記録。D6・E の手動受入は未実施のまま失効 |
-| D43 | `docs/design/qa/rabbit-remaining-issues.md` | qa-log | 2026-09-19 | 8f8aabb (2026-09-20) | — | 3 (0) | 無効 (失効) | **flow** | 凍結して残す | commit 0aae098 時点の残課題 |
-| D44 | `docs/design/qa/remaining-tasks.md` | plan | 2026-09-20 | e526110 (2026-09-20) | — | 3 (1) | 無効 (失効) | **flow** | 凍結して残す | 見出しに「2026-09-20 11:30 時点」。名に日付は無いが時点の計画 |
-| D45 | `docs/design/qa/verification-workflow.md` | qa-log | 2026-09-19 | c297924 (2026-09-20) | — | 1 (0) | 一部有効 | **flow** | 凍結して残す | 日付は無いが M6〜M8 の旧模型の検証手順。観察画面の検証手順は observe/*.md の「出力と作り直し方」が持つ |
-| D46 | `docs/design/qa/wolf-acceptance-criteria.md` | qa-log | 2026-09-19 | cdbb913 (2026-09-20) | — | 1 (0) | 無効 (失効) | **flow** | 凍結して残す | 2026-09-20 のブランチの受入記録。D5 未実施で失効 |
-| D47 | `docs/design/qa/wolf-remaining-issues.md` | qa-log | 2026-09-19 | cdbb913 (2026-09-20) | — | 2 (0) | 無効 (失効) | **flow** | 凍結して残す | 2 回目の後の残課題の一覧 |
-| D48 | `docs/decisions/0001-acceptance-automation.md` | ADR | 2026-09-30 | 6a5b2f8 (2026-10-04) | — | 24 (21) | 有効 | stock | 残す | ADR は決めを積む記録。ただし改訂の節が無いまま、本文に後の事実 (例外 0.12・段 6 済み) を書き足しており、上書きの跡が追えない |
-| D49 | `docs/decisions/0002-architecture-fence.md` | ADR | 2026-10-10 | 5fb8269 (2026-10-11) | — | 5 (0) | 有効 | stock | 残す | ADR。§改訂 に 2026-10-11 の上書きを記録しているが、決定 1・2 の本文そのものを書き換えた (supersede しない判断を明記) |
-| D50 | `docs/architecture/fitness-functions.md` | design | 2026-10-10 | 675a1b5 (2026-10-28) | — | 2 (1) | 有効 | stock | 残す | 日付なし。柵を足すたびに 1 行足す決まり (§足し方) で保守 |
-| D51 | `docs/architecture/overview.md` | design | 2026-10-11 | 782f3d7 (2026-10-11) | — | 1 (0) | 一部有効 | stock | 残す | 日付なしで「保守する文書」と名乗り、§9 更新の手順を持つ。ただし冒頭の対象 9fa690b と §8 は時点の記述 |
-| D52 | `docs/operations/README.md` | index | 2026-10-06 | 4ff7552 (2026-10-06) | — | 1 (1) | 一部有効 | stock | 残す | 日付なしの目次。文書を足し引きするたびに保守する |
-| D53 | `docs/operations/acceptance.md` | ops | 2026-09-27 | 8cdc556 (2026-10-18) | — | 15 (8) | 有効 | stock | 残す | 日付なし。M25 の各票で節を足して保守されている |
-| D54 | `docs/operations/cloudflare-api-token.md` | ops | 2026-09-27 | 38fb78c (2026-10-10) | — | 7 (1) | 有効 | stock | 残す | 日付なしの型。§手元のログイン(記録) だけが flow の注 |
-| D55 | `docs/operations/cloudflare-deploy.md` | ops | 2026-09-27 | 4eda520 (2026-10-11) | — | 10 (1) | 一部有効 | **flow** | **統合して消す** | 名に日付は無いが、中身は 2026-09-27 の初回の配備の記録 (H1〜A12a に済の印)。今の手順は deploy-runbook |
-| D56 | `docs/operations/cloudflare.md` | ops | 2026-10-06 | 4eda520 (2026-10-11) | — | 8 (1) | 一部有効 | stock | 残す | 日付なし。README から移した運用の正本 (2026-10-06) |
-| D57 | `docs/operations/deploy-runbook.md` | ops | 2026-10-05 | 4eda520 (2026-10-11) | — | 20 (3) | 有効 | stock | 残す | 日付なし。今の配備の正本。§1 の 7403 の経緯だけ flow の注 |
-| D58 | `docs/operations/readme-screenshots.md` | ops | 2026-09-26 | d419c0b (2026-09-29) | — | 4 (2) | 一部有効 | stock | 残す | 日付なしの手順 |
-| D59 | `docs/uiux/2026-10-04-title-flow.md` | uiux | 2026-10-04 | 1252497 (2026-10-05) | 1 | 18 (7) | 一部有効 | flow | 凍結して残す | 日付つき。2026-10-04 に承認された設計 |
-| D60 | `docs/uiux/README.md` | index | 2026-10-04 | 1252497 (2026-10-05) | — | 1 (1) | 有効 | stock | 残す | 日付なしのフォルダの目次と図の読み方 |
-| D61 | `docs/review/archive-2026-10-13.md` | review | 2026-10-13 | a39f9a1 (2026-10-13) | — | 0 (0) | 有効 | **flow** | 凍結して残す | 日付つきの一度きりの写し。同じ中身を機械の形で docs/review/archive-2026-10-13.jsonl (228 行) も持つ |
-| D62 | `issues/README.md` | index | 2026-09-19 | ac8aa46 (2026-10-28) | — | 10 (3) | 一部有効 | stock | 残す | 日付なしの規約。ただし §進める順 に日付つきの flow が埋まっている |
+| # | 文書 | 種類 | 初出 | 最終 commit | 後 | 参照 (票) | 出 | 有効 | S/F | 箱 | 提案 | S/F の根拠 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| D01 | `docs/specs/2026-09-19-ecosystem-sim-design.md` | spec | 2026-09-19 | dd08879 (2026-10-18) | 45 | 20 (12) | 82 | 一部有効 | flow | C | 凍結して残す | a440d08 (09-19) の設計書に、M1〜M10R の実装差分 §4.7〜4.31 と §6 の証跡を 09-23 までに 45 回書き足した。stock として作られたが、中身は積み上がった flow になっている。09-23 より後の commit は dd08879 (ポインタを足した) の 1 回だけ。 |
+| D02 | `docs/specs/2026-10-18-decisions-current.md` | spec | 2026-10-18 | b3cf33e (2026-10-28) | 7 | 12 (5) | 19 | 有効 | **stock** | B (改訂の表は A) | 残す | 今の正本として、改訂の表で保守している |
+| D03 | `docs/specs/plans/2026-09-19-m1-implementation-plan.md` | plan | 2026-09-19 | a1c9d67 (2026-09-19) | 0 | 17 (17) | 41 | 無効 (失効) | flow | C | 凍結して残す | 日付つきの実装計画で、M1 の完了で役目を終えた |
+| D04 | `docs/specs/plans/2026-09-19-m6-playable-dilemma-plan.md` | plan | 2026-09-19 | 25e0f6f (2026-09-19) | 0 | 6 (5) | 3 | 無効 (失効) | flow | C | 凍結して残す | 日付つきの計画で、§3.6 に校正の結果を書き足して閉じている |
+| D05 | `docs/specs/plans/2026-09-19-m6-playtest.md` | playtest | 2026-09-19 | a2cd73e (2026-09-19) | 0 | 6 (4) | 0 | 有効 | flow | C | 凍結して残す | 日付つきの手動受入の記録 |
+| D06 | `docs/specs/plans/2026-09-19-m8-civilization-plan.md` | plan | 2026-09-19 | dcd8ad9 (2026-09-19) | 0 | 7 (6) | 2 | 無効 (失効) | flow | C | 凍結して残す | 日付つきの計画 |
+| D07 | `docs/specs/plans/2026-09-20-m20-public-release-plan.md` | plan | 2026-09-20 | 21878a8 (2026-09-20) | 0 | 4 (4) | 4 | 一部有効 | flow | C | 凍結して残す | 日付つきの計画と監査の記録 |
+| D08 | `docs/specs/plans/2026-09-20-m8-playtest.md` | playtest | 2026-09-21 | acce045 (2026-09-21) | 1 | 2 (1) | 1 | 有効 | flow | C | 凍結して残す | 日付つきの手動受入の記録 |
+| D09 | `docs/specs/plans/2026-09-22-m10-playtest.md` | playtest | 2026-09-22 | 2e22bc7 (2026-09-22) | 0 | 2 (1) | 0 | 有効 | flow | C | 凍結して残す | 日付つきの手動受入の記録 |
+| D10 | `docs/specs/plans/2026-09-22-m9-playtest.md` | playtest | 2026-09-22 | 5f040bb (2026-09-22) | 0 | 2 (1) | 5 | 有効 | flow | C | 凍結して残す | 日付つきの手動受入の記録 |
+| D11 | `docs/specs/plans/2026-09-23-handoff.md` | handoff | 2026-09-23 | 5daf40a (2026-09-23) | 0 | 0 (0) | 4 | 無効 (失効) | flow | C | **消す** | セッションの引き継ぎで、書いた時点の状態を写したもの |
+| D12 | `docs/specs/plans/2026-09-23-m10r-07-playtest.md` | playtest | 2026-09-23 | d427d3c (2026-09-23) | 0 | 1 (1) | 0 | 有効 | flow | C | 凍結して残す | 日付つきの手動受入の記録 |
+| D13 | `docs/specs/plans/2026-09-23-m10r-08-playtest.md` | playtest | 2026-09-23 | c024381 (2026-09-23) | 0 | 1 (1) | 0 | 有効 | flow | C | 凍結して残す | 日付つきの手動受入の記録 |
+| D14 | `docs/specs/plans/2026-09-23-m10r-playtest.md` | playtest | 2026-09-23 | 5b8d6fc (2026-09-23) | 0 | 3 (2) | 0 | 一部有効 | flow | C | 凍結して残す | 日付つきの手動受入の記録 (差し戻しの判断を含む) |
+| D15 | `docs/specs/plans/2026-09-23-m21-01-ui-parity-audit.md` | review | 2026-09-23 | a54f1b1 (2026-09-23) | 0 | 6 (3) | 3 | 一部有効 | flow | C | 凍結して残す | 日付つきの監査の記録 |
+| D16 | `docs/specs/plans/2026-09-23-roadmap.md` | plan | 2026-09-23 | a895cf2 (2026-10-18) | 1 | 16 (13) | 2 | 一部有効 | flow | C | 凍結して残す | 日付つきの計画。09-23 の後は §8 を末尾に足しただけ (a895cf2) で、前の文は書き換えていない |
+| D17 | `docs/specs/plans/2026-10-18-plan.md` | plan | 2026-10-18 | d072620 (2026-10-18) | 0 | 1 (1) | 28 | 一部有効 | flow | C | 凍結して残す | 日付つきの点検表。d072620 の 1 回だけ書き、以後は追っていない。これから書き足す予定は無い (状態は票が持つ) ので凍結できる |
+| D18 | `docs/design/2026-09-19-art-brief.md` | design | 2026-09-19 | 1c0344f (2026-09-19) | 0 | 1 (0) | 0 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D19 | `docs/design/2026-09-19-proposal.html` | plan | 2026-09-19 | 2e22bc7 (2026-09-22) | 6 | 5 (2) | 2 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D20 | `docs/design/2026-09-19-scenarios-and-world.md` | design | 2026-09-19 | 5c80fe3 (2026-09-22) | 1 | 68 (59) | 0 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D21 | `docs/design/2026-09-20-level-design-tower.md` | level-design | 2026-09-20 | 7bada9d (2026-09-21) | 1 | 8 (4) | 0 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D22 | `docs/design/2026-09-21-level-design-faith.md` | level-design | 2026-09-21 | d33de56 (2026-09-22) | 2 | 8 (2) | 0 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D23 | `docs/design/2026-09-22-level-design-devices.md` | level-design | 2026-09-22 | d2c4de9 (2026-09-22) | 0 | 8 (2) | 1 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D24 | `docs/design/2026-09-22-level-design-faith-economy.md` | level-design | 2026-09-23 | 25b7f59 (2026-10-11) | 13 | 15 (9) | 5 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D25 | `docs/design/2026-09-23-observation-view-design.md` | design | 2026-09-23 | 2e76f19 (2026-10-12) | 2 | 10 (1) | 1 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D26 | `docs/design/2026-09-23-observation-view.md` | design | 2026-09-23 | 18bbff2 (2026-09-24) | 6 | 22 (13) | 0 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D27 | `docs/design/2026-09-24-observe-perf.md` | plan | 2026-09-24 | 9c309ec (2026-10-02) | 1 | 23 (12) | 2 | 無効 (失効) | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D28 | `docs/design/2026-09-26-cloudflare-architecture.md` | design | 2026-09-26 | dd08879 (2026-10-18) | 3 | 39 (24) | 16 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D29 | `docs/design/2026-09-27-scenario-save-url.md` | design | 2026-09-27 | 2cd444f (2026-09-28) | 1 | 5 (2) | 1 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D30 | `docs/design/2026-09-29-acceptance-redesign.md` | design | 2026-09-29 | b427b74 (2026-09-30) | 1 | 6 (3) | 7 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D31 | `docs/design/2026-10-10-architecture-review.md` | review | 2026-10-10 | 25b7f59 (2026-10-11) | 1 | 10 (6) | 44 | 一部有効 | flow | C | 凍結して残す | 名に日付 → flow (既定) |
+| D32 | `docs/design/2026-10-28-level-design-intercept-2.md` | level-design | 2026-10-28 | b3cf33e (2026-10-28) | 0 | 3 (1) | 9 | 一部有効 | flow | C (未凍結) | **残す** | 名に日付 → flow (既定) |
+| D33 | `docs/design/qa/observe/deer.md` | qa-log | 2026-09-23 | 0fffb7d (2026-09-26) | — | 4 (2) | 1 | 一部有効 | **flow** | C | 凍結して残す | 手直しを下へ足していく作業の記録 (追記型)。今の値は末尾の節にしか無い |
+| D34 | `docs/design/qa/observe/environment.md` | qa-log | 2026-09-23 | cb97bb8 (2026-10-17) | — | 5 (4) | 15 | 一部有効 | **flow** | C | 凍結して残す | 試作の記録の下に追記を重ねる作業ログ (650 行)。M22-11 (done) の所見の置き場 |
+| D35 | `docs/design/qa/observe/keyitems.md` | qa-log | 2026-09-24 | 44f4ce4 (2026-09-24) | — | 5 (3) | 13 | 一部有効 | **flow** | C | 凍結して残す | 試作の記録と追記。ただし中に今も効く契約 (舟の GLB) が埋まっている |
+| D36 | `docs/design/qa/observe/rabbit.md` | qa-log | 2026-09-24 | 83cf98c (2026-09-26) | — | 1 (1) | 7 | 一部有効 | **flow** | C | 凍結して残す | 手直し 1〜7 を下へ重ねた作業ログ (595 行) |
+| D37 | `docs/design/qa/observe/session-2026-10.md` | playtest | 2026-10-20 | 7daf697 (2026-10-20) | — | 2 (1) | 5 | 有効 | **flow** | C (未凍結) | **残す** | 日付つき (2026-10-20) の 1 回のセッションの記録 |
+| D38 | `docs/design/qa/observe/wolf.md` | qa-log | 2026-09-24 | c0d641b (2026-10-12) | — | 1 (1) | 1 | 一部有効 | **flow** | C | 凍結して残す | 作り直し 1〜6 回目の作業ログ (489 行) |
+| D39 | `docs/design/qa/deer-acceptance-criteria.md` | qa-log | 2026-09-19 | ba31f2f (2026-09-20) | — | 1 (0) | 2 | 無効 (失効) | **flow** | C | 凍結して残す | 日付は無いが 2026-09-20 の 1 ブランチ (worktree-concept-art-variants) の受入の記録。D5 手動受入は未実施のまま、方針転換で失効 |
+| D40 | `docs/design/qa/deer-remaining-issues.md` | qa-log | 2026-09-19 | ba31f2f (2026-09-20) | — | 2 (0) | 0 | 無効 (失効) | **flow** | C | 凍結して残す | 2026-09-20 時点の残課題の一覧。閉じる票が無いまま放棄された |
+| D41 | `docs/design/qa/handoff-T18-merge.md` | handoff | 2026-09-20 | 32d52f1 (2026-09-20) | — | 3 (2) | 3 | 無効 (失効) | **flow** | C | **消す** | 1 回の作業のための貼り付け用プロンプト。済んだ後に読む理由が無い |
+| D42 | `docs/design/qa/rabbit-acceptance-criteria.md` | qa-log | 2026-09-19 | efc7551 (2026-09-19) | — | 1 (0) | 1 | 無効 (失効) | **flow** | C | 凍結して残す | 2026-09-20 のブランチの受入記録。D6・E の手動受入は未実施のまま失効 |
+| D43 | `docs/design/qa/rabbit-remaining-issues.md` | qa-log | 2026-09-19 | 8f8aabb (2026-09-20) | — | 3 (0) | 1 | 無効 (失効) | **flow** | C | 凍結して残す | commit 0aae098 時点の残課題 |
+| D44 | `docs/design/qa/remaining-tasks.md` | plan | 2026-09-20 | e526110 (2026-09-20) | — | 3 (1) | 0 | 無効 (失効) | **flow** | C | 凍結して残す | 見出しに「2026-09-20 11:30 時点」。名に日付は無いが時点の計画 |
+| D45 | `docs/design/qa/verification-workflow.md` | qa-log | 2026-09-19 | c297924 (2026-09-20) | — | 1 (0) | 2 | 一部有効 | **flow** | C | 凍結して残す | 日付は無いが M6〜M8 の旧模型の検証手順。観察画面の検証手順は observe/*.md の「出力と作り直し方」が持つ |
+| D46 | `docs/design/qa/wolf-acceptance-criteria.md` | qa-log | 2026-09-19 | cdbb913 (2026-09-20) | — | 1 (0) | 2 | 無効 (失効) | **flow** | C | 凍結して残す | 2026-09-20 のブランチの受入記録。D5 未実施で失効 |
+| D47 | `docs/design/qa/wolf-remaining-issues.md` | qa-log | 2026-09-19 | cdbb913 (2026-09-20) | — | 2 (0) | 0 | 無効 (失効) | **flow** | C | 凍結して残す | 2 回目の後の残課題の一覧 |
+| D48 | `docs/decisions/0001-acceptance-automation.md` | ADR | 2026-09-30 | 6a5b2f8 (2026-10-04) | — | 24 (21) | 21 | 有効 | stock | A | 残す | ADR は決めを積む記録。ただし改訂の節が無いまま、本文に後の事実 (例外 0.12・段 6 済み) を書き足しており、上書きの跡が追えない |
+| D49 | `docs/decisions/0002-architecture-fence.md` | ADR | 2026-10-10 | 5fb8269 (2026-10-11) | — | 5 (0) | 4 | 有効 | stock | A | 残す | ADR。§改訂 に 2026-10-11 の上書きを記録しているが、決定 1・2 の本文そのものを書き換えた (supersede しない判断を明記) |
+| D50 | `docs/architecture/fitness-functions.md` | design | 2026-10-10 | 675a1b5 (2026-10-28) | — | 2 (1) | 23 | 有効 | stock | B | 残す | 日付なし。柵を足すたびに 1 行足す決まり (§足し方) で保守 |
+| D51 | `docs/architecture/overview.md` | design | 2026-10-11 | 782f3d7 (2026-10-11) | — | 1 (0) | 10 | 一部有効 | stock | B | 残す | 日付なしで「保守する文書」と名乗り、§9 更新の手順を持つ。ただし冒頭の対象 9fa690b と §8 は時点の記述 |
+| D52 | `docs/operations/README.md` | index | 2026-10-06 | 4ff7552 (2026-10-06) | — | 1 (1) | 2 | 一部有効 | stock | B | 残す | 日付なしの目次。文書を足し引きするたびに保守する |
+| D53 | `docs/operations/acceptance.md` | ops | 2026-09-27 | 8cdc556 (2026-10-18) | — | 15 (8) | 14 | 有効 | stock | B | 残す | 日付なし。M25 の各票で節を足して保守されている |
+| D54 | `docs/operations/cloudflare-api-token.md` | ops | 2026-09-27 | 38fb78c (2026-10-10) | — | 7 (1) | 1 | 有効 | stock | B | 残す | 日付なしの型。§手元のログイン(記録) だけが flow の注 |
+| D55 | `docs/operations/cloudflare-deploy.md` | ops | 2026-09-27 | 4eda520 (2026-10-11) | — | 10 (1) | 5 | 一部有効 | **flow** | C | 凍結して残す | 名に日付は無いが、中身は 2026-09-27 の初回の配備の記録 (H1〜A12a に済の印)。今の手順は deploy-runbook |
+| D56 | `docs/operations/cloudflare.md` | ops | 2026-10-06 | 4eda520 (2026-10-11) | — | 8 (1) | 9 | 一部有効 | stock | B | 残す | 日付なし。README から移した運用の正本 (2026-10-06) |
+| D57 | `docs/operations/deploy-runbook.md` | ops | 2026-10-05 | 4eda520 (2026-10-11) | — | 20 (3) | 7 | 有効 | stock | B | 残す | 日付なし。今の配備の正本。§1 の 7403 の経緯だけ flow の注 |
+| D58 | `docs/operations/readme-screenshots.md` | ops | 2026-09-26 | d419c0b (2026-09-29) | — | 4 (2) | 1 | 一部有効 | stock | B | 残す | 日付なしの手順 |
+| D59 | `docs/uiux/2026-10-04-title-flow.md` | uiux | 2026-10-04 | 1252497 (2026-10-05) | 1 | 18 (7) | 8 | 一部有効 | flow | C | 凍結して残す | 日付つき。2026-10-04 に承認された設計 |
+| D60 | `docs/uiux/README.md` | index | 2026-10-04 | 1252497 (2026-10-05) | — | 1 (1) | 2 | 有効 | stock | B | 残す | 日付なしのフォルダの目次と図の読み方 |
+| D61 | `docs/review/archive-2026-10-13.md` | review | 2026-10-13 | a39f9a1 (2026-10-13) | — | 0 (0) | 49 | 有効 | **flow** | A | 凍結して残す | 日付つきの一度きりの写し。同じ中身を機械の形で docs/review/archive-2026-10-13.jsonl (228 行) も持つ |
+| D62 | `issues/README.md` | index | 2026-09-19 | ac8aa46 (2026-10-28) | — | 10 (3) | 14 | 一部有効 | stock | B | 残す | 日付なしの規約。ただし §進める順 に日付つきの flow が埋まっている |
 
 ## 3. 文書ごとの詳細
 
@@ -218,6 +218,7 @@
 - 有効: 有効 — 記録としては正しい。燃料の警告の修正は済んでいる。
 - 提案: 凍結して残す
 - 参照・在りか: 設計書 §6 M8-06 (858 行) と M8-06 の票から参照されている
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 
 ### D09 `docs/specs/plans/2026-09-22-m10-playtest.md`
 
@@ -261,6 +262,7 @@
 - 有効: 有効 — 今の no-answer (2063、北の谷 1366、8 年ごと、FAITH_YOUNG_STAGE 3) と合う。
 - 提案: 凍結して残す
 - 参照・在りか: M10R-07 の票から参照されている
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 
 ### D13 `docs/specs/plans/2026-09-23-m10r-08-playtest.md`
 
@@ -269,6 +271,7 @@
 - 有効: 有効 — 今の sky-ship (fuelStock 0、0 年目の鐘樹、SHIP_CUT_PER_YEAR 6、SHIP_NEED 120) と合う。
 - 提案: 凍結して残す
 - 参照・在りか: M10R-08 の票から参照されている
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 
 ### D14 `docs/specs/plans/2026-09-23-m10r-playtest.md`
 
@@ -279,6 +282,7 @@
 - 参照・在りか: LD faith-economy と M10R-05・06 の票から参照されている
 - 正本へ移す・扱いを決める節:
   - §「成立していない点」(UI と同じ手で台本を書く) → 規約は issues/README に移済みか確かめる
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 
 ### D15 `docs/specs/plans/2026-09-23-m21-01-ui-parity-audit.md`
 
@@ -310,9 +314,9 @@
 - 題: 2026-10-18 の計画 (仕上げの残りと、石板へ戻る前の決め)
 - 行数 432、commit 1 回、最終 d072620 2026-10-18 docs(plans): 2026-10-18 の計画 (仕上げの残り 8 票を 1 票 1 節の点検表に。verify-biotope の層
 - 有効: 一部有効 — 開いている票 (M21-03・M22-09・M24-02/03・M26-14・M19-19) の節は今も使える。点検の箱は 145 個すべて未チェックだが、M26-20・M19-03・M21-11 は status: done。
-- 提案: 残す
+- 提案: 凍結して残す
 - 正本へ移す・扱いを決める節:
-  - 票ごとの節は、票が閉じるまで生きている。閉じたら凍結
+  - 票ごとの節は、票が閉じるまで読まれる。凍結しても読むのは妨げない。箱の状態は書き足さず、状態の正本は票 (§4.1 の決まり 2)
 - 食い違い:
   - `docs/specs/plans/2026-10-18-plan.md:325`「Create `docs/design/2026-10-xx-level-design-intercept-2.md`」 ↔ `scripts/check_docs.py (REQUIRED_POINTERS)`: LD は docs/design/2026-10-28-level-design-intercept-2.md としてできていて、decisions-current がそれを supersede している。箱は [ ] のまま
   - `docs/specs/plans/2026-10-18-plan.md:51`「## D1 の書きの予算を性能要件と適用度関数にする (M26-20) (箱はすべて [ ])」 ↔ `issues/M26-20-d1-write-budget-fitness.md`: status: done。scripts/check_d1_writes.py があり、check に入っている
@@ -324,9 +328,8 @@
 - 題: アート発注書 — 2D デザイン画像(3D デザイナー用の下絵)
 - 行数 67、commit 2 回、最終 1c0344f 2026-09-19 tools: Gemini で発注書どおりコンセプト画を生成するスクリプト
 - 有効: 一部有効 — §1 の色は species.json と一致。だが種の名・種の数・プロンプトはコードが先へ進み、絵の正は assets/textures/board/ (観察画面の決定) に移った
-- 提案: 統合して消す
-- 失われる情報: §1 の形の指示とムー的な由来の列、§4 の UI アイコンの一覧、§5 の共通プロンプト
-- その在りか: 形の指示とプロンプトは tools/gen-concept-art.mjs:40-46 の COMMON・ITEMS (英訳済み)、色は assets/data/species.json、由来は docs/design/2026-09-19-scenarios-and-world.md §1.3、今の絵の正は assets/textures/board/README.md。ただし tools/gen-concept-art.mjs:3・:46 のコメントがこの文書を指すので、消すならそのコメントの書き換え (承認制) が要る。それを避けるなら凍結して残す
+- 提案: 凍結して残す
+- 参照・在りか: 凍結にした (レビューの指摘: 消すと tools/gen-concept-art.mjs:3・:46 のコメントの書き換えが要り、承認制)。中身の写しの在りか: 形の指示とプロンプトは tools/gen-concept-art.mjs:40-46 (英訳)、色は assets/data/species.json、由来は scenarios-and-world §1.3、今の絵の正は assets/textures/board/README.md。対象読者「ムー読者の中高生」(art-brief:4) はここにしか無い。docs/uiux/2026-10-04-title-flow.md:168・:210 が題で引く
 - 食い違い:
   - `docs/design/2026-09-19-art-brief.md:15`「| forest | 森(鐘樹) | 植物 | #2E6B37 | 釣鐘型の樹冠 …」 ↔ `assets/data/species.json:23,164`: forest の name は「森」、鐘樹は別の種 belltree (color #3E8E6A) として M8 で足された
   - `docs/design/2026-09-19-art-brief.md:16-18`「deer | 月鹿 / rabbit | 土兎 / wolf | 灰狼」 ↔ `assets/data/species.json:42,67,91`: name は 鹿・ウサギ・狼。種は 8 つ (moss・firelizard・belltree を含む) で、表の 5 つより多い
@@ -354,7 +357,7 @@
 - 行数 244、commit 4 回、最終 5c80fe3 2026-09-22 docs(design): シナリオ設計書 §6 実装後の見直し(空の舟・迎撃の塔・祈りに応えるな の障壁と実装の連動、信仰の経済、直す順番)
 - 有効: 一部有効 — §1 世界観と §3 の 30 本の題・予言・Alive/Dead は未実装 20 本の唯一の仕様として生きている (実装済みは 10 本)。§5 の逆算表は M11〜M19 の plan。§6 (09-22 の見直し) は faith-economy LD に置き換わり、#9 の 3 星は decisions-current の 2 星と食い違う
 - 提案: 凍結して残す
-- 参照・在りか: issues/ の 59 票が plan: で指す (52 票が #5-システムへの逆算、4 票が文書全体、1 票が #b-…、本文 1)。docs/specs/2026-09-19-ecosystem-sim-design.md・docs/design/2026-10-10-architecture-review.md も指す
+- 参照・在りか: issues/ の 59 票が plan: で指す (52 票が #5-システムへの逆算、4 票が文書全体、1 票が #b-…、本文 1)。docs/specs/2026-09-19-ecosystem-sim-design.md・docs/design/2026-10-10-architecture-review.md も指す (内訳は読み手の数え。合計は表の参照の列が正。M9-03・05 の 2 件は無い道を指す切れ)
 - 正本へ移す・扱いを決める節:
   - §3 の 30 本の表 (未実装 20 本の予言・開始・Alive/Dead・障害) → シナリオ一覧の正本 (stock) へ。実装済みの 10 本は assets/data/scenarios.json が正
   - §5 の逆算表 (優先と使うシナリオ) → docs/specs/plans/2026-09-23-roadmap.md か issues/README.md の進める順へ。票の plan: をそこへ向け直す
@@ -446,7 +449,7 @@
 - 行数 103、commit 10 回、最終 18bbff2 2026-09-24 docs: 審査台(M22)への判断を各チケットの残りと決定の文書に写す
 - 有効: 一部有効 — 決定 1〜12 (体験の芯・見るだけ・実時間・絵画的写実・死の描写・忠実さ) と「動物側の世界観を優先」は今も正。後半は試作 1〜3・審査台の判断を 6 回書き足した判断の記録で、対象を空の舟に限る 0a は M19-18 で外れた
 - 提案: 凍結して残す
-- 参照・在りか: issues の M22-00〜M22-11 の 9 票が plan: で指す。auto-memory「衝突したら動物の世界観を優先」も
+- 参照・在りか: issues の M22-00〜M22-11 の 11 票 (親が grep で数え直した)が plan: で指す。auto-memory「衝突したら動物の世界観を優先」も
 - 正本へ移す・扱いを決める節:
   - 決定事項の表 (0b〜12) と申し送り「動物側の世界観を優先」 → 観察画面の今の決め (decisions-current の節か assets/textures/board/README.md) へ
   - 試作・審査台の判断の節 (L45〜96) → 各 M22/M23 票の作業ログに既に写してある (18bbff2)。ここへの書き足しは止める
@@ -602,6 +605,7 @@
 - 提案: 残す
 - 正本へ移す・扱いを決める節:
   - §所感(層 C) はユーザーが書く欄。書かれて M22-09 が done になったら凍結
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 
 ### D38 `docs/design/qa/observe/wolf.md`
 
@@ -748,6 +752,7 @@
 - 行数 77、commit 7 回、最終 675a1b5 2026-10-28 docs: 審査台 decisions-20261020 の承認を適用 (E2E 21→23 の印、test:slow:table の時間、観
 - 有効: 有効 — FF-07 の 261、FF-08 の World.ts 985、FF-09 の boot 218 ほか 11 件は architecture.test.ts:126-140 と一致。FF-18・19 の捨てる順と 7 日 / 30 日は worker/src/policy.ts:7,72-74 と一致。check の中身も package.json の check と合う
 - 提案: 残す
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 - 候補:
   - `docs/architecture/fitness-functions.md (表 2 か 4)`「(足す) check:docs・check:d1-writes の行」 — package.json の check に入っている scripts/check_docs.py (decisions-current の数) と check_d1_writes.py (D1 の書きの 90%) が適応度関数の表に無い。削除でなく追記の候補
 
@@ -781,6 +786,7 @@
 - 行数 154、commit 13 回、最終 8cdc556 2026-10-18 docs(judge): --image の回が no・失敗の票の根拠を出すことを使い方の注と acceptance.md に足す (M26-
 - 有効: 有効 — round の human は TUR-001 だけ (scenarios.jsonl の active な human は TUR-001 と deploy の OPS-001・002)、judge の llm は OBS-002・SEL-003・CNF-002、LENSES は legible だけ、閾値 0.2 / 0.02 / 0.12、judge の既定 sonnet (scripts/judge.py:65)。どれもコードと一致
 - 提案: 残す
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 - 候補:
   - `docs/operations/acceptance.md:64-82 (LLM の採点)`「(足す) docs/acceptance/crops.json の説明」 — M26-11 の切り抜き (scripts/judge.py:26,68) を judge が読むが、この文書に無い。削除でなく追記の候補
 
@@ -798,9 +804,8 @@
 - 題: Cloudflare への配備の手順(人の作業と AI の作業)
 - 行数 104、commit 13 回、最終 4eda520 2026-10-11 docs(operations): 手元の wrangler は pnpm run cf で打つ (M26-12)
 - 有効: 一部有効 — 大半の行が「済 2026-09-27」の初回の記録で、10 行目で自分から deploy-runbook.md に譲っている。§8 配ったあとの確かめ (ログ・D1 の行・Observability) と §3 の「初回は secret put で置けない」注は今も生きていて、deploy-runbook.md:151 が §8 を引く
-- 提案: 統合して消す
-- 失われる情報: 初回の配備の記録 (各 ID の確定日、--secrets-file による初回の配り方 A12a、7403 に至った経緯)、§8 の確かめ (A14 tail・A15 D1 の行・H10 Observability)、§9 の片づけ (mod.py)
-- その在りか: ID と値は deploy-runbook.md §0 と wrangler.jsonc、7403 の経緯は deploy-runbook.md §1、片づけは cloudflare.md §運用、rollback は deploy-runbook.md §6、残りは git 履歴。§8 の A14・A15・H10 と §3 の初回の secret の注は移し先が要る
+- 提案: 凍結して残す
+- 参照・在りか: 凍結にした (レビューの指摘)。消すと承認制の参照が 3 つ切れる: docs/acceptance/scenarios.jsonl:2 (OPS の background が §8 を指す)・scripts/cf_auth.py:205 のコメント (H3)・wrangler.jsonc:23 のコメント (A2)。deploy-runbook.md:10・:23 も番号 (H3・H6・H7・A7〜A9) をこの文書に頼る。§8 と §3 の注は runbook へ写し (M8a)、この文書は初回の配備の記録として凍結する
 - 正本へ移す・扱いを決める節:
   - §8 配ったあとの確かめ (A13〜H10) → deploy-runbook.md §5 へ (§5 が「ほかの確かめは cloudflare-deploy.md の 8」と引いている)
   - §3 末尾の「初回は secret put では置けない … --secrets-file」→ deploy-runbook.md に「作り直すとき」の節として
@@ -808,7 +813,7 @@
 - 食い違い:
   - `docs/operations/cloudflare-deploy.md:76`「feat/m19 を push し、PR を作る。CI(check と E2E)が pnpm で通ることを確かめる」 ↔ `.github/workflows/deploy.yml:18`: 配備は main だけ (if: github.ref == 'refs/heads/main')。手順 6 の feat/m19 → main は一度きりの段取りで、今の配備の手順 (deploy-runbook §2.2) には無い
 - 候補:
-  - `docs/operations/cloudflare-deploy.md (全体)`「ファイルごと」 — §8・§3 の生きた節を deploy-runbook.md へ移した後に消す。記録として残したいなら名を 2026-09-27-cloudflare-first-deploy.md にして凍結する案もある
+  - `docs/operations/README.md:15`「| [cloudflare-deploy.md](cloudflare-deploy.md) | 配備の手順(人の作業と AI の作業) |」 — 説明を「初回の配備 (2026-09-27) の記録。今の手順は deploy-runbook.md」に直す候補
 
 ### D56 `docs/operations/cloudflare.md`
 
@@ -830,8 +835,9 @@
 - 行数 181、commit 9 回、最終 4eda520 2026-10-11 docs(operations): 手元の wrangler は pnpm run cf で打つ (M26-12)
 - 有効: 有効 — 主の道の順 (check → site key → build → check:free-tier → d1 migrations → deploy) は .github/workflows/deploy.yml:36-55 と一致。pnpm run deploy・cf・cf:auth は package.json にある
 - 提案: 残す
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 - 候補:
-  - `docs/operations/deploy-runbook.md:151`「ほかの確かめ(ログ・D1 の行・Observability)は cloudflare-deploy.md の 8。」 — cloudflare-deploy.md を統合して消すなら、§8 の中身をここへ写してこの行を置き換える
+  - `docs/operations/deploy-runbook.md:151`「ほかの確かめ(ログ・D1 の行・Observability)は cloudflare-deploy.md の 8。」 — §8 の中身をここへ写す回 (M13) で、この行を写した節への参照に置き換える (cloudflare-deploy は凍結して残る)
 
 ### D58 `docs/operations/readme-screenshots.md`
 
@@ -864,6 +870,7 @@
 - 行数 40、commit 3 回、最終 1252497 2026-10-05 docs(uiux): M24-01 の後で古くなった文 5 つを直す (session.ts:9、title-flow の状態・storag
 - 有効: 有効 — wireframes/*.svg と make_wireframes.py は実在。bootRouteOf は src/app/place.ts:204
 - 提案: 残す
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 
 ### D61 `docs/review/archive-2026-10-13.md`
 
@@ -871,6 +878,7 @@
 - 行数 3324、commit 1 回、最終 a39f9a1 2026-10-13 docs(review): 審査台の確定分を文字の記録に移す
 - 有効: 有効 — 2026-10-02〜10-13 の審査台の判定 (items 112・板 C 17・板 D 25・票の審査 22+52) を文字に写したもの。判定の記録としては正で、どこからも参照されない
 - 提案: 凍結して残す
+- 食い違い: 無し (読み手が突き合わせて見つからなかった)
 - 候補:
   - `docs/review/archive-2026-10-13.md (全体)`「ファイルごと」 — 消すなら失うのは人が読む形だけ (中身は .jsonl と git 履歴 a39f9a1 にある)。3,324 行で参照ゼロだが、ユーザーの判定の原文なので凍結を推す
 
@@ -907,7 +915,7 @@ B のどの文書に何を置くか:
 - **overview (構造)**: 09-19 の設計書の §3 用語・§4 冒頭の依存の向き・§4.1 の World の契約 (dispatch が validate の結果を返すことを足して)・§4.2 LogSink・§4.4 Runner の契約・§8 リスク。09-26 の「版は 3 つ」の段落 (ADR 0002 の決定と合わせて)。観察画面の舟の GLB の約束 (`src/observe/render/ship.ts:7` が引く)。§8 の時点の表は票へのポインタ 1 行に縮める。
 - **ADR (理由)**: 新しく起こすのは、決めの理由が LD にしか無く、しかも後から覆りうるものだけ。§4.7〜4.31 の 25 節を ADR に割ることはしない (理由の多くは LD と定数の脇のコメントにある)。ADR には節「改訂」を必須にする (0001 には無い)。
 - **operations (手順)**: 配備は `deploy-runbook.md` 1 本を正本にし、`cloudflare-deploy.md` の §8 (配ったあとの確かめ) と §3 の初回の secret の注を移す。`cloudflare.md` の §配備 1〜9 は runbook へのポインタにする (トークンの型の食い違いもここで消える)。受入の行の決まり (acceptance-redesign §2.1) と `crops.json` は `acceptance.md` へ。
-- **シナリオ一覧**: scenarios-and-world §3 の 30 本の表は、未実装 20 本の唯一の仕様。今は 09-19 の flow の中にある。B に「シナリオ一覧」を起こすか、凍結のまま「未実装の石板の仕様はここ」と目録に書くかは CEO の判断 (§4.3 の M7)。
+- **シナリオ一覧**: scenarios-and-world §3 の 30 本の表は、未実装 20 本の唯一の仕様。今は 09-19 の flow の中にある。B に「シナリオ一覧」を起こすか、凍結のまま「未実装の石板の仕様はここ」と目録に書くかは CEO の判断 (§4.3 の M12)。
 
 運用の決まり (新しく足す):
 
@@ -917,80 +925,130 @@ B のどの文書に何を置くか:
 
 ### 4.2 凍結の仕方
 
-- **目録で持つ (推す)**: `docs/README.md` を起こし、全文書を 1 行ずつ「path・箱 (A / B / C)・凍結した日・今の正本へのポインタ」で並べる。凍結は目録の 1 行で済み、文書の本文には触らない。承認は目録 1 本 (フォルダごとに分けても 6 回)。
-- **頭にポインタの行を足す**: brief の案。決まりは今と同じ (`superseded-by` の行。形は `scripts/check_docs.py` の docstring)。足すのは、生きた中身を B へ移した文書と、今の値と読み違えやすい文書だけにする (09-19 の設計書・LD 5 本・09-26・scenarios-and-world・観察画面の 2 本・qa/observe の 4 本の冒頭の実測の表。約 12〜15 本)。全部 (49 本) に足すと 49 回の承認になる。
-- 凍結した後の書き換えは柵 (§4.4 の F1) が落とす。
+凍結は 2 つで示す。どちらも本文には触らない。
+
+1. **目録** (`docs/README.md`、新しく起こす): 全文書を 1 行ずつ「path・箱 (A / B / C)・凍結した日・今の正本・本文のハッシュ」で並べる。全体を見渡す人と柵のため。この文書 (`docs/review/2026-10-28-spec-inventory.md`) 自身も C に入れ、CEO がこの計画を判じた日で凍結する。
+2. **頭の 1 行**: 凍結した文書の題の直下に、決まった形の行を足す。コードのコメントや票の `plan:` から直に来た人が気づけるように。目録だけだとこの道で気づけない (CEO の「後で追ったら有効か分からない」はこの道で起きる)。形は次の 2 つに限る (柵がこの形の外を落とす)。
+   - `> 凍結: YYYY-MM-DD。今の正本: <path>#<anchor>` (今を指す先がある文書)
+   - `> 凍結: YYYY-MM-DD。失効: <理由 1 句>` (今を指す先が無い文書。qa/ の旧模型など)
+   - 今の決まりの `superseded-by` の行 (節ごとのポインタ) はそのまま使える。§3 の候補のうち「節の直下に注を 1 行足す」もの (D33〜D36・D38・D39〜D47・D48 の注) は、この頭の行に寄せる。
+
+比べ (公平に):
+
+| | 目録だけ | 頭の 1 行だけ (10-18 の決まりの延長) | 両方 (推す) |
+|---|---|---|---|
+| 承認 | 目録 1 本 | 群ごと (6 回、中で 1 本ずつ外せる) | 目録 1 回 + 群ごと 6 回 |
+| 直に来た人が気づく | 気づかない | 気づく | 気づく |
+| 見渡し・柵 | できる | 文書を全部読む必要 | できる |
+| 10-18 の決まり (decisions-current:15「ポインタの行を足す」、承認済み) との関係 | 外れる (足さないので) | そのまま | そのまま。目録は足すだけ |
 
 ### 4.3 承認の単位
 
-CEO が審査台で 1 件ずつ押せる単位。計 25 回 (段 0 が 4、段 1 が 10、段 2 が 6、段 3 が 4、段 4 が 1)。各回は 1 commit。番号の順に進める (前の段が済まないと後ろの段の柵が働かない)。
+1 回に 1 つの変更。各回は 1 commit。凍結 (段 3) は群ごとに 1 票にし、審査台では中の文書を 1 本ずつ外せる形で出す。番号の順に進める。
 
-**段 0 — 柵を先に (文書は変えない。scripts と package.json だけ)**
-
-| # | 何を | 変えるもの | 消える文 |
-|---|---|---|---|
-| F1 | 凍結した文書 (目録で C) の本文の書き換えを落とす | `scripts/check_docs.py`・試験 | 無し |
-| F2 | 目録に無い文書・目録の箱と食い違う文書を落とす | 同上 | 無し |
-| F3 | decisions-current の印の無い数に印を足す (通し実行の件数 `slow_cases` を先に。数え方は vitest list か、試験の題の数) | 同上・decisions-current に印 | 無し (印は追記) |
-| F4 | 票の `plan:` の path とアンカーの切れを落とす (今 3 件切れている) | 同上 | 無し |
-
-**段 1 — 正本へ移す (B に足すだけ。C は触らない)**
-
-| # | 何を | 移し元 → 移し先 |
-|---|---|---|
-| M1 | シナリオごとの決め (祈りに応えるな・空の舟) と check の印 | faith-economy §8.9〜§9.5 → decisions-current |
-| M2 | 塔の重さ・霊脈枯れ・回避装置の門 (星の門 12・0.8、気象塔) と印 | tower §8・faith §8〜§9・devices §3.1・§8.1 → decisions-current |
-| M3 | 石板の順・公開の方針・シナリオの判定の決め | roadmap §7・M20 計画の表・09-19 §4.10・§4.12・§4.24 → decisions-current |
-| M4 | World の契約・LogSink・Runner・用語・リスク | 09-19 §3・§4.1・§4.2・§4.4・§8 → overview |
-| M5 | 版 3 つの段落 (check_docs の VERSION_DOC も向け直す) | 09-26 §1.3 の後 → overview か ADR 0002 |
-| M6 | 舟の GLB の約束 (`src/observe/render/ship.ts:7` のコメントの向け直しは承認制。この回で一緒に示す) | qa/observe/keyitems.md → overview §7 |
-| M7 | 未実装 20 本の石板の仕様をどこに置くか (B に起こす / 凍結のまま目録で指す) | scenarios-and-world §3 |
-| M8 | 配備の手順を runbook 1 本へ (cloudflare.md:57-67 の削除を含む) | cloudflare-deploy §8・§3 → deploy-runbook |
-| M9 | 受入の行の決まりと crops.json | acceptance-redesign §2.1 → operations/acceptance.md |
-| M10 | decisions-current 自身の直し (:51 の文、迎撃の節の頭に実装の状態、caffeinate の段落を operations へ) | decisions-current |
-
-**段 2 — 凍結 (目録に C と書く。ポインタの行は §4.2 の 12〜15 本だけ)**
-
-| # | 対象 |
-|---|---|
-| Z1 | `docs/specs/` (09-19 の設計書と plans/ の 15 本。2026-10-18 の計画は票が閉じるまで B) |
-| Z2 | `docs/design/` の LD 6 本 (intercept-2 は M21-03 が done になってから) |
-| Z3 | `docs/design/` のほか 9 本 (企画書・art-brief・観察画面 2 本・observe-perf・09-26・save-url・acceptance-redesign・architecture-review) |
-| Z4 | `docs/design/qa/` 直下の 8 本 (旧模型。M22 で失効。handoff-T18 は X2) |
-| Z5 | `docs/design/qa/observe/` の 6 本 (session-2026-10 は M22-09 が done になってから) |
-| Z6 | `docs/uiux/2026-10-04-title-flow.md`・`docs/review/archive-2026-10-13.md` |
-
-**段 3 — 消す・統合して消す (1 本ずつ)**
-
-| # | 対象 | 条件 |
-|---|---|---|
-| X1 | `docs/specs/plans/2026-09-23-handoff.md` | 参照 0。中身は roadmap・memory・CLAUDE.md にある |
-| X2 | `docs/design/qa/handoff-T18-merge.md` | ART-01 の票と git 履歴にある。参照の 3 件は票と qa の一覧 (消しても読める形を確かめる) |
-| X3 | `docs/operations/cloudflare-deploy.md` | M8 の後。被参照 10 件の向け直しを同じ回に示す |
-| X4 | `docs/design/2026-09-19-art-brief.md` | `tools/gen-concept-art.mjs:3`・`:46` のコメントが指す。コメントの書き換えが要るので、**凍結に留めるのを推す** (この回は「消さない」の確認) |
-
-**段 4 — 決まりを書く**
+**段 0 — 目録を起こす (新しいファイル 1 本だけ。既存の文書は変えない)**
 
 | # | 何を |
 |---|---|
-| R1 | §4.1 の「運用の決まり」3 つと箱の定義を decisions-current の頭の「更新の約束」に足し、ADR に節「改訂」を必須にする (0001 に節を足す) |
+| I1 | `docs/README.md` を起こす。全文書の行 (path・箱・凍結の日は空・今の正本・ハッシュは空)。箱は §2 の表の列のとおり |
+
+**段 1 — 柵 (scripts と試験だけ。文書は変えない)**
+
+| # | 何を | 初日に落ちないための手当て |
+|---|---|---|
+| F2 | 目録に無い文書・目録にあって無い文書・名に日付があるのに箱が B (例外は decisions-current だけ名指し) を落とす | I1 の後なので通る |
+| F1 | 目録で凍結の日がある文書について、本文のハッシュ (頭の決まった形の行を除いた残り) が目録の値と違えば落とす。頭の行の形の外の行も落とす | 凍結の日がまだ空なので、何も検めない (段 3 で 1 本ずつ効き始める) |
+| F4 | 票の `plan:` の path とアンカーの切れを落とす (`plan: null` は許す。ART-01 の `git show` の形は許す) | 今の切れ 10 件は、直す回 P1 が済むまで警告にとどめる |
+
+**段 2 — 正本へ移す (B に足すだけ。C は触らない)**
+
+| # | 何を | 移し元 → 移し先 |
+|---|---|---|
+| M1 | 祈りに応えるなの決め (2063・北の谷 1366・8 年ごと・若い信仰の記憶) と印 | faith-economy §8.9〜§8.10・§9.5 → decisions-current |
+| M2 | 空の舟の決め (鐘樹 0.0025 / 0.0005 / 0・舟 6/年・民の林・舟か塔か) と印 | faith-economy §9.3〜§9.4 → decisions-current |
+| M3 | 塔の重さの決め (燃料・火口・予算) と印 | tower §8 → decisions-current |
+| M4 | 霊脈枯れと文明の発生の決め | faith §8〜§9 → decisions-current |
+| M5 | 回避装置の門 (星の門 12・0.8、気象塔) と印 | devices §3.1・§8.1 → decisions-current |
+| M6 | 石板の順 | roadmap §7 → decisions-current |
+| M7 | 公開の方針 (MIT・karak97・LFS) | M20 計画の表 → decisions-current |
+| M8 | シナリオの判定の決め (dead は省略できる・星の力はシナリオ層・species_mean・escape → dead → alive) | 09-19 §4.10・§4.12・§4.24 → decisions-current |
+| M9 | World の契約・LogSink・Runner・用語・リスク | 09-19 §3・§4.1・§4.2・§4.4・§8 → overview |
+| M10 | 版 3 つの段落 (check_docs の VERSION_DOC も向け直す) | 09-26 §1.3 の後 → overview か ADR 0002 |
+| M11 | 舟の GLB の約束 | qa/observe/keyitems.md → overview §7 |
+| M11c | `src/observe/render/ship.ts:7` のコメントを M11 の移し先へ向け直す (既存コメントの書き換え。原文と理由はその回に示す) | — |
+| M12 | 未実装 20 本の石板の仕様をどこに置くか (B に起こす / 凍結のまま目録で指す) | scenarios-and-world §3 |
+| M13 | 配ったあとの確かめ (§8) と初回の secret の注 (§3) を写す | cloudflare-deploy → deploy-runbook |
+| M13d | `docs/operations/cloudflare.md:57-67` (初回の配備 1〜9) を runbook への 1 行にする (既存の文の削除) | — |
+| M14 | 受入の行の決まりと crops.json | acceptance-redesign §2.1 → operations/acceptance.md |
+| M15 | decisions-current :51 の文を直す (表の 3,000・500 と合わせる) | decisions-current |
+| M16 | 迎撃の塔の節の頭に「実装: M21-03 (todo)。コードは 3 星・150 年」 | decisions-current |
+| M17 | 通し実行の件数に印 `slow_cases` を足す。数は Python で数えられない (試験がループで展開される) ので、`vitest list --json` を読む小さな node のスクリプトで数え、check_docs の FACTS に渡す | decisions-current・scripts |
+| M18 | caffeinate・pmset の段落を operations へ移す | decisions-current → operations |
+| P1 | 票の `plan:` の切れ 10 件を直す (既存の行の書き換え。票ごとの原文と直しをその回に示す)。済んだら F4 を警告から落とす柵へ | issues/ |
+
+**段 3 — 凍結 (目録に凍結の日とハッシュ、頭に 1 行)**
+
+| # | 対象 |
+|---|---|
+| Z1 | `docs/specs/`: 09-19 の設計書と plans/ の 14 本 (handoff は X1) |
+| Z2 | `docs/design/` の LD 4 本 (tower・faith・devices・faith-economy)。intercept-2 は M21-03 が done になってから |
+| Z3 | `docs/design/` のほか 10 本 (企画書・art-brief・scenarios-and-world・観察画面 2 本・observe-perf・09-26・save-url・acceptance-redesign・architecture-review) |
+| Z4 | `docs/design/qa/` 直下の 8 本 (旧模型。M22 で失効。handoff-T18 は X2) |
+| Z5 | `docs/design/qa/observe/` の 5 本 (session-2026-10 は M22-09 で所感が書かれてから) |
+| Z6 | `docs/uiux/2026-10-04-title-flow.md`・`docs/operations/cloudflare-deploy.md`・この文書 |
+
+凍結を待つ文書 (C (未凍結)) の基準は「これから書き足す予定があるか」。票が開いていても、読まれるだけで書き足さない文書は凍結してよい (凍結は書き足しを止めるだけで、読むのは妨げない)。intercept-2 (M21-03 の実装で行列を使う) と session-2026-10 (所感の欄が空) だけが待つ。
+
+**段 4 — 消す (1 本ずつ)**
+
+| # | 対象 | 条件 |
+|---|---|---|
+| X1 | `docs/specs/plans/2026-09-23-handoff.md` | 参照 0。中身は roadmap・auto-memory・CLAUDE.md にある |
+| X2 | `docs/design/qa/handoff-T18-merge.md` | ART-01 の票 (`git show` の旧版を指す) と git 履歴にある。ほかの参照 2 件 (qa の一覧) は凍結した文書の中なので書き換えない |
+
+**段 5 — 決まりを書く**
+
+| # | 何を |
+|---|---|
+| R1 | §4.1 の箱の定義と「運用の決まり」3 つを decisions-current の「更新の約束」に足す |
+| R2 | ADR に節「改訂」を必須にし、0001 に節を足す (本文は書き換えない) |
+
+計 33 回 (段 0: 1、段 1: 3、段 2: 21、段 3: 6、段 4: 2、段 5: 2)。段 2 の中は順不同で、CEO が要らないと判じた回は飛ばせる。
 
 ### 4.4 機械の柵 (check_docs の拡張案)
 
-| 柵 | 何を落とす | 作り | 走らせる所 |
-|---|---|---|---|
-| F1 凍結の書き換え | 目録で C の文書について、基点 (`git merge-base HEAD main`、無ければ feat/m19) との差分に、ポインタの行の追加の外の行 (追加・削除・変更) があれば落とす。コミットのメッセージに「ユーザーの承認 YYYY-MM-DD」と対象の path があれば通す | `check_docs.py --since <ref>`。git diff の -U0 を読む純粋な関数 (差分 → 違反) を試験で固定 | `pnpm run check`・CI・`.githooks/pre-push` |
-| F2 目録 | `docs/**/*.md`・`*.html` で目録に無いもの、目録にあって無いもの、名に日付があるのに箱が B (例外は名指しの表で) | 目録の表を読む | `pnpm run check` |
-| F3 印の無い数 | decisions-current の表の中の数のうち、印の無いものを警告 (落とさない)。`slow_cases` を REQUIRED_CHECKS に | FACTS を足す | `pnpm run check` |
-| F4 票の `plan:` | `issues/**/*.md` の `plan:` の path が無い・アンカーが見出しに無い | 既存の anchors_of を使う | `pnpm run check` |
-| (任意) F5 状態の二重持ち | B の文書に `status: review` のような票の状態や `- [ ]` が増えたら警告 | 文字の検索 | `pnpm run check` |
+今の `scripts/check_docs.py` は、ファイルの中身だけを読む純粋な検査 (load_repo → check_files) で、git も commit のメッセージも読まない。CI (`.github/workflows/ci.yml`・`deploy.yml`) の checkout は fetch-depth 1 で、基点との差分は取れない。柵はこの作りに乗せる。
 
-F1 は日付つきでない C (qa/ の作業ログ・cloudflare-deploy) も目録で拾うので、名に日付が無い一度きりの記録も守れる。
+| 柵 | 何を落とす | 作り | 走る所 |
+|---|---|---|---|
+| F2 目録 | `docs/**/*.md`・`*.html` で目録に無いもの、目録にあって無いもの、名に日付があるのに箱が B | 目録の表を読む関数。load_repo を `*.html` まで広げる | `pnpm run check` (CI と配備の前も) |
+| F1 凍結の書き換え | 凍結の日がある文書の本文 (頭の決まった形の行を除く) の sha256 が目録の値と違う。頭に決まった形の外の行がある | 本文 → ハッシュの純粋な関数。試験で固定 | 同上 |
+| F4 票の `plan:` | `issues/**/*.md` の `plan:` の path が無い・アンカーが見出しに無い | 既存の anchors_of を使う。load_repo を issues/ まで広げる | 同上 (P1 までは警告) |
+| (任意) F5 状態の二重持ち | B の文書に票の状態 (`status: review` など) や `- [ ]` が増えたら警告 | 文字の検索 | 同上 |
+
+F1 の限界: 柵は書き換えを見つけるだけで、許すかは決めない。目録のハッシュを書き換えれば通るので、凍結を解くことは目録の差分として見える (B の文書の 1 行の変更で、レビューと審査台に出る)。agent が自分でハッシュを直すことは止められない。止めるのは「既存の文の書き換えは承認制」の決まりと、目録の差分を審査台で見ること。
+
+F1 は名に日付の無い C (qa/ の作業ログ・cloudflare-deploy) も目録で拾うので、名に日付が無い一度きりの記録も守れる。日でなく本文で比べるので、同じ日の書き換え (intercept-2 の b3cf33e のような) も、凍結の後なら落ちる。
 
 ## 5. 確かめていないこと・限界
 
-- 通し実行の件数: decisions-current は 49 (47 + 2)、2026-09-23 のロードマップ §8 は 34 + 2。`tests/slow/scenarios.playthrough.test.ts` はループで試験を展開するため、この worktree (node_modules 無し) では vitest list で数を確かめていない。F3 で印を足すときに数える。
+- 通し実行の件数: decisions-current は 49 (47 + 2)、2026-09-23 のロードマップ §8 は 34 + 2。`tests/slow/scenarios.playthrough.test.ts` はループで試験を展開するため、この worktree (node_modules 無し) では vitest list で数を確かめていない。M17 で印を足すときに数える。
 - 被参照の数は path の文字の一致で数えた。文の中で題だけを書いた参照 (「09-19 の設計書」) は数えていない。票の `plan:` は数えている。
 - 「有効」の判定は読み手 3 つ (opus) の読みと、親の抜き取り (§冒頭の 3) による。長い作業ログ (qa/observe の 500〜650 行、M1 の計画 1,172 行、審査台の記録 3,324 行) は流し読みで判定した。
 - 09-21 より前の SHA (09-19 の設計書 §6 の 11 個) は M20-02 の履歴の書き換えで今の履歴に無い。たどるには `issues/archived/M20-02-history-rewrite.md` の bundle が要る。凍結の判断は変わらない。
 - 担当の外で気づいたこと: M24-02・M24-03 は status: todo だが E2E は入っていて、decisions-current の改訂の表がそれを数えている。票の状態と実装のずれは §4.1 の決まり 2 で扱う。
+
+## 6. レビューの反映
+
+読むだけの別モデルのレビュアー (opus) に 1 周見せた (fede318 に対して)。§3 の食い違いは 25 件ほどの抜き取りでほぼ正しく、誤りは参照と在りかの側にあった。直したこと:
+
+- 票の `plan:` の切れを 3 → 10 に数え直した (check_docs の anchors_of で検めた)。`plan: null` 15 票と ART-01 の形を書いた。
+- cloudflare-deploy (D55) を「統合して消す」から「凍結して残す」へ。消すと scenarios.jsonl:2・scripts/cf_auth.py:205・wrangler.jsonc:23 の承認制の参照が切れる。art-brief (D18) も表を計画に合わせて凍結へ。対象読者の行と、題で引く参照を在りかに足した。
+- 目録を起こす回 (I1) を段 0 に置き、柵はその後にした。F1 を git の差分から目録のハッシュへ替えた (check_docs の作りと CI の fetch-depth 1 に乗る)。F1 の限界を書いた。
+- 頭に足す行の形を 2 つに決め、§3 の「節の直下に注」の候補はそこへ寄せると書いた。
+- 目録とポインタの比べを表にし、目録だけでは直に来た人が気づけないこと、10-18 の決まりとの関係を書いた。推しを「両方」に改めた。
+- 承認を 1 回に 1 つの変更に割った (移し元ごと、移すことと削除・コメントの書き換えを別の回に)。F3 (通し実行の件数の印) は文書を変えるので段 2 の M17 へ移し、node で数える手当てを書いた。
+- 凍結を待つ基準を「書き足す予定があるか」に揃えた (2026-10-18 の計画は凍結へ、intercept-2 と session-2026-10 だけ待つ)。表に箱 (A / B / C) と出ていく参照の数の列を足し、食い違いの無い文書に「無し」と書いた。
+- Z の数 (LD は 5 本、scenarios-and-world の置き場、handoff の二重数え) と、commit の数え方を直した。
+
+直していないこと: 被参照の数は path の文字の一致のまま (§5)。D20 の内訳の数え違いは読み手の数えとして注を付けた。
