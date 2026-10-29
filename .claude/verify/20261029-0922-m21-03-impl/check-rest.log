@@ -1,4 +1,15 @@
 
+> biotope-island@1.0.0 lint:py /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> uvx ruff@0.16.9 check scripts tools/acceptance-probe && uvx ruff@0.16.9 format --check scripts tools/acceptance-probe
+
+All checks passed!
+31 files already formatted
+
+> biotope-island@1.0.0 check:readme /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> uv run scripts/check_readme.py
+
+README の柵: 違反なし (警告 0 件)
+
 > biotope-island@1.0.0 check:d1-writes /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
 > uv run scripts/check_d1_writes.py
 
@@ -29,9 +40,9 @@ Cron: harbor_stats       1      2       2
 
 
  Test Files  147 passed (147)
-      Tests  1518 passed (1518)
-   Start at  09:50:08
-   Duration  117.33s (tests 87%, import 12%, transform 1%)
+      Tests  1519 passed (1519)
+   Start at  10:02:19
+   Duration  112.53s (tests 87%, import 11%, transform 1%)
 
 
 > biotope-island@1.0.0 test:worker /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
@@ -65,30 +76,18 @@ Using secrets defined in process.env
 
 
 exception = kj/async-io.c++:766: disconnected: read end of pipe was aborted
-stack: 1032e833f
+stack: 103c2033f
 
  Test Files  5 passed (5)
       Tests  67 passed (67)
-   Start at  09:52:07
-   Duration  7.35s (transform 305ms, setup 596ms, import 98ms, tests 308ms, environment 0ms)
+   Start at  10:04:13
+   Duration  1.28s (transform 302ms, setup 557ms, import 122ms, tests 331ms, environment 0ms)
 
 
 > biotope-island@1.0.0 test:scripts /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
 > uv run --no-project python -m unittest discover -s scripts
 
-.......................................................................................................F.................F..........................................................................................................................................................................................................................................................................................................................
-======================================================================
-FAIL: test_todays_code (test_check_docs.FactTest.test_todays_code)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6/scripts/test_check_docs.py", line 168, in test_todays_code
-    self.assertEqual(facts["command_types"], "9")
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: '10' != '9'
-- 10
-+ 9
-
-
+.........................................................................................................................F..........................................................................................................................................................................................................................................................................................................................
 ======================================================================
 FAIL: test_todays_docs_pass (test_check_docs.RepoTest.test_todays_docs_pass)
 ----------------------------------------------------------------------
@@ -107,9 +106,9 @@ First extra element 0:
 -  '10。決定を変えたなら文書の行と「改訂」を書き直す']
 
 ----------------------------------------------------------------------
-Ran 436 tests in 18.839s
+Ran 436 tests in 19.524s
 
-FAILED (failures=2)
+FAILED (failures=1)
 usage: python -m unittest [-h] [--apply ROUND] [--verdicts VERDICTS]
                           [--round PREFIX]
 

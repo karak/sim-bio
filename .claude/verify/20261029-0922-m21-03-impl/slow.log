@@ -34,16 +34,16 @@
  ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: edict without faith → dead
  ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: answer then stop (想定解 1) → alive
  ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: ritual then stop (想定解 2) → alive
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > idle → dead (信仰が減衰して塔で止まり、一つ目の星が落ちる) 33136ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > answer-only (儀式なし、祈りにだけ応える) → dead (信仰が 77 年目に工事の門 0.6 を割り、二つ目の窓で備蓄が積めず 105 年目の星が落ちる) 57741ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive ritual without edict (儀式を最初から、止めよ無し) → dead (窓の外でも掘り続けて脈が尽き、二つ目の窓で備蓄が積めず 105 年目の星が落ちる) 59080ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive ritual + answer without edict (儀式と応え、止めよ無し) → dead (応えは脈を戻さない。窓の外で掘り尽くし、105 年目の星が落ちる) 57620ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > old solution 1: ritual + stop at three loads (儀式を最初から、備蓄 9 で止めよ) → dead (備蓄は窓ごとに 4.3 までしか積めず止めよが出ないまま脈が尽き、105 年目の星が落ちる) 58213ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > old solution 2: ritual + stop at two loads (備蓄 6 で止めよ) → dead (備蓄 6 にも届かず止めよが出ないまま脈が尽き、105 年目の星が落ちる) 57247ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (星に届くのは 36 年目。備蓄 9 に届かず止めよが出ないまま窓の外で掘り続けて脈が 93 年目に尽き、105 年目の星が落ちる) 57884ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive stop only (儀式 + 星に届いたら止めよ、再開しない) → dead (窓で工事が動かず、60 年目の星が落ちる) 33200ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > solution 1: ritual + window rhythm (儀式 + 星に届いたら止めよ + 星が見えたら再開せよ + 砕いたら止めよ) → alive (58・102 年目に砕く) 59329ms
- ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > solution 2: ritual + answer + window rhythm after the first (儀式 + 応え + 星が見えたら再開せよ + 一度目を砕いた後だけ止めよ) → alive 59294ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > idle → dead (信仰が減衰して塔で止まり、一つ目の星が落ちる) 32521ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > answer-only (儀式なし、祈りにだけ応える) → dead (信仰が 77 年目に工事の門 0.6 を割り、二つ目の窓で備蓄が積めず 105 年目の星が落ちる) 56380ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive ritual without edict (儀式を最初から、止めよ無し) → dead (窓の外でも掘り続けて脈が尽き、二つ目の窓で備蓄が積めず 105 年目の星が落ちる) 58130ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive ritual + answer without edict (儀式と応え、止めよ無し) → dead (応えは脈を戻さない。窓の外で掘り尽くし、105 年目の星が落ちる) 56193ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > old solution 1: ritual + stop at three loads (儀式を最初から、備蓄 9 で止めよ) → dead (備蓄は窓ごとに 4.3 までしか積めず止めよが出ないまま脈が尽き、105 年目の星が落ちる) 56182ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > old solution 2: ritual + stop at two loads (備蓄 6 で止めよ) → dead (備蓄 6 にも届かず止めよが出ないまま脈が尽き、105 年目の星が落ちる) 56302ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (星に届くのは 36 年目。備蓄 9 に届かず止めよが出ないまま窓の外で掘り続けて脈が 93 年目に尽き、105 年目の星が落ちる) 60172ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive stop only (儀式 + 星に届いたら止めよ、再開しない) → dead (窓で工事が動かず、60 年目の星が落ちる) 33857ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > solution 1: ritual + window rhythm (儀式 + 星に届いたら止めよ + 星が見えたら再開せよ + 砕いたら止めよ) → alive (58・102 年目に砕く) 59668ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > solution 2: ritual + answer + window rhythm after the first (儀式 + 応え + 星が見えたら再開せよ + 一度目を砕いた後だけ止めよ) → alive 58409ms
  ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > idle → dead (林だけでは塔は立つが舟が無く、沈む)
  ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > 林だけ (植えずに 10 年目に着工) → dead (0 年目の民の林だけでは持続収量が足りず、着工しても帆が落ちる)
  ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > naive 薄い植え足し (2 年に 1 本、20 年目に着工) → dead (進み 111 で林が尽きて帆が落ちる)
@@ -55,7 +55,7 @@
 
  Test Files  1 passed (1)
       Tests  10 passed | 41 skipped (51)
-   Start at  09:40:25
-   Duration  532.93s (tests 100%)
+   Start at  10:04:39
+   Duration  528.12s (tests 100%)
 
-exit 0 wall 533s
+exit 0 wall 529s
