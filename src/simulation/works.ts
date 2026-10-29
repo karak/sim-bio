@@ -46,7 +46,10 @@ export function stepWorks(
   const mined = Math.max(0, Math.min(WORKS_RATE, total));
   // 残量に比例して取り除く (気象塔の takeCrystal と同じ。M10 レビューで一本化)
   if (mined > 0) takeCrystal(pool, crystal, mined);
-  return { civ: { ...civ, works: { stock: works.stock + mined, stopped: false } }, mined };
+  // 見える星 (M21-03 K1、LD docs/design/2026-10-28-level-design-intercept-2.md §3): 星が見えていない年 (starVisible === false) は
+  // 掘った輝石を灯に焚く (脈は減り、備蓄は増えない)。窓を持たない石板 (undefined) は今までどおり毎年積む
+  const stock = civ.starVisible === false ? works.stock : works.stock + mined;
+  return { civ: { ...civ, works: { stock, stopped: false } }, mined };
 }
 
 /** 迎撃できるか。できなければ理由 (cmd.rejected と石板に出す) */

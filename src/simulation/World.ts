@@ -767,7 +767,7 @@ export class World {
     if (civ.stage >= MAX_STAGE) {
       const r = stepWorks(civ, this.crystal, this.elevation, this.config.size, { ids: this.veins, cells: this.veinCells });
       this.civ = civ = r.civ;
-      this.log('info', 'sim.civ.works', { year, stock: civ.works?.stock ?? 0, stopped: civ.works?.stopped ?? false, mined: r.mined });
+      this.log('info', 'sim.civ.works', { year, stock: civ.works?.stock ?? 0, stopped: civ.works?.stopped ?? false, mined: r.mined, visible: civ.starVisible ?? null });
       if (r.mined > 0) computeVeinLoss(this.crystal, this.crystal0, this.elevation, this.config.size, this.veinLoss, this.veins);
     }
     // 文明の衰退と崩壊 (M8-03): 発生済みのときだけ判定する
@@ -816,16 +816,13 @@ export class World {
         });
         break;
       }
-      case 'set_climate': {
+      case 'set_climate':
         if (cmd.tempOffset !== undefined) this.config.climate.tempOffset = cmd.tempOffset;
         if (cmd.rainScale !== undefined) this.config.climate.rainScale = cmd.rainScale;
         break;
-      }
-      case 'disaster': {
-        const r = applyDisaster(this, cmd, this.config.species, this.config.size);
-        this.log('info', 'sim.disaster', { kind: cmd.kind, cell: cmd.cell, radius: cmd.radius, affectedCells: r.affectedCells });
+      case 'disaster':
+        this.log('info', 'sim.disaster', { kind: cmd.kind, cell: cmd.cell, radius: cmd.radius, affectedCells: applyDisaster(this, cmd, this.config.species, this.config.size).affectedCells });
         break;
-      }
       case 'sink': {
         let drowned = 0;
         for (let i = 0; i < this.n; i++) {
@@ -846,13 +843,16 @@ export class World {
         this.log('info', 'sim.civ.edict', { year, edict: cmd.edict, obeyed, faith: civ.faith ?? 0, miningStopped: civ.miningStopped ?? false });
         break;
       }
-      case 'intercept': {
+      case 'intercept':
         // 迎撃 (M10-02): validate で canIntercept を通っている。備蓄を消費して回数を増やす
         if (!this.civ) break;
         this.civ = applyIntercept(this.civ);
         this.log('info', 'sim.civ.intercept', { year: Math.floor(this.tick / this.config.ticksPerYear), n: this.civ.intercepted ?? 0, stock: this.civ.works?.stock ?? 0 });
         break;
-      }
+      case 'star_sign':
+        // 見える星 (M21-03 K1): 窓の開閉を civ に写す (文明が無ければ何もしない)。年に一度の stepWorks が読み、sim.civ.works の visible に出る
+        if (this.civ) this.civ = { ...this.civ, starVisible: cmd.visible };
+        break;
       case 'launch_ship': {
         // 空の舟 (M10-03): validate で canLaunchShip を通っている。着工する (進み 0 から)
         const year = Math.floor(this.tick / this.config.ticksPerYear);
@@ -880,13 +880,12 @@ export class World {
         this.log('info', 'sim.tower.built', { cell: tower.cell, radius: tower.radius, rainScale: tower.rainScale, tempOffset: tower.tempOffset, year });
         break;
       }
-      case 'tower_power': {
+      case 'tower_power':
         // 維持費の自動切り替え (M10-01): 全ての塔の active を一括で切り替える (ScenarioRunner が力の増減から dispatch する)
         for (const t of this.towers) t.active = cmd.active;
         this.recomputeTowerFactors();
         this.log('info', 'sim.tower.power', { active: cmd.active, count: this.towers.length });
         break;
-      }
     }
   }
 

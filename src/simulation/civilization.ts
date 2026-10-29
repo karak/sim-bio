@@ -55,6 +55,11 @@ export type CivState = {
   vitality?: number;
   /** 星の工事 (M10-02、works.ts)。星 (7) に達した年から stepWorks が年 1 回更新する。星でない・古いセーブでは無い */
   works?: { stock: number; stopped: boolean };
+  /**
+   * 次の星が見えているか (M21-03 K1「見える星」)。石板の runner が star_sign で開け閉めする。
+   * false の年は工事が掘っても備蓄に積まない (灯に焚く)。窓を持たない石板・自由モード・古いセーブでは無い (今までどおり毎年積む)
+   */
+  starVisible?: boolean;
   /** 迎撃した回数 (M10-02)。判定条件 intercepted が読む。省略時 0 */
   intercepted?: number;
   /** 勅令で採掘が止まっているか (M9-03)。省略時 false。止まっている間は stepMining を呼ばない */

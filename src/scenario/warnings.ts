@@ -4,9 +4,41 @@ import { FUEL_YEARS } from '../simulation/civilizationFuel';
 import { UNREST_FAITH, UNREST_YEARS } from '../simulation/unrest';
 import { formatFaith } from '../simulation/faith';
 import { SHIP_CREW, SHIP_FAITH, SHIP_NEED, SHIP_STAGE } from '../simulation/ship';
+import { MAX_STAGE } from '../simulation/civilization';
+import { WORKS_FAITH } from '../simulation/works';
 import type { Condition, ScenarioDef, StartStats } from './types';
 
-export type WarningKind = 'event' | 'species_low' | 'land_low' | 'power_low' | 'power_capped' | 'upkeep_over_income' | 'civ_declining' | 'fuel_low' | 'faith_low' | 'civ_vitality_low' | 'ship_stalled' | 'ship_late' | 'ship_waiting';
+export type WarningKind =
+  | 'event'
+  | 'species_low'
+  | 'land_low'
+  | 'power_low'
+  | 'power_capped'
+  | 'upkeep_over_income'
+  | 'civ_declining'
+  | 'fuel_low'
+  | 'faith_low'
+  | 'civ_vitality_low'
+  | 'ship_stalled'
+  | 'ship_late'
+  | 'ship_waiting'
+  | 'star_visible'
+  | 'star_dark';
+
+/**
+ * 見える星 (M21-03 K1) の警告。window は runner が予定から求めた今年の窓 (visible と次の星の着弾年)。窓を持たない石板・次の星が無ければ空。
+ * star_visible: 窓の間「星が見えている(着弾まで N 年)」。key は星ごとに 1 つなので、年表には窓ごとに 1 回積む。
+ * star_dark: 窓の外で星の民が掘っている間 (星・止めよ無し・信仰が工事の門以上)「灯に焚く」。止めよで脈を残せることを知らせる
+ */
+export function starSignWarnings(s: WorldSnapshot, year: number, window: { visible: boolean; atYear: number } | null): Warning[] {
+  if (!window) return [];
+  if (window.visible) {
+    return [{ kind: 'star_visible', key: `star_visible:${window.atYear}`, text: `星が見えている(着弾まで ${window.atYear - year} 年)。民は掘った輝石を工事に積む` }];
+  }
+  const c = s.civ;
+  if (!c || c.stage < MAX_STAGE || c.miningStopped || (c.faith ?? 0) < WORKS_FAITH) return [];
+  return [{ kind: 'star_dark', key: `star_dark:${window.atYear}`, text: `星はまだ見えない(${window.atYear} 年目の星)。民が掘る輝石は灯に焚かれ、工事に積まれない(止めよで脈を残せる)` }];
+}
 
 /** 石板に出す警告。key は「同じ警告を年ごとに何度もログに出さない」ための識別子。event は text 付きの予定コマンドの台詞 (M10R-07、ScenarioRunner が足す) */
 export type Warning = {

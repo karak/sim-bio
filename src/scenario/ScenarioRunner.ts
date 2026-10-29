@@ -1,7 +1,7 @@
 import type { Command, WorldSnapshot } from '../simulation/types';
 import { civVitality, judgeScenario, landRatio, startStats, vitalityRatio } from './judge';
 import type { ScenarioDef, StartStats, Verdict } from './types';
-import { scenarioWarnings, type CivContext, type Warning } from './warnings';
+import { scenarioWarnings, starSignWarnings, type CivContext, type Warning } from './warnings';
 import type { PrayerKind } from '../simulation/prayer';
 import type { CivState } from '../simulation/civilization';
 import { canIntercept, INTERCEPT_NEED } from '../simulation/works';
@@ -216,6 +216,69 @@ function restoredState(def: ScenarioDef, saved: LegacyRunnerState): RunnerState 
   return withNotices(def, structuredClone(saved));
 }
 
+/** コマンド 1 回の値段。budget が無ければ常に 0 (無料) */
+function commandCost(budgetDef: ScenarioDef['budget'], cmd: Command): number {
+  if (!budgetDef) return 0;
+  switch (cmd.type) {
+    case 'spawn_species':
+      return budgetDef.costs.spawn;
+    case 'disaster':
+      return budgetDef.costs.disaster;
+    case 'set_climate':
+      return budgetDef.costs.climate;
+    // 勅令 (M9-03) は言葉なので力は要らない (信仰の門が代わり)
+    case 'civ_edict':
+      return 0;
+    case 'sink':
+      return 0;
+    // 気象塔 (M10-01) を建てる値段。省略時は TOWER_COST
+    case 'build_tower':
+      return budgetDef.costs.tower ?? TOWER_COST;
+    // 維持費の自動切り替え (M10-01) は言葉ではなく力の増減そのものなので、ここでは値段を持たない (0)
+    case 'tower_power':
+      return 0;
+    // 迎撃 (M10-02) は民の備蓄 (輝石) で払う。力は要らない
+    case 'intercept':
+      return 0;
+    // 舟を作れ (M10-03) は civ_edict と同じく言葉なので力は要らない (信仰・材の門が代わり)
+    case 'launch_ship':
+      return 0;
+    // 見える星 (M21-03 K1) は runner が World へ直に流す空の知らせで、プレイヤーは打たない
+    case 'star_sign':
+      return 0;
+  }
+}
+
+/**
+ * 見える星 (M21-03 K1): 今年の窓。def.starSignYears が無ければ null (窓の無い石板)。次の星が無ければ (撃ち尽くした・落ち終えた) 空は暗い。
+ * 窓は次の星 (target: 取り消せる次の予定隕石) の着弾の starSignYears 年前から着弾の前の年まで。撃てば次の星に移るので、次の窓まで閉じる
+ */
+export function starWindow(def: ScenarioDef, year: number, target: { atYear: number } | null): { visible: boolean; atYear: number | null } | null {
+  const w = def.starSignYears;
+  if (w === undefined) return null;
+  if (!target) return { visible: false, atYear: null };
+  return { visible: year >= target.atYear - w, atYear: target.atYear };
+}
+
+/**
+ * 窓の開閉を World の civ.starVisible に揃える関数を作る。続き (restored) や古いセーブで食い違っていても流し直す。
+ * pending は World へ流したがまだ snapshot に写っていない値で、写ったら null に戻す (同じ年に何度 update しても 1 回だけ流す)。
+ * 文明が無ければ流さない (pending も立てない。後で文明が現れたときに流せるように)
+ */
+function createStarSignSync(world: RunnerWorld): (s: WorldSnapshot, visible: boolean) => void {
+  let pending: boolean | null = null;
+  return (s, visible) => {
+    if (!s.civ) return;
+    if (s.civ.starVisible === visible) {
+      pending = null;
+      return;
+    }
+    if (pending === visible) return;
+    pending = visible;
+    world.dispatch({ type: 'star_sign', visible }, { fromStar: false });
+  };
+}
+
 /**
  * 石板の予言を実行する。予定コマンド (滅びの進行) を年に合わせて dispatch し、年が変わるたびに判定する。
  * 判定が確定したら以後は何もしない。
@@ -363,35 +426,9 @@ export function createScenarioRunner(
     return best;
   };
 
-  /** コマンド 1 回の値段。budget が無ければ常に 0 (無料) */
-  const costOf = (cmd: Command): number => {
-    if (!budgetDef) return 0;
-    switch (cmd.type) {
-      case 'spawn_species':
-        return budgetDef.costs.spawn;
-      case 'disaster':
-        return budgetDef.costs.disaster;
-      case 'set_climate':
-        return budgetDef.costs.climate;
-      // 勅令 (M9-03) は言葉なので力は要らない (信仰の門が代わり)
-      case 'civ_edict':
-        return 0;
-      case 'sink':
-        return 0;
-      // 気象塔 (M10-01) を建てる値段。省略時は TOWER_COST
-      case 'build_tower':
-        return budgetDef.costs.tower ?? TOWER_COST;
-      // 維持費の自動切り替え (M10-01) は言葉ではなく力の増減そのものなので、ここでは値段を持たない (0)
-      case 'tower_power':
-        return 0;
-      // 迎撃 (M10-02) は民の備蓄 (輝石) で払う。力は要らない
-      case 'intercept':
-        return 0;
-      // 舟を作れ (M10-03) は civ_edict と同じく言葉なので力は要らない (信仰・材の門が代わり)
-      case 'launch_ship':
-        return 0;
-    }
-  };
+  /** 見える星 (M21-03 K1): 窓の開閉を World へ流す */
+  const syncStarSign = createStarSignSync(world);
+  const costOf = (cmd: Command): number => commandCost(budgetDef, cmd);
 
   /** 年が変わるたびの力の増減。power < 0 になったら 0 にして気候を既定へ戻す */
   const applyBudgetYearChange = (s: WorldSnapshot) => {
@@ -560,6 +597,8 @@ export function createScenarioRunner(
       // 迎撃 (M10 レビュー): World が適用した分だけ pending を減らす
       syncIntercepts(s);
       fireDue(year);
+      const sky = starWindow(def, year, nextMeteor());
+      if (sky) syncStarSign(s, sky.visible);
       if (year !== lastYear) {
         // 最初の呼び出し (lastYear === -1) はまだ 1 年も経っていないので力は動かさない
         const isFirstCheck = lastYear === -1;
@@ -569,6 +608,8 @@ export function createScenarioRunner(
         const civ: CivContext = prevCivStage === null ? null : { prevStage: prevCivStage };
         // 舟の警告 (M10-04): 前年の進みと比べる。前年に舟が無ければ null
         warnings = scenarioWarnings(def, s, start, budgetDef ? { power, max: budgetMax, incomeLastYear, upkeepLastYear } : null, civ, { year, prevProgress: prevShipProgress });
+        // 見える星 (M21-03 K1): snapshot の starVisible はこの update で流した star_sign をまだ写していないので、runner の窓から出す
+        if (sky?.atYear != null) warnings = [...warnings, ...starSignWarnings(s, year, { visible: sky.visible, atYear: sky.atYear })];
         // 予定の告知 (M10R-07) の期限切れを消す (判定はここだけ)。告知は fireDue が notices に入れ、warnings() が先頭に並べる
         for (const [idx, n] of notices) if (year >= n.untilYear) notices.delete(idx);
         prevShipProgress = s.ship && s.ship.launchedYear === undefined ? s.ship.progress : null;

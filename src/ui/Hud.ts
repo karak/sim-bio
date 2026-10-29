@@ -57,6 +57,17 @@ export function formatCiv(civ: CivState | null, dreamEater = false): string | nu
  * timber (M21-02 D2): 徴収半径内の材 (Hud.update が timberAround で計算した値をそのまま渡す)。
  * 林があと何年で舟を養えるか読めないプレイテスト (m10r-08) を受け、未着工では末尾に、建造中は進みの直後に足す。
  */
+/**
+ * 迎撃の行の「次の星」(M21-02 D4)。見える星 (M21-03 K1) の石板では、星が見えているか (工事が備蓄に積めるか) を添える。
+ * 窓の無い石板 (starVisible が無い) は今までどおり年だけ
+ */
+export function formatNextMeteor(year: number | null, starVisible: boolean | undefined): string {
+  if (year === null) return '';
+  const base = `次の星 ${year} 年目`;
+  if (starVisible === undefined) return base;
+  return starVisible ? `${base} · 見えている(工事は備蓄に積む)` : `${base} · まだ見えない(掘った輝石は灯に焚く)`;
+}
+
 export function formatShipHint(civ: CivState | null, ship: ShipState | null, timber: number): string {
   if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。年に ${SHIP_CUT_PER_YEAR} の材を伐って ${SHIP_NEED} まで進む(${SHIP_NEED / SHIP_CUT_PER_YEAR} 年) · 材 ${timber.toFixed(1)}`;
   if (ship.launchedYear !== undefined) return '舟は飛び立った';
@@ -493,7 +504,7 @@ export function createHud(
       const reasonEl = $('intercept-reason');
       if (reasonEl.textContent !== reasonText) reasonEl.textContent = reasonText;
       reasonEl.hidden = reasonText === '';
-      const nextText = nextMeteor !== null ? `次の星 ${nextMeteor} 年目` : '';
+      const nextText = formatNextMeteor(nextMeteor, s.civ.starVisible);
       const nextEl = $('intercept-next');
       if (nextEl.textContent !== nextText) nextEl.textContent = nextText;
     }

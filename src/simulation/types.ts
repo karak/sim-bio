@@ -102,6 +102,11 @@ export type Command =
   | { type: 'tower_power'; active: boolean }
   /** 迎撃 (M10-02)。星の文明の備蓄が INTERCEPT_NEED 以上なら消費して 1 回数える。予定隕石の取り消しは ScenarioRunner が行う */
   | { type: 'intercept' }
+  /**
+   * 見える星 (M21-03 K1)。次の星が見えたか (着弾の starSignYears 年前から着弾まで) を ScenarioRunner が年の頭に dispatch する (fromStar: false)。
+   * 星の行為ではなく、年代記にも来ない (runner が予定から作り直す)
+   */
+  | { type: 'star_sign'; visible: boolean }
   /** 空の舟を作れ (M10-03)。段階・信仰・材の門は World.dispatch が canLaunchShip で確かめる */
   | { type: 'launch_ship' };
 

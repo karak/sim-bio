@@ -85,3 +85,35 @@ describe('迎撃 (M10-02): canIntercept / applyIntercept', () => {
     expect(civ.intercepted).toBeUndefined();
   });
 });
+
+describe('見える星 (M21-03 K1): stepWorks の窓', () => {
+  it('星が見えていない年 (starVisible: false) も民は掘り、脈は WORKS_RATE 減るが備蓄は増えない (灯に焚く)', () => {
+    const c = mkCrystal();
+    const before = sum(c);
+    const r = stepWorks(mkCiv({ starVisible: false, works: { stock: 1, stopped: false } }), c, land, SIZE);
+    expect(r.mined).toBeCloseTo(WORKS_RATE, 6);
+    expect(before - sum(c)).toBeCloseTo(WORKS_RATE, 5);
+    expect(r.civ.works).toEqual({ stock: 1, stopped: false });
+  });
+  it('星が見えている年 (starVisible: true) は今までどおり備蓄に積む', () => {
+    const c = mkCrystal();
+    const r = stepWorks(mkCiv({ starVisible: true, works: { stock: 1, stopped: false } }), c, land, SIZE);
+    expect(r.mined).toBeCloseTo(WORKS_RATE, 6);
+    expect(r.civ.works!.stock).toBeCloseTo(1 + WORKS_RATE, 6);
+  });
+  it('窓の外でも勅令「止めよ」の間は掘らない (脈が残る)。信仰が門を割れば止まる (stopped)', () => {
+    const c = mkCrystal();
+    const r = stepWorks(mkCiv({ starVisible: false, miningStopped: true, works: { stock: 1, stopped: false } }), c, land, SIZE);
+    expect(r.mined).toBe(0);
+    expect(sum(c)).toBeCloseTo(0.1 * N, 6);
+    const r2 = stepWorks(mkCiv({ starVisible: false, faith: WORKS_FAITH - 0.01, works: { stock: 1, stopped: false } }), c, land, SIZE);
+    expect(r2.mined).toBe(0);
+    expect(r2.civ.works).toEqual({ stock: 1, stopped: true });
+  });
+  it('窓を持たない石板 (starVisible が無い) は今までどおり毎年積む', () => {
+    const c = mkCrystal();
+    const r = stepWorks(mkCiv({ works: { stock: 1, stopped: false } }), c, land, SIZE);
+    expect(r.civ.works!.stock).toBeCloseTo(1 + WORKS_RATE, 6);
+    expect(r.civ.starVisible).toBeUndefined();
+  });
+});

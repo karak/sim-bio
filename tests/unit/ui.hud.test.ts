@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCiv, formatShipHint, slotLabel } from '../../src/ui/Hud';
+import { formatCiv, formatNextMeteor, formatShipHint, slotLabel } from '../../src/ui/Hud';
 import type { CivState } from '../../src/simulation/civilization';
 import { SHIP_CREW, SHIP_CUT_PER_YEAR, SHIP_FAITH, SHIP_FOREST_MIN, SHIP_NEED } from '../../src/simulation/ship';
 
@@ -77,6 +77,15 @@ describe('formatCiv: 星の工事 (M10-02)', () => {
     expect(formatCiv(civ)).toBe('文明 星(7) · 進み 100% · 民 100 · 信仰 0.90 · 工事 1.3 / 3');
     expect(formatCiv({ ...civ, works: { stock: 1.25, stopped: true } })).toBe('文明 星(7) · 進み 100% · 民 100 · 信仰 0.90 · 工事 1.3 / 3 止');
     expect(formatCiv({ ...civ, works: undefined })).toBe('文明 星(7) · 進み 100% · 民 100 · 信仰 0.90');
+  });
+});
+
+describe('formatNextMeteor: 見える星 (M21-03 K1)', () => {
+  it('窓の無い石板は年だけ。窓のある石板は見えているか (工事が積めるか) を添える。次の星が無ければ空', () => {
+    expect(formatNextMeteor(60, undefined)).toBe('次の星 60 年目');
+    expect(formatNextMeteor(60, true)).toBe('次の星 60 年目 · 見えている(工事は備蓄に積む)');
+    expect(formatNextMeteor(105, false)).toBe('次の星 105 年目 · まだ見えない(掘った輝石は灯に焚く)');
+    expect(formatNextMeteor(null, false)).toBe('');
   });
 });
 
