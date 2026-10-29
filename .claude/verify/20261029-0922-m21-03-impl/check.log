@@ -1,0 +1,37 @@
+
+> biotope-island@1.0.0 check /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> pnpm run typecheck && pnpm run lint && pnpm run lint:py && pnpm run check:readme && pnpm run check:docs && pnpm run check:d1-writes && pnpm run test && pnpm run test:worker && pnpm run test:scripts
+
+
+> biotope-island@1.0.0 typecheck /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> tsc --noEmit && tsc --noEmit -p worker && wrangler types worker/worker-configuration.d.ts --check
+
+
+ ⛅️ wrangler 4.141.0 (update available 4.155.0)
+───────────────────────────────────────────────
+✨ Types at worker/worker-configuration.d.ts are up to date.
+
+
+> biotope-island@1.0.0 lint /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> eslint .
+
+
+> biotope-island@1.0.0 lint:py /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> uvx ruff@0.16.9 check scripts tools/acceptance-probe && uvx ruff@0.16.9 format --check scripts tools/acceptance-probe
+
+All checks passed!
+31 files already formatted
+
+> biotope-island@1.0.0 check:readme /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> uv run scripts/check_readme.py
+
+README の柵: 違反なし (警告 0 件)
+
+> biotope-island@1.0.0 check:docs /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> uv run scripts/check_docs.py
+
+NG docs/specs/2026-10-18-decisions-current.md:33: command_types は文書で 9、コードで 10。決定を変えたなら文書の行と「改訂」を書き直す
+文書の柵: 1 件の違反 (M27-06)
+ ELIFECYCLE  Command failed with exit code 1.
+ ELIFECYCLE  Command failed with exit code 1.
+exit 1

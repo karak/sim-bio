@@ -1,0 +1,131 @@
+
+> biotope-island@1.0.0 check:d1-writes /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> uv run scripts/check_d1_writes.py
+
+道                       上限  1 件の行    最悪の行
+------------------  ------  -----  ------
+daily_budget        45,000      1  45,000
+confirm              5,000      1   5,000
+report_outcome       5,000      1   5,000
+cast_cargo           3,000      3   9,000
+publish              2,000      4   8,000
+report                 500      5   2,500
+withdraw               500      5   2,500
+Cron: reports          500      2   1,000
+Cron: cargo          3,000      3   9,000
+Cron: daily_budget      11      1      11
+Cron: chronicles       166      2     332
+Cron: harbor_stats       1      2       2
+
+道の書き 77,000 + Cron の掃除 10,345 = 合計 87,345 行/日
+無料枠 100,000 行/日の 87.3% (要件 90% = 90,000 行)
+要件の内。87,345 <= 90,000
+
+> biotope-island@1.0.0 test /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> vitest run
+
+
+ RUN  v5.0.1 /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+
+
+ Test Files  147 passed (147)
+      Tests  1518 passed (1518)
+   Start at  09:50:08
+   Duration  117.33s (tests 87%, import 12%, transform 1%)
+
+
+> biotope-island@1.0.0 test:worker /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> pnpm --filter ./worker test
+
+
+> biotope-island-worker@ test /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6/worker
+> vitest run
+
+
+ RUN  v4.1.11 /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6/worker
+
+Using secrets defined in process.env
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mMissing required secrets: TURNSTILE_SECRET_KEY, SENDER_SECRET. Add them to .dev.vars, .env, or set as environment variables.[0m
+
+
+Using secrets defined in process.env
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mMissing required secrets: TURNSTILE_SECRET_KEY, SENDER_SECRET. Add them to .dev.vars, .env, or set as environment variables.[0m
+
+
+Using secrets defined in process.env
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mMissing required secrets: TURNSTILE_SECRET_KEY, SENDER_SECRET. Add them to .dev.vars, .env, or set as environment variables.[0m
+
+
+Using secrets defined in process.env
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mMissing required secrets: TURNSTILE_SECRET_KEY, SENDER_SECRET. Add them to .dev.vars, .env, or set as environment variables.[0m
+
+
+Using secrets defined in process.env
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mMissing required secrets: TURNSTILE_SECRET_KEY, SENDER_SECRET. Add them to .dev.vars, .env, or set as environment variables.[0m
+
+
+exception = kj/async-io.c++:766: disconnected: read end of pipe was aborted
+stack: 1032e833f
+
+ Test Files  5 passed (5)
+      Tests  67 passed (67)
+   Start at  09:52:07
+   Duration  7.35s (transform 305ms, setup 596ms, import 98ms, tests 308ms, environment 0ms)
+
+
+> biotope-island@1.0.0 test:scripts /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+> uv run --no-project python -m unittest discover -s scripts
+
+.......................................................................................................F.................F..........................................................................................................................................................................................................................................................................................................................
+======================================================================
+FAIL: test_todays_code (test_check_docs.FactTest.test_todays_code)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6/scripts/test_check_docs.py", line 168, in test_todays_code
+    self.assertEqual(facts["command_types"], "9")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '10' != '9'
+- 10
++ 9
+
+
+======================================================================
+FAIL: test_todays_docs_pass (test_check_docs.RepoTest.test_todays_docs_pass)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6/scripts/test_check_docs.py", line 233, in test_todays_docs_pass
+    self.assertEqual(check_files(load_repo(REPO)), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['docs/specs/2026-10-18-decisions-current.[55 chars]き直す'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'docs/specs/2026-10-18-decisions-current.md:33: command_types は文書で 9、コードで 10。決定を変えたなら文書の行と「改訂」を書き直す'
+
++ []
+- ['docs/specs/2026-10-18-decisions-current.md:33: command_types は文書で 9、コードで '
+-  '10。決定を変えたなら文書の行と「改訂」を書き直す']
+
+----------------------------------------------------------------------
+Ran 436 tests in 18.839s
+
+FAILED (failures=2)
+usage: python -m unittest [-h] [--apply ROUND] [--verdicts VERDICTS]
+                          [--round PREFIX]
+
+要素ごとの基準画の更新の手順 (M25-03、ADR 0001 段 3)。 基準画は tests/e2e/baselines/ にあり、手元の Mac
+だけで持つ。CI では比べない。 比べが落ちたとき・基準画を足すときに、前後と差の画を審査台 (.claude/localreview/<回>/)
+に並べる。 人が審査台で「合格」を押した画だけ、基準画を書き換える。押さない画は変わらない。 pnpm run shots:update #
+撮って比べ、前後と差を審査台の回に出す (基準画は書き換えない) pnpm run shots:update -- --apply <回の名前> #
+審査台で合格にした画だけ基準画へ写す (コミットは人がする) pnpm run shots:update -- --round m25-14- #
+回の名前の接頭辞を票の名前にする (既定は shots-) 回の名前は 1 つ目のコマンドが出す (<接頭辞>-YYYYMMDD-HHMM の形。既定は
+shots-20261004-1200、--round m25-14- なら m25-14-20261004-1131)。 審査台は index.html
+が読む共有の items.json を書き換えない。回の items.json (1 つの group) を共有の groups に足すと並ぶ。
+
+options:
+  -h, --help           show this help message and exit
+  --apply ROUND        審査台で合格にした画だけ基準画へ写す
+  --verdicts VERDICTS  審査台の判定の写し (既定は審査台の verdicts.json)
+  --round PREFIX       審査台の回の名前の接頭辞 (既定は shots-。票の名前を付けるなら m25-14- の形)
+ ELIFECYCLE  Command failed with exit code 1.
+exit 1
