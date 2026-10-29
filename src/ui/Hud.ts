@@ -52,12 +52,6 @@ export function formatCiv(civ: CivState | null, dreamEater = false): string | nu
 }
 
 /**
- * #hud-ship の説明文 (M10-03)。formatCiv とは別の行に出す (formatCiv の既存の文字列はテストが留め金にしているので変えない)。
- * 未着工なら門の説明、建造中なら進み、完成したが信仰不足なら「民は乗らない」を添え、飛び立てば専用の文を返す。
- * timber (M21-02 D2): 徴収半径内の材 (Hud.update が timberAround で計算した値をそのまま渡す)。
- * 林があと何年で舟を養えるか読めないプレイテスト (m10r-08) を受け、未着工では末尾に、建造中は進みの直後に足す。
- */
-/**
  * 迎撃の行の「次の星」(M21-02 D4)。見える星 (M21-03 K1) の石板では、星が見えているか (工事が備蓄に積めるか) を添える。
  * 窓の無い石板 (starVisible が無い) は今までどおり年だけ
  */
@@ -68,6 +62,12 @@ export function formatNextMeteor(year: number | null, starVisible: boolean | und
   return starVisible ? `${base} · 見えている(工事は備蓄に積む)` : `${base} · まだ見えない(掘った輝石は灯に焚く)`;
 }
 
+/**
+ * #hud-ship の説明文 (M10-03)。formatCiv とは別の行に出す (formatCiv の既存の文字列はテストが留め金にしているので変えない)。
+ * 未着工なら門の説明、建造中なら進み、完成したが信仰不足なら「民は乗らない」を添え、飛び立てば専用の文を返す。
+ * timber (M21-02 D2): 徴収半径内の材 (Hud.update が timberAround で計算した値をそのまま渡す)。
+ * 林があと何年で舟を養えるか読めないプレイテスト (m10r-08) を受け、未着工では末尾に、建造中は進みの直後に足す。
+ */
 export function formatShipHint(civ: CivState | null, ship: ShipState | null, timber: number): string {
   if (!ship) return `帆・信仰 ${SHIP_FAITH}・材 ${SHIP_FOREST_MIN} で着工。年に ${SHIP_CUT_PER_YEAR} の材を伐って ${SHIP_NEED} まで進む(${SHIP_NEED / SHIP_CUT_PER_YEAR} 年) · 材 ${timber.toFixed(1)}`;
   if (ship.launchedYear !== undefined) return '舟は飛び立った';

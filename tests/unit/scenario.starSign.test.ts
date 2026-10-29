@@ -3,7 +3,9 @@ import { createScenarioRunner } from '../../src/scenario/ScenarioRunner';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, WorldSnapshot } from '../../src/simulation/types';
 import type { CivState } from '../../src/simulation/civilization';
-import { grass } from './helpers';
+import { grass, testConfig } from './helpers';
+import { World } from '../../src/simulation/World';
+import { createMemorySink } from '../../src/core/log/memorySink';
 
 /**
  * 見える星 (M21-03 K1) の ScenarioRunner 側: 次の星の着弾 starSignYears 年前から着弾までを窓とし、
@@ -119,5 +121,40 @@ describe('見える星 (M21-03 K1、ScenarioRunner)', () => {
       r.update(w.snapshot());
       expect(r.warnings().map((x) => x.kind)).not.toContain('star_dark');
     }
+  });
+});
+
+describe('見える星 (M21-03 K1): 年の途中で撃っても、update の刻みに依らず同じ結末 (M19-04 の決定論)', () => {
+  // レビューの指摘: 窓を閉じる star_sign を update だけが流すと、毎フレーム update するアプリと境目でしか update しない年代記の再生で
+  // 撃った年の残りに備蓄が積まれるかが分かれた。撃った時に流せば、どちらも撃った tick の次の step で閉じる
+  const def: ScenarioDef = {
+    id: 't', title: 't', prophecy: 'p', kind: 'prevent', start: { seed: 1, size: 32 }, years: 31, referenceSize: 32,
+    schedule: [meteor(14), meteor(30)], starSignYears: 12, alive: { type: 'year_reached', year: 31 },
+  };
+  const run = (midUpdate: boolean) => {
+    const home = 16 * 32 + 16;
+    const w = World.create(testConfig({ civilization: { speciesId: 'grass', start: { stage: 7, home, fuelStock: 900, faith: 1 } } }), { log: createMemorySink() });
+    const r = createScenarioRunner(def, w, { ticksPerYear: 360 });
+    for (let y = 0; y < 11; y++) {
+      r.update(w.snapshot());
+      w.step(360);
+    }
+    r.update(w.snapshot());
+    w.step(100);
+    expect(r.intervene({ type: 'intercept' })).toEqual({ ok: true });
+    if (midUpdate) {
+      w.step(1);
+      r.update(w.snapshot());
+      w.step(259);
+    } else w.step(260);
+    r.update(w.snapshot());
+    return w.snapshot().civ!;
+  };
+  it('撃った年の残りは窓が閉じていて、境目だけ update しても途中で update しても備蓄は同じ (撃った 3 を引いた残り)', () => {
+    const replay = run(false);
+    const live = run(true);
+    expect(replay.starVisible).toBe(false);
+    expect(live.works!.stock).toBeCloseTo(replay.works!.stock, 9);
+    expect(replay.works!.stock).toBeCloseTo(0.24, 5);
   });
 });
