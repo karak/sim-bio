@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { World } from '../../src/simulation/World';
 import { createMemorySink } from '../../src/core/log/memorySink';
 import { createScenarioRunner, type ScenarioRunner } from '../../src/scenario/ScenarioRunner';
-import type { ScenarioDef } from '../../src/scenario/types';
+import type { ScenarioDef, Verdict } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig, WorldSnapshot } from '../../src/simulation/types';
 import { resolveCivilizationStart } from '../../src/simulation/civilization';
 import { forEachInRadius } from '../../src/simulation/disaster';
@@ -432,38 +432,92 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
     if (p.kind === 'rain') r.intervene(spawnClick('grass', s.civ!.home));
   };
   const seq = (...fs: Script[]): Script => (r, s, y) => { for (const f of fs) f(r, s, y); };
+  // 見える星 (M21-03 K1、LD docs/design/2026-10-28-level-design-intercept-2.md §6・§7)。2 星 60・105 / 110 年、窓 12 年、勝ちは 2 回砕いて段階 6 以上。
+  // 星が落ちた年の次の年次評価で dead になる (60 年目の星 → 61、105 年目の星 → 106)
+  const stop = (r: ScenarioRunner) => r.intervene({ type: 'civ_edict', edict: 'stop_mining' });
+  const resume = (r: ScenarioRunner) => r.intervene({ type: 'civ_edict', edict: 'resume_mining' });
+  /**
+   * 星が見えているか。石板の窓 (次の星の着弾 starSignYears 年前から) を runner の次の星の年から読む。この台本は年に 1 度しか update しないので、
+   * snapshot の civ.starVisible は 1 年遅れる (アプリは毎フレーム update するので 1 tick 遅れるだけ)
+   */
+  const visible = (r: ScenarioRunner, y: number) => {
+    const n = r.nextMeteorYear();
+    return n !== null && def.starSignYears !== undefined && y >= n - def.starSignYears;
+  };
+  /** 星に届いたら止めよ。一度も撃たず、再開もしない (止まるまで毎年言う) */
+  const stopAtStar: Script = (r, s) => { if (s.civ?.stage === 7 && !s.civ.miningStopped && (s.civ.intercepted ?? 0) === 0 && (s.civ.works?.stock ?? 0) < INTERCEPT_NEED) stop(r); };
+  /**
+   * 窓のリズム: 星が見えていて止まっていれば再開せよ。星が見えず掘っていれば止めよ。
+   * 想定解 1 は星に届いた時から止める。想定解 2 は一度目を砕いた後だけ止める (星に届いてから一度目までは掘りっぱなし)
+   */
+  const windowRhythm = (o: { onlyAfterFirst: boolean }): Script => (r, s, y) => {
+    const c = s.civ;
+    if (!c || c.stage < 7) return;
+    if (visible(r, y)) { if (c.miningStopped) resume(r); return; }
+    if (c.miningStopped) return;
+    if (!o.onlyAfterFirst || (c.intercepted ?? 0) === 1) stop(r);
+  };
+  /** playTower と同じ回し方で、結末の決まった年も返す (行列の「決まる年」を固定する) */
+  const playYear = (script: Script | null): { v: Verdict; year: number } => {
+    const cfg: WorldConfig = {
+      ...structuredClone(base), size: SIZE, species: species.map((d) => ({ ...d })), seed: def.start?.seed ?? base.seed,
+      civilization: resolveCivilizationStart(def.start?.civilization, SIZE), crystalScale: def.start?.crystalScale,
+    };
+    const w = World.create(cfg, { log: createMemorySink() });
+    const r = createScenarioRunner(def, w, { ticksPerYear: cfg.ticksPerYear });
+    for (let y = 0; y <= def.years; y++) {
+      const s = w.snapshot();
+      script?.(r, s, y);
+      const v = r.update(s);
+      if (v.status !== 'running') return { v, year: y };
+      w.step(cfg.ticksPerYear);
+    }
+    return { v: r.verdict(), year: def.years };
+  };
+  const expectDead = (got: { v: Verdict; year: number }, year: number) => {
+    expect(got.v.status, got.v.reason).toBe('dead');
+    expect(got.v.reason).toContain('絶滅: deer');
+    expect(got.year).toBe(year);
+  };
+  const expectAlive = (got: { v: Verdict; year: number }) => {
+    expect(got.v.status, got.v.reason).toBe('alive');
+    expect(got.v.reason).toContain('星を 2 回砕いた');
+    expect(got.year).toBe(110);
+  };
   it('idle → dead (信仰が減衰して塔で止まり、一つ目の星が落ちる)', () => {
-    const v = playTower(def, null);
-    expect(v.status).toBe('dead');
+    expectDead(playYear(null), 61);
   });
   // M21-01: 応えを UI と同じ手 (疫病 環 4・草 環 1) にすると、応えだけで信仰 0.88 に届いて 30 年目に星、50 年目までに三度砕き alive。
   // 以前の dead は環 6 の疫病で 50 年目の祈りが 1 回多く、信仰が工事の門 0.6 を割らずに脈を掘り尽くした偶然だった。応えだけで勝てる問題と、
   // 50 年で撃ち終わる後半の空白は M21-03 の LD で扱う (docs/specs/plans/2026-09-23-m21-01-ui-parity-audit.md §3)
-  it('answer-only (儀式なし、祈りにだけ応える) → alive (応えで信仰 0.88、30 年目に星、50 年目までに三度砕く。M21-03 で作り直す)', () => {
-    const v = playTower(def, seq(answerOnly, fire));
-    expect(v.status, v.reason).toBe('alive');
-    expect(v.reason).toContain('星を 3 回砕いた');
+  // M21-03: 見える星の下では、一つ目は窓で撃てるが、信仰が 77 年目に 0.6 を割り、二つ目の窓 (93〜104) で工事が動かない
+  it('answer-only (儀式なし、祈りにだけ応える) → dead (信仰が 77 年目に工事の門 0.6 を割り、二つ目の窓で備蓄が積めず 105 年目の星が落ちる)', () => {
+    expectDead(playYear(seq(answerOnly, fire)), 106);
   });
-  it('naive ritual without edict (儀式を最初から、止めよ無し) → dead (脈を掘り尽くし「星の砂を」の無視で上限が削れ、工事が止まり内乱で崩れる)', () => {
-    const v = playTower(def, seq(ritualFrom(0), fire));
-    expect(v.status).toBe('dead');
-    expect(v.reason).toContain('文明の段階 0');
+  it('naive ritual without edict (儀式を最初から、止めよ無し) → dead (窓の外でも掘り続けて脈が尽き、二つ目の窓で備蓄が積めず 105 年目の星が落ちる)', () => {
+    expectDead(playYear(seq(ritualFrom(0), fire)), 106);
   });
-  it('solution 1: ritual + stop at three loads (儀式を最初から、備蓄 9 で止めよ) → alive (三度砕く)', () => {
-    const v = playTower(def, seq(ritualFrom(0), stopAtStock(9), fire));
-    expect(v.status).toBe('alive');
-    expect(v.reason).toContain('星を 3 回砕いた');
+  it('naive ritual + answer without edict (儀式と応え、止めよ無し) → dead (応えは脈を戻さない。窓の外で掘り尽くし、105 年目の星が落ちる)', () => {
+    expectDead(playYear(seq(ritualFrom(0), answerOnly, fire)), 106);
   });
-  it('solution 2: ritual + stop at two loads (備蓄 6 で止めよ、残りは止める前の余りで) → alive', () => {
-    const v = playTower(def, seq(ritualFrom(0), stopAtStock(6), fire));
-    expect(v.status).toBe('alive');
-    expect(v.reason).toContain('星を 3 回砕いた');
+  it('old solution 1: ritual + stop at three loads (儀式を最初から、備蓄 9 で止めよ) → dead (備蓄は窓ごとに 4.3 までしか積めず止めよが出ないまま脈が尽き、105 年目の星が落ちる)', () => {
+    expectDead(playYear(seq(ritualFrom(0), stopAtStock(9), fire)), 106);
   });
-  it('naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (儀式が遅いと三度分を蓄える前に脈が 10% を切り、失望で工事が止まる)', () => {
+  it('old solution 2: ritual + stop at two loads (備蓄 6 で止めよ) → dead (備蓄 6 にも届かず止めよが出ないまま脈が尽き、105 年目の星が落ちる)', () => {
+    expectDead(playYear(seq(ritualFrom(0), stopAtStock(6), fire)), 106);
+  });
+  it('naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (星に届くのは 36 年目。備蓄 9 に届かず止めよが出ないまま窓の外で掘り続けて脈が 93 年目に尽き、105 年目の星が落ちる)', () => {
     // 計測 (M10R-05): 星に届くのが 36 年目、備蓄 9 は 84 年目。脈は 85 年目に 10% を切って「星の砂を」が絶え間なく出て、上限が 114 年目に 0.6 を割る
-    const v = playTower(def, seq(ritualFrom(20), edictLoop(), stopAtStock(9), fire));
-    expect(v.status, v.reason).toBe('dead');
-    expect(v.reason).toContain('文明の段階');
+    expectDead(playYear(seq(ritualFrom(20), edictLoop(), stopAtStock(9), fire)), 106);
+  });
+  it('naive stop only (儀式 + 星に届いたら止めよ、再開しない) → dead (窓で工事が動かず、60 年目の星が落ちる)', () => {
+    expectDead(playYear(seq(ritualFrom(0), stopAtStar, fire)), 61);
+  });
+  it('solution 1: ritual + window rhythm (儀式 + 星に届いたら止めよ + 星が見えたら再開せよ + 砕いたら止めよ) → alive (58・102 年目に砕く)', () => {
+    expectAlive(playYear(seq(ritualFrom(0), windowRhythm({ onlyAfterFirst: false }), fire)));
+  });
+  it('solution 2: ritual + answer + window rhythm after the first (儀式 + 応え + 星が見えたら再開せよ + 一度目を砕いた後だけ止めよ) → alive', () => {
+    expectAlive(playYear(seq(ritualFrom(0), answerOnly, windowRhythm({ onlyAfterFirst: true }), fire)));
   });
 });
 

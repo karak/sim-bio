@@ -33,9 +33,11 @@ const def: ScenarioDef = PROTO
       alive: { type: 'all', of: [{ type: 'intercepted', min: 2 }, { type: 'civ_stage', min: 6, years: 5 }] },
     }
   : orig;
-/** 星が見えているか (プレイヤーが石板で読めるもの)。試作は runner の次の星の年から、本実装は civ.starVisible */
-const visible = (r: ScenarioRunner, s: WorldSnapshot, y: number) => {
-  if (!PROTO) return (s.civ as { starVisible?: boolean } | null)?.starVisible === true;
+/**
+ * 星が見えているか (プレイヤーが石板で読めるもの)。runner の次の星の年から求める (試作・本実装とも)。
+ * 年に 1 度だけ update するこの台本では snapshot の civ.starVisible は 1 年遅れる (アプリは毎フレーム update するので 1 tick)
+ */
+const visible = (r: ScenarioRunner, _s: WorldSnapshot, y: number) => {
   const n = r.nextMeteorYear();
   return n !== null && y >= n - W;
 };
@@ -67,7 +69,16 @@ const windowRhythm = (o: { onlyAfterFirst: boolean }): Script => (r, s, y) => {
   if (!o.onlyAfterFirst || (c.intercepted ?? 0) === 1) stop(r);
 };
 const seq = (...fs: Script[]): Script => (r, s, y) => { for (const f of fs) f(r, s, y); };
+/** tests/slow の edictLoop の写し: 塔で星の門が閉じている間は止めよ、開いたら再開せよ */
+const edictLoop = (): Script => { let stopped = false; return (r, s) => {
+  const c = s.civ!;
+  if (c.stage === 6 && !stopped && (c.faith ?? 0) >= 0.6 && ((c.populationStar ?? 0) < 4.5 || (c.faith ?? 0) < 0.8)) { stop(r); stopped = true; }
+  if (stopped && (c.populationStar ?? 0) >= 4.5 && (c.faith ?? 0) >= 0.8) { resume(r); stopped = false; }
+}; };
 const scripts: Record<string, Script | null> = {
+  // 追加の 2 行 (LD §7 で dead に書き直す既存の試験): 旧想定解 2 (備蓄 6 で止めよ) と、遅い儀式 + 門の間の止めよ
+  'old-solution-stop6': seq(ritualFrom(0), stopAtStock(6), fire),
+  'late-ritual-edict-loop': seq(ritualFrom(20), edictLoop(), stopAtStock(9), fire),
   idle: null,
   'answer-only': seq(answerOnly, fire),
   'ritual-only': seq(ritualFrom(0), fire),
