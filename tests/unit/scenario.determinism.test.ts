@@ -11,6 +11,7 @@ import type { ScenarioDef } from '../../src/scenario/types';
 import type { Command, SpeciesDef, WorldConfig } from '../../src/simulation/types';
 import { disasterClick, spawnClick } from '../../src/simulation/commands';
 import { runChronicle } from '../../src/chronicle/replay';
+import { resolveCivilizationStart } from '../../src/simulation/civilization';
 
 /**
  * 決定論の刻み (M19-04、設計書 2026-09-26-cloudflare-architecture.md §1.3 C6)。
@@ -175,19 +176,57 @@ const CHRONICLE: { scenarioId: string; years: number; commands: readonly Timed[]
  * 版ごとの golden。本体 (係数・規則) を変えてこのテストが落ちたら、SIM_VERSION を上げ、新しい版の行を足す。
  * 古い行は消さない (過去の年代記がどの版で何になったかの記録)
  */
-const GOLDEN: Readonly<Record<string, string>> = {
-  '1': 'efc90e40c735aaddb775b20b68dcd7460222667ae20ee269f03f6617222f7ea6',
+// 1 行は版ごとの「年代記 → hash」。版 2 (M21-03 見える星) は沈む欠片の結末を変えないので、K1 が結末を変える年代記 (WITNESS) を足した。
+// 版を上げたら、前の版の行と少なくとも 1 つの年代記の hash が違うか、新しい年代記が加わっている (上げた証拠がある) こと
+const GOLDEN: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  '1': { sinking: 'efc90e40c735aaddb775b20b68dcd7460222667ae20ee269f03f6617222f7ea6' },
+  '2': { sinking: 'efc90e40c735aaddb775b20b68dcd7460222667ae20ee269f03f6617222f7ea6', 'intercept-tower': 'f570a165831e62cb384c05a7ff2f868c14fcffc686303660222395e506a5e6a1' },
 };
 
+/**
+ * 版 2 の証人 (M21-03 K1): 星の文明 (備蓄 2.7) を島の中心に据え、6 年目の星の窓を 3 年にした迎撃の塔。4 年目の頭に撃つ (どちらの規則でも受理される)。
+ * 版 1 の規則 (窓が無く毎年積む) なら撃った後の備蓄は 1.14、版 2 では 0〜2 年目が窓の外 (灯に焚く) なので 0.06。
+ * 種の総数は変わらないので、この年代記の digest には文明の備蓄・迎撃の数・星が見えているかを足す (toPrecision(6))
+ */
+const WITNESS_DEF: ScenarioDef = {
+  ...scenario('intercept-tower', 8),
+  start: { seed: 42, size: SIZE, civilization: { speciesId: 'deer', stage: 7, home: 16 * SIZE + 16, fuelStock: 600, faith: 0.9, worksStock: 2.7 } },
+  schedule: [{ atYear: 6, command: { type: 'disaster', kind: 'meteor', cell: -1, radius: 48 } }],
+  starSignYears: 3,
+  milestones: [],
+};
+const CHRONICLES: Readonly<Record<string, { def: ScenarioDef; commands: readonly Timed[] }>> = {
+  sinking: { def: scenario(CHRONICLE.scenarioId, CHRONICLE.years), commands: CHRONICLE.commands },
+  'intercept-tower': { def: WITNESS_DEF, commands: [{ tick: 4 * 360 + 10, command: { type: 'intercept' } }] },
+};
+
+/** 文明の開始 (start.civilization) も据える再生。沈む欠片の golden は replay (文明なし) のまま */
+function replayWithCiv(def: ScenarioDef, commands: readonly Timed[]) {
+  const cfg: WorldConfig = {
+    ...structuredClone(base),
+    size: SIZE,
+    species: species.map((d) => ({ ...d })),
+    seed: def.start?.seed ?? base.seed,
+    civilization: resolveCivilizationStart(def.start?.civilization, SIZE),
+  };
+  const world = World.create(cfg, { log: createMemorySink() });
+  const runner = createScenarioRunner(def, world, { ticksPerYear: cfg.ticksPerYear });
+  expect(runChronicle(world, runner, commands, { maxTicks: def.years * cfg.ticksPerYear })).toEqual({ kind: 'done' });
+  return { world, runner };
+}
+
 /** 設計書 §5.1 の Digest の中身 (年・判定・種ごとの総数 toPrecision(6)・絶滅した種) の正規化 JSON の SHA-256 */
-function replayDigest(): { hash: string; year: number; verdict: string } {
-  const { world, runner } = replay(scenario(CHRONICLE.scenarioId, CHRONICLE.years), CHRONICLE.commands);
+function replayDigest(id = 'sinking', def?: ScenarioDef): { hash: string; year: number; verdict: string } {
+  const c = CHRONICLES[id];
+  const { world, runner } = id === 'sinking' ? replay(c.def, c.commands) : replayWithCiv(def ?? c.def, c.commands);
   const s = world.snapshot();
   const verdict = runner.verdict().status;
   const ids = Object.keys(s.totals).sort();
   const totals = Object.fromEntries(ids.map((id) => [id, Number(s.totals[id].toPrecision(6))]));
   const extinct = ids.filter((id) => s.totals[id] === 0);
-  return { hash: sha256({ year: s.year, verdict, totals, extinct }), year: s.year, verdict };
+  if (id === 'sinking') return { hash: sha256({ year: s.year, verdict, totals, extinct }), year: s.year, verdict };
+  const civ = { stock: Number((s.civ?.works?.stock ?? 0).toPrecision(6)), intercepted: s.civ?.intercepted ?? 0, starVisible: s.civ?.starVisible ?? null };
+  return { hash: sha256({ year: s.year, verdict, totals, extinct, civ }), year: s.year, verdict };
 }
 
 describe('golden replay (M19-04)', () => {
@@ -195,11 +234,24 @@ describe('golden replay (M19-04)', () => {
     const d = replayDigest();
     expect(d.year).toBe(CHRONICLE.years);
     expect(d.verdict).not.toBe('running');
-    expect(d.hash, `本体の結末が変わった。SIM_VERSION を上げ、GOLDEN に '${String(Number(SIM_VERSION) + 1)}': '${d.hash}' を足す`).toBe(GOLDEN[SIM_VERSION]);
+    expect(d.hash, `本体の結末が変わった。SIM_VERSION を上げ、GOLDEN に '${String(Number(SIM_VERSION) + 1)}': '${d.hash}' を足す`).toBe(GOLDEN[SIM_VERSION].sinking);
   });
-  it('GOLDEN の最新の版が SIM_VERSION で、版ごとの hash はすべて違う', () => {
-    const versions = Object.keys(GOLDEN).map(Number);
+  it(`版 ${SIM_VERSION} の golden の年代記 (沈む欠片以外) もすべて一致する`, { timeout: 60_000 }, () => {
+    for (const id of Object.keys(GOLDEN[SIM_VERSION]).filter((k) => k !== 'sinking')) {
+      const d = replayDigest(id);
+      expect(d.verdict, id).not.toBe('running');
+      expect(d.hash, `${id} の結末が変わった`).toBe(GOLDEN[SIM_VERSION][id]);
+    }
+  });
+  it('GOLDEN の最新の版が SIM_VERSION で、版ごとの行はすべて前の版と違う (上げた証拠がある)', () => {
+    const versions = Object.keys(GOLDEN).map(Number).sort((a, b) => a - b);
     expect(Math.max(...versions)).toBe(Number(SIM_VERSION));
-    expect(new Set(Object.values(GOLDEN)).size).toBe(versions.length);
+    for (let i = 1; i < versions.length; i++) expect(GOLDEN[String(versions[i])]).not.toEqual(GOLDEN[String(versions[i - 1])]);
+  });
+  it('版 2 の証人: 見える星の窓を外す (版 1 の規則と同じく毎年積む) と、撃った後の備蓄が変わり digest が変わる', { timeout: 60_000 }, () => {
+    const k1 = replayDigest('intercept-tower');
+    const v1 = replayDigest('intercept-tower', { ...WITNESS_DEF, starSignYears: undefined });
+    expect(k1.verdict).toBe('dead');
+    expect(v1.hash).not.toBe(k1.hash);
   });
 });

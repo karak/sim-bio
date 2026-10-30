@@ -2,6 +2,7 @@ import type { Chronicle } from '../../src/chronicle/chronicle';
 import type { ReplayIsland } from '../../src/chronicle/replay';
 import type { ScenarioDef } from '../../src/scenario/types';
 import type { SpeciesDef, WorldConfig } from '../../src/simulation/types';
+import { SIM_VERSION } from '../../src/simulation/version';
 
 /**
  * 年代記の再生の golden (M19-06)。単体 (Node) と E2E (Chromium の Web Worker) が同じ年代記を回し、同じ hash になることを確かめる。
@@ -11,7 +12,7 @@ export const FIXTURE_SIZE = 32;
 export const FIXTURE_YEARS = 3;
 
 export const FIXTURE_CHRONICLE: Chronicle = {
-  simVersion: '1',
+  simVersion: SIM_VERSION,
   scenarioId: 'sinking',
   seed: 42,
   commands: [
@@ -26,7 +27,7 @@ export const FIXTURE_CHRONICLE: Chronicle = {
 export const FIXTURE_HASH = 'c8c2ea44b47e522b37bc4fefc4d7e81798cb5f033dbe6b18fe387d75db51aaa2';
 
 /** 上の年代記の id (M19-07)。Node の単体と workerd の Worker のテストが同じ id になることを確かめる */
-export const FIXTURE_CHRONICLE_ID = '6f6bc0c30c31b6ea4462be142f0ba6c27bf375611b51fa7d1ffa875352c18a5d';
+export const FIXTURE_CHRONICLE_ID = 'b9c1a96ed8dabf1b97010b76a7c657d416af19e6eb01dd81c4be76225fb379c3';
 
 /** 石板の年数と島の大きさだけを縮めた島 (速く回すため)。種の上書きと seed は石板のまま */
 export function fixtureIsland(catalog: { base: Omit<WorldConfig, 'species'>; species: readonly SpeciesDef[]; scenarios: readonly ScenarioDef[] }, scenarioId = FIXTURE_CHRONICLE.scenarioId): ReplayIsland {

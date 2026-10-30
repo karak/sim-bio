@@ -150,7 +150,7 @@ describe('見える星 (M21-03 K1): 年の途中で撃っても、update の刻�
     r.update(w.snapshot());
     return w.snapshot().civ!;
   };
-  it('撃った年の残りは窓が閉じていて、境目だけ update しても途中で update しても備蓄は同じ (撃った 3 を引いた残り)', () => {
+  it('撃った年の残りは窓が閉じていて、境目だけ update しても途中で update しても備蓄は同じ (撃った 3 を引いた残り)', { timeout: 60_000 }, () => {
     const replay = run(false);
     const live = run(true);
     expect(replay.starVisible).toBe(false);
