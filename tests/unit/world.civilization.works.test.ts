@@ -56,3 +56,30 @@ describe('星の工事と迎撃 (M10-02、World)', () => {
     expect(r2.snapshot().civ!.works).toEqual({ stock: 0, stopped: false });
   });
 });
+
+describe('見える星 (M21-03 K1、World)', () => {
+  it('star_sign で civ.starVisible が立つ。見えていない年は脈が減っても備蓄は増えず、見えれば積む', () => {
+    const { w, log } = mk(1);
+    expect(w.snapshot().civ!.starVisible).toBeUndefined();
+    w.dispatch({ type: 'star_sign', visible: false }, { fromStar: false });
+    const before = total(w);
+    w.step(360);
+    let civ = w.snapshot().civ!;
+    expect(civ.starVisible).toBe(false);
+    expect(civ.works!.stock).toBe(0);
+    expect(before - total(w)).toBeCloseTo(WORKS_RATE, 4);
+    expect(log.find('sim.civ.works').at(-1)).toMatchObject({ visible: false, stock: 0 });
+    w.dispatch({ type: 'star_sign', visible: true }, { fromStar: false });
+    w.step(360);
+    civ = w.snapshot().civ!;
+    expect(civ.starVisible).toBe(true);
+    expect(civ.works!.stock).toBeCloseTo(WORKS_RATE, 5);
+  });
+  it('starVisible は保存に往復する', () => {
+    const { w } = mk(1);
+    w.dispatch({ type: 'star_sign', visible: false }, { fromStar: false });
+    w.step(1);
+    const r = World.restore(w.serialize(), { log: createMemorySink() });
+    expect(r.snapshot().civ!.starVisible).toBe(false);
+  });
+});

@@ -49,7 +49,8 @@ GROUPS: tuple[tuple[str, float], ...] = (
     ("scenario playthroughs (size 64)", 14.7),
     ("tower scenario v2 playthroughs (size 64)", 4.5),
     ("faith scenarios (M9-04, size 64)", 10.4),
-    ("intercept-tower scenario playthroughs (size 64)", 7.4),
+    # M21-03 (2026-10-29): 2 星 110 年・10 本に作り直し、1 本で回して 533 秒
+    ("intercept-tower scenario playthroughs (size 64)", 8.9),
     ("sky-ship scenario playthroughs (size 64)", 6.3),
     ("観察画面の 4 場面が空の舟の実プレイで引かれる (M22-09)", 2.7),
 )

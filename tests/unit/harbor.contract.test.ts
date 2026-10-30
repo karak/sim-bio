@@ -32,7 +32,7 @@ const withSpawns = (n: number): Chronicle => ({
 
 describe('chronicleId (M19-07): 同じ年代記は同じ id', () => {
   it('JSON の往復・鍵の順・知らない鍵を経ても同じ id になり、固定の年代記は golden の id になる', async () => {
-    const reordered = JSON.parse(JSON.stringify({ yearly: FIXTURE_CHRONICLE.yearly, commands: FIXTURE_CHRONICLE.commands, seed: 42, scenarioId: 'sinking', simVersion: '1', extra: 'x' }));
+    const reordered = JSON.parse(JSON.stringify({ yearly: FIXTURE_CHRONICLE.yearly, commands: FIXTURE_CHRONICLE.commands, seed: 42, scenarioId: 'sinking', simVersion: FIXTURE_CHRONICLE.simVersion, extra: 'x' }));
     const parsed = parseChronicle(reordered);
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.error));
     const id = await chronicleId(FIXTURE_CHRONICLE);

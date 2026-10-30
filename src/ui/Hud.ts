@@ -52,6 +52,17 @@ export function formatCiv(civ: CivState | null, dreamEater = false): string | nu
 }
 
 /**
+ * 迎撃の行の「次の星」(M21-02 D4)。見える星 (M21-03 K1) の石板では、星が見えているか (工事が備蓄に積めるか) を添える。
+ * 窓の無い石板 (starVisible が無い) は今までどおり年だけ
+ */
+export function formatNextMeteor(year: number | null, starVisible: boolean | undefined): string {
+  if (year === null) return '';
+  const base = `次の星 ${year} 年目`;
+  if (starVisible === undefined) return base;
+  return starVisible ? `${base} · 見えている(工事は備蓄に積む)` : `${base} · まだ見えない(掘った輝石は灯に焚く)`;
+}
+
+/**
  * #hud-ship の説明文 (M10-03)。formatCiv とは別の行に出す (formatCiv の既存の文字列はテストが留め金にしているので変えない)。
  * 未着工なら門の説明、建造中なら進み、完成したが信仰不足なら「民は乗らない」を添え、飛び立てば専用の文を返す。
  * timber (M21-02 D2): 徴収半径内の材 (Hud.update が timberAround で計算した値をそのまま渡す)。
@@ -493,7 +504,7 @@ export function createHud(
       const reasonEl = $('intercept-reason');
       if (reasonEl.textContent !== reasonText) reasonEl.textContent = reasonText;
       reasonEl.hidden = reasonText === '';
-      const nextText = nextMeteor !== null ? `次の星 ${nextMeteor} 年目` : '';
+      const nextText = formatNextMeteor(nextMeteor, s.civ.starVisible);
       const nextEl = $('intercept-next');
       if (nextEl.textContent !== nextText) nextEl.textContent = nextText;
     }

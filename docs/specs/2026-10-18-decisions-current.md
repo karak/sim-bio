@@ -30,7 +30,7 @@
 | 5 | 環境レイヤー | 標高・気温・降水(水分)。日照は緯度で代用。土壌は持たない | 最小で気候の多様性を作れる | M5 で生気・枯死 (09-19 §4.11)、M8-01 で輝石の層を足した。土壌は持たない | `src/simulation/types.ts` の `WorldSnapshot.layers` |
 | 5 | 季節 | あり。気温と降水を年周期で揺らす | 無介入でも画面が動く | 同じ | — |
 | 6 | 気候フィードバック | 「植生 → 降水」のみ有効。植生→気温、CO2→気温、氷→気温は係数 0 のスロットとして定義だけ持つ | 局所的で因果が目で追える。正のフィードバックの暴走を避ける | 同じ | — |
-| 7 | 介入 | 時間操作、種を放つ、気候スライダー、災害 4 種(隕石・火山・山火事・疫病)。地形変更は第二段階 | 実装済みの仕組みの面白さを引き出す最短経路 | M6〜M10 で沈降 (台本だけ)・勅令・気象塔・塔の電源・迎撃・空の舟を足し、`Command` は 9 種 <!-- check: command_types=9 -->。地形変更はまだ無い | `src/simulation/types.ts` の `Command` |
+| 7 | 介入 | 時間操作、種を放つ、気候スライダー、災害 4 種(隕石・火山・山火事・疫病)。地形変更は第二段階 | 実装済みの仕組みの面白さを引き出す最短経路 | M6〜M10 で沈降 (台本だけ)・勅令・気象塔・塔の電源・迎撃・空の舟を足し、`Command` は 10 種 <!-- check: command_types=10 -->。地形変更はまだ無い | `src/simulation/types.ts` の `Command` |
 | 8 | 技術 | Three.js + TypeScript + Vite + ESLint + Vitest。デプロイは Cloudflare 静的配信想定、当面ローカル | 大量の数値をバッファに書く処理に React は向かない | M19-02 から Cloudflare Workers に配る (静的配信と港の API を 1 本の Worker で)。E2E は Playwright | `wrangler.jsonc`、`playwright.config.ts`、`docs/design/2026-09-26-cloudflare-architecture.md` |
 | 9 | 地形 | シード付き手続き生成 | 再現性とリプレイ性 | 同じ | — |
 | 10 | 実行場所 | メインスレッド。型付き配列 + コマンド境界で Worker 化に備える | COOP/COEP の設定を初期から抱えない | 本体はメインスレッドのまま。年代記の回し直しだけ Web Worker (M19-06) | `src/chronicle/replayInWorker.ts` |
@@ -113,6 +113,8 @@ vitest の並列の単位はファイルで、47 件が 1 つのファイルに�
 
 ## 迎撃の塔 (M21-03)
 
+実装: M21-03 (枝 worktree-agent-ade35eca553d23ef6)。窓は `ScenarioDef.starSignYears`、工事は `src/simulation/works.ts` の `stepWorks`、窓の受け渡しは `src/scenario/starSign.ts`。
+
 - supersedes: docs/design/2026-10-28-level-design-intercept-2.md#9-ユーザーへの問い (問いの答え)
 - supersedes: docs/design/2026-10-28-level-design-intercept-2.md#105-候補と推奨 (長さ)
 - 決めた日: 2026-10-28 (審査台 decisions-20261028・202610282)。LD は書いた時点のまま残し、今はこの節が正。実装は M21-03
@@ -136,3 +138,4 @@ vitest の並列の単位はファイルで、47 件が 1 つのファイルに�
 | 2026-10-20 | M24-02・M24-03 | E2E を 21 → 23 本 (titleMenu.spec・titleHarbor.spec) |
 | 2026-10-28 | M26-21 | cap を cast_cargo 3,000・report 500・withdraw 500 に下げ、check:d1-writes を check に入れた (審査台 decisions-20261020 の判定) |
 | 2026-10-28 | M21-03 | 節「迎撃の塔 (M21-03)」を足した (K1・W 12・灯に焚く・2 星 60・105 / 110 年・勝ちの条件 2 回。審査台 decisions-20261028・202610282 の判定) |
+| 2026-10-31 | M21-03 | `Command` を 9 → 10 種 (star_sign: 見える星の窓の開閉を runner が World へ渡す)。SIM_VERSION を 1 → 2 (K1 で迎撃の塔の結末が変わる。ADR 0002 決定 5)。ユーザーの承認 2026-10-31 |

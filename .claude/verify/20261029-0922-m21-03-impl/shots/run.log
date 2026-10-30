@@ -1,0 +1,8 @@
+
+Running 1 test using 1 worker
+
+home click {"d":0,"x":840,"y":482.99999999999994,"cell":1770}
+  ✓  1 .claude/verify/20261029-0922-m21-03-impl/shots/m21-03.spec.ts:47:1 › M21-03 迎撃の塔 (見える星) の画 a〜e (50.9s)
+
+  1 passed (51.6s)
+exit 0

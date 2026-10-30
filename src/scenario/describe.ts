@@ -36,6 +36,9 @@ export function describeEvent(e: TimelineEvent, names: Record<string, string>): 
         return c.active ? '気象塔が動き出した' : '気象塔が止まった';
       case 'launch_ship':
         return '石板が告げた: 舟を作れ';
+      // 見える星 (M21-03 K1) は runner が World へ直に流し年表には積まないので通らないが、Command の網羅性のために用意しておく
+      case 'star_sign':
+        return c.visible ? '星が見えた' : '空は暗い';
     }
   };
   switch (e.kind) {

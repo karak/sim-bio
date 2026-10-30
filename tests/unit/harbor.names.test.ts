@@ -11,7 +11,7 @@ describe('港の島の呼び名とひとこと (M19-09)', () => {
     const id = FIXTURE_CHRONICLE_ID as ChronicleId;
     expect(islandName(id)).toBe(islandName(id));
     expect(islandName(id)).toMatch(/^[ア-ン]{3,4}の(島|環|洲)$/);
-    expect(islandName(id)).toBe('キワヌの島');
+    expect(islandName(id)).toBe('マノロの島');
   });
 
   it('id が違えば、たいていは違う名になる (64 通りの id で 40 以上)', async () => {

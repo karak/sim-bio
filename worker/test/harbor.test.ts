@@ -4,6 +4,7 @@ import { sha256Hex } from '../../src/chronicle/digest';
 import { chronicleId, type BrowseCursor, type ChronicleId, type HarborCatalog, type InscriptionId } from '../../src/harbor/contract';
 import { MAX_BODY_BYTES, readResponse, writeRequest } from '../../src/harbor/wire';
 import { BOT, captureLogs, chronicleOf, digestFor, freshIp, HUMAN, keyOf, ORIGIN, publishReq, refusalOf, send, stubSiteverify } from './helpers';
+import { FIXTURE_CHRONICLE } from '../../tests/fixtures/chronicle';
 
 const catalog: HarborCatalog = { scenarios: new Set(['sinking', 'volcano']), species: new Set(['deer', 'wolf', 'rabbit']), inscriptions: new Set(['still-here', 'we-tried']) };
 
@@ -143,7 +144,7 @@ describe('一覧 GET /api/v1/chronicles と訪問 GET /api/v1/chronicles/:id', (
     const second = await browse({ before: first.next ?? undefined });
     expect(second.cards.map((c) => c.seed)).toEqual([3, 2, 1]);
     expect(second.next).toBeNull();
-    expect(first.cards[1]).toEqual({ id: ids[25], simVersion: '1', scenarioId: 'sinking', seed: 26, inscription: 'still-here', verdict: 'alive', year: 3, publishedAt: 1_790_000_026_000, confirms: 0, mismatches: 0 });
+    expect(first.cards[1]).toEqual({ id: ids[25], simVersion: FIXTURE_CHRONICLE.simVersion, scenarioId: 'sinking', seed: 26, inscription: 'still-here', verdict: 'alive', year: 3, publishedAt: 1_790_000_026_000, confirms: 0, mismatches: 0 });
 
     expect((await browse({ scenarioId: 'volcano' })).cards.map((c) => c.seed)).toEqual([99]);
   });

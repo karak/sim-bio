@@ -165,7 +165,7 @@ class FactTest(unittest.TestCase):
 
     def test_todays_code(self):
         facts = facts_of(load_repo(REPO))
-        self.assertEqual(facts["command_types"], "9")
+        self.assertEqual(facts["command_types"], "10")
         self.assertEqual(facts["trophic_decomposer"], "decomposer")
         self.assertEqual(facts["slots"], "4")
         self.assertEqual(facts["autosave_ticks"], "90")

@@ -78,6 +78,9 @@ export function commandKey(cmd: Command): string | null {
     // 舟を作れ (M10-03) は civ_edict と同じく言葉 (石板が民に告げる) であって行為ではないので、儀式にも気まぐれにも数えない
     case 'launch_ship':
       return null;
+    // 見える星 (M21-03 K1) は runner が予定から流す空の知らせで、星の行為ではない
+    case 'star_sign':
+      return null;
   }
 }
 

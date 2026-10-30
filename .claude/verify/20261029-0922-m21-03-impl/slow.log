@@ -1,0 +1,61 @@
+
+ RUN  v5.0.1 /Volumes/Mac external HDD/Projects/game-demo/.claude/worktrees/agent-ade35eca553d23ef6
+
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > sinking: idle → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > sinking: scripted intervention → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > falling-star: idle → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > falling-star: scripted intervention → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > volcano: idle → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > volcano: scripted intervention → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > enrichment: idle → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > enrichment: scripted intervention → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > vitality-famine: idle → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > vitality-famine: scripted intervention → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > sinking: naive rain-only → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > sinking: naive spawn-only → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > sinking: naive plague-only → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > sinking: save-then-rain (second solution) → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > scenario playthroughs (size 64) > enrichment: too much rain kills the wolves (the trap)
+ ↓ tests/slow/scenarios.playthrough.test.ts > tower scenario v2 playthroughs (size 64) > idle → dead (燃料切れで段階が落ちる)
+ ↓ tests/slow/scenarios.playthrough.test.ts > tower scenario v2 playthroughs (size 64) > naive fire-only → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > tower scenario v2 playthroughs (size 64) > naive tree-only → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > tower scenario v2 playthroughs (size 64) > fire + trees (想定解 1) → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > tower scenario v2 playthroughs (size 64) > trees first + fire (想定解 2) → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: idle → dead (放置。信仰が減衰して内乱、崩壊)
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: naive ritual only (儀式だけ、先回りなし) → dead (記憶の予算が尽きて夢喰い)
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: naive answer (祈りが出たら疫病) → dead (民は考えるのをやめた)
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: naive greedy the year after the wave (波の翌年に疫病) → dead (窓は波の年だけ)
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: naive alt 1:2 (3 波に 1 回だけ先回り) → dead (夢喰い)
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: naive greedy without ritual → dead (信仰の減衰で内乱)
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: solution 1: greedy (波の年に力 24 があれば集落へ疫病) + ritual → alive (7 回買えて 5 回見送り、上限 0.5)
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > no-answer: solution 2: alt 1:1 (一つおきに先回り) + ritual → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: idle → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: moss-only → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: edict without faith → dead
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: answer then stop (想定解 1) → alive
+ ↓ tests/slow/scenarios.playthrough.test.ts > faith scenarios (M9-04, size 64) > vein-drain: ritual then stop (想定解 2) → alive
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > idle → dead (信仰が減衰して塔で止まり、一つ目の星が落ちる) 32521ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > answer-only (儀式なし、祈りにだけ応える) → dead (信仰が 77 年目に工事の門 0.6 を割り、二つ目の窓で備蓄が積めず 105 年目の星が落ちる) 56380ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive ritual without edict (儀式を最初から、止めよ無し) → dead (窓の外でも掘り続けて脈が尽き、二つ目の窓で備蓄が積めず 105 年目の星が落ちる) 58130ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive ritual + answer without edict (儀式と応え、止めよ無し) → dead (応えは脈を戻さない。窓の外で掘り尽くし、105 年目の星が落ちる) 56193ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > old solution 1: ritual + stop at three loads (儀式を最初から、備蓄 9 で止めよ) → dead (備蓄は窓ごとに 4.3 までしか積めず止めよが出ないまま脈が尽き、105 年目の星が落ちる) 56182ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > old solution 2: ritual + stop at two loads (備蓄 6 で止めよ) → dead (備蓄 6 にも届かず止めよが出ないまま脈が尽き、105 年目の星が落ちる) 56302ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (星に届くのは 36 年目。備蓄 9 に届かず止めよが出ないまま窓の外で掘り続けて脈が 93 年目に尽き、105 年目の星が落ちる) 60172ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > naive stop only (儀式 + 星に届いたら止めよ、再開しない) → dead (窓で工事が動かず、60 年目の星が落ちる) 33857ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > solution 1: ritual + window rhythm (儀式 + 星に届いたら止めよ + 星が見えたら再開せよ + 砕いたら止めよ) → alive (58・102 年目に砕く) 59668ms
+ ✓ tests/slow/scenarios.playthrough.test.ts > intercept-tower scenario playthroughs (size 64) > solution 2: ritual + answer + window rhythm after the first (儀式 + 応え + 星が見えたら再開せよ + 一度目を砕いた後だけ止めよ) → alive 58409ms
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > idle → dead (林だけでは塔は立つが舟が無く、沈む)
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > 林だけ (植えずに 10 年目に着工) → dead (0 年目の民の林だけでは持続収量が足りず、着工しても帆が落ちる)
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > naive 薄い植え足し (2 年に 1 本、20 年目に着工) → dead (進み 111 で林が尽きて帆が落ちる)
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > naive 早い着工 (毎年 1 本、5 年目に着工) → dead (進み 119 で林が尽きて止まる)
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > naive 遅い着工 (毎年 1 本、100 年目に着工) → dead (沈没で林が痩せ、民の記憶=信仰の上限も削れている)
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > solution 1: 毎年 1 本植えて 20 年目に着工 → escaped (40 年目)
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > solution 2: 毎年 1 本植えて 45 年目に着工 → escaped (65 年目)
+ ↓ tests/slow/scenarios.playthrough.test.ts > sky-ship scenario playthroughs (size 64) > naive forest-only (森を UI 並みの環 1・0.5 で 2 年ごとに放ち続ける) → dead (鹿に食われ、材が育たない)
+
+ Test Files  1 passed (1)
+      Tests  10 passed | 41 skipped (51)
+   Start at  10:04:39
+   Duration  528.12s (tests 100%)
+
+exit 0 wall 529s

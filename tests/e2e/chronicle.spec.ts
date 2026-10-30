@@ -100,7 +100,7 @@ test('M19-06: シナリオ中に受理された介入だけが、tick 付きで�
   await expect(page.locator('#tablet-power')).toHaveText('1 / 30');
   await expect.poll(async () => (await storedChronicle(page, 'test-quick'))?.commands.length).toBe(3);
   const c = await storedChronicle(page, 'test-quick');
-  expect(c).toMatchObject({ simVersion: '1', scenarioId: 'test-quick', seed: 42 });
+  expect(c).toMatchObject({ simVersion: FIXTURE_CHRONICLE.simVersion, scenarioId: 'test-quick', seed: 42 });
   expect(c?.commands.map((x) => x.command.type)).toEqual(['spawn_species', 'spawn_species', 'spawn_species']);
   const ticks = c?.commands.map((x) => x.tick) ?? [];
   expect(new Set(ticks).size).toBe(1);

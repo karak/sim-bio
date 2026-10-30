@@ -1,0 +1,30 @@
+
+Running 24 tests using 1 worker
+
+  ✓   1 tests/e2e/smoke.spec.ts:3:1 › boots, advances a year at 100x, graph shows values, layer switch works (8.1s)
+  ✓   2 tests/e2e/smoke.spec.ts:24:1 › species palette: pick a species and click the island to spawn it (1.4s)
+  ✓   3 tests/e2e/smoke.spec.ts:41:1 › firelizard (M8-09): shown in legend but not spawnable by the watcher (501ms)
+  ✓   4 tests/e2e/smoke.spec.ts:51:1 › 鐘樹 (belltree, M8-10): spawn chip and legend appear in free mode (503ms)
+  ✓   5 tests/e2e/smoke.spec.ts:59:1 › suitability layer: mode toggle + species chip reflect the choice in DOM state (551ms)
+  ✓   6 tests/e2e/smoke.spec.ts:73:1 › clicking the island opens the cell panel with a local time series (509ms)
+  ✓   7 tests/e2e/smoke.spec.ts:84:1 › stone tablet: ?scenario=sinking shows the prophecy and counts years (4.0s)
+  ✓   8 tests/e2e/smoke.spec.ts:94:1 › stone tablet: verdict overlay appears and stops the clock (9.4s)
+  ✓   9 tests/e2e/smoke.spec.ts:104:1 › free mode has the selector but no prophecy (554ms)
+  ✓  10 tests/e2e/smoke.spec.ts:110:1 › civilization: ?scenario=test-civ shows the stage line in the HUD (M8-04) (482ms)
+  ✓  11 tests/e2e/smoke.spec.ts:116:1 › civilization: free mode has no civ line (194ms)
+  ✓  12 tests/e2e/smoke.spec.ts:121:1 › tower fuel: ?scenario=test-civ shows the fuel line once a year has passed (M8-08) (4.0s)
+  ✓  13 tests/e2e/smoke.spec.ts:128:1 › faith: ?scenario=test-civ shows the faith line once a year has passed (M9-01) (485ms)
+  ✓  14 tests/e2e/smoke.spec.ts:135:1 › prayer: ?scenario=test-civ shows the current prayer, and an answering intervention clears it and logs answered (M9-02) (4.0s)
+  ✓  15 tests/e2e/smoke.spec.ts:158:1 › edict: ?scenario=test-civ の勅令「採掘を止めよ」は信仰 0.7 の民が従い、HUD に「採掘 止」、年表に「民は採掘を止めた」が出る (M9-03) (4.9s)
+  ✓  16 tests/e2e/smoke.spec.ts:171:1 › volcano hint: arming the 火山 chip shows the hint text, unarming hides it (M8-08) (665ms)
+  ✓  17 tests/e2e/smoke.spec.ts:182:1 › star power: budget line is shown, spawning costs power, and an unaffordable spawn is rejected (703ms)
+  ✓  18 tests/e2e/smoke.spec.ts:211:1 › stone tablet: milestone disappears when reached, power warning appears, verdict shows stats (8.1s)
+  ✓  19 tests/e2e/smoke.spec.ts:245:1 › intercept: ?scenario=test-intercept の星の民は「星を砕け」で三年目の隕石を取り消し、節目が消えて年表に「星が砕けた」が出る (M10-02) (1.3s)
+  ✓  20 tests/e2e/smoke.spec.ts:265:1 › weather tower: ?scenario=test-tower で気象塔チップを武装して島をクリックすると建ち、セル詳細と年表に出る (M10-01) (1.9s)
+  ✓  21 tests/e2e/smoke.spec.ts:292:1 › sky ship: ?scenario=test-ship shows the ship progress in the HUD and escapes to a 次の島へ verdict with a downloadable cargo (M10-03) (4.0s)
+  ✓  22 tests/e2e/smoke.spec.ts:306:1 › ship: 段階が帆に満たない年は押せない理由を行に出す (M21-02 D3) (451ms)
+  ✓  23 tests/e2e/smoke.spec.ts:313:1 › intercept: 備蓄が足りない年は押せない理由を行に出す (M21-02 D3) (4.0s)
+  ✓  24 tests/e2e/smoke.spec.ts:323:1 › warnings: 種 id 付きの警告 (狼の波) に「〜を見る」チップが出て、押すと狼レイヤーが開く (M21-02 D5) (2.2s)
+
+  24 passed (1.1m)
+exit 0
