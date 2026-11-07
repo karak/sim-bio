@@ -397,11 +397,11 @@ describe('faith scenarios (M9-04, size 64)', { timeout: 600_000 }, () => {
 });
 
 /**
- * 迎撃の塔 (M10-02、size 64、150 年)。LD: docs/design/2026-09-22-level-design-devices.md §4.1・§5・§8.2。
- * 星は三度落ちる (60/100/140)。星の門 (半径 12 の民 4.0 + 信仰 0.8) と工事 (備蓄 3.0、信仰 0.6) と薄い脈 (crystalScale 0.62)。
- * 儀式を最初から続ければ塔で待たずに星に上がり、三度撃てる。儀式を後回しにすると、信仰が 0.8 に届くまで塔で掘り続けて脈を
- * 無駄にし、三度目の備蓄が足りない。そのとき「止めよ」で脈を守れば間に合う。儀式をせず祈りに応えるだけでは 0.8 に届かず、一つ目が落ちる
- * (M21-01: 応えを UI と同じ手にすると応えだけで 0.8 に届き alive。下の answer-only と M21-03 を見よ)
+ * 迎撃の塔 (M10-02 → M21-03、size 64、110 年)。LD: docs/design/2026-10-28-level-design-intercept-2.md §3・§6、
+ * 決め: docs/specs/2026-10-18-decisions-current.md「迎撃の塔 (M21-03)」。
+ * 星は二度落ちる (60/105)。星の門 (半径 12 の民 4.0 + 信仰 0.8) と工事 (備蓄 3.0、信仰 0.6) と薄い脈 (crystalScale 0.62)。
+ * 工事が備蓄に積めるのは着弾 12 年前からの窓の間だけ (K1)。窓の外で止めよ、窓で再開、撃てば止めよ、が想定解。
+ * 応えだけ・儀式だけ・止めよ無しは二つ目の窓で工事が動かず dead
  */
 describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }, () => {
   const def = defs.find((d) => d.id === 'intercept-tower');
@@ -411,7 +411,7 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
   /** 備蓄が満ちたら撃つ */
   const fire: Script = (r, s) => { if ((s.civ?.works?.stock ?? 0) >= INTERCEPT_NEED) r.intervene({ type: 'intercept' }); };
   /**
-   * 三度分の蓄えが成ったら「止めよ」(M10R-05)。星の工事も勅令で止まる。止めなければ脈が 10% を切って「星の砂を」が絶え間なく出て、
+   * 備蓄 N で「止めよ」(M10R-05 の旧想定解。K1 の下では窓ごとに 4.3 までしか積めず、dead の行でだけ使う)。星の工事も勅令で止まる。止めなければ脈が 10% を切って「星の砂を」が絶え間なく出て、
    * 無視のたびに信仰の上限が削れ (5 年に −0.1)、工事の門 0.6 を切って止まる (LD §8.1)
    */
   const stopAtStock = (need: number): Script => (r, s) => {
@@ -487,7 +487,7 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
   it('idle → dead (信仰が減衰して塔で止まり、一つ目の星が落ちる)', () => {
     expectDead(playYear(null), 61);
   });
-  // M21-01: 応えを UI と同じ手 (疫病 環 4・草 環 1) にすると、応えだけで信仰 0.88 に届いて 30 年目に星、50 年目までに三度砕き alive。
+  // M21-01 の頃は応えだけで alive だった (疫病 環 4・草 環 1 で信仰 0.88 に届いて 30 年目に星)。K1 の下では 106 年目に dead (下の M21-03 の注)。
   // 以前の dead は環 6 の疫病で 50 年目の祈りが 1 回多く、信仰が工事の門 0.6 を割らずに脈を掘り尽くした偶然だった。応えだけで勝てる問題と、
   // 50 年で撃ち終わる後半の空白は M21-03 の LD で扱う (docs/specs/plans/2026-09-23-m21-01-ui-parity-audit.md §3)
   // M21-03: 見える星の下では、一つ目は窓で撃てるが、信仰が 77 年目に 0.6 を割り、二つ目の窓 (93〜104) で工事が動かない
@@ -507,7 +507,7 @@ describe('intercept-tower scenario playthroughs (size 64)', { timeout: 900_000 }
     expectDead(playYear(seq(ritualFrom(0), stopAtStock(6), fire)), 106);
   });
   it('naive late ritual + edict loop (儀式を 20 年目から、門の間は止めよ、蓄えたら止めよ) → dead (星に届くのは 36 年目。備蓄 9 に届かず止めよが出ないまま窓の外で掘り続けて脈が 93 年目に尽き、105 年目の星が落ちる)', () => {
-    // 計測 (M10R-05): 星に届くのが 36 年目、備蓄 9 は 84 年目。脈は 85 年目に 10% を切って「星の砂を」が絶え間なく出て、上限が 114 年目に 0.6 を割る
+    // 計測 (M21-03、K1): 星に届くのが 25 年目。窓の外で掘り続けて脈が 93 年目に尽き、105 年目の星で dead (106 年目に判定)
     expectDead(playYear(seq(ritualFrom(20), edictLoop(), stopAtStock(9), fire)), 106);
   });
   it('naive stop only (儀式 + 星に届いたら止めよ、再開しない) → dead (窓で工事が動かず、60 年目の星が落ちる)', () => {

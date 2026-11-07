@@ -1,11 +1,13 @@
 ---
 id: M24-03
 title: タイトルからシナリオ選択と港への導線
-status: todo
+status: done
 milestone: M24
 plan: docs/uiux/2026-10-04-title-flow.md
 depends_on: [M24-01]
 evidence:
+  - "tests/unit/ui.titleHarbor.closed.dom.test.ts、tests/e2e/titleHarbor.spec.ts (lane1・lane1b・lane3)、正本 SEL-004・HBR-008/009 (docs/acceptance/scenarios.jsonl)"
+  - "層 C: 審査台 decisions-20261028 d1028-c-m24-03 = 承認 (2026-11-07)"
   - 749ecd8 行き先の表の行 RED (tests/unit/ui.titleMenu.route.test.ts, app.title.test.ts, ui.titleMenu.panels.test.ts)
   - 8985dc4 tests/e2e/titleHarbor.spec.ts 4 本 (層 A: .claude/verify/20261020-1019-m24-03/、15 passed)
   - 8f62234 実装 (石板の板 scenarioRowsOf、港の板 案 A、runAtTitle の assign)
@@ -23,10 +25,10 @@ M24-00 の W/F に沿って、タイトルから次へ行けるようにする�
 
 ## Acceptance criteria
 
-- [ ] 試験を先に書く: シナリオ選択と港の入口の行き先を純粋な関数にし、表の単体試験で確かめる (M21-07 の searchFor・finishedScopeOf を使い、作り直さない)
-- [ ] 操作画面の石板の選択とタイトルのシナリオ選択が、同じ石板で同じ始まりになる (単体試験)
-- [ ] E2E: タイトル → シナリオ選択 → 石板の操作画面、タイトル → 港 → 訪問 (tests/fixtures/fakeHarbor.ts)、港が閉じているときの知らせ
-- [ ] 前後の画を審査台に置き、ユーザーが見る
+- [x] 試験を先に書く: シナリオ選択と港の入口の行き先を純粋な関数にし、表の単体試験で確かめる (M21-07 の searchFor・finishedScopeOf を使い、作り直さない)
+- [x] 操作画面の石板の選択とタイトルのシナリオ選択が、同じ石板で同じ始まりになる (単体試験)
+- [x] E2E: タイトル → シナリオ選択 → 石板の操作画面、タイトル → 港 → 訪問 (tests/fixtures/fakeHarbor.ts)、港が閉じているときの知らせ
+- [x] 前後の画を審査台に置き、ユーザーが見る (d1028-c-m24-03 = 承認、2026-11-07)
 
 ## Blocked by
 
@@ -38,3 +40,4 @@ M24-00 の W/F に沿って、タイトルから次へ行けるようにする�
 - 2026-10-20: 実装・feat/m19 に取り込み (merge)。層 C (前後の画 .claude/localreview/m24-03-20261020-0954/) と scenarios.jsonl の 4 行 (同じ置き場の scenarios-proposal.jsonl) の承認待ちで status は todo のまま。perf 92.1→93.8 ms。未決: 自動の枠が無く閉港だとタイトルから石板を選ぶ道が無い (案 a いつも板 / 案 b 閉港の板にも「石板を選ぶ」)。「初めから始める」は未実装。check:docs は E2E の数 21→23 の承認待ちで赤。
 - 2026-10-28 審査台 decisions-20261020 の判定: 閉港の板にも「石板を選ぶ」を出す (案 b、d1020-m24-03-newgame=b)。「初めから始める」は別の票 M24-06 に (d1020-m24-03-restart=ticket)。正本に SEL-004・HBR-008/009 を足した (675a1b5)。TTL-002 (human) は ADR 0001 段 6 と衝突するので保留。層 C は未判定。
 - 2026-10-28: 案 b を実装。閉港のタイトルの港の板にも「石板を選ぶ」の札を出す (src/ui/Harbor.ts の titleHarborBody、空の港と同じ toScenarios)。単体 tests/unit/ui.titleHarbor.closed.dom.test.ts、E2E lane1b を足した。lane3 の「石板を選ぶ」の確かめは hidden から visible へ反転。HBR-009 の行の案は .claude/verify/20261028-0856-m24-03b/scenarios-proposal.jsonl (正本は未編集)。層 C は未判定のため status は todo のまま。
+- 2026-11-07 層 C 承認 (d1028-c-m24-03) で done。見た目の行 TTL-002 は M24-07 へ。

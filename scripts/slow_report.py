@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # tests/slow の describe の題と、1 本で回したときの分 (分けの重さ)。
-# 2026-10-20 の Lane 1 (jobs 1、lane1-b) の実測。新しい describe はここに足さなくても REST の分けで回る
+# 2026-10-20 の Lane 1 (jobs 1、lane1-b) の実測 (迎撃の塔だけ 2026-10-29、M21-03 の 10 本で 8.9 分)。新しい describe はここに足さなくても REST の分けで回る
 GROUPS: tuple[tuple[str, float], ...] = (
     ("scenario playthroughs (size 64)", 14.7),
     ("tower scenario v2 playthroughs (size 64)", 4.5),

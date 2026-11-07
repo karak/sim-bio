@@ -1,7 +1,7 @@
 ---
 id: M21-03
 title: 迎撃の塔の作り直し(応えだけで勝てる・後半 100 年の空白)
-status: todo
+status: done
 milestone: M21
 plan: docs/specs/plans/2026-09-23-roadmap.md#21-チケットになっていない負債既存-11-本の仕上げ
 depends_on: [M21-01]
@@ -27,8 +27,8 @@ M21-01
 
 - [x] LD に作り直しの設計(仮説、キーアイテム、縮約モデル、判定行列。応えだけ・儀式だけ・止めよ無しがそれぞれどうなるか)を書き、ユーザーの承認を得る
 - [x] 想定解の台本は UI と同じ手(放流 環 1・0.5、力 4)で書き、通し実行で放置・素朴戦略 dead と想定解 alive を固定する
-- [ ] 手動 1 回、記録(後半に悩む余地があるか)
-- [ ] npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す
+- [x] 手動 1 回、記録(後半に悩む余地があるか) — 層 C: 画 5 枚 (.claude/verify/20261029-0922-m21-03-impl/m21-03-a〜e.png) をユーザーが承認 (審査台 d1031-c-m21-03、2026-11-07)
+- [x] npm run check と E2E が通り、evidence に commit SHA とテストファイルを記す (merge 9e00d72 で check 全通過)
 
 ## 作業ログ
 
@@ -40,3 +40,4 @@ M21-01
 - 2026-10-29: 残り: check:docs が decisions-current の「Command は 9 種」(star_sign で 10 種) で落ちる。既存の文の書き換えなのでユーザーの承認待ち。手動 1 回 (後半に悩む余地があるか) も未。status は todo のまま
 - 2026-10-29: レビュー (読むだけの別インスタンス) の指摘「撃った年の残りに積まれるかが update の刻みで分かれる」を直した (cc6fc39、撃った tick で star_sign を流す。tests/unit/scenario.starSign.test.ts に年の途中で撃つ決定論の試験)。直した後も tests/slow 10 本 529 秒・E2E smoke 24 本が通る
 - 2026-10-31: ユーザーの判断で decisions-current の Command を 10 種に直し (19287c6)、SIM_VERSION を 2 に上げた (3a14524。golden に迎撃の塔の証人の年代記を足し、年代記の fixture の版を SIM_VERSION から読む)。pnpm run check が全部通る。E2E chronicle + smoke 28 本通る。審査台の画 a〜e を UI の手 (想定解 1、止めよは星に届いた次の年) で撮った (.claude/verify/20261029-0922-m21-03-impl/m21-03-a〜e.png、58・102 年目に砕いて 110 年目に alive)。手動 1 回が残るので status は todo のまま
+- 2026-11-07 層 C 承認 (d1031-c-m21-03 = yes) で done。石板と HUD の重なりは票 M26-22 へ。
