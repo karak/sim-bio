@@ -20,6 +20,13 @@
 4. 今の文書の印 `<!-- check: <名>=<値> -->` の値が、今のコードから読んだ数 (FACTS) と合う。
    印は 1 行に何個でも置ける。値は同じ行の印の外の文にも書く (数は 2,000 のように桁の区切りが
    あってもよい)。FACTS に無い名は落とし、REQUIRED_CHECKS の名が無いのも落とす
+5. 目録 docs/README.md の表 `| path | 箱 | 凍結 | 今の正本 | ハッシュ |` (spec 棚卸しの F2)。
+   表が無い・列が違う・箱が A / B / C の外・凍結の日が YYYY-MM-DD の形でない・ハッシュが
+   16 桁の 16 進でない・凍結の日とハッシュの片方だけ埋まっている・今の正本が解決しない
+   (path#anchor、1 と同じ解決) を落とす。docs/ の .md と .html と issues/README.md で目録に
+   無いもの、目録にあって木に無いもの、名に YYYY-MM-DD があるのに箱が B のもの (例外は
+   DATED_B_ALLOWED) も落とす。目録が無ければ「無い」で落とす。表が無い・列が違うときは、
+   その 1 件だけを出す
 
 アンカーの決まり (GitHub の見出しの id に合わせる): 見出しの文を小文字にし、英数字・かな漢字・
 `_`・`-`・空白の外の字を消し、空白を 1 つずつ `-` にする。`## D1 の書きの予算` は
@@ -33,9 +40,18 @@ import re
 import sys
 from collections import Counter
 from collections.abc import Callable, Mapping
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 
 CURRENT_DOC = "docs/specs/2026-10-18-decisions-current.md"
+
+CATALOG = "docs/README.md"
+CATALOG_COLUMNS = ("path", "箱", "凍結", "今の正本", "ハッシュ")
+BOXES = frozenset({"A", "B", "C"})
+# 名に日付があっても箱 B (保守する) でよい文書。名の日付は起こした日と読む
+DATED_B_ALLOWED: frozenset[str] = frozenset({CURRENT_DOC})
+# docs/ の外で目録に載せる文書
+ISSUES_README = "issues/README.md"
 
 # 古い文書 → (ポインタの先, 数)。今の文書へ移した決定の印。足すときはここに足す
 REQUIRED_POINTERS: Mapping[str, Mapping[str, int]] = {
@@ -88,6 +104,9 @@ _HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _MARK = re.compile(r"<!--\s*check:\s*([A-Za-z0-9_]+)=([^\s>]+)\s*-->")
 _COMMENT = re.compile(r"<!--.*?-->")
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_DIGEST = re.compile(r"[0-9a-f]{16}")
+_TABLE_RULE = re.compile(r"^\|(?:\s*:?-{3,}:?\s*\|)+$")
 
 
 def _prose_lines(text: str) -> list[tuple[int, str]]:
@@ -292,6 +311,125 @@ def check_marks(text: str, facts: Mapping[str, str]) -> list[str]:
     return errors
 
 
+@dataclass(frozen=True)
+class CatalogRow:
+    """目録の 1 行。空の欄は空の文字"""
+
+    line: int
+    path: str
+    box: str
+    frozen: str
+    current: str
+    digest: str
+
+
+def _cells(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def read_catalog(text: str) -> tuple[list[CatalogRow], list[str]]:
+    """目録の表を行に読む (行と、表の形の崩れ)。path と今の正本の backtick は剥がす"""
+    lines = _prose_lines(text)
+    head = next(
+        (
+            i
+            for i, (_, line) in enumerate(lines[:-1])
+            if line.startswith("|")
+            and "path" in _cells(line)
+            and _TABLE_RULE.match(lines[i + 1][1].strip())
+        ),
+        None,
+    )
+    columns = " | ".join(CATALOG_COLUMNS)
+    if head is None:
+        return [], [f"{CATALOG}: 目録の表が無い (列は | {columns} |)"]
+    number, header = lines[head]
+    if tuple(_cells(header)) != CATALOG_COLUMNS:
+        return [], [f"{CATALOG}:{number}: 目録の表の列が違う (列は | {columns} |)"]
+    rows: list[CatalogRow] = []
+    errors: list[str] = []
+    for number, line in lines[head + 2 :]:
+        if not line.startswith("|"):
+            break
+        cells = _cells(line)
+        where = f"{CATALOG}:{number}"
+        if len(cells) != len(CATALOG_COLUMNS):
+            errors.append(f"{where}: 欄の数が {len(cells)} (要るのは 5)")
+            continue
+        path, box, frozen, current, digest = cells
+        row = CatalogRow(
+            number, path.strip("`"), box, frozen, current.strip("`"), digest
+        )
+        if row.box not in BOXES:
+            errors.append(f"{where}: 箱が「{row.box}」。A・B・C のどれか 1 字にする")
+        if row.frozen and not _DATE.fullmatch(row.frozen):
+            errors.append(f"{where}: 凍結の日が「{row.frozen}」。YYYY-MM-DD か空にする")
+        if row.digest and not _DIGEST.fullmatch(row.digest):
+            errors.append(
+                f"{where}: ハッシュが「{row.digest}」。sha256 の先頭 16 桁 (小文字の"
+                " 16 進) か空にする"
+            )
+        if bool(row.frozen) != bool(row.digest):
+            errors.append(
+                f"{where}: 凍結の日とハッシュの片方だけが埋まっている。凍結したなら"
+                " 両方、凍結していなければ両方とも空にする"
+            )
+        rows.append(row)
+    return rows, errors
+
+
+def _catalogued(path: str) -> bool:
+    """目録に載せる文書か (docs/ の .md と .html)"""
+    return path.startswith("docs/") and path.endswith((".md", ".html"))
+
+
+def _must_list(path: str) -> bool:
+    """目録に行が要る文書か (docs/ の .md と .html と、docs/ の外の issues/README.md)"""
+    return _catalogued(path) or path == ISSUES_README
+
+
+def _unresolved(docs: Mapping[str, str], target: str) -> str | None:
+    """`<path>#<anchor>` が docs の markdown の見出しに解決しなければ、その訳"""
+    path, sep, anchor = target.partition("#")
+    if not sep or not anchor:
+        return f"{target} が <path>#<anchor> の形でない"
+    if path not in docs:
+        return f"{path} が docs/ の markdown に無い"
+    if anchor not in anchors_of(docs[path]):
+        return f"{path} に見出し #{anchor} が無い"
+    return None
+
+
+def check_catalog(files: Mapping[str, str]) -> list[str]:
+    text = files.get(CATALOG)
+    if text is None:
+        return [f"{CATALOG} が無い (目録)"]
+    docs = {p: t for p, t in files.items() if _catalogued(p) and p.endswith(".md")}
+    rows, errors = read_catalog(text)
+    if not rows and errors:
+        # 表が無い・列が違う。文書ごとの「行が無い」を並べず、その 1 件だけを出す
+        return errors
+    listed = Counter(row.path for row in rows)
+    for row in rows:
+        where = f"{CATALOG}:{row.line}"
+        if listed[row.path] > 1:
+            errors.append(f"{where}: {row.path} の行が {listed[row.path]} 個ある")
+        if not row.path.endswith((".md", ".html")):
+            errors.append(f"{where}: {row.path} は .md でも .html でもない")
+        elif row.path not in files:
+            errors.append(f"{where}: {row.path} が木に無い (消したなら目録の行も消す)")
+        dated = _DATE.search(PurePosixPath(row.path).name)
+        if row.box == "B" and dated and row.path not in DATED_B_ALLOWED:
+            errors.append(
+                f"{where}: {row.path} は名に日付があるのに箱が B。日付つきの文書は A か C"
+            )
+        if row.current and (why := _unresolved(docs, row.current)):
+            errors.append(f"{where}: 今の正本が解決しない ({why})")
+    for path in sorted(p for p in files if _must_list(p) and p not in listed):
+        errors.append(f"{path}: 目録 {CATALOG} に行が無い (箱を決めて行を足す)")
+    return errors
+
+
 def check_files(files: Mapping[str, str]) -> list[str]:
     docs = {
         p: t for p, t in files.items() if p.startswith("docs/") and p.endswith(".md")
@@ -305,6 +443,7 @@ def check_files(files: Mapping[str, str]) -> list[str]:
         errors += check_marks(docs[CURRENT_DOC], facts_of(files))
     else:
         errors.append(f"{CURRENT_DOC} が無い (今の決定事項の文書)")
+    errors += check_catalog(files)
     return errors
 
 
@@ -313,6 +452,10 @@ def load_repo(root: Path) -> dict[str, str]:
         p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
         for p in sorted((root / "docs").rglob("*.md"))
     }
+    for p in sorted((root / "docs").rglob("*.html")):
+        files[p.relative_to(root).as_posix()] = p.read_text(encoding="utf-8")
+    if (root / ISSUES_README).is_file():
+        files[ISSUES_README] = (root / ISSUES_README).read_text(encoding="utf-8")
     for p in sorted((root / "tests" / "e2e").glob("*.spec.ts")):
         files[p.relative_to(root).as_posix()] = ""
     for name in FACT_SOURCES:
@@ -325,7 +468,8 @@ def load_with(read: Callable[[str], str], names: list[str]) -> dict[str, str]:
     wanted = [
         n
         for n in names
-        if (n.startswith("docs/") and n.endswith(".md"))
+        if _catalogued(n)
+        or n == ISSUES_README
         or E2E_SPEC.match(n)
         or n in FACT_SOURCES
     ]
