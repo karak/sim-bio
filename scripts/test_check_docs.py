@@ -6,7 +6,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import check_docs
 from check_docs import (
     AUTOSAVE_TS,
     CATALOG,
@@ -18,12 +20,14 @@ from check_docs import (
     SLOTS_TS,
     TYPES_TS,
     VERSION_DOC,
+    _with_plan_targets,
     anchors_of,
     body_hash,
     check_catalog,
     check_files,
     check_frozen,
     check_marks,
+    check_plans,
     check_pointers,
     check_version_paragraph,
     count_command_types,
@@ -32,8 +36,10 @@ from check_docs import (
     load_repo,
     load_with,
     main,
+    plan_of,
     read_catalog,
     slug,
+    warnings_of,
 )
 
 REPO = Path(__file__).resolve().parent.parent
@@ -648,7 +654,161 @@ class FrozenTest(unittest.TestCase):
         self.assertEqual(out.getvalue(), f"{BODY_HASH}\n")
 
 
+TICKET = "issues/X-01-a.md"
+
+
+def ticket(plan):
+    return f"---\nid: X-01\nstatus: done\nplan: {plan}\n---\n# X-01\n"
+
+
+# 票の plan: の試験の木 (docs の外のファイル・directory・ほかの票を含む)
+PLAN_TREE = {
+    NEW: "# b\n\n## 決定事項\n",
+    "docs/uiux/README.md": "# uiux\n",
+    "references/games/ideas.md": "",
+    "issues/M27-05-x.md": "---\nid: M27-05\n---\n",
+}
+
+
+class PlanTest(unittest.TestCase):
+    def problems(self, plan):
+        return check_plans(dict(PLAN_TREE) | {TICKET: ticket(plan)})
+
+    def test_plan_is_read_from_the_frontmatter_only(self):
+        self.assertEqual(plan_of(ticket(NEW)), (4, NEW))
+        self.assertIsNone(plan_of("---\nid: X\n---\nplan: docs/z.md\n"))
+        self.assertIsNone(plan_of("# 票\n\nplan: docs/z.md\n"))
+
+    def test_allowed_forms_pass(self):
+        for plan in (
+            "null",
+            NEW,
+            f"{NEW}#決定事項",
+            "docs/uiux/",
+            "references/games/ideas.md",
+            "issues/M27-05-x.md",
+            f"{NEW} (git show worktree-x:{NEW})",
+        ):
+            with self.subTest(plan=plan):
+                self.assertEqual(self.problems(plan), [])
+
+    def test_ticket_without_plan_passes(self):
+        files = dict(PLAN_TREE) | {TICKET: "---\nid: X-01\n---\n"}
+        self.assertEqual(check_plans(files), [])
+
+    def test_missing_path_is_reported(self):
+        problems = self.problems("docs/specs/plans/z.md#5-x")
+        self.assertEqual(len(problems), 1)
+        self.assertIn(
+            f"{TICKET}:4: plan: の先 docs/specs/plans/z.md が木に無い", problems[0]
+        )
+
+    def test_missing_directory_is_reported(self):
+        self.assertEqual(len(self.problems("docs/nowhere/")), 1)
+
+    def test_missing_anchor_is_reported(self):
+        problems = self.problems(f"{NEW}#6-運用")
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f"{NEW} に見出し #6-運用 が無い", problems[0])
+
+    def test_anchor_outside_docs_markdown_is_not_checked(self):
+        self.assertEqual(self.problems("references/games/ideas.md#どこか"), [])
+
+    def test_broken_form_is_reported(self):
+        for plan in ("", f"{NEW} と {NEW}", f"{NEW} (注)"):
+            with self.subTest(plan=plan):
+                problems = self.problems(plan)
+                self.assertEqual(len(problems), 1)
+                self.assertIn("plan: の形でない", problems[0])
+
+    def test_git_show_note_skips_the_tree_and_anchor(self):
+        gone = "docs/design/qa/gone.md"
+        for plan in (
+            f"{gone} (git show worktree-x:{gone})",
+            f"{gone}#どこか (git show abc123:{gone})",
+            f"{NEW}#無い節 (git show abc123:{NEW})",
+        ):
+            with self.subTest(plan=plan):
+                self.assertEqual(self.problems(plan), [])
+
+    def test_paths_leaving_the_root_are_not_in_the_tree(self):
+        names = ["issues/A-01-a.md", "issues/A-02-b.md", "issues/A-03-c.md"]
+        texts = {
+            "issues/A-01-a.md": ticket("/etc/hosts"),
+            "issues/A-02-b.md": ticket("../outside.md"),
+            "issues/A-03-c.md": ticket("docs/../docs/uiux/"),
+        }
+        files = {n: texts[n] for n in names}
+        # 手元の load_repo のように、何でも「ある」と答える読み方でも足さない
+        _with_plan_targets(files, lambda _: True, lambda _: True)
+        self.assertEqual(sorted(files), names)
+        problems = check_plans(files)
+        self.assertEqual(len(problems), 3)
+        self.assertTrue(all("が木に無い" in p for p in problems), problems)
+
+    def test_warning_until_switched_to_failure(self):
+        files = dict(PLAN_TREE) | {TICKET: ticket("docs/z.md")}
+        files |= {
+            CATALOG: catalog((CATALOG, "B"), (NEW, "B"), ("docs/uiux/README.md", "B"))
+        }
+        self.assertFalse(check_docs.PLAN_LINKS_FAIL)
+        self.assertEqual(len(warnings_of(files)), 1)
+        self.assertFalse(any("docs/z.md" in e for e in check_files(files)))
+        with mock.patch.object(check_docs, "PLAN_LINKS_FAIL", True):
+            self.assertEqual(warnings_of(files), [])
+            self.assertTrue(any("docs/z.md" in e for e in check_files(files)))
+
+    def test_load_with_marks_plan_targets_outside_the_read_set(self):
+        names = [
+            "issues/A-01-a.md",
+            "issues/A-02-b.md",
+            "issues/A-03-c.md",
+            "references/games/ideas.md",
+            "references/art/x.png",
+        ]
+        texts = {
+            "issues/A-01-a.md": ticket("references/games/ideas.md"),
+            "issues/A-02-b.md": ticket("references/art/"),
+            "issues/A-03-c.md": ticket("references/none.md"),
+        }
+        files = load_with(texts.__getitem__, names)
+        self.assertEqual(files["references/games/ideas.md"], "")
+        self.assertIn("references/art/", files)
+        self.assertNotIn("references/art/x.png", files)
+        problems = check_plans(files)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("references/none.md が木に無い", problems[0])
+
+
 class RepoTest(unittest.TestCase):
+    def test_todays_plan_links_warn_ten(self):
+        warnings = warnings_of(load_repo(REPO))
+        tickets = sorted(Path(w.split(":", 1)[0]).name for w in warnings)
+        self.assertEqual(
+            tickets,
+            [
+                "M10R-03-dream-eater.md",
+                "M10R-07-no-answer-redesign.md",
+                "M10R-08-sky-ship-redesign.md",
+                "M26-20-d1-write-budget-fitness.md",
+                "M6-02-suitability-layer.md",
+                "M6-03-tablet-warnings-milestones.md",
+                "M6-04-sinking-redesign-calibration.md",
+                "M6-05-manual-playtest.md",
+                "M9-03-faith-effects.md",
+                "M9-05-faith-playtest.md",
+            ],
+        )
+
+    def test_main_warns_but_passes(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            code = main(["--root", str(REPO)])
+        self.assertEqual(code, 0)
+        lines = err.getvalue().splitlines()
+        self.assertEqual(sum(line.startswith("WARN ") for line in lines), 10)
+        self.assertIn("警告 10 件", err.getvalue())
+
     def test_todays_docs_pass(self):
         self.assertEqual(check_files(load_repo(REPO)), [])
 

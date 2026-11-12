@@ -36,6 +36,13 @@
    落とす。body_hash は `uv run scripts/check_docs.py --hash <path>` で出る
    - `> 凍結: YYYY-MM-DD。今の正本: <path>#<anchor>`
    - `> 凍結: YYYY-MM-DD。失効: <理由 1 句>`
+7. 票 (issues/**/*.md) の frontmatter の `plan:` (spec 棚卸しの F4)。`null`・`<path>`・
+   `<path>#<anchor>` と、その後ろに ` (git show …)` の注が付く形を許す。path はリポジトリの根
+   からのファイルか directory で、木にある (絶対の path と `..`・`.` の段は木に無いと読む)。
+   anchor は path が docs/ の markdown のときだけ、1 と同じ決まりで見出しに解決する。
+   ` (git show …)` の注つきの形は、先が git の歴史にある印なので、木と anchor を見ない。
+   PLAN_LINKS_FAIL が False の間は WARN として出すだけで、
+   exit code は変えない
 
 アンカーの決まり (GitHub の見出しの id に合わせる): 見出しの文を小文字にし、英数字・かな漢字・
 `_`・`-`・空白の外の字を消し、空白を 1 つずつ `-` にする。`## D1 の書きの予算` は
@@ -62,6 +69,9 @@ BOXES = frozenset({"A", "B", "C"})
 DATED_B_ALLOWED: frozenset[str] = frozenset({CURRENT_DOC})
 # docs/ の外で目録に載せる文書
 ISSUES_README = "issues/README.md"
+# 票の plan: の切れを落とす (True) か、警告にとどめる (False) か。改訂計画の P1
+# (今の切れ 10 件を直す回) が済んだら True にする
+PLAN_LINKS_FAIL = False
 
 # 古い文書 → (ポインタの先, 数)。今の文書へ移した決定の印。足すときはここに足す
 REQUIRED_POINTERS: Mapping[str, Mapping[str, int]] = {
@@ -121,6 +131,7 @@ _TABLE_RULE = re.compile(r"^\|(?:\s*:?-{3,}:?\s*\|)+$")
 _FROZEN_WORD = "> 凍結:"
 _FROZEN_CURRENT = re.compile(r"^> 凍結: (\d{4}-\d{2}-\d{2})。今の正本: (\S+)$")
 _FROZEN_EXPIRED = re.compile(r"^> 凍結: (\d{4}-\d{2}-\d{2})。失効: \S.*$")
+_PLAN = re.compile(r"^([^\s#()]+)(?:#(\S+))?(\s+\(git show [^)]+\))?$")
 
 
 def _prose_lines(text: str) -> list[tuple[int, str]]:
@@ -531,6 +542,102 @@ def check_frozen(files: Mapping[str, str]) -> list[str]:
     return errors
 
 
+def _in_issues(path: str) -> bool:
+    return path.startswith("issues/") and path.endswith(".md")
+
+
+def plan_of(text: str) -> tuple[int, str] | None:
+    """票の頭の frontmatter (`---` で挟んだ所) の `plan:` の (行, 値)。無ければ None"""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for number, line in enumerate(lines[1:], start=2):
+        if line.strip() == "---":
+            return None
+        if line.startswith("plan:"):
+            return number, line.removeprefix("plan:").strip()
+    return None
+
+
+@dataclass(frozen=True)
+class PlanTarget:
+    """plan: の値の先。in_history は ` (git show …)` の注つき (木から消えて git の歴史にある)"""
+
+    path: str
+    anchor: str
+    in_history: bool
+
+
+def _plan_target(value: str) -> PlanTarget | None:
+    """plan: の値の先。null・形の崩れは None"""
+    found = _PLAN.match(value)
+    if not found:
+        return None
+    return PlanTarget(found.group(1), found.group(2) or "", bool(found.group(3)))
+
+
+def _in_tree(path: str) -> bool:
+    """木の中を指す path か。根の外 (絶対の path・`..`) と `.` は手元と CI で食い違うので外す"""
+    return not path.startswith("/") and not {"..", "."} & set(path.split("/"))
+
+
+def _plans(files: Mapping[str, str]) -> list[tuple[str, int, str]]:
+    """(票, 行, 値) の一覧。plan: の無い票と plan: null は入れない"""
+    found = ((name, plan_of(files[name])) for name in sorted(files) if _in_issues(name))
+    return [(name, p[0], p[1]) for name, p in found if p and p[1] != "null"]
+
+
+def _with_plan_targets(
+    files: dict[str, str],
+    is_file: Callable[[str], bool],
+    is_dir: Callable[[str], bool],
+) -> dict[str, str]:
+    """票の plan: の先のうち、読んでいないファイルを "" で、directory を `<path>/` で足す"""
+    for _, _, value in _plans(files):
+        target = _plan_target(value)
+        if target is None or target.in_history or not _in_tree(target.path):
+            continue
+        path = target.path
+        if path in files:
+            continue
+        if is_file(path):
+            files[path] = ""
+        elif is_dir(path):
+            files[path.rstrip("/") + "/"] = ""
+    return files
+
+
+def _exists(files: Mapping[str, str], path: str) -> bool:
+    prefix = path.rstrip("/") + "/"
+    return path in files or any(p.startswith(prefix) for p in files)
+
+
+def check_plans(files: Mapping[str, str]) -> list[str]:
+    docs = {p: t for p, t in files.items() if _catalogued(p) and p.endswith(".md")}
+    problems: list[str] = []
+    for name, number, value in _plans(files):
+        where = f"{name}:{number}"
+        target = _plan_target(value)
+        if target is None:
+            problems.append(
+                f"{where}: plan: の形でない「{value}」。null・<path>・<path>#<anchor>"
+                " (後ろに (git show …) の注を付けてよい) にする"
+            )
+            continue
+        if target.in_history:
+            # 注の形は、先が git の歴史にしか無い (X2 で木から消す) ので木を見ない
+            continue
+        path, anchor = target.path, target.anchor
+        if not _in_tree(path) or not _exists(files, path):
+            problems.append(f"{where}: plan: の先 {path} が木に無い")
+        elif anchor and path in docs and anchor not in anchors_of(docs[path]):
+            problems.append(
+                f"{where}: plan: の先 {path} に見出し #{anchor} が無い"
+                " (アンカーの決まりは scripts/check_docs.py の docstring)"
+            )
+    return problems
+
+
 def check_files(files: Mapping[str, str]) -> list[str]:
     docs = {
         p: t for p, t in files.items() if p.startswith("docs/") and p.endswith(".md")
@@ -546,7 +653,14 @@ def check_files(files: Mapping[str, str]) -> list[str]:
         errors.append(f"{CURRENT_DOC} が無い (今の決定事項の文書)")
     errors += check_catalog(files)
     errors += check_frozen(files)
+    if PLAN_LINKS_FAIL:
+        errors += check_plans(files)
     return errors
+
+
+def warnings_of(files: Mapping[str, str]) -> list[str]:
+    """落とさずに知らせるもの (PLAN_LINKS_FAIL が False の間の票の plan: の切れ)"""
+    return [] if PLAN_LINKS_FAIL else check_plans(files)
 
 
 def load_repo(root: Path) -> dict[str, str]:
@@ -556,13 +670,15 @@ def load_repo(root: Path) -> dict[str, str]:
     }
     for p in sorted((root / "docs").rglob("*.html")):
         files[p.relative_to(root).as_posix()] = p.read_text(encoding="utf-8")
-    if (root / ISSUES_README).is_file():
-        files[ISSUES_README] = (root / ISSUES_README).read_text(encoding="utf-8")
+    for p in sorted((root / "issues").rglob("*.md")):
+        files[p.relative_to(root).as_posix()] = p.read_text(encoding="utf-8")
     for p in sorted((root / "tests" / "e2e").glob("*.spec.ts")):
         files[p.relative_to(root).as_posix()] = ""
     for name in FACT_SOURCES:
         files[name] = (root / name).read_text(encoding="utf-8")
-    return files
+    return _with_plan_targets(
+        files, lambda p: (root / p).is_file(), lambda p: (root / p).is_dir()
+    )
 
 
 def load_with(read: Callable[[str], str], names: list[str]) -> dict[str, str]:
@@ -570,12 +686,16 @@ def load_with(read: Callable[[str], str], names: list[str]) -> dict[str, str]:
     wanted = [
         n
         for n in names
-        if _catalogued(n)
-        or n == ISSUES_README
-        or E2E_SPEC.match(n)
-        or n in FACT_SOURCES
+        if _catalogued(n) or _in_issues(n) or E2E_SPEC.match(n) or n in FACT_SOURCES
     ]
-    return {n: "" if E2E_SPEC.match(n) else read(n) for n in wanted}
+    files = {n: "" if E2E_SPEC.match(n) else read(n) for n in wanted}
+    listed = frozenset(names)
+
+    def is_dir(path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(n.startswith(prefix) for n in names)
+
+    return _with_plan_targets(files, listed.__contains__, is_dir)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -594,7 +714,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.hash:
         print(body_hash((args.root / args.hash).read_text(encoding="utf-8")))
         return 0
-    errors = check_files(load_repo(args.root))
+    files = load_repo(args.root)
+    errors = check_files(files)
+    warnings = warnings_of(files)
+    for w in warnings:
+        print(f"WARN {w}", file=sys.stderr)
+    if warnings:
+        print(
+            f"文書の柵: 警告 {len(warnings)} 件 (票の plan: の切れ。P1 の後に落とす)",
+            file=sys.stderr,
+        )
     for e in errors:
         print(f"NG {e}", file=sys.stderr)
     if errors:
