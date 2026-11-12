@@ -1,6 +1,9 @@
+import contextlib
+import io
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -16,8 +19,10 @@ from check_docs import (
     TYPES_TS,
     VERSION_DOC,
     anchors_of,
+    body_hash,
     check_catalog,
     check_files,
+    check_frozen,
     check_marks,
     check_pointers,
     check_version_paragraph,
@@ -26,6 +31,7 @@ from check_docs import (
     facts_of,
     load_repo,
     load_with,
+    main,
     read_catalog,
     slug,
 )
@@ -467,6 +473,179 @@ class CatalogTest(unittest.TestCase):
         self.assertIn("docs/design/2026-09-19-proposal.html", paths)
         self.assertEqual({r.box for r in rows}, {"A", "B", "C"})
         self.assertEqual(check_catalog(files), [])
+
+
+BODY = "# a\n\n本文\n"
+# BODY の sha256 の先頭 16 桁 (hashlib で別に出した値で固定する)
+BODY_HASH = "738bc9b73e7c41dd"
+EXPIRED = "> 凍結: 2026-10-28。失効: 旧模型\n"
+
+
+def with_head(head, body=BODY):
+    """題の直下に頭の行を足す"""
+    title, rest = body.split("\n", 1)
+    return f"{title}\n{head}{rest}"
+
+
+class BodyHashTest(unittest.TestCase):
+    def test_hash_is_pinned(self):
+        self.assertEqual(body_hash(BODY), BODY_HASH)
+
+    def test_head_line_does_not_change_the_hash(self):
+        current = f"> 凍結: 2026-10-28。今の正本: {NEW}#決定事項\n"
+        for head in (EXPIRED, current):
+            with self.subTest(head=head):
+                self.assertEqual(body_hash(with_head(head)), BODY_HASH)
+
+    def test_blank_lines_between_title_and_head_are_allowed(self):
+        self.assertEqual(body_hash("# a\n\n" + EXPIRED + "本文\n"), BODY_HASH)
+
+    def test_only_the_head_under_the_title_is_dropped(self):
+        current = f"> 凍結: 2026-10-28。今の正本: {NEW}#決定事項\n"
+        for text in (
+            BODY + EXPIRED,
+            with_head(EXPIRED + current),
+            "前書き\n" + EXPIRED + BODY,
+            "```\n# 塊の中\n```\n" + EXPIRED + "本文\n",
+        ):
+            with self.subTest(text=text):
+                self.assertNotEqual(body_hash(text), BODY_HASH)
+                self.assertNotEqual(
+                    body_hash(text), body_hash(text.replace(EXPIRED, ""))
+                )
+
+    def test_one_char_in_the_body_changes_the_hash(self):
+        self.assertNotEqual(body_hash(BODY.replace("本文", "本分")), BODY_HASH)
+        self.assertNotEqual(body_hash(BODY + "\n"), BODY_HASH)
+
+    def test_only_lines_starting_with_the_prefix_are_dropped(self):
+        quoted = with_head("  " + EXPIRED)
+        self.assertNotEqual(body_hash(quoted), BODY_HASH)
+
+
+class FrozenTest(unittest.TestCase):
+    def files(self, text, frozen="2026-10-28", digest=BODY_HASH):
+        rows = ((CATALOG, "B"), (OLD, "C", frozen, "", digest), (NEW, "B"))
+        return {OLD: text, NEW: "# b\n\n## 決定事項\n", CATALOG: catalog(*rows)}
+
+    def test_frozen_doc_with_head_and_same_body_passes(self):
+        self.assertEqual(check_frozen(self.files(with_head(EXPIRED))), [])
+
+    def test_changed_body_fails_and_says_both_hashes(self):
+        text = with_head(EXPIRED, BODY.replace("本文", "本分"))
+        errors = check_frozen(self.files(text))
+        self.assertEqual(len(errors), 1)
+        self.assertIn(f"{OLD} の本文のハッシュが {body_hash(text)}", errors[0])
+        self.assertIn(BODY_HASH, errors[0])
+        self.assertIn(f"{CATALOG}:8", errors[0])
+
+    def test_frozen_without_hash_in_catalog_fails(self):
+        errors = check_frozen(self.files(with_head(EXPIRED), digest=""))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("目録の値 (空)", errors[0])
+
+    def test_frozen_doc_without_head_fails(self):
+        errors = check_frozen(self.files(BODY))
+        self.assertEqual(len(errors), 1)
+        self.assertIn(f"{OLD}: 目録で 2026-10-28 に凍結したのに、頭の行", errors[0])
+
+    def test_bad_head_lines_fail_in_any_doc(self):
+        for line in (
+            "> 凍結: 2026-10-28",
+            "> 凍結: 2026/10/28。失効: 旧模型",
+            "> 凍結:2026-10-28。失効: 旧模型",
+            "> 凍結: 2026-10-28。失効: ",
+            "> 凍結: 2026-10-28。今は: 別の文書",
+        ):
+            with self.subTest(line=line):
+                errors = check_frozen(
+                    self.files(f"# a\n{line}\n", frozen="", digest="")
+                )
+                self.assertEqual(len(errors), 1)
+                self.assertIn(f"{OLD}:2: 凍結の行の形でない", errors[0])
+
+    def test_head_line_in_code_block_is_checked_too(self):
+        text = "# a\n\n```\n> 凍結: YYYY-MM-DD。失効: x\n```\n"
+        errors = check_frozen(self.files(text, frozen="", digest=""))
+        self.assertEqual(len(errors), 1)
+        self.assertIn(f"{OLD}:4: 凍結の行「", errors[0])
+        self.assertIn("頭 (題の直下の 1 行) の外", errors[0])
+
+    def test_head_line_pointer_must_resolve(self):
+        cases = {
+            f"{NEW}#決定事項": None,
+            f"{NEW}#無い節": "見出し #無い節 が無い",
+            "docs/z.md#決定事項": "docs/z.md が docs/ の markdown に無い",
+            NEW: "<path>#<anchor> の形でない",
+        }
+        for target, wanted in cases.items():
+            with self.subTest(target=target):
+                head = f"> 凍結: 2026-10-28。今の正本: {target}\n"
+                errors = check_frozen(self.files(with_head(head)))
+                if wanted is None:
+                    self.assertEqual(errors, [])
+                else:
+                    self.assertEqual(len(errors), 1)
+                    self.assertIn(f"{OLD}:2: 頭の行の今の正本が解決しない", errors[0])
+                    self.assertIn(wanted, errors[0])
+
+    def test_unfrozen_row_is_not_checked(self):
+        text = BODY.replace("本文", "本分")
+        self.assertEqual(check_frozen(self.files(text, frozen="", digest="")), [])
+
+    def test_todays_tree_has_nothing_frozen(self):
+        self.assertEqual(check_frozen(load_repo(REPO)), [])
+
+    def test_head_line_away_from_the_title_fails(self):
+        for text, number in ((BODY + EXPIRED, 4), ("# a\n\n本文\n\n" + EXPIRED, 5)):
+            with self.subTest(text=text):
+                errors = check_frozen(self.files(text, frozen="", digest=""))
+                self.assertEqual(len(errors), 1)
+                self.assertIn(f"{OLD}:{number}: 凍結の行「", errors[0])
+                self.assertIn("の外にある", errors[0])
+
+    def test_second_head_line_fails(self):
+        current = f"> 凍結: 2026-10-28。今の正本: {NEW}#決定事項\n"
+        text = with_head(EXPIRED + current)
+        errors = check_frozen(self.files(text, digest=body_hash(text)))
+        self.assertEqual(len(errors), 1)
+        self.assertIn(f"{OLD}:3: 凍結の行「", errors[0])
+        self.assertIn("の外にある", errors[0])
+
+    def test_head_date_must_match_the_catalog(self):
+        head = "> 凍結: 2026-10-29。失効: 旧模型\n"
+        errors = check_frozen(self.files(with_head(head)))
+        self.assertEqual(len(errors), 1)
+        self.assertIn(
+            f"{OLD}:2: 頭の行の日 2026-10-29 が目録の凍結の日 2026-10-28", errors[0]
+        )
+
+    def test_head_without_frozen_date_in_the_catalog_fails(self):
+        errors = check_frozen(self.files(with_head(EXPIRED), frozen="", digest=""))
+        self.assertEqual(len(errors), 1)
+        self.assertIn(f"{OLD}:2: 頭の行があるのに", errors[0])
+        self.assertIn("凍結の日が無い", errors[0])
+
+    def test_head_in_a_doc_without_a_row_is_left_to_the_catalog_check(self):
+        files = self.files(with_head(EXPIRED))
+        files[CATALOG] = catalog((CATALOG, "B"), (NEW, "B"))
+        self.assertEqual(check_frozen(files), [])
+        self.assertIn(f"{OLD}: 目録 {CATALOG} に行が無い", check_catalog(files)[0])
+
+    def test_check_files_runs_the_frozen_check(self):
+        text = with_head(EXPIRED, BODY.replace("本文", "本分"))
+        errors = check_files(self.files(text))
+        self.assertTrue(any(f"{OLD} の本文のハッシュが" in e for e in errors), errors)
+
+    def test_hash_option_prints_body_hash(self):
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "docs").mkdir()
+            (Path(root) / OLD).write_text(with_head(EXPIRED), encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = main(["--root", root, "--hash", OLD])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue(), f"{BODY_HASH}\n")
 
 
 class RepoTest(unittest.TestCase):

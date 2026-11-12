@@ -27,6 +27,15 @@
    無いもの、目録にあって木に無いもの、名に YYYY-MM-DD があるのに箱が B のもの (例外は
    DATED_B_ALLOWED) も落とす。目録が無ければ「無い」で落とす。表が無い・列が違うときは、
    その 1 件だけを出す
+6. 凍結の書き換え (spec 棚卸しの F1)。頭の行は、最初の見出し (題) の直下 (間に空行を挟んで
+   よい) の `> 凍結:` で始まる 1 行だけ。目録で凍結の日がある文書は、本文のハッシュ (body_hash:
+   頭の行 1 行だけを除いた残りの sha256 の先頭 16 桁) が目録の値と同じで、頭の行があり、その
+   日が目録の凍結の日と同じ。頭の行は次の 2 つの形に限る。形 1 の path#anchor は 1 と同じ解決。
+   頭の行の外で `> 凍結:` で始まる行 (コードの塊の中も、2 行目の頭の行も) は、凍結の日の有無に
+   関わらずどの文書でも落とす (本文に数える)。頭の行があるのに目録の行に凍結の日が無いのも
+   落とす。body_hash は `uv run scripts/check_docs.py --hash <path>` で出る
+   - `> 凍結: YYYY-MM-DD。今の正本: <path>#<anchor>`
+   - `> 凍結: YYYY-MM-DD。失効: <理由 1 句>`
 
 アンカーの決まり (GitHub の見出しの id に合わせる): 見出しの文を小文字にし、英数字・かな漢字・
 `_`・`-`・空白の外の字を消し、空白を 1 つずつ `-` にする。`## D1 の書きの予算` は
@@ -36,6 +45,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from collections import Counter
@@ -107,6 +117,10 @@ _COMMENT = re.compile(r"<!--.*?-->")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _DIGEST = re.compile(r"[0-9a-f]{16}")
 _TABLE_RULE = re.compile(r"^\|(?:\s*:?-{3,}:?\s*\|)+$")
+# 凍結した文書の頭の行の前置き。頭の行は題の直下の 1 行だけで、body_hash はその行だけを除く
+_FROZEN_WORD = "> 凍結:"
+_FROZEN_CURRENT = re.compile(r"^> 凍結: (\d{4}-\d{2}-\d{2})。今の正本: (\S+)$")
+_FROZEN_EXPIRED = re.compile(r"^> 凍結: (\d{4}-\d{2}-\d{2})。失効: \S.*$")
 
 
 def _prose_lines(text: str) -> list[tuple[int, str]]:
@@ -430,6 +444,93 @@ def check_catalog(files: Mapping[str, str]) -> list[str]:
     return errors
 
 
+def head_line(text: str) -> int | None:
+    """頭の行の位置 (0 から)。最初の見出し (題) の直下の、空行を飛ばした次の行が
+    `> 凍結:` で始まるときだけ。無ければ None"""
+    title = next((n for n, line in _prose_lines(text) if _HEADING.match(line)), None)
+    if title is None:
+        return None
+    lines = text.splitlines()
+    index = title
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    if index < len(lines) and lines[index].startswith(_FROZEN_WORD):
+        return index
+    return None
+
+
+def body_hash(text: str) -> str:
+    """頭の行 (題の直下の `> 凍結:` の 1 行、改行ごと) だけを除いた残りの sha256 の先頭 16 桁"""
+    head = head_line(text)
+    body = "".join(
+        line
+        for index, line in enumerate(text.splitlines(keepends=True))
+        if index != head
+    )
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
+def _head_match(line: str) -> re.Match[str] | None:
+    return _FROZEN_CURRENT.match(line) or _FROZEN_EXPIRED.match(line)
+
+
+def check_frozen(files: Mapping[str, str]) -> list[str]:
+    docs = {p: t for p, t in files.items() if _catalogued(p) and p.endswith(".md")}
+    rows = read_catalog(files[CATALOG])[0] if CATALOG in files else []
+    frozen_on = {row.path: row.frozen for row in rows}
+    errors: list[str] = []
+    for name in sorted(p for p in files if _must_list(p)):
+        head = head_line(files[name])
+        for index, line in enumerate(files[name].splitlines()):
+            if not line.startswith(_FROZEN_WORD):
+                continue
+            where = f"{name}:{index + 1}"
+            if index != head:
+                errors.append(
+                    f"{where}: 凍結の行「{line.strip()}」が頭 (題の直下の 1 行) の外に"
+                    "ある。凍結の行は題の直下に 1 行だけ置く"
+                )
+                continue
+            if not _head_match(line):
+                errors.append(
+                    f"{where}: 凍結の行の形でない「{line.strip()}」。"
+                    "`> 凍結: YYYY-MM-DD。今の正本: <path>#<anchor>` か"
+                    " `> 凍結: YYYY-MM-DD。失効: <理由 1 句>` にする"
+                )
+                continue
+            current = _FROZEN_CURRENT.match(line)
+            if current and (why := _unresolved(docs, current.group(2))):
+                errors.append(f"{where}: 頭の行の今の正本が解決しない ({why})")
+            if name in frozen_on and not frozen_on[name]:
+                errors.append(
+                    f"{where}: 頭の行があるのに、目録 {CATALOG} の行に凍結の日が無い"
+                )
+    for row in rows:
+        text = files.get(row.path)
+        if not row.frozen or text is None:
+            continue
+        where = f"{CATALOG}:{row.line}"
+        head = head_line(text)
+        matched = None if head is None else _head_match(text.splitlines()[head])
+        if matched is None:
+            errors.append(
+                f"{row.path}: 目録で {row.frozen} に凍結したのに、頭の行"
+                " (題の直下の `> 凍結: …`) が無い"
+            )
+        elif matched.group(1) != row.frozen:
+            errors.append(
+                f"{row.path}:{head + 1}: 頭の行の日 {matched.group(1)} が目録の凍結の日"
+                f" {row.frozen} と違う ({where})"
+            )
+        digest = body_hash(text)
+        if digest != row.digest:
+            errors.append(
+                f"{where}: {row.path} の本文のハッシュが {digest} で、目録の値"
+                f" ({row.digest or '空'}) と違う。凍結した本文は書き換えない"
+            )
+    return errors
+
+
 def check_files(files: Mapping[str, str]) -> list[str]:
     docs = {
         p: t for p, t in files.items() if p.startswith("docs/") and p.endswith(".md")
@@ -444,6 +545,7 @@ def check_files(files: Mapping[str, str]) -> list[str]:
     else:
         errors.append(f"{CURRENT_DOC} が無い (今の決定事項の文書)")
     errors += check_catalog(files)
+    errors += check_frozen(files)
     return errors
 
 
@@ -483,7 +585,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--root", type=Path, default=Path(__file__).resolve().parent.parent
     )
+    parser.add_argument(
+        "--hash",
+        metavar="PATH",
+        help="リポジトリの根からの PATH の body_hash を出して終わる (目録を埋めるとき)",
+    )
     args = parser.parse_args(argv)
+    if args.hash:
+        print(body_hash((args.root / args.hash).read_text(encoding="utf-8")))
+        return 0
     errors = check_files(load_repo(args.root))
     for e in errors:
         print(f"NG {e}", file=sys.stderr)
