@@ -34,7 +34,6 @@
 | FF-10 | 本番の bundle に試験・開発の口を入れない(C11、F9) | `vite build`(production、`VITE_DEVTOOLS` 無し)の出力 JS | 印 7 つ(`__probe`・`advanceTo`・`x-dev-sender`・`biotope-dev-snapshot` ほか)と旧名 2 つの出現 | 0 個。受入のビルド(`VITE_DEVTOOLS=1`)では 7 つ全部ある(空振りでないこと) | check(unit) | `tests/unit/build.devtools.test.ts` |
 | FF-11 | 課金になる構成を入れない(Q1・B7・C1・C3) | `wrangler.jsonc`、`assets/.assetsignore`、`dist/` | 許可リスト外の key、`usage_model`、R2/KV/Queues/AE/AI/DO 等の binding、`*.blend`・`textures/concept/**` の配布、dist のファイル数と 1 ファイルの大きさ | 違反 0 件。dist ≤ 20,000 ファイル、1 ファイル ≤ 25 MiB | CI(check の後)、deploy | `scripts/check_free_tier.py`、`ci.yml`・`deploy.yml` |
 | FF-12 | 配るもの・配らないもの・知らない道の扱い(B1、Q2) | `wrangler dev` の静的配信 | `.assetsignore` の対象が 404、SPA の fallback が index.html、`/api/*` だけ Worker | 期待どおり | CI(`test:e2e:cloudflare`) | `tests/e2e-cloudflare/harbor.spec.ts` 「配るもの・配らないもの・知らない道」 |
-| FF-13 | README に運用の手順を書かない(B10、check_readme) | `README.md` | 見出しの集合、運用の印(コマンド・鍵・URL の形)、行数 | 見出しは `ALLOWED_HEADINGS` の内、印 0 件、≤ 200 行 | check | `scripts/check_readme.py` |
 
 ## 3. 決定論
 
